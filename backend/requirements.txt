@@ -1,0 +1,12 @@
+fastapi
+uvicorn
+sqlalchemy
+alembic
+celery
+redis
+psycopg2-binary
+pydantic
+passlib
+bcrypt
+pyjwt
+slowapi
