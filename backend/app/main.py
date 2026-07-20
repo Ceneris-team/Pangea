@@ -1,13 +1,7 @@
 from fastapi import FastAPI
 
-app = FastAPI()
-
-
-@app.get("/")
-def read_root():
-    return {"message": "Welcome to Pangea API"}
-
+app = FastAPI(title="Pangea 4.0 API")
 
 @app.get("/health")
-def health_check():
-    return {"status": "healthy"}
+def health():
+    return {"status": "ok"}
