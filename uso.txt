@@ -1,0 +1,2 @@
+Cada vez que reinicies tu PC o cierres Docker Desktop, vas a necesitar volver a levantar Redis con docker-compose up -d redis antes de que /auth/login-demo funcione.
+Cada vez que abras una terminal nueva, activa el venv (venv\Scripts\Activate.ps1) antes de correr cualquier comando de Python.

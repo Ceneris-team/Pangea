@@ -10,3 +10,5 @@ passlib
 bcrypt
 pyjwt
 slowapi
+cryptography
+python-dotenv
