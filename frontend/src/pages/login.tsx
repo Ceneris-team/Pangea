@@ -1,20 +1,17 @@
 import { useState, type FormEvent } from "react";
+import { useNavigate } from "react-router-dom";
 import "./Login.css";
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
-
-interface LoginResponse {
-  access_token: string;
-  token_type: string;
-  rol: string;
-  nombre_completo: string;
-}
+import { useAuth } from "../context/AuthContext";
+import { rutaPorRol } from "../config/roles";
+import { ApiError } from "../services/api";
 
 function isValidEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
 export default function Login() {
+  const { login } = useAuth();
+  const navigate = useNavigate();
   const [correo, setCorreo] = useState("");
   const [contrasena, setContrasena] = useState("");
   const [remember, setRemember] = useState(false);
@@ -49,30 +46,16 @@ export default function Login() {
 
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/auth/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ correo: correo.trim(), contrasena }),
-      });
-
-      if (!res.ok) {
-        const data = await res.json().catch(() => null);
-        throw new Error(data?.detail ?? "Correo o contraseña incorrectos");
-      }
-
-      const data: LoginResponse = await res.json();
-
-      const storage = remember ? localStorage : sessionStorage;
-      storage.setItem("pangea_token", data.access_token);
-      storage.setItem("pangea_rol", data.rol);
+      const data = await login(correo.trim(), contrasena, remember);
 
       setFormMsg(`Bienvenido, ${data.nombre_completo}`);
       setFormOk(true);
 
-      // TODO: reemplazar por navegación real con React Router, según data.rol
-      // navigate(rutaPorRol(data.rol));
+      // HU01 CA: "el sistema me autentica y me redirige al panel principal
+      // correspondiente a mi rol."
+      navigate(rutaPorRol(data.rol), { replace: true });
     } catch (err) {
-      setFormMsg(err instanceof Error ? err.message : "Correo o contraseña incorrectos");
+      setFormMsg(err instanceof ApiError ? err.message : "Correo o contraseña incorrectos");
       setFormOk(false);
     } finally {
       setLoading(false);
