@@ -19,6 +19,7 @@ from app.security.dependencies import get_current_user
 
 router = APIRouter(prefix="/auth", tags=["Autenticación"])
 limiter = Limiter(key_func=get_remote_address, storage_uri="redis://localhost:6379/1")
+MAX_INTENTOS = 5
 
 
 class LoginRequest(BaseModel):
@@ -39,7 +40,7 @@ MSG_CREDENCIALES_INVALIDAS = "Correo o contraseña incorrectos"
 
 
 @router.post("/login", response_model=LoginResponse)
-@limiter.limit("5/5minutes")  # T43: mismo límite que ya validamos en HT-04
+@limiter.limit("5/5minutes")
 def login(request: Request, body: LoginRequest, db: Session = Depends(get_db)):
     usuario = (
         db.query(Usuario)
@@ -48,17 +49,29 @@ def login(request: Request, body: LoginRequest, db: Session = Depends(get_db)):
         .first()
     )
 
-    if usuario is None or not verify_password(body.contrasena, usuario.cntrsn_hsh):
+    if usuario is None:
+        raise HTTPException(status_code=401, detail=MSG_CREDENCIALES_INVALIDAS)
+
+    # Bloqueo por intentos fallidos: se revisa ANTES de aceptar la contraseña,
+    # si no, un usuario bloqueado podría seguir entrando con la clave correcta.
+    if usuario.intnts_fllds >= MAX_INTENTOS:
+        raise HTTPException(
+            status_code=403,
+            detail="Cuenta bloqueada por demasiados intentos fallidos. Contacte al administrador.",
+        )
+
+    if not verify_password(body.contrasena, usuario.cntrsn_hsh):
+        usuario.intnts_fllds += 1
+        db.commit()
         raise HTTPException(status_code=401, detail=MSG_CREDENCIALES_INVALIDAS)
 
     if usuario.estd != "Activo":
         raise HTTPException(status_code=401, detail=MSG_CREDENCIALES_INVALIDAS)
 
-    # El sede_id ya no se calcula aquí: un usuario 'por_sede' puede tener
-    # acceso a varias sedes a la vez (vía prms_usr_sd / prms_ubccn), así que
-    # una sola sede en el token no alcanza. El filtrado real por sede se
-    # hace consultando esas tablas de permisos en cada endpoint (como ya
-    # hicimos en /ubicaciones), no con un valor fijo aquí.
+    # Login exitoso: resetear contador
+    usuario.intnts_fllds = 0
+    db.commit()
+
     token = create_access_token(
         user_id=usuario.id_usr,
         sede_id=None,

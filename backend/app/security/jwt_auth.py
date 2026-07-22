@@ -20,7 +20,7 @@ import jwt
 # Generarla una sola vez con: python -c "import secrets; print(secrets.token_hex(32))"
 SECRET_KEY = os.environ.get("JWT_SECRET_KEY", "clave-de-desarrollo-cambiar-en-produccion")
 ALGORITHM = "HS256"
-EXPIRATION_MINUTES = 60
+EXPIRATION_MINUTES = 60 * 8
 
 
 class TokenInvalido(Exception):
