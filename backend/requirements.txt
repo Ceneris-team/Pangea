@@ -11,3 +11,4 @@ passlib[bcrypt]
 pyjwt
 slowapi
 python-dotenv
+pydantic[email]
