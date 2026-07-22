@@ -12,3 +12,4 @@ pyjwt
 cryptography
 slowapi
 python-dotenv
+pydantic[email]
