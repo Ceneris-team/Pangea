@@ -27,3 +27,13 @@ class ListadoPaginado(BaseModel):
     pagina: int
     por_pagina: int
     items: list
+
+
+class MetricasColaIngesta(BaseModel):
+    """HU 09: conteo de archv_ingst agrupado por estado, para el módulo
+    de monitoreo de la cola de procesamiento (HT-05, CA3)."""
+    pendientes: int
+    procesando: int
+    exitosos: int
+    fallidos: int
+    total: int
