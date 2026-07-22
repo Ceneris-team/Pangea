@@ -1,6 +1,6 @@
 from sqlalchemy import (
     Column, Integer, String, ForeignKey, TIMESTAMP, Numeric, CheckConstraint,
-    UniqueConstraint, text,
+    Index, UniqueConstraint, text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
@@ -14,6 +14,7 @@ class Ubicacion(Base):
         UniqueConstraint("id_sd", "nmbr", name="uq_ubccn_sd_nombre"),
         CheckConstraint("lttd BETWEEN -90 AND 90", name="ubccn_lttd_check"),
         CheckConstraint("lngtd BETWEEN -180 AND 180", name="ubccn_lngtd_check"),
+        Index("idx_ubccn_sd", "id_sd"),
     )
 
     id_ubccn = Column(Integer, primary_key=True, autoincrement=True)
