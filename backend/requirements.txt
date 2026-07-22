@@ -9,6 +9,7 @@ pydantic
 bcrypt==4.0.1  # fijado: passlib rompe con bcrypt>=4.1 (ver https://github.com/pyca/bcrypt/issues/684)
 passlib[bcrypt]
 pyjwt
+cryptography
 slowapi
 python-dotenv
 pydantic[email]

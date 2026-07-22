@@ -18,7 +18,7 @@ import jwt
 
 # La llave real SIEMPRE debe venir de una variable de entorno, nunca hardcodeada.
 # Generarla una sola vez con: python -c "import secrets; print(secrets.token_hex(32))"
-SECRET_KEY = os.environ.get("JWT_SECRET_KEY", "clave-de-desarrollo-cambiar-en-produccion")
+SECRET_KEY = os.environ.get("JWT_SECRET", "clave-de-desarrollo-cambiar-en-produccion")
 ALGORITHM = "HS256"
 EXPIRATION_MINUTES = 60 * 8
 
