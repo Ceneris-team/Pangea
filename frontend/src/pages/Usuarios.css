@@ -1,0 +1,74 @@
+.usuarios-page {
+  padding: 32px;
+  font-family: system-ui, sans-serif;
+  color: #e8ede8;
+  background: #0e1712;
+  min-height: 100vh;
+}
+
+.usuarios-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.usuarios-header a {
+  color: #9fd8b0;
+  text-decoration: none;
+}
+
+.usuarios-toolbar {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.usuarios-toolbar input,
+.usuarios-toolbar select {
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid #2b4a37;
+  background: #152720;
+  color: #e8ede8;
+}
+
+.usuarios-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.usuarios-table th,
+.usuarios-table td {
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 1px solid #2b4a37;
+}
+
+.badge {
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 0.85em;
+}
+
+.badge-activo {
+  background: #1f4d33;
+  color: #9fe0b5;
+}
+
+.badge-inactivo {
+  background: #4d1f1f;
+  color: #e09f9f;
+}
+
+.usuarios-paginacion {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  margin-top: 16px;
+}
+
+.usuarios-error {
+  color: #e09f9f;
+}
