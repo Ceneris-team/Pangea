@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, TIMESTAMP, CheckConstraint, text
+from sqlalchemy import Column, Integer, String, ForeignKey, TIMESTAMP, Boolean, CheckConstraint, text
 from sqlalchemy.orm import relationship
 
 from app.database import Base
@@ -25,7 +25,9 @@ class Usuario(Base):
     scp = Column(String(20), nullable=False, server_default="por_sede")  # [corrección compañero]
     nmbr_cmplt = Column(String(150), nullable=False)
     crr = Column(String(150), nullable=False, unique=True)
+    tlfn = Column(String(20), nullable=True)
     cntrsn_hsh = Column(String(255), nullable=False)
+    dbe_cmbr_pswrd = Column(Boolean, nullable=False, server_default="true")
     zn_hrr = Column(String(50), nullable=False, server_default="America/Lima")
     estd = Column(String(20), nullable=False, server_default="Activo")
     intnts_fllds = Column(Integer, nullable=False, server_default="0")

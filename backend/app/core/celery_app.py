@@ -16,7 +16,7 @@ celery_app = Celery(
     "pangea",
     broker=CELERY_BROKER_URL,
     backend=CELERY_RESULT_BACKEND,
-    include=["app.tasks.ping", "app.tasks.ingesta"],
+    include=["app.tasks.ping", "app.tasks.ingesta", "app.tasks.notificaciones"],
 )
 
 celery_app.conf.update(
