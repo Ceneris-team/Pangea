@@ -44,5 +44,19 @@ services:
       - db
       - redis
 
+  beat:
+    build: ./backend
+    profiles: ["full"]
+    env_file:
+      - ./.env
+    environment:
+      DATABASE_URL: postgresql+psycopg2://pangea:pangea_dev@db:5432/pangea_dev
+      CELERY_BROKER_URL: redis://redis:6379/2
+      CELERY_RESULT_BACKEND: redis://redis:6379/3
+    command: celery -A app.core.celery_app beat --loglevel=info
+    depends_on:
+      - db
+      - redis
+
 volumes:
   pgdata:

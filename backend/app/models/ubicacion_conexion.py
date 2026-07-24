@@ -49,3 +49,10 @@ class ConexionFTP(Base):
     rt_rmt = Column(String(300))
     frcnc_mnts = Column(Integer, nullable=False, server_default="15")
     estd = Column(String(20), nullable=False, server_default="Activa")
+    # [HT-05] última vez que el receptor FTP sondeó esta conexión, se
+    # actualiza en cada corrida haya o no archivos nuevos. Sin esta
+    # columna, frcnc_mnts quedaría como un valor configurable sin efecto
+    # real: no hay forma de saber si "ya toca" sondear una conexión
+    # específica cuando Celery Beat corre con una cadencia fija distinta
+    # (cada 1 minuto) a la de cada datalogger.
+    ultm_snd = Column(TIMESTAMP(timezone=True))

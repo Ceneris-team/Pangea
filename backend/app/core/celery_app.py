@@ -27,3 +27,15 @@ celery_app.conf.update(
     enable_utc=True,
     task_track_started=True,
 )
+
+# HT-05 CA1: sondeo de conexiones FTP cada minuto. La cadencia real por
+# datalogger la controla cnxn_ftp.frcnc_mnts (ver
+# app.tasks.ingesta.sondear_conexiones_ftp) - 1 minuto es el "tick" mínimo
+# posible, así que ninguna frcnc_mnts configurada por debajo de eso puede
+# cumplirse igual.
+celery_app.conf.beat_schedule = {
+    "sondear-conexiones-ftp-cada-minuto": {
+        "task": "app.tasks.ingesta.sondear_conexiones_ftp",
+        "schedule": 60.0,
+    },
+}
