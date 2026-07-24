@@ -66,10 +66,19 @@ class PermisoUsuarioSede(Base):
     __tablename__ = "prms_usr_sd"
     __table_args__ = (
         UniqueConstraint("id_usr", "id_sd", "mdl", name="uq_prmsusrsd_usr_sd_mdl"),
+        CheckConstraint(
+            "mdl IN ('Usuarios','Ubicaciones','Dispositivos','Ingesta','Tableros','Alarmas','Comercial')",
+            name="prmsusrsd_mdl_check",
+        ),
+        CheckConstraint(
+            "nvl IN ('Lectura','Edición','Ninguno')",
+            name="prmsusrsd_nvl_check",
+        ),
     )
 
     id_prms = Column(Integer, primary_key=True, autoincrement=True)
     id_usr = Column(Integer, ForeignKey("usr.id_usr"), nullable=False)
     id_sd = Column(Integer, ForeignKey("sd.id_sd"), nullable=False)
+    id_rl = Column(Integer, ForeignKey("rl.id_rl"), nullable=False)
     mdl = Column(String(50), nullable=False)
     nvl = Column(String(20), nullable=False)
