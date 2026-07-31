@@ -57,7 +57,7 @@ def estandarizar_filas(resultado: ResultadoParseo, id_cnxn: int, mapeo: dict) ->
     (ej. índices de calidad, timestamps de máximos, etc. de HU06)-.
 
     `mapeo` es columna_original -> nombre_parametro_estandar, resuelto por
-    quien llama (normalmente PP-96; ver _mapeo_prueba_temporal para el
+    quien llama (normalmente PP-96; ver mapeo_prueba_temporal para el
     mock usado en pruebas del pipeline)."""
     lecturas = []
     for fila in resultado.filas:

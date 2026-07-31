@@ -91,7 +91,7 @@ def procesar_archivo_dat(self, id_archv: int) -> dict:
         # por defecto de ConfiguracionParseo.
         resultado_parseo = parsear_dat(contenido, ConfiguracionParseo())
 
-        # TODO(PP-96): reemplazar _mapeo_prueba_temporal() por el mapeo
+        # TODO(PP-96): reemplazar mapeo_prueba_temporal() por el mapeo
         # real (mp_frmt + mp_clmn + prmtr) resuelto para este dispositivo.
         lecturas_estandar = estandarizar_filas(
             resultado_parseo, id_cnxn=archivo.id_cnxn, mapeo=mapeo_prueba_temporal(),
