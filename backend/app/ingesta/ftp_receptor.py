@@ -9,6 +9,7 @@ datos por socket) que no se puede sondear de la misma forma; queda fuera
 de esta pieza.
 """
 import ftplib
+import io
 import logging
 
 from app.security.ftp_crypto import decrypt_credential
@@ -32,3 +33,20 @@ def listar_archivos_dat(cnxn) -> list[str]:
         nombres = ftp.nlst()
 
     return [n for n in nombres if n.lower().endswith(EXTENSION_DAT)]
+
+
+def descargar_archivo_dat(cnxn, nombre_archivo: str, encoding: str = "utf-8") -> str:
+    """Descarga un .dat puntual de rt_rmt y devuelve su contenido como
+    texto (PP-97 trabaja sobre texto, no sobre bytes). Igual que
+    listar_archivos_dat, levanta ftplib.all_errors si la conexión falla
+    -el llamador (Celery task) decide si eso dispara reintento-."""
+    password = decrypt_credential(cnxn.crdncl_cfrd)
+    buffer = io.BytesIO()
+
+    with ftplib.FTP() as ftp:
+        ftp.connect(host=cnxn.hst, port=cnxn.prt, timeout=30)
+        ftp.login(user=cnxn.usr_ftp, passwd=password)
+        ftp.cwd(cnxn.rt_rmt)
+        ftp.retrbinary(f"RETR {nombre_archivo}", buffer.write)
+
+    return buffer.getvalue().decode(encoding)
