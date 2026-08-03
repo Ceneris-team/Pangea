@@ -32,6 +32,50 @@ el número de dataloggers crece más allá de eso, la vía es escalar
 horizontalmente (ver abajo), no subir la concurrencia de un único worker
 sin límite -mantiene cada worker liviano y predecible en uso de memoria-.
 
+### Prueba de carga (CA4)
+
+`tests/carga/prueba_carga_ca4.py` valida CA4 ("la cola soporta al menos un
+archivo por minuto por datalogger sin cuellos de botella perceptibles").
+Levanta un FTP local que sirve los fixtures de `tests/fixtures/`, crea N
+conexiones `cnxn_ftp` de prueba apuntando a él, encola todo de golpe y mide
+cuánto tarda la cola real (Celery + Redis + worker) en drenar.
+
+```bash
+# el stack debe estar levantado SIN docker-compose.override.aws-test.yml,
+# si no se escriben datos de prueba en la RDS compartida
+docker compose -f docker-compose.yml --profile full up -d
+
+cd backend
+./venv/Scripts/python.exe tests/carga/prueba_carga_ca4.py
+./venv/Scripts/python.exe tests/carga/prueba_carga_ca4.py --limpiar
+```
+
+No basta con que la cola drene rápido: el script exige las tres cosas
+(drenar a tiempo, **todos** los archivos en `Exitoso`, y filas reales
+escritas en `tlmtr`) y devuelve exit code 1 si alguna falla. Sin la
+verificación de `tlmtr`, un pipeline que marcara los archivos como
+`Exitoso` sin persistir nada daría un falso "CUMPLE".
+
+Resultado medido (3 ago 2026, `--concurrency=4`, un solo worker, todo en
+una máquina de desarrollo con Docker Desktop):
+
+| Métrica | Valor |
+|---|---|
+| Escenario | 5 dataloggers x 12 archivos = 60 archivos de golpe |
+| Equivalente en operación real | 12 min (1 archivo/min/datalogger) |
+| Tiempo en drenar la cola | **1.0 s** |
+| Throughput | ~59 archivos/s (~3.500 archivos/min) |
+| Estados finales | 60/60 `Exitoso` |
+| Filas persistidas en `tlmtr` | 220 |
+
+**CA4 se cumple con amplio margen**: la cola absorbe en 1 segundo lo que en
+operación real llegaría a lo largo de 12 minutos (~700x de margen). No se
+observó cuello de botella; con `--concurrency=4` el limitante práctico sería
+el FTP de los dataloggers o el pool de Postgres, no la cola. La medición es
+optimista respecto a producción en un punto: el FTP de prueba es local
+(latencia ~0), mientras que un datalogger real en campo añade latencia de red
+por descarga. Aun así el margen es tan amplio que la conclusión no cambia.
+
 ### Escalar horizontalmente
 
 El diseño permite agregar más workers a medida que se suman sedes/clientes,

@@ -17,7 +17,16 @@ logger = logging.getLogger(__name__)
 # Errores transitorios: vale la pena reintentar (conexión, timeout, I/O).
 # Un archivo mal formado o datos inválidos no se arreglan reintentando -
 # ese tipo de error se distingue con ErrorDatosNoRecuperable más abajo.
-ERRORES_TRANSITORIOS = (ftplib.all_errors, OSError, TimeoutError)
+#
+# OJO: ftplib.all_errors ya es una TUPLA (Error, OSError, EOFError,
+# SSLError), así que se usa tal cual y NO se anida dentro de otra tupla.
+# Anidarla -(ftplib.all_errors, ...)- hace que Celery falle con
+# "TypeError: catching classes that do not inherit from BaseException" al
+# intentar usarla en autoretry_for, y el archivo queda colgado en
+# 'Procesando' para siempre en vez de reintentarse. TimeoutError y
+# OSError ya están cubiertos por all_errors (TimeoutError hereda de
+# OSError).
+ERRORES_TRANSITORIOS = tuple(ftplib.all_errors)
 
 
 class ErrorDatosNoRecuperable(Exception):
@@ -135,15 +144,25 @@ def procesar_archivo_dat(self, id_archv: int) -> dict:
         return {"id_archv": id_archv, "estado": "Fallido"}
     except Exception as exc:
         db.rollback()
-        if self.request.retries >= self.max_retries:
+        # Se marca Fallido cuando ya no va a haber otro intento, sea porque
+        # se agotaron los reintentos o porque el error no es de los
+        # transitorios (autoretry_for) y por tanto Celery no lo reintenta.
+        # Sin esta segunda condición, un error inesperado -por ejemplo un
+        # IntegrityError de Postgres- dejaba el archivo colgado en
+        # 'Procesando' indefinidamente: ni se reintentaba, ni aparecía como
+        # fallido en las métricas de HU09, ni se podía reprocesar (HU31).
+        es_transitorio = isinstance(exc, ERRORES_TRANSITORIOS)
+        if not es_transitorio or self.request.retries >= self.max_retries:
             archivo = db.get(ArchivoIngesta, id_archv)
             if archivo is not None:
                 archivo.estd = "Fallido"
                 archivo.mnsj_errr = str(exc)[:500]
                 db.commit()
             logger.error(
-                "archv_ingst id=%s marcado Fallido tras agotar reintentos: %s",
-                id_archv, exc,
+                "archv_ingst id=%s marcado Fallido (%s): %s",
+                id_archv,
+                "reintentos agotados" if es_transitorio else "error no reintentable",
+                exc,
             )
         raise
     finally:
