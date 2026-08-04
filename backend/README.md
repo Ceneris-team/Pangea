@@ -2,6 +2,19 @@
 
 ## Cola de ingesta (HT-05)
 
+**Estado: cerrada.** Los cuatro criterios de aceptación están implementados y
+verificados:
+
+| CA | Qué pide | Dónde está | Verificación |
+|---|---|---|---|
+| CA1 | Cada `.dat` recibido genera un job sin bloquear la recepción | `sondear_conexiones_ftp` + `beat_schedule` (cada 60s) | Sondeo corriendo en Beat |
+| CA2 | Reintentos automáticos ante fallos transitorios | `autoretry_for` + backoff exponencial con jitter (5 intentos, tope 600s) | Ver "Reintentos" abajo |
+| CA3 | Métricas de jobs pendientes / en proceso / fallidos | `GET /ingesta/metricas` (`app/routers/ingesta.py`) | Router registrado en `main.py` |
+| CA4 | Soportar ≥1 archivo/min por datalogger sin cuello de botella | — | Medido: 60 archivos en 1.0s (ver "Prueba de carga") |
+
+> **Pendiente que NO bloquea HT-05 pero sí afecta a la ingesta en
+> producción — ver "Particiones de tlmtr" al final de este documento.**
+
 La ingesta de archivos `.dat` de los dataloggers corre sobre Celery + Redis,
 con tres roles separados que corren como contenedores/procesos independientes:
 
@@ -31,6 +44,33 @@ dataloggers reportando cada uno una vez por minuto sin acumular cola. Si
 el número de dataloggers crece más allá de eso, la vía es escalar
 horizontalmente (ver abajo), no subir la concurrencia de un único worker
 sin límite -mantiene cada worker liviano y predecible en uso de memoria-.
+
+### Reintentos (CA2)
+
+`procesar_archivo_dat` distingue dos clases de error, porque no todos se
+arreglan reintentando:
+
+- **Transitorios** (`ERRORES_TRANSITORIOS` = `ftplib.all_errors`: conexión
+  caída, timeout, EOF, SSL): hasta 5 reintentos con backoff exponencial +
+  jitter, tope de 600s entre intentos. Al agotarlos, el archivo queda
+  `Fallido` para reproceso manual (HU31).
+- **No reintentables** (`ErrorDatosNoRecuperable`, o cualquier otra excepción
+  como un `IntegrityError` de Postgres): se marcan `Fallido` de inmediato.
+  Reintentar no cambiaría el resultado.
+
+Dos trampas que costaron un diagnóstico largo y conviene no reintroducir:
+
+1. **No anidar `ftplib.all_errors`**: ya es una tupla. Escribir
+   `(ftplib.all_errors, OSError)` hace que Celery falle con `TypeError:
+   catching classes that do not inherit from BaseException`, y **el retry
+   deja de funcionar por completo**.
+2. **Marcar `Fallido` también cuando el error no es reintentable**, no solo
+   al agotar reintentos. Si solo se contempla lo segundo, un error
+   inesperado deja el archivo colgado en `Procesando` para siempre:
+   invisible en las métricas de CA3/HU09 y no reprocesable por HU31.
+
+Ambos casos producían el mismo síntoma —archivos zombis en `Procesando`— y
+los detectó la prueba de carga de CA4, no una prueba unitaria.
 
 ### Prueba de carga (CA4)
 
@@ -110,3 +150,51 @@ Cada `cnxn_ftp` respeta su propia `frcnc_mnts` (frecuencia en minutos)
 gracias a la columna `ultm_snd`: aunque Celery Beat dispara el sondeo cada
 minuto, cada conexión solo se sondea de verdad si ya pasó su `frcnc_mnts`
 desde el último sondeo.
+
+---
+
+## PENDIENTE: particiones de `tlmtr` (fuera de HT-05)
+
+> **Fecha límite: 1 de noviembre de 2026.** A partir de esa fecha la ingesta
+> empieza a perder lecturas si nadie actúa antes.
+
+`tlmtr` está particionada por rango mensual sobre `fch_hr`. La migración
+`eadc512979fc` (22-jul-2026) creó **a mano** solo cuatro particiones:
+`tlmtr_2026_07`, `_08`, `_09` y `_10`. No hay criterio de negocio detrás de
+ese rango: es "el mes en curso + 3 de colchón" en el momento de escribir la
+migración.
+
+Esa migración asume que existe un job que crea las siguientes
+automáticamente ("*el job de HT-08/Celery Beat creará las siguientes*"),
+pero **ese job no está implementado**: no hay ninguna función que cree
+particiones en `app/`, y `beat_schedule` solo tiene la entrada de
+`sondear_conexiones_ftp`. El docstring de `app/models/telemetria.py` es el
+que refleja la realidad actual: *"las particiones mensuales se crean a mano
+en la migración"*.
+
+**Consecuencia.** Una lectura cuyo `fch_hr` caiga fuera de las particiones
+existentes falla al insertarse:
+
+```
+IntegrityError: no partition of relation "tlmtr" found for row
+DETAIL: Partition key of the failing row contains (fch_hr) = (2026-11-01 ...)
+```
+
+Desde el fix de CA2, ese archivo se marca `Fallido` y queda visible en las
+métricas y reprocesable por HU31 -antes se quedaba colgado en `Procesando`-,
+pero **la lectura no se guarda igual**. No es una degradación silenciosa,
+pero sí es pérdida de ingesta hasta que existan las particiones.
+
+**Opciones para cerrarlo** (decisión del equipo, no se tomó en HT-05):
+
+1. **Implementar el job de HT-08** que la migración da por hecho: una tarea
+   en `beat_schedule` que cree con antelación la partición del mes
+   siguiente. Es la solución de fondo.
+2. **Parche temporal**: una migración que agregue particiones hasta mediados
+   de 2027. Compra ~1 año y vuelve a presentar el mismo problema después.
+
+Nota para quien corra pruebas: `tests/carga/prueba_carga_ca4.py` ya sortea
+esto eligiendo automáticamente una fecha dentro de una partición existente
+(y no futura, porque PP-99 rechaza timestamps futuros). Si esa prueba
+empieza a fallar con el `IntegrityError` de arriba, la causa es esta y no
+el pipeline.

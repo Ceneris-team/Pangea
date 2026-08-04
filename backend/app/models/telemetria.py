@@ -8,7 +8,15 @@ class Telemetria(Base):
     (las particiones mensuales se crean a mano en la migración, ya que
     Alembic no las genera automáticamente). La PK compuesta (id_lctr,
     fch_hr) es requisito de Postgres: la columna de partición debe formar
-    parte de toda unique/primary key de la tabla particionada."""
+    parte de toda unique/primary key de la tabla particionada.
+
+    PENDIENTE (fecha límite 1-nov-2026): solo existen las particiones
+    2026_07 .. 2026_10, creadas a mano en la migración eadc512979fc. El
+    job que debía crear las siguientes automáticamente NO está
+    implementado, así que a partir de noviembre de 2026 toda lectura
+    fallará con "no partition of relation tlmtr found for row" y se
+    perderá esa ingesta. Ver la sección "PENDIENTE: particiones de tlmtr"
+    en backend/README.md."""
     __tablename__ = "tlmtr"
     __table_args__ = (
         Index("idx_tlmtr_fchhr_brin", "fch_hr", postgresql_using="brin"),
