@@ -3,8 +3,12 @@ import { AuthProvider } from "../context/AuthContext";
 import ProtectedRoute from "../components/ProtectedRoute";
 import Login from "../pages/Login";
 import PanelAdmin from "../pages/PanelAdmin";
+import PanelTecnico from "../pages/PanelTecnico";
 import Usuarios from "../pages/Usuarios";
+import Ubicaciones from "../pages/Ubicaciones";
 import { ROLES } from "../config/roles";
+import ConexionesFTP from "../pages/ConexionesFTP";
+import ConfigurarConexionFTP from "../pages/ConfigurarConexionFTP";
 
 export default function AppRouter() {
   return (
@@ -22,7 +26,18 @@ export default function AppRouter() {
             }
           />
 
-          {/* HU03: "Solo el rol Administrador puede acceder a este módulo." */}
+          {/* Nueva: resuelve el problema de que el Técnico no aterrizaba
+              en ningún lado tras el login (rutaPorRol() apuntaba aquí y
+              la ruta no existía). */}
+          <Route
+            path="/panel-tecnico"
+            element={
+              <ProtectedRoute rolRequerido={ROLES.TECNICO_CENERIS}>
+                <PanelTecnico />
+              </ProtectedRoute>
+            }
+          />
+
           <Route
             path="/usuarios"
             element={
@@ -32,9 +47,41 @@ export default function AppRouter() {
             }
           />
 
-          {/* TODO (equipo): agregar /panel-tecnico, /panel-cliente, /panel-comercial
-              cuando se implementen esas historias. Por ahora, si un rol distinto
-              a Administrador inicia sesión, no tiene panel propio todavía. */}
+          <Route
+            path="/ubicaciones"
+            element={
+              <ProtectedRoute>
+                <Ubicaciones />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/conexiones-ftp"
+            element={
+              <ProtectedRoute>
+                <ConexionesFTP />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/conexiones-ftp/nueva"
+            element={
+              <ProtectedRoute>
+                <ConfigurarConexionFTP />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/conexiones-ftp/:id/editar"
+            element={
+              <ProtectedRoute>
+                <ConfigurarConexionFTP />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* TODO (equipo): agregar /panel-cliente y /panel-comercial
+              cuando se implementen esas historias. */}
 
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>

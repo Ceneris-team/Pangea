@@ -1,6 +1,0 @@
-
-
-
-Paso 1: En terminal entrar a Backend y luego ejecutar este comando (uvicorn app.main:app --reload) , esto activa el Backend
-Paso 2: En otra terminal "cd frontend" y luego ejecutar "npm run dev "
-Pase 3: Abrir docker desktop correr pangea y luego ejecutar "docker run -d --name pangea-redis -p 6379:6379 redis:7-alpine"
