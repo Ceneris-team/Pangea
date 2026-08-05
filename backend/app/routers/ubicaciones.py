@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import Ubicacion, PermisoUbicacion
-from app.security.dependencies import get_current_user
+from app.security.permisos import require_permiso, LECTURA
 from app.schemas import UbicacionListItem
 
 router = APIRouter(prefix="/ubicaciones", tags=["Ubicaciones"])
@@ -29,7 +29,7 @@ def listar_ubicaciones(
     pagina: int = Query(default=1, ge=1),
     por_pagina: int = Query(default=10, ge=1, le=100),  # CA: 10 por defecto
     db: Session = Depends(get_db),
-    usuario: dict = Depends(get_current_user),
+    usuario: dict = Depends(require_permiso("Ubicaciones", LECTURA)),
 ):
     query = db.query(Ubicacion)
 
