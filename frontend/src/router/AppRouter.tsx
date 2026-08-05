@@ -2,6 +2,9 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "../context/AuthContext";
 import ProtectedRoute from "../components/ProtectedRoute";
 import Login from "../pages/Login";
+import OlvideContrasena from "../pages/OlvideContrasena";
+import RestablecerContrasena from "../pages/RestablecerContrasena";
+import MiPerfil from "../pages/MiPerfil";
 import PanelAdmin from "../pages/PanelAdmin";
 import PanelTecnico from "../pages/PanelTecnico";
 import Usuarios from "../pages/Usuarios";
@@ -16,6 +19,19 @@ export default function AppRouter() {
       <AuthProvider>
         <Routes>
           <Route path="/login" element={<Login />} />
+          {/* HU02: flujo de recuperación de contraseña, accesible sin sesión */}
+          <Route path="/olvide-contrasena" element={<OlvideContrasena />} />
+          <Route path="/restablecer-contrasena" element={<RestablecerContrasena />} />
+
+          {/* HU02: cambiar contraseña con sesión activa desde "Mi perfil" */}
+          <Route
+            path="/mi-perfil"
+            element={
+              <ProtectedRoute>
+                <MiPerfil />
+              </ProtectedRoute>
+            }
+          />
 
           <Route
             path="/panel-admin"
