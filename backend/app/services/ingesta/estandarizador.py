@@ -3,12 +3,12 @@ PP-98 (HU06): estandariza la salida del parser (PP-97) a una estructura
 interna común -formato .tsp- usando un diccionario de mapeo
 columna_original -> nombre_parametro_estandar.
 
-Ese diccionario lo debe producir PP-96 (mini-ETL por marca: mp_frmt +
-mp_clmn + prmtr) resolviendo, para cada archivo, qué mapeo aplica y
-traduciendo mp_clmn.indc_clmn -> prmtr.nmbr. PP-96 todavía está bloqueado
-pendiente de definición de negocio sobre cómo distinguir tipos de trama
-por archivo, así que esta etapa recibe el mapeo ya resuelto como
-parámetro y no sabe nada de mp_frmt/mp_clmn.
+Ese diccionario lo produce PP-96 (app.services.ingesta.mapeo) leyendo
+mp_frmt + mp_clmn + prmtr: resuelve qué formato aplica al archivo según
+sede, marca y tipo de trama, y traduce mp_clmn.indc_clmn -> prmtr.nmbr.
+
+Esta etapa sigue recibiendo el mapeo ya resuelto como parámetro y no sabe
+nada de mp_frmt/mp_clmn, para poder probarse sin base de datos.
 """
 import dataclasses
 import datetime as dt
@@ -26,17 +26,14 @@ class LecturaEstandar:
     error_parseo: str | None = None
 
 
-def mapeo_prueba_temporal() -> dict:
-    """Mapeo mock solo para probar el pipeline end-to-end mientras PP-96
-    no existe. Cubre las columnas de los dos archivos de ejemplo de HU06
-    (trama de estado de gabinete y trama de calidad de agua).
+def mapeo_de_ejemplo() -> dict:
+    """Mapeo de ejemplo para pruebas del pipeline SIN base de datos.
 
-    # TODO(PP-96): reemplazar por el mapeo real (mp_frmt + mp_clmn + prmtr)
-    # cuando la definición de negocio de "cómo distinguir tipos de trama
-    # por archivo" esté cerrada. El punto de integración es el parámetro
-    # `mapeo` de estandarizar_filas() más abajo: quien llame a esta función
-    # debe resolver el mapeo real ahí en vez de usar este mock.
-    """
+    El pipeline real ya no usa esto: resuelve el mapeo desde
+    mp_frmt/mp_clmn/prmtr (ver app.services.ingesta.mapeo, PP-96). Se
+    conserva solo para tests que ejercitan parser/estandarizador/validador
+    de forma aislada, como
+    tests/services/test_pipeline_ingesta_manual.py."""
     return {
         "Estado_Gabinete": "estado_gabinete",
         "Estado_Puerta": "estado_puerta",
@@ -57,7 +54,7 @@ def estandarizar_filas(resultado: ResultadoParseo, id_cnxn: int, mapeo: dict) ->
     (ej. índices de calidad, timestamps de máximos, etc. de HU06)-.
 
     `mapeo` es columna_original -> nombre_parametro_estandar, resuelto por
-    quien llama (normalmente PP-96; ver mapeo_prueba_temporal para el
+    quien llama (normalmente PP-96; ver mapeo_de_ejemplo para el
     mock usado en pruebas del pipeline)."""
     lecturas = []
     for fila in resultado.filas:

@@ -152,6 +152,60 @@ minuto, cada conexión solo se sondea de verdad si ya pasó su `frcnc_mnts`
 desde el último sondeo.
 
 ---
+## Mapeo de formato por marca (HU06 / PP-96)
+
+Un datalogger manda **dos formatos de archivo distintos**, con distinto número
+y significado de columnas. El tipo se deduce del prefijo del nombre:
+
+| Prefijo | `mp_frmt.tp_trm` | Contenido |
+|---|---|---|
+| `H_*.dat` | `H` | Datos periódicos (la lectura en tiempo real) |
+| `E_*.dat` | `E` | Estados y eventos que genera el equipo |
+
+Por eso un formato se identifica por **sede + marca + tipo de trama**
+(`uq_mpfrmt_sd_mrc_tptrm`), no solo por marca: sin `tp_trm` no habría forma de
+guardar ambos sin inventar marcas falsas tipo `"Campbell_H"`.
+
+### Cómo se resuelve un archivo
+
+`app/services/ingesta/mapeo.py`, antes de descargar nada:
+
+1. `detectar_tipo_trama()` saca `H`/`E` del prefijo del nombre (tolera
+   minúsculas y rutas).
+2. `resolver_formato()` busca el `mp_frmt` activo de esa sede + marca + trama, y
+   de ahí salen delimitador, fila de inicio de datos y formato de fecha.
+3. Tras parsear el header, `construir_mapeo()` traduce `mp_clmn` a
+   `columna → parámetro`.
+
+**`mp_clmn` referencia las columnas por índice (`indc_clmn`, 0-based sobre el
+header), no por nombre.** Es a propósito: los archivos de campo traen headers
+con nombres inconsistentes, repetidos o con unidades pegadas
+(`Temperatura(C°)`), y el índice es estable frente a eso. El contrapeso es que
+si el datalogger inserta una columna al principio, los índices se desplazan y
+hay que recargar el mapeo.
+
+### Qué pasa si falta el mapeo
+
+Se lanza `MapeoNoEncontradoError`, que el pipeline clasifica como error de datos
+**no reintentable**: el archivo queda `Fallido` con una causa accionable
+("no hay formato activo para sede=X, marca=Y, trama=Z"). No se adivina el
+formato: interpretar un archivo con el mapeo equivocado produciría lecturas
+incorrectas en silencio, que es peor que no procesarlo.
+
+Lo mismo si el archivo no tiene prefijo reconocible, o si ninguna columna del
+mapeo existe en el header.
+
+### Cargar un formato nuevo
+
+Hoy se hace por SQL/seed: una fila en `mp_frmt` (sede, marca, `tp_trm`,
+delimitador, formato de fecha) y una fila en `mp_clmn` por cada columna que se
+quiera capturar, apuntando a su `prmtr`.
+
+> **Pendiente**: el equipo de telemetría pidió poder crear y editar estos
+> formatos ellos mismos, sin tocar la base de datos, porque el tipo de variables
+> que manejan es muy variado. Eso es una historia aparte (endpoints CRUD +
+> pantalla de configuración); el modelo de datos que necesita ya existe.
+
 ## Particionamiento de `tlmtr` (HT-08)
 
 **Estado: implementado.** `tlmtr` está particionada por RANGE mensual sobre

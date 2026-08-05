@@ -7,12 +7,25 @@ from app.database import Base
 
 
 class MapeoFormato(Base):
-    """HU 06: mini-ETL por marca de sensor."""
+    """HU 06: mini-ETL por marca de sensor.
+
+    Un datalogger de una misma marca manda dos formatos distintos de
+    archivo, con distinto número y significado de columnas, y por eso el
+    formato se identifica por sede + marca + tipo de trama (PP-96):
+
+      tp_trm='H' -> archivos H_*.dat: datos periódicos (lectura real)
+      tp_trm='E' -> archivos E_*.dat: estados y eventos del equipo
+    """
     __tablename__ = "mp_frmt"
+    __table_args__ = (
+        CheckConstraint("tp_trm IN ('H','E')", name="mpfrmt_tptrm_check"),
+        UniqueConstraint("id_sd", "mrc", "tp_trm", name="uq_mpfrmt_sd_mrc_tptrm"),
+    )
 
     id_mp = Column(Integer, primary_key=True, autoincrement=True)
     id_sd = Column(Integer, ForeignKey("sd.id_sd"), nullable=False)
     mrc = Column(String(100), nullable=False)
+    tp_trm = Column(String(5), nullable=False, server_default="H")
     dlmtdr = Column(String(5), nullable=False, server_default=",")
     fl_inc_dts = Column(Integer, nullable=False, server_default="1")
     frmt_fch = Column(String(50), nullable=False)

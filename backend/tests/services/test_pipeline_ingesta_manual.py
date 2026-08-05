@@ -12,7 +12,7 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
 
-from app.services.ingesta.estandarizador import estandarizar_filas, mapeo_prueba_temporal
+from app.services.ingesta.estandarizador import estandarizar_filas, mapeo_de_ejemplo
 from app.services.ingesta.parser import ConfiguracionParseo, parsear_archivo_dat
 from app.services.ingesta.validador import validar_lecturas
 
@@ -29,7 +29,7 @@ def correr(nombre_archivo: str, id_cnxn: int = 1):
     for fila in resultado_parseo.filas:
         print(f"  fila {fila.numero_fila}: fecha={fila.fecha_hora} error={fila.error}")
 
-    lecturas = estandarizar_filas(resultado_parseo, id_cnxn=id_cnxn, mapeo=mapeo_prueba_temporal())
+    lecturas = estandarizar_filas(resultado_parseo, id_cnxn=id_cnxn, mapeo=mapeo_de_ejemplo())
     print(f"lecturas estandarizadas (mapeo mock): {len(lecturas)}")
     for l in lecturas:
         print(f"  {l.parametro} = {l.valor_crudo!r} (fila {l.numero_fila})")
