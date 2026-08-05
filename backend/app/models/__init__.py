@@ -16,3 +16,4 @@ from app.models.alarma import (
     Alarma, CondicionAlarma, DestinatarioAlarma, NotificacionEnviada,
 )
 from app.models.varios import ParametroCalculado, LogAuditoria, Exportacion
+from app.models.token_recuperacion import TokenRecuperacion

@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import "./Login.css";
 import { useAuth } from "../context/AuthContext";
 import { rutaPorRol } from "../config/roles";
@@ -156,16 +156,9 @@ export default function Login() {
                   />
                   Recordarme
                 </label>
-                <a
-                  href="#"
-                  className="link"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    alert('Aquí se redirige al flujo de "Gestionar contraseña" (HU 02).');
-                  }}
-                >
+                <Link to="/olvide-contrasena" className="link">
                   ¿Olvidaste tu contraseña?
-                </a>
+                </Link>
               </div>
 
               <button type="submit" className="submit" disabled={loading}>

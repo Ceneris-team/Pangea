@@ -32,5 +32,10 @@ class Usuario(Base):
     estd = Column(String(20), nullable=False, server_default="Activo")
     intnts_fllds = Column(Integer, nullable=False, server_default="0")
     fch_crcn = Column(TIMESTAMP(timezone=True), nullable=False, server_default=text("NOW()"))
+    # HU 02: fecha del último cambio de contraseña. Se usa para invalidar los
+    # JWT emitidos antes de este momento (ver security/dependencies.py) y así
+    # cumplir "el cambio de contraseña invalida todas las sesiones activas".
+    fch_cntrsn_actlzd = Column(TIMESTAMP(timezone=True), nullable=True)
 
     rol = relationship("Rol", back_populates="usuarios")
+    tokens_recuperacion = relationship("TokenRecuperacion", back_populates="usuario")
