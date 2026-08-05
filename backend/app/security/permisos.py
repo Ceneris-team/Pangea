@@ -2,10 +2,11 @@
 HT-09: Middleware de autorización en FastAPI.
 
 Valida, para cada endpoint del PMV, que el usuario autenticado (HT-04) tenga
-permiso sobre el módulo y la acción solicitados según la matriz de HT-03. Si
-el permiso es insuficiente devuelve 403 (distinto del 401 que ya cubre HT-04
-para tokens inválidos o expirados), y registra el intento denegado en un log
-preliminar que sirve de base para la auditoría formal de HT-11.
+permiso sobre el módulo y la acción solicitados según la matriz de HT-03
+(tabla `prms_usr_sd`, Usuario-Sede-Rol-Permiso). Si el permiso es
+insuficiente devuelve 403 (distinto del 401 que ya cubre HT-04 para tokens
+inválidos o expirados), y registra el intento denegado en un log preliminar
+que sirve de base para la auditoría formal de HT-11.
 
 Uso en un endpoint:
 
@@ -29,15 +30,24 @@ sedes ajenas aunque tenga permiso de edición en la suya:
         verificar_sede(usuario, sede_id, modulo="Dispositivos", accion=LECTURA)
         ...
 
-NOTA: la matriz de abajo es una primera versión basada en los 4 roles
-sembrados en seed_usuarios_prueba.py (HT-04). Cuando se implementen
-HU08/HU10-HU13 hay que revisarla contra el diseño final de HT-03 y ajustar
-módulos/roles/acciones si hace falta.
+HISTORIAL: la primera versión de este archivo (adda9bb) usaba una matriz
+rol -> módulo -> acciones hardcodeada en Python (MATRIZ_PERMISOS) como
+implementación provisional, a falta de conectar con HT-03. Se elimina sin
+dejarla como fallback: además de estar duplicada con `prms_usr_sd`, incluía
+un módulo "Mediciones" que nunca fue válido según el CHECK constraint real
+de HT-03 (`mdl IN ('Usuarios','Ubicaciones','Dispositivos','Ingesta',
+'Tableros','Alarmas','Comercial')`), prueba de que había quedado
+desalineada del modelo real. La matriz de permisos ahora vive solo en la
+base de datos (tabla `prms_usr_sd`), editable sin tocar código, que es lo
+que pedía HT-03 CA4 desde el principio.
 """
 import logging
 
 from fastapi import Depends, HTTPException
+from sqlalchemy.orm import Session
 
+from app.database import get_db
+from app.models import PermisoUsuarioSede
 from .dependencies import get_current_user
 
 logger = logging.getLogger("auditoria.autorizacion")
@@ -45,33 +55,48 @@ logger = logging.getLogger("auditoria.autorizacion")
 LECTURA = "lectura"
 EDICION = "edicion"
 
-# rol -> módulo -> acciones permitidas
-MATRIZ_PERMISOS: dict[str, dict[str, set[str]]] = {
-    "Administrador": {
-        "Ubicaciones": {LECTURA, EDICION},
-        "Dispositivos": {LECTURA, EDICION},
-        "Mediciones": {LECTURA, EDICION},
-    },
-    "Técnico CENERIS": {
-        "Ubicaciones": {LECTURA, EDICION},
-        "Dispositivos": {LECTURA, EDICION},
-        "Mediciones": {LECTURA, EDICION},
-    },
-    "Cliente Final": {
-        "Ubicaciones": {LECTURA},
-        "Dispositivos": {LECTURA},
-        "Mediciones": {LECTURA},
-    },
-    "Administrador Comercial": {
-        "Ubicaciones": {LECTURA},
-        "Dispositivos": {LECTURA},
-        "Mediciones": {LECTURA},
-    },
+# Los niveles válidos en prms_usr_sd.nvl (HT-03 CHECK constraint) y qué
+# acciones de aplicación habilita cada uno: "Edición" da lectura + edición,
+# "Lectura" da solo lectura, "Ninguno" (o la ausencia de fila) no da nada.
+_NIVELES_QUE_PERMITEN = {
+    LECTURA: {"Lectura", "Edición"},
+    EDICION: {"Edición"},
 }
 
 
-def tiene_permiso(rol: str, modulo: str, accion: str) -> bool:
-    return accion in MATRIZ_PERMISOS.get(rol, {}).get(modulo, set())
+def tiene_permiso(db: Session, id_usr: int, id_sd: int | None, modulo: str, accion: str) -> bool:
+    """Consulta real a prms_usr_sd (HT-03 CA2): reemplaza la matriz en
+    memoria por el permiso efectivamente otorgado en la base de datos.
+
+    id_sd es el sede_id del JWT del usuario (HT-04). Para un usuario con
+    scope "por_sede" siempre viene informado, y el chequeo se restringe a
+    su propia fila usuario+sede+módulo -consistente con que verificar_sede()
+    ya le impide operar sobre otras sedes de todos modos-.
+
+    Para un usuario con scope "global" puede venir en None (HT-04: "si es
+    'global', sede_id puede ir en None"). CA4 de HT-09 dejó explícito con
+    criterio conservador que scope=="global" solo exime del filtro de SEDE
+    (eso lo resuelve verificar_sede), NO del de módulo/nivel: un usuario
+    global igual necesita una fila en prms_usr_sd que le otorgue el nivel
+    pedido. Como prms_usr_sd.id_sd es NOT NULL (no hay forma de expresar en
+    el esquema actual de HT-03 "permiso en todas las sedes" sin una fila por
+    sede), la única interpretación posible sin tocar ese esquema es: si el
+    usuario tiene el nivel pedido en AL MENOS UNA de sus filas para ese
+    módulo, se le concede -sea cual sea la sede de esa fila, porque
+    verificar_sede ya autoriza el acceso entre sedes para scope global-.
+    Ver también el punto 4 del resumen de cierre de HT-09 sobre esta
+    limitación del modelo de datos.
+    """
+    query = db.query(PermisoUsuarioSede).filter(
+        PermisoUsuarioSede.id_usr == id_usr,
+        PermisoUsuarioSede.mdl == modulo,
+    )
+    if id_sd is not None:
+        query = query.filter(PermisoUsuarioSede.id_sd == id_sd)
+
+    niveles_otorgados = {p.nvl for p in query.all()}
+    niveles_que_habilitan = _NIVELES_QUE_PERMITEN.get(accion, set())
+    return bool(niveles_otorgados & niveles_que_habilitan)
 
 
 def _registrar_acceso_denegado(usuario: dict, modulo: str, accion: str) -> None:
@@ -83,11 +108,16 @@ def _registrar_acceso_denegado(usuario: dict, modulo: str, accion: str) -> None:
 
 def require_permiso(modulo: str, accion: str):
     """Fábrica de dependencias: exige que el usuario autenticado tenga el
-    permiso indicado sobre `modulo`/`accion` según la matriz de HT-03.
+    permiso indicado sobre `modulo`/`accion` según prms_usr_sd (HT-03).
     Devuelve 403, no 401 (HT-04 ya cubre token inválido/expirado)."""
 
-    def dependencia(usuario: dict = Depends(get_current_user)) -> dict:
-        if not tiene_permiso(usuario.get("rol"), modulo, accion):
+    def dependencia(
+        usuario: dict = Depends(get_current_user),
+        db: Session = Depends(get_db),
+    ) -> dict:
+        id_usr = int(usuario["sub"])
+        id_sd = usuario.get("sede_id")
+        if not tiene_permiso(db, id_usr, id_sd, modulo, accion):
             _registrar_acceso_denegado(usuario, modulo, accion)
             raise HTTPException(status_code=403, detail="No tienes permiso para realizar esta acción")
         return usuario
@@ -99,7 +129,8 @@ def verificar_sede(usuario: dict, sede_id_recurso: int, modulo: str = "", accion
     """Aísla el acceso entre sedes: un usuario con scope 'por_sede' solo
     puede operar sobre recursos de su propia sede, aunque tenga permiso de
     edición sobre el módulo. Los usuarios con scope 'global' no tienen esta
-    restricción."""
+    restricción de sede (pero sí siguen pasando por tiene_permiso() para el
+    chequeo de módulo/nivel, ver el docstring de esa función)."""
     if usuario.get("scope") == "global":
         return
     if usuario.get("sede_id") != sede_id_recurso:

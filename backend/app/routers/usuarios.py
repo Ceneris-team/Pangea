@@ -3,7 +3,10 @@ HU 03 - Listar usuarios
 
 CA: tabla con Nombre, Correo, Rol, Estado y Acciones. Búsqueda por nombre o
 correo (insensible a mayúsculas). Filtro por rol y por estado. Paginado de
-10 por defecto. Solo el rol Administrador accede a este módulo.
+10 por defecto. El acceso al módulo "Usuarios" lo decide prms_usr_sd
+(HT-09/HT-03), no un rol hardcodeado: en la práctica hoy solo Administrador
+tiene una fila con permiso en ese módulo, pero el control ya no depende del
+nombre del rol sino del permiso otorgado.
 """
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, or_
@@ -12,19 +15,12 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import Usuario, Rol
-from app.security.dependencies import get_current_user
+from app.security.permisos import require_permiso, LECTURA, EDICION
 from app.security.hashing import generar_password_temporal, hash_password
 from app.schemas import UsuarioListItem, UsuarioCrear, UsuarioCreado
 from app.tasks.notificaciones import enviar_correo_bienvenida
 
 router = APIRouter(prefix="/usuarios", tags=["Usuarios"])
-
-
-def _requerir_administrador(usuario: dict = Depends(get_current_user)) -> dict:
-    """HU 03 CA: 'Solo el rol Administrador puede acceder a este módulo.'"""
-    if usuario.get("rol") != "Administrador":
-        raise HTTPException(status_code=403, detail="Solo un Administrador puede ver este listado")
-    return usuario
 
 
 @router.get("")
@@ -35,7 +31,7 @@ def listar_usuarios(
     pagina: int = Query(default=1, ge=1),
     por_pagina: int = Query(default=10, ge=1, le=100),  # CA: 10 por defecto
     db: Session = Depends(get_db),
-    _admin: dict = Depends(_requerir_administrador),
+    _usuario: dict = Depends(require_permiso("Usuarios", LECTURA)),
 ):
     query = db.query(Usuario).join(Rol, Usuario.id_rl == Rol.id_rl)
 
@@ -78,10 +74,11 @@ def listar_usuarios(
 def crear_usuario(
     body: UsuarioCrear,
     db: Session = Depends(get_db),
-    _admin: dict = Depends(_requerir_administrador),
+    _usuario: dict = Depends(require_permiso("Usuarios", EDICION)),
 ):
-    """HU04: solo el Administrador crea usuarios. Genera una contraseña
-    temporal, la hashea, y encola el correo de bienvenida (HU04 CA2).
+    """HU04: crear usuarios requiere permiso de Edición en el módulo
+    Usuarios (HT-09). Genera una contraseña temporal, la hashea, y encola
+    el correo de bienvenida (HU04 CA2).
     """
     rol = db.query(Rol).filter(Rol.nmbr == body.rol_nombre).first()
     if rol is None:
