@@ -14,8 +14,9 @@ export default function PanelAdmin() {
         </div>
       </header>
 
-      <nav style={{ marginTop: 24 }}>
+      <nav style={{ marginTop: 24, display: "flex", gap: 16 }}>
         <Link to="/usuarios">Gestión de Usuarios</Link>
+        <Link to="/mi-perfil">Mi perfil</Link>
         {/* TODO (equipo): agregar aquí los links a Ubicaciones (HU07/HU08),
             Dispositivos (HU10/HU11), etc. a medida que se implementen. */}
       </nav>
