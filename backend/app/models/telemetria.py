@@ -10,13 +10,14 @@ class Telemetria(Base):
     fch_hr) es requisito de Postgres: la columna de partición debe formar
     parte de toda unique/primary key de la tabla particionada.
 
-    PENDIENTE (fecha límite 1-nov-2026): solo existen las particiones
-    2026_07 .. 2026_10, creadas a mano en la migración eadc512979fc. El
-    job que debía crear las siguientes automáticamente NO está
-    implementado, así que a partir de noviembre de 2026 toda lectura
-    fallará con "no partition of relation tlmtr found for row" y se
-    perderá esa ingesta. Ver la sección "PENDIENTE: particiones de tlmtr"
-    en backend/README.md."""
+    HT-08: las particiones se mantienen solas. La migración a7f31c4b9e02
+    crea 12 meses desde que se aplica, y el job diario
+    app.tasks.particiones.asegurar_particiones_futuras conserva un colchón
+    de 3 meses por delante (además de reparar huecos). Una fila cuya
+    fch_hr no caiga en ninguna partición NO revienta con el error crudo de
+    Postgres: app.services.ingesta.persistencia lo traduce a
+    ParticionInexistenteError. Ver "Particionamiento de tlmtr (HT-08)" en
+    backend/README.md."""
     __tablename__ = "tlmtr"
     __table_args__ = (
         Index("idx_tlmtr_fchhr_brin", "fch_hr", postgresql_using="brin"),

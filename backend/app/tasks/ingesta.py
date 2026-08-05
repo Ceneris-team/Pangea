@@ -11,6 +11,7 @@ from app.services.ingesta.estandarizador import estandarizar_filas, mapeo_prueba
 from app.services.ingesta.parser import ConfiguracionParseo, parsear_dat
 from app.services.ingesta.persistencia import DispositivoNoResueltoError, guardar_lecturas, resolver_dispositivo
 from app.services.ingesta.validador import validar_lecturas
+from app.services.particiones import ParticionInexistenteError
 
 logger = logging.getLogger(__name__)
 
@@ -108,9 +109,16 @@ def procesar_archivo_dat(self, id_archv: int) -> dict:
 
         resultado_validacion = validar_lecturas(lecturas_estandar)
 
-        resultado_persistencia = guardar_lecturas(
-            db, resultado_validacion.validas, dispositivo, id_archv,
-        )
+        try:
+            resultado_persistencia = guardar_lecturas(
+                db, resultado_validacion.validas, dispositivo, id_archv,
+            )
+        except ParticionInexistenteError as exc:
+            # HT-08 CA4: falta la partición de tlmtr para esas fechas.
+            # Reintentar no la crea (eso lo hace el job de Beat), así que
+            # se trata como error de datos: Fallido con causa clara y
+            # reprocesable por HU31 una vez exista la partición.
+            raise ErrorDatosNoRecuperable(str(exc)) from exc
 
         archivo.estd = "Exitoso"
         archivo.fch_prcsd = dt.datetime.now(dt.timezone.utc)

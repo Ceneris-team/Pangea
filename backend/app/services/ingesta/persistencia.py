@@ -14,12 +14,17 @@ import dataclasses
 import datetime as dt
 import logging
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models.mapeo_dispositivo import Dispositivo, Parametro
 from app.models.telemetria import Telemetria
 from app.models.ubicacion_conexion import Ubicacion
 from app.services.ingesta.validador import LecturaValidada
+from app.services.particiones import (
+    ParticionInexistenteError,
+    es_error_de_particion_faltante,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -93,6 +98,33 @@ def guardar_lecturas(
             id_archv=id_archv,
         ))
         guardadas += 1
+
+    # flush explícito para que el INSERT viaje a Postgres AQUÍ y no en el
+    # commit del llamador: es la única forma de traducir el fallo por
+    # partición faltante (HT-08 CA4) a un error de dominio con contexto
+    # útil. Sin esto, el llamador recibiría un IntegrityError crudo desde
+    # dentro de db.commit(), sin saber qué fecha lo causó.
+    if guardadas:
+        try:
+            db.flush()
+        except IntegrityError as exc:
+            db.rollback()
+            if es_error_de_particion_faltante(exc):
+                fechas = sorted({
+                    l.fecha_hora for l in lecturas if l.valor is not None
+                })
+                rango = (
+                    f"{fechas[0]:%Y-%m-%d} .. {fechas[-1]:%Y-%m-%d}"
+                    if fechas else "desconocido"
+                )
+                raise ParticionInexistenteError(
+                    f"No existe partición de tlmtr para las lecturas del archivo "
+                    f"id_archv={id_archv} (rango {rango}). El job "
+                    f"app.tasks.particiones.asegurar_particiones_futuras crea las "
+                    f"particiones futuras; si la fecha es muy antigua o muy lejana, "
+                    f"revisa la configuración de fecha del datalogger."
+                ) from exc
+            raise
 
     if parametros_desconocidos:
         logger.warning(

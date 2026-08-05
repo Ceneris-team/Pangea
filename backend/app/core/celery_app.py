@@ -1,6 +1,7 @@
 import os
 
 from celery import Celery
+from celery.schedules import crontab
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -16,7 +17,12 @@ celery_app = Celery(
     "pangea",
     broker=CELERY_BROKER_URL,
     backend=CELERY_RESULT_BACKEND,
-    include=["app.tasks.ping", "app.tasks.ingesta", "app.tasks.notificaciones"],
+    include=[
+        "app.tasks.ping",
+        "app.tasks.ingesta",
+        "app.tasks.notificaciones",
+        "app.tasks.particiones",
+    ],
 )
 
 celery_app.conf.update(
@@ -69,5 +75,16 @@ celery_app.conf.beat_schedule = {
     "sondear-conexiones-ftp-cada-minuto": {
         "task": "app.tasks.ingesta.sondear_conexiones_ftp",
         "schedule": 60.0,
+    },
+    # HT-08: mantiene el colchón de particiones de tlmtr. Corre a diario a
+    # las 03:00 (hora baja de ingesta) y no una vez al mes a propósito: si
+    # el job falla un día, al siguiente se recupera solo. Un job mensual
+    # que falle deja un hueco que nadie nota hasta que la ingesta empieza
+    # a rechazar lecturas. Como crea MESES_DE_COLCHON meses por delante,
+    # la partición del mes siguiente existe siempre con semanas de
+    # anticipación -HT-08 exige al menos una-.
+    "asegurar-particiones-tlmtr-diario": {
+        "task": "app.tasks.particiones.asegurar_particiones_futuras",
+        "schedule": crontab(hour=3, minute=0),
     },
 }

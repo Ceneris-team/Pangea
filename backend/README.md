@@ -12,8 +12,8 @@ verificados:
 | CA3 | Métricas de jobs pendientes / en proceso / fallidos | `GET /ingesta/metricas` (`app/routers/ingesta.py`) | Router registrado en `main.py` |
 | CA4 | Soportar ≥1 archivo/min por datalogger sin cuello de botella | — | Medido: 60 archivos en 1.0s (ver "Prueba de carga") |
 
-> **Pendiente que NO bloquea HT-05 pero sí afecta a la ingesta en
-> producción — ver "Particiones de tlmtr" al final de este documento.**
+> El pendiente de particiones de `tlmtr` que quedó abierto al cerrar HT-05
+> **ya está resuelto en HT-08** — ver "Particionamiento de tlmtr (HT-08)".
 
 La ingesta de archivos `.dat` de los dataloggers corre sobre Celery + Redis,
 con tres roles separados que corren como contenedores/procesos independientes:
@@ -152,49 +152,97 @@ minuto, cada conexión solo se sondea de verdad si ya pasó su `frcnc_mnts`
 desde el último sondeo.
 
 ---
+## Particionamiento de `tlmtr` (HT-08)
 
-## PENDIENTE: particiones de `tlmtr` (fuera de HT-05)
+**Estado: implementado.** `tlmtr` está particionada por RANGE mensual sobre
+`fch_hr`. Postgres no crea particiones por su cuenta: una fila cuya `fch_hr`
+no caiga en ninguna partición existente **hace fallar el INSERT**, así que
+hay tres piezas que garantizan que eso no ocurra en operación normal.
 
-> **Fecha límite: 1 de noviembre de 2026.** A partir de esa fecha la ingesta
-> empieza a perder lecturas si nadie actúa antes.
+| CA | Qué pide | Dónde está |
+|---|---|---|
+| CA1 | Tabla particionada por rango de fecha | `app/models/telemetria.py` (RANGE sobre `fch_hr`, PK compuesta, BRIN + índices por `id_dspstv`/`id_sd`) |
+| CA2 | Las consultas por rango excluyen particiones irrelevantes | Verificado con `EXPLAIN ANALYZE`, ver abajo |
+| CA3 | Particiones creadas automáticamente con anticipación | `app/tasks/particiones.py` + `beat_schedule` |
+| CA4 | Insertar fuera de rango no genera un error no controlado | `ParticionInexistenteError`, ver "Fecha sin partición" |
 
-`tlmtr` está particionada por rango mensual sobre `fch_hr`. La migración
-`eadc512979fc` (22-jul-2026) creó **a mano** solo cuatro particiones:
-`tlmtr_2026_07`, `_08`, `_09` y `_10`. No hay criterio de negocio detrás de
-ese rango: es "el mes en curso + 3 de colchón" en el momento de escribir la
-migración.
+### Piezas
 
-Esa migración asume que existe un job que crea las siguientes
-automáticamente ("*el job de HT-08/Celery Beat creará las siguientes*"),
-pero **ese job no está implementado**: no hay ninguna función que cree
-particiones en `app/`, y `beat_schedule` solo tiene la entrada de
-`sondear_conexiones_ftp`. El docstring de `app/models/telemetria.py` es el
-que refleja la realidad actual: *"las particiones mensuales se crean a mano
-en la migración"*.
+1. **Migración inicial** (`a7f31c4b9e02`): crea 12 meses de particiones desde
+   el mes en que se aplica. Es el arranque del PMV; a partir de ahí manda el
+   job. La migración `eadc512979fc` había creado a mano solo `2026_07` ..
+   `2026_10`, que se agotaban el 1-nov-2026.
+2. **Job diario** (`app.tasks.particiones.asegurar_particiones_futuras`):
+   corre a las 03:00 vía Celery Beat y mantiene `MESES_DE_COLCHON = 3` meses
+   creados por delante. La partición del mes siguiente existe siempre con
+   semanas de anticipación (HT-08 pide al menos una).
+3. **Helper compartido** (`app/services/particiones.py`): el cálculo de
+   nombres/rangos y el `CREATE` viven en un solo sitio, usado tanto por la
+   migración como por el job, para que no diverjan.
 
-**Consecuencia.** Una lectura cuyo `fch_hr` caiga fuera de las particiones
-existentes falla al insertarse:
+**Por qué el job corre a diario y no una vez al mes:** si falla un día -o el
+worker está caído justo el día que tocaba-, al día siguiente se recupera
+solo. Un job mensual que falle deja un hueco que nadie nota hasta que la
+ingesta empieza a rechazar lecturas. Por lo mismo el job **también repara
+huecos** hacia atrás dentro de su ventana, no solo crea hacia adelante.
+
+Todo es idempotente (`CREATE TABLE IF NOT EXISTS`): re-aplicar la migración
+o que el job corra dos veces el mismo día no falla ni duplica nada.
+
+### Fecha sin partición (CA4)
+
+Insertar una lectura sin partición produce en Postgres crudo:
 
 ```
-IntegrityError: no partition of relation "tlmtr" found for row
-DETAIL: Partition key of the failing row contains (fch_hr) = (2026-11-01 ...)
+ERROR: no partition of relation "tlmtr" found for row
+DETAIL: Partition key of the failing row contains (fch_hr) = (2019-03-01 ...)
 ```
 
-Desde el fix de CA2, ese archivo se marca `Fallido` y queda visible en las
-métricas y reprocesable por HU31 -antes se quedaba colgado en `Procesando`-,
-pero **la lectura no se guarda igual**. No es una degradación silenciosa,
-pero sí es pérdida de ingesta hasta que existan las particiones.
+`guardar_lecturas` hace `flush()` explícito para que ese INSERT viaje a la
+BD dentro de la función -no en el `commit()` del llamador- y traduce el
+fallo (SQLSTATE `23514` + mensaje de partición) a `ParticionInexistenteError`,
+con el rango de fechas concreto y qué revisar. El pipeline la clasifica como
+`ErrorDatosNoRecuperable`: el archivo se marca `Fallido` **sin reintentar**
+-reintentar no crea la partición- y queda reprocesable por HU31.
 
-**Opciones para cerrarlo** (decisión del equipo, no se tomó en HT-05):
+**Se rechaza el insert; no se crea la partición al vuelo.** Decisión
+deliberada: (a) ejecutar DDL desde el path de ingesta toma un lock sobre la
+tabla padre y con varios workers concurrentes puede bloquear la ingesta
+entera; (b) crear particiones automáticamente enmascara datos corruptos -un
+datalogger mal configurado que reporte el año 2019 o 2040 generaría
+particiones basura en silencio-; (c) el caso legítimo ya lo cubre el job de
+Beat, así que una fecha fuera de rango es una anomalía real que conviene ver.
 
-1. **Implementar el job de HT-08** que la migración da por hecho: una tarea
-   en `beat_schedule` que cree con antelación la partición del mes
-   siguiente. Es la solución de fondo.
-2. **Parche temporal**: una migración que agregue particiones hasta mediados
-   de 2027. Compra ~1 año y vuelve a presentar el mismo problema después.
+### Partition pruning verificado (CA2)
 
-Nota para quien corra pruebas: `tests/carga/prueba_carga_ca4.py` ya sortea
-esto eligiendo automáticamente una fecha dentro de una partición existente
-(y no futura, porque PP-99 rechaza timestamps futuros). Si esa prueba
-empieza a fallar con el `IntegrityError` de arriba, la causa es esta y no
-el pipeline.
+Medido sobre 15.410 filas repartidas en 7 meses (13 particiones), con la
+consulta típica de HU12/HU13 -filtro por sede + rango de fechas-:
+
+```sql
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT fch_hr, vlr FROM tlmtr
+WHERE id_sd = :sede AND fch_hr >= '2026-09-01' AND fch_hr < '2026-10-01'
+ORDER BY fch_hr;
+```
+
+```
+Index Scan using tlmtr_2026_09_id_sd_fch_hr_idx on tlmtr_2026_09 tlmtr
+  (cost=0.28..136.19 rows=2160) (actual time=0.157..0.814 rows=2160 loops=1)
+  Index Cond: ((id_sd = $0) AND (fch_hr >= ...) AND (fch_hr < ...))
+  Buffers: shared hit=29
+Execution Time: 0.952 ms
+```
+
+| Consulta | Particiones tocadas | Buffers |
+|---|---|---|
+| Con filtro de rango mensual | **1** de 13 | 29 |
+| Sin filtro de fecha | 13 de 13 | 132 |
+
+El planner descarta las 12 particiones irrelevantes y ataca solo
+`tlmtr_2026_09` por el índice `(id_sd, fch_hr)`. CA2 cumplido.
+
+> Nota para HT-16 (optimización de índices, sprint posterior): esta medición
+> es la línea base. Se hizo con datos sintéticos de un solo dispositivo y una
+> sola sede; para HT-16 conviene repetirla con varias sedes y dispositivos,
+> que es cuando el índice `(id_sd, fch_hr)` empieza a competir de verdad con
+> el BRIN sobre `fch_hr`.
