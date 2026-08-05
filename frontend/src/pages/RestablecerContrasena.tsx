@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import "./login.css";
+import "./Login.css";
 import { apiFetch, ApiError } from "../services/api";
 
 // HU 02, detalle de conversación: "La nueva contraseña debe tener mínimo 8

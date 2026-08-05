@@ -48,6 +48,30 @@ export async function apiFetch<T>(path: string, options: ApiOptions = {}): Promi
     body: options.body ? JSON.stringify(options.body) : undefined,
   });
 
+  return manejarRespuesta<T>(res);
+}
+
+/**
+ * HU06 CA2: la vista previa manda un archivo .dat de muestra, así que va
+ * como multipart/form-data y no como JSON. Deliberadamente NO se fija el
+ * header Content-Type: el navegador tiene que ponerlo él para incluir el
+ * `boundary` que separa las partes; fijarlo a mano rompe el parseo en el
+ * backend. Por lo demás comparte el token y el manejo de 401 con apiFetch.
+ */
+export async function apiUpload<T>(path: string, formData: FormData): Promise<T> {
+  const url = new URL(path, API_BASE_URL);
+  const token = getToken();
+
+  const res = await fetch(url.toString(), {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
+  });
+
+  return manejarRespuesta<T>(res);
+}
+
+async function manejarRespuesta<T>(res: Response): Promise<T> {
   if (res.status === 401) {
     // HU 01 CA: token inválido/expirado -> cerrar sesión y volver a login.
     localStorage.removeItem("pangea_token");

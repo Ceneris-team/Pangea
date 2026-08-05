@@ -1,5 +1,70 @@
 # Backend - Pangea 4.0
 
+## Mapeo de formato: CRUD y vista previa (HU06)
+
+**Estado: cerrada.** El *motor* de mapeo (`app/services/ingesta/mapeo.py` y
+`parser.py`) ya existía y está en uso por el pipeline de ingesta; lo que
+faltaba para cerrar HU06 era la capa que permite al Técnico CENERIS crear
+y editar los mapeos desde la interfaz, en vez de insertarlos a mano en la
+base de datos. Eso es `app/routers/mapeos.py` + las pantallas
+`frontend/src/pages/Mapeos.tsx` y `ConfigurarMapeo.tsx`.
+
+| CA | Qué pide | Endpoint / pantalla |
+|---|---|---|
+| CA1 | Formulario "Nuevo mapeo" con la tabla de asignación columna→parámetro | `GET /parametros` + `ConfigurarMapeo.tsx` |
+| CA2 | "Vista previa": primeras 10 filas del .dat de muestra interpretadas | `POST /mapeos/vista-previa` |
+| CA3 | "Guardar" → "Mapeo guardado correctamente" | `POST /mapeos` |
+| CA4 | "Actualizar" → "Mapeo actualizado correctamente" | `PUT /mapeos/{id_mp}`, `GET /mapeos/{id_mp}` |
+| CA5 | "Ver mapeos": el registro aparece asociado a su marca | `GET /mapeos` + `Mapeos.tsx` |
+
+Acceso: `require_permiso("Ingesta", …)` (HT-09). No existe un módulo
+"Mapeos" en el CHECK constraint de `prms_usr_sd`; `Ingesta` es el que
+corresponde a la configuración del pipeline. Lectura para consultar y
+previsualizar, Edición para crear/actualizar.
+
+### El archivo de muestra no se persiste (CA2)
+
+Regla explícita de la HU. `POST /mapeos/vista-previa` recibe el `.dat` por
+`multipart/form-data`, lo lee **en memoria** (`await archivo.read()`), lo
+pasa por el `parsear_dat()` que ya existía y devuelve las primeras 10
+filas. No se escribe en disco ni en base de datos: por eso el endpoint
+pide permiso de *Lectura* y no de Edición, y por eso hay un test
+(`test_no_persiste_nada`) que verifica que los conteos de `mp_frmt` y
+`mp_clmn` no cambian tras previsualizar.
+
+### Formato de fecha: dos lenguajes, una traducción en la frontera
+
+La HU dice que el campo "acepta cadenas tipo `YYYY-MM-DD HH:mm:ss`", pero
+el motor (`parser._parsear_fecha`) usa `strptime`, y los mapeos sembrados
+antes de HU06 ya están guardados como `%Y-%m-%d %H:%M:%S`. En vez de tocar
+el motor -que está probado y en producción-, la traducción vive en el
+router: `a_formato_strptime()` al guardar y `a_formato_legible()` al leer.
+Un valor que ya venga con `%` se deja pasar tal cual, así los mapeos
+existentes siguen funcionando sin migrar nada.
+
+### Limitaciones del modelo de datos encontradas (no resueltas)
+
+Ninguna se resolvió aquí: HU06 no incluía cambios de esquema y el modelo
+de datos ya se daba por cerrado. Se reportan para decidir aparte.
+
+1. **No hay columna para "Extensión de archivo"**, que CA1 lista como campo
+   obligatorio del formulario. Lo más cercano en `mp_frmt` es `tp_trm`
+   (`'H'`/`'E'`), que no es la extensión sino el *tipo de trama*, y que el
+   motor deduce del **prefijo** del nombre (`H_*.dat` / `E_*.dat`), no de
+   la extensión. El formulario expone `tp_trm` en ese lugar, porque es el
+   campo que el motor realmente usa y forma parte de la clave única
+   `(id_sd, mrc, tp_trm)`. Si el equipo quiere una extensión configurable
+   de verdad (hoy el pipeline solo procesa `.dat`), hace falta una columna
+   nueva **y** que el motor la consuma; agregarla sola sería dato muerto.
+2. **No hay columna para el nombre de la columna de fecha.**
+   `ConfiguracionParseo.columna_fecha` existe en el parser y por defecto
+   vale `"Fecha"`, pero `resolver_formato()` no lo setea, así que el motor
+   siempre usa ese valor fijo. La vista previa acepta `columna_fecha` como
+   parámetro (para poder previsualizar tramas cuyo header use otro nombre)
+   pero **no puede persistirlo**: una marca cuya columna de fecha no se
+   llame "Fecha" se previsualizaría bien y luego fallaría en la ingesta
+   real. Si aparece un datalogger así, hace falta la columna en `mp_frmt`.
+
 ## Middleware de autorización (HT-09)
 
 **Estado: cerrada para los endpoints que existen hoy; CA1 queda parcial
@@ -295,10 +360,11 @@ Hoy se hace por SQL/seed: una fila en `mp_frmt` (sede, marca, `tp_trm`,
 delimitador, formato de fecha) y una fila en `mp_clmn` por cada columna que se
 quiera capturar, apuntando a su `prmtr`.
 
-> **Pendiente**: el equipo de telemetría pidió poder crear y editar estos
-> formatos ellos mismos, sin tocar la base de datos, porque el tipo de variables
-> que manejan es muy variado. Eso es una historia aparte (endpoints CRUD +
-> pantalla de configuración); el modelo de datos que necesita ya existe.
+> **Resuelto en HU06**: el equipo de telemetría pedía poder crear y editar estos
+> formatos ellos mismos, sin tocar la base de datos. Ya existe el CRUD
+> (`app/routers/mapeos.py`) y la pantalla de configuración - ver "Mapeo de
+> formato: CRUD y vista previa (HU06)" al inicio de este README. Cargar un
+> formato por SQL/seed sigue funcionando, pero ya no es la única vía.
 
 ## Particionamiento de `tlmtr` (HT-08)
 

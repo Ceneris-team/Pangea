@@ -13,5 +13,6 @@ cryptography
 slowapi
 python-dotenv
 pydantic[email]
+python-multipart  # HU06: FastAPI lo exige para leer multipart/form-data (vista previa del .dat de muestra)
 pytest
 httpx

@@ -12,6 +12,12 @@ import Ubicaciones from "../pages/Ubicaciones";
 import { ROLES } from "../config/roles";
 import ConexionesFTP from "../pages/ConexionesFTP";
 import ConfigurarConexionFTP from "../pages/ConfigurarConexionFTP";
+import Mapeos from "../pages/Mapeos";
+import ConfigurarMapeo from "../pages/ConfigurarMapeo";
+
+// HU06: "Solo los roles Técnico CENERIS y Administrador tienen acceso a
+// este módulo." El backend lo exige igual vía require_permiso('Ingesta').
+const ROLES_MAPEOS = [ROLES.ADMINISTRADOR, ROLES.TECNICO_CENERIS] as const;
 
 export default function AppRouter() {
   return (
@@ -92,6 +98,32 @@ export default function AppRouter() {
             element={
               <ProtectedRoute>
                 <ConfigurarConexionFTP />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* HU06: mapeo de formato por marca de sensor */}
+          <Route
+            path="/mapeos"
+            element={
+              <ProtectedRoute rolesPermitidos={ROLES_MAPEOS}>
+                <Mapeos />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/mapeos/nuevo"
+            element={
+              <ProtectedRoute rolesPermitidos={ROLES_MAPEOS}>
+                <ConfigurarMapeo />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/mapeos/:id/editar"
+            element={
+              <ProtectedRoute rolesPermitidos={ROLES_MAPEOS}>
+                <ConfigurarMapeo />
               </ProtectedRoute>
             }
           />
