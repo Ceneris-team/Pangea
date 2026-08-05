@@ -1,6 +1,6 @@
 from sqlalchemy import (
     Column, Integer, String, ForeignKey, TIMESTAMP, Numeric, CheckConstraint,
-    UniqueConstraint, text,
+    Index, UniqueConstraint, text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
@@ -14,6 +14,7 @@ class Ubicacion(Base):
         UniqueConstraint("id_sd", "nmbr", name="uq_ubccn_sd_nombre"),
         CheckConstraint("lttd BETWEEN -90 AND 90", name="ubccn_lttd_check"),
         CheckConstraint("lngtd BETWEEN -180 AND 180", name="ubccn_lngtd_check"),
+        Index("idx_ubccn_sd", "id_sd"),
     )
 
     id_ubccn = Column(Integer, primary_key=True, autoincrement=True)
@@ -48,3 +49,10 @@ class ConexionFTP(Base):
     rt_rmt = Column(String(300))
     frcnc_mnts = Column(Integer, nullable=False, server_default="15")
     estd = Column(String(20), nullable=False, server_default="Activa")
+    # [HT-05] última vez que el receptor FTP sondeó esta conexión, se
+    # actualiza en cada corrida haya o no archivos nuevos. Sin esta
+    # columna, frcnc_mnts quedaría como un valor configurable sin efecto
+    # real: no hay forma de saber si "ya toca" sondear una conexión
+    # específica cuando Celery Beat corre con una cadencia fija distinta
+    # (cada 1 minuto) a la de cada datalogger.
+    ultm_snd = Column(TIMESTAMP(timezone=True))

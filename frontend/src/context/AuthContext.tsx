@@ -6,6 +6,7 @@ interface LoginResponse {
   token_type: string;
   rol: string;
   nombre_completo: string;
+  debe_cambiar_contrasena: boolean;
 }
 
 interface AuthState {
