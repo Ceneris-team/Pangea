@@ -1,5 +1,99 @@
 # Backend - Pangea 4.0
 
+## Middleware de autorización (HT-09)
+
+**Estado: cerrada para los endpoints que existen hoy; CA1 queda parcial
+porque HU08/HU10-HU13 todavía no están implementadas.** Ver el detalle CA
+por CA abajo.
+
+`app/security/permisos.py` valida, para cada endpoint protegido, que el
+usuario autenticado (HT-04) tenga el permiso pedido según `prms_usr_sd`
+(HT-03: Usuario-Sede-Rol-Permiso), no según un rol hardcodeado. La primera
+versión de este archivo usaba una matriz `rol -> módulo -> acciones` en
+memoria como implementación provisional; se reemplazó por una consulta
+real a la tabla, que es lo que pedía HT-03 CA4 desde el principio (permisos
+editables en BD, no fijos en código).
+
+| CA | Qué pide | Estado |
+|---|---|---|
+| CA1 | Todos los endpoints del PMV (HU08, HU10, HU11, HU12, HU13) validan permiso | **Parcial.** Esas 5 HU no tienen ningún endpoint implementado todavía (no existe router de dispositivos ni de tableros/dashboards) - no hay nada que conectar. Sí se aplicó/confirmó `require_permiso()` en los 3 endpoints que sí existen y tocan módulos del CHECK constraint de HT-03: `GET /ubicaciones` (HU07), `GET /ingesta/metricas` (HU09) y `GET`+`POST /usuarios` (HU03/HU04), reemplazando en los dos últimos un chequeo de rol hardcodeado por el permiso real. |
+| CA2 | Solo-lectura en Dispositivos -> 403 al intentar HU11 (edición) | **Cerrado.** `tiene_permiso()` consulta `prms_usr_sd` filtrando por usuario+sede+módulo y compara el nivel (`Lectura`/`Edición`/`Ninguno`) contra la acción pedida. Sin fila = sin permiso, igual que `Ninguno`. |
+| CA3 | Usuario `por_sede` de la Sede A no toca la Sede B ni con permiso de edición | **Cerrado**, ya estaba implementado en `verificar_sede()`; se confirmó que sigue aplicando después de conectar CA2 a la BD (son chequeos independientes: uno filtra por módulo/nivel, el otro por sede del recurso). |
+| CA4 | Usuario `global` opera cualquier sede sin asignación previa | **Cerrado, con una decisión documentada.** Ver "Scope global y prms_usr_sd" abajo. |
+| CA5 | Cada acceso denegado queda registrado (usuario, sede, módulo, acción) | **Cerrado**, sin cambios: `_registrar_acceso_denegado()` no dependía de la matriz y sigue funcionando igual con el chequeo basado en BD. |
+
+### Scope global y prms_usr_sd (CA4)
+
+`verificar_sede()` ya eximía a `scope == "global"` del filtro de sede. La
+pregunta que quedaba abierta era si ese usuario también necesita una fila
+en `prms_usr_sd` para el chequeo de módulo/nivel, o si `global` debería
+implicar edición total.
+
+**Decisión (conservadora): sí necesita la fila.** `scope == "global"` solo
+exime del filtro de *sede*, no del de *módulo/nivel* - son dos ejes
+independientes en el modelo de HT-03, y no hay razón para que uno implique
+el otro. Como `prms_usr_sd.id_sd` es `NOT NULL` (no se puede tocar ese
+constraint, es de HT-03), un usuario global no puede tener una fila
+"sede-agnóstica"; `tiene_permiso()` resuelve esto ignorando el filtro de
+sede cuando `id_sd` viene en `None` y aceptando cualquier fila del usuario
+para ese módulo, sea cual sea su sede - consistente con que `verificar_sede`
+ya lo deja operar en cualquier sede de todos modos. Ver el docstring de
+`tiene_permiso()` en `app/security/permisos.py` para el detalle.
+
+### Limitación real encontrada en el modelo de datos
+
+Dos hallazgos de esta conexión, ninguno de los cuales toca el esquema de
+HT-03 ni el JWT de HT-04 (fuera de alcance de HT-09), pero que conviene
+resolver antes de que un usuario `por_sede` real dependa de esto en
+producción:
+
+1. **`POST /auth/login` (HT-04) siempre emite `sede_id=None` en el JWT**,
+   sin importar `usr.scp`. Es un bug de HT-04, no de HT-09, pero bloquea
+   CA3 en la práctica: un usuario `por_sede` real jamás podría pasar
+   `verificar_sede()` ni siquiera para su propia sede, porque
+   `usuario.sede_id` (`None`) nunca es igual al `sede_id_recurso` real. Los
+   tests de HT-09 no lo tocan porque prueban `verificar_sede()` con un
+   payload construido a mano (como lo emitiría un login correcto), no a
+   través del flujo real de `/auth/login`. Queda para quien cierre esa
+   parte de HT-04, o para una HT nueva si HT-04 ya se dio por cerrada.
+2. **`prms_usr_sd.id_sd` es `NOT NULL`**, así que no hay forma de expresar
+   en el esquema actual "este usuario tiene permiso en TODAS las sedes"
+   con una sola fila - ni para roles global ni para sedes que se creen
+   después. Hoy se resuelve en `tiene_permiso()` interpretando "cualquier
+   fila del usuario para ese módulo" como suficiente para un usuario
+   global (ver arriba), pero un usuario global sin ninguna fila para un
+   módulo nuevo queda bloqueado hasta que alguien le cree una fila a mano
+   en alguna sede. Si esto se vuelve un problema operativo real, la
+   solución de fondo (agregar una fila "comodín" con `id_sd` nulleable, o
+   una tabla de permisos separada para scope global) es un cambio de
+   esquema de HT-03 y no se hizo aquí a propósito.
+
+### Correr los tests
+
+Los tests de autorización (`tests/test_permisos.py`,
+`tests/routers/test_autorizacion_endpoints.py`) corren contra una Postgres
+real con las migraciones aplicadas -no contra SQLite-, porque el esquema
+real usa tipos (`JSONB`) que SQLite no puede compilar y porque HT-09
+necesita validar contra `prms_usr_sd` tal como la define la migración de
+HT-03, no una recreación aproximada del modelo.
+
+```bash
+createdb pangea_test
+DATABASE_URL=postgresql+psycopg2://postgres:postgres@localhost:5432/pangea_test \
+    python -m alembic upgrade head
+
+# Redis debe estar corriendo (lo usa el broker de resultados de Celery,
+# que se dispara en el test de POST /usuarios al encolar el correo de
+# bienvenida de HU04).
+TEST_DATABASE_URL=postgresql+psycopg2://postgres:postgres@localhost:5432/pangea_test \
+    python -m pytest tests/test_permisos.py tests/routers/test_autorizacion_endpoints.py -v
+```
+
+Cada test corre dentro de un SAVEPOINT que se revierte al final
+(`tests/conftest.py`), así que no ensucia `pangea_test` ni necesita volver
+a migrar entre corridas.
+
+---
 ## Cola de ingesta (HT-05)
 
 **Estado: cerrada.** Los cuatro criterios de aceptación están implementados y

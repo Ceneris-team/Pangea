@@ -8,18 +8,16 @@ en vez de consultar celery.control.inspect(): así el conteo refleja también
 los jobs que un receptor FTP ya registró como 'Pendiente' pero que ningún
 worker ha tomado todavía, que es justo el caso que se quiere monitorear.
 """
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import ArchivoIngesta
-from app.security.dependencies import get_current_user
+from app.security.permisos import require_permiso, LECTURA
 from app.schemas import MetricasColaIngesta
 
 router = APIRouter(prefix="/ingesta", tags=["Ingesta"])
-
-ROLES_CON_ACCESO = {"Administrador", "Tecnico CENERIS", "Técnico CENERIS"}
 
 ESTADOS = ("Pendiente", "Procesando", "Exitoso", "Fallido")
 
@@ -27,11 +25,8 @@ ESTADOS = ("Pendiente", "Procesando", "Exitoso", "Fallido")
 @router.get("/metricas", response_model=MetricasColaIngesta)
 def metricas_cola_ingesta(
     db: Session = Depends(get_db),
-    usuario: dict = Depends(get_current_user),
+    usuario: dict = Depends(require_permiso("Ingesta", LECTURA)),
 ):
-    if usuario.get("rol") not in ROLES_CON_ACCESO:
-        raise HTTPException(status_code=403, detail="No autorizado")
-
     conteos = dict(
         db.query(ArchivoIngesta.estd, func.count(ArchivoIngesta.id_archv))
         .filter(ArchivoIngesta.estd.in_(ESTADOS))
