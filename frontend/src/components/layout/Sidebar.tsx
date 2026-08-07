@@ -2,14 +2,7 @@ import { Link } from "react-router-dom";
 import pangeaLogo from "../../assets/pangea-logo.png";
 import { ROLES, rutaPorRol } from "../../config/roles";
 
-export type SeccionActiva =
-  | "panel"
-  | "usuarios"
-  | "ubicaciones"
-  | "conexiones-ftp"
-  | "mapeos"
-  | "dashboard"
-  | "configuracion";
+type SeccionActiva = "panel" | "usuarios" | "ubicaciones" | "conexiones-ftp" | "dashboard" | "configuracion" | "consulta-datos"| "mapeos";
 
 interface SidebarProps {
   onLogout: () => void;
@@ -158,6 +151,27 @@ export default function Sidebar({ onLogout, activo, rol }: SidebarProps) {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
           </svg>
           Gestion de Ubicaciones
+        </Link>
+
+        {/* HU13: consulta de datos de telemetria filtrada por parametros/ubicaciones */}
+        <Link
+          to="/consulta-datos"
+          className={linkBase + " " + (activo === "consulta-datos" ? linkActivo : linkInactivo)}
+        >
+          <svg
+            className={"w-5 h-5 " + (activo === "consulta-datos" ? "text-[#8fb300] dark:text-[#ccff00]" : "")}
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="2"
+              d="M9 17V7m6 10V11m-9 6h12a2 2 0 002-2V5a2 2 0 00-2-2H6a2 2 0 00-2 2v10a2 2 0 002 2z"
+            />
+          </svg>
+          Consulta de Datos
         </Link>
 
         {/* Configuracion: placeholder, aun no implementado */}

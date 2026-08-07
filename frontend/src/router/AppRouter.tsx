@@ -1,17 +1,20 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "../context/AuthContext";
 import ProtectedRoute from "../components/ProtectedRoute";
-import Login from "../pages/Login";
+import Login from "../pages/login";
 import OlvideContrasena from "../pages/OlvideContrasena";
 import RestablecerContrasena from "../pages/RestablecerContrasena";
 import MiPerfil from "../pages/MiPerfil";
 import PanelAdmin from "../pages/PanelAdmin";
 import PanelTecnico from "../pages/PanelTecnico";
+import PanelUsuario from "../pages/PanelUsuario";
+import PanelComercial from "../pages/PanelComercial";
 import Usuarios from "../pages/Usuarios";
 import Ubicaciones from "../pages/Ubicaciones";
 import { ROLES } from "../config/roles";
 import ConexionesFTP from "../pages/ConexionesFTP";
 import ConfigurarConexionFTP from "../pages/ConfigurarConexionFTP";
+import ConsultaDatos from "../pages/ConsultaDatos";
 import Mapeos from "../pages/Mapeos";
 import ConfigurarMapeo from "../pages/ConfigurarMapeo";
 
@@ -61,6 +64,24 @@ export default function AppRouter() {
           />
 
           <Route
+            path="/panel-cliente"
+            element={
+              <ProtectedRoute rolRequerido={ROLES.CLIENTE_FINAL}>
+                <PanelUsuario />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/panel-comercial"
+            element={
+              <ProtectedRoute rolRequerido={ROLES.ADMINISTRADOR_COMERCIAL}>
+                <PanelComercial />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
             path="/usuarios"
             element={
               <ProtectedRoute rolRequerido={ROLES.ADMINISTRADOR}>
@@ -102,6 +123,16 @@ export default function AppRouter() {
             }
           />
 
+          {/* HU13: consulta de datos de telemetría filtrada por parámetros/ubicaciones */}
+          <Route
+            path="/consulta-datos"
+            element={
+              <ProtectedRoute>
+                <ConsultaDatos />
+              </ProtectedRoute>
+            }
+          />
+
           {/* HU06: mapeo de formato por marca de sensor */}
           <Route
             path="/mapeos"
@@ -127,9 +158,6 @@ export default function AppRouter() {
               </ProtectedRoute>
             }
           />
-
-          {/* TODO (equipo): agregar /panel-cliente y /panel-comercial
-              cuando se implementen esas historias. */}
 
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
