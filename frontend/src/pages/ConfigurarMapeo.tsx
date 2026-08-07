@@ -244,10 +244,18 @@ export default function ConfigurarMapeo() {
     "bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block w-full p-2.5 outline-none";
   const labelClase = "block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1";
 
+  // La columna de fecha NO se asigna acá: se configura arriba ("Columna de
+  // fecha") y el motor la usa directo, sin pasar por mp_clmn/prmtr. Si se
+  // deja en esta tabla parece que hay que elegirle un parámetro estándar,
+  // y no hay ninguno que le corresponda (la fecha no es una medición).
+  const columnasSinFecha = (vistaPrevia?.columnas ?? []).filter(
+    (c) => c.nombre_columna !== form.columna_fecha
+  );
+
   // CA4: al editar, la asignación guardada existe aunque todavía no se
   // haya subido un archivo de muestra en esta sesión. Se muestra igual.
   const filasAsignacion =
-    vistaPrevia?.columnas ??
+    (vistaPrevia ? columnasSinFecha : null) ??
     Object.keys(asignaciones)
       .map(Number)
       .sort((a, b) => a - b)
@@ -451,8 +459,12 @@ export default function ConfigurarMapeo() {
                   <h2 className="text-base font-bold text-gray-900 dark:text-white mb-1">
                     Asignación de columnas
                   </h2>
-                  <p className="text-sm text-gray-500 dark:text-gray-400 mb-4 font-light">
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mb-1 font-light">
                     Indica qué parámetro estándar corresponde a cada columna del archivo.
+                  </p>
+                  <p className="text-xs text-gray-400 dark:text-gray-500 mb-4 font-light">
+                    La columna de fecha ("{form.columna_fecha}") no aparece aquí: se configura arriba, en
+                    "Columna de fecha".
                   </p>
 
                   {filasAsignacion.length === 0 ? (
