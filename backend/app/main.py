@@ -35,6 +35,7 @@ app.include_router(ingesta.router)
 app.include_router(conexiones_ftp.router)
 app.include_router(mapeos.router)
 app.include_router(mapeos.router_parametros)
+app.include_router(mapeos.router_sedes)
 
 
 @app.get("/")
