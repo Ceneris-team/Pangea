@@ -1,3 +1,5 @@
+import os
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -6,7 +8,10 @@ from slowapi.errors import RateLimitExceeded
 
 from app.routers import usuarios, ubicaciones, auth, ingesta, conexiones_ftp, mapeos
 
-limiter = Limiter(key_func=get_remote_address, storage_uri="redis://localhost:6379/1")
+RATELIMIT_STORAGE_URL = os.environ.get(
+    "RATELIMIT_STORAGE_URL", "redis://localhost:6379/1"
+)
+limiter = Limiter(key_func=get_remote_address, storage_uri=RATELIMIT_STORAGE_URL)
 
 app = FastAPI()
 app.state.limiter = limiter

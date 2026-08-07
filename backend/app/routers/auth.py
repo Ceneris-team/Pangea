@@ -11,6 +11,7 @@ contraseña), restablecerla con ese enlace, y cambiarla estando autenticado
 desde "Mi perfil".
 """
 import datetime as dt
+import os
 import secrets
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -28,7 +29,10 @@ from app.security.mailer import enviar_correo_recuperacion
 from app.security.password_policy import MSG_POLITICA_INVALIDA, es_password_valido
 
 router = APIRouter(prefix="/auth", tags=["Autenticación"])
-limiter = Limiter(key_func=get_remote_address, storage_uri="redis://localhost:6379/1")
+RATELIMIT_STORAGE_URL = os.environ.get(
+    "RATELIMIT_STORAGE_URL", "redis://localhost:6379/1"
+)
+limiter = Limiter(key_func=get_remote_address, storage_uri=RATELIMIT_STORAGE_URL)
 MAX_INTENTOS = 5
 VIGENCIA_TOKEN_RECUPERACION_MINUTOS = 30
 
