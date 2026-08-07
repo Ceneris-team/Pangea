@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pangea 4.0 · Iniciar sesión</title>
+<style>
+  :root{
+    --deep-01:#0c1712;
+    --deep-02:#122019;
+    --moss-01:#1c2f24;
+    --moss-02:#2a4535;
+    --ink:#eef2ee;
+    --ink-soft:rgba(238,242,238,0.62);
+    --ink-faint:rgba(238,242,238,0.38);
+    --line:rgba(238,242,238,0.18);
+    --accent:#7fd8a3;
+    --danger:#ff9b8a;
+    --radius:2px;
+  }
+
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0;
+    font-family:'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif;
+    background:var(--deep-01);
+    color:var(--ink);
+    display:flex;
+    min-height:100vh;
+  }
+
+  /* ---------- Fondo: imagen personalizable a pantalla completa ---------- */
+  .bg-photo{
+    position:fixed;
+    inset:0;
+    z-index:0;
+    background-image:var(--bg-image, none);
+    background-size:cover;
+    background-position:center;
+    background-repeat:no-repeat;
+    transition:opacity .3s ease;
+  }
+  /* Follaje SVG de respaldo, visible solo si no se ha cargado una imagen propia */
+  .bg-fallback{
+    position:fixed;
+    inset:0;
+    z-index:0;
+  }
+  .bg-fallback svg{
+    position:absolute;
+    inset:-6% -6%;
+    width:112%;
+    height:112%;
+  }
+  .bg-fallback::after{
+    content:"";
+    position:absolute;
+    inset:0;
+    background:linear-gradient(160deg, #0a140f 0%, #10201a 45%, #0a1712 100%);
+    opacity:0.55;
+  }
+
+  .stage{
+    position:relative;
+    z-index:1;
+    display:flex;
+    width:100%;
+    min-height:100vh;
+  }
+
+  /* ---------- Zona izquierda: deja ver la imagen sin overlay ---------- */
+  .canopy{
+    position:relative;
+    flex:1.05;
+    display:none;
+  }
+  .canopy-tag{
+    position:absolute;
+    left:44px;
+    bottom:40px;
+    z-index:2;
+    letter-spacing:0.22em;
+    font-size:11px;
+    text-transform:uppercase;
+    color:rgba(238,242,238,0.55);
+    text-shadow:0 2px 12px rgba(0,0,0,0.55);
+  }
+  .canopy-tag b{
+    display:block;
+    font-size:20px;
+    letter-spacing:0.04em;
+    color:var(--ink);
+    text-transform:none;
+    margin-bottom:6px;
+    font-weight:600;
+  }
+
+  /* ---------- Panel de login: vidrio transparente sobre la imagen ---------- */
+  .panel{
+    flex:1;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    position:relative;
+    background:rgba(10,18,14,0.42);
+    backdrop-filter:blur(18px) saturate(115%);
+    -webkit-backdrop-filter:blur(18px) saturate(115%);
+    border-left:1px solid rgba(238,242,238,0.08);
+    padding:48px 32px;
+  }
+
+  .card{
+    width:100%;
+    max-width:380px;
+  }
+
+  /* ---------- Control para subir imagen personalizada ---------- */
+  .bg-upload{
+    position:fixed;
+    top:22px;
+    right:22px;
+    z-index:3;
+    display:flex;
+    align-items:center;
+    gap:10px;
+  }
+  .bg-upload label{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    margin:0;
+    padding:9px 14px;
+    font-size:12.5px;
+    font-weight:500;
+    color:var(--ink);
+    background:rgba(10,18,14,0.5);
+    border:1px solid rgba(238,242,238,0.22);
+    border-radius:999px;
+    backdrop-filter:blur(10px);
+    cursor:pointer;
+    transition:background .2s ease, border-color .2s ease;
+  }
+  .bg-upload label:hover{
+    background:rgba(10,18,14,0.72);
+    border-color:rgba(238,242,238,0.4);
+  }
+  .bg-upload svg{width:15px;height:15px;flex:none;}
+  .bg-upload input[type="file"]{display:none;}
+  .bg-upload .reset-bg{
+    display:none;
+    padding:9px 12px;
+    font-size:12.5px;
+    color:var(--ink-soft);
+    background:rgba(10,18,14,0.5);
+    border:1px solid rgba(238,242,238,0.22);
+    border-radius:999px;
+    backdrop-filter:blur(10px);
+    cursor:pointer;
+  }
+  .bg-upload .reset-bg:hover{color:var(--ink);}
+  .bg-upload.has-image .reset-bg{display:inline-block;}
+
+  .eyebrow{
+    font-size:11px;
+    letter-spacing:.24em;
+    text-transform:uppercase;
+    color:var(--ink-faint);
+    margin:0 0 14px;
+  }
+
+  h1{
+    font-size:34px;
+    line-height:1.1;
+    margin:0 0 8px;
+    font-weight:600;
+    letter-spacing:-0.01em;
+  }
+
+  .sub{
+    margin:0 0 34px;
+    color:var(--ink-soft);
+    font-size:14.5px;
+  }
+
+  form{margin:0;}
+
+  .field{
+    margin-bottom:22px;
+  }
+
+  label{
+    display:block;
+    font-size:13px;
+    font-weight:600;
+    margin-bottom:8px;
+    color:var(--ink);
+  }
+
+  .input-wrap{
+    position:relative;
+    border-bottom:1px solid var(--line);
+    transition:border-color .2s ease;
+  }
+  .input-wrap:focus-within{
+    border-color:var(--accent);
+  }
+
+  input[type="email"],
+  input[type="password"],
+  input[type="text"]{
+    width:100%;
+    background:transparent;
+    border:none;
+    outline:none;
+    color:var(--ink);
+    font-size:15px;
+    padding:6px 30px 10px 0;
+    font-family:inherit;
+  }
+  input::placeholder{color:var(--ink-faint);}
+
+  .toggle-visibility{
+    position:absolute;
+    right:0;
+    top:2px;
+    background:none;
+    border:none;
+    padding:6px;
+    cursor:pointer;
+    color:var(--ink-faint);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+  }
+  .toggle-visibility:hover{color:var(--ink-soft);}
+  .toggle-visibility svg{width:18px;height:18px;}
+
+  .field-error{
+    display:none;
+    color:var(--danger);
+    font-size:12px;
+    margin-top:7px;
+  }
+  .field.has-error .input-wrap{border-color:var(--danger);}
+  .field.has-error .field-error{display:block;}
+
+  .row-between{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    margin:26px 0 30px;
+    font-size:13.5px;
+  }
+
+  .remember{
+    display:flex;
+    align-items:center;
+    gap:9px;
+    color:var(--ink-soft);
+    cursor:pointer;
+    user-select:none;
+  }
+  .remember input{
+    appearance:none;
+    -webkit-appearance:none;
+    width:16px;
+    height:16px;
+    border:1px solid var(--line);
+    border-radius:3px;
+    background:transparent;
+    cursor:pointer;
+    position:relative;
+    flex:none;
+  }
+  .remember input:checked{
+    background:var(--accent);
+    border-color:var(--accent);
+  }
+  .remember input:checked::after{
+    content:"";
+    position:absolute;
+    left:4px;
+    top:1px;
+    width:4px;
+    height:8px;
+    border:solid #0c1712;
+    border-width:0 2px 2px 0;
+    transform:rotate(45deg);
+  }
+
+  a.link{
+    color:var(--ink);
+    text-decoration:none;
+    border-bottom:1px solid var(--line);
+    padding-bottom:1px;
+  }
+  a.link:hover{border-color:var(--ink);}
+
+  .submit{
+    width:100%;
+    padding:15px;
+    background:var(--ink);
+    color:#0c1712;
+    border:none;
+    border-radius:var(--radius);
+    font-size:15px;
+    font-weight:600;
+    cursor:pointer;
+    letter-spacing:.01em;
+    transition:transform .15s ease, background .2s ease;
+  }
+  .submit:hover{background:var(--accent);}
+  .submit:active{transform:scale(0.99);}
+  .submit:disabled{
+    opacity:.55;
+    cursor:not-allowed;
+  }
+
+  .form-msg{
+    margin-top:16px;
+    font-size:13px;
+    text-align:center;
+    min-height:18px;
+    color:var(--danger);
+  }
+  .form-msg.ok{color:var(--accent);}
+
+  .foot-note{
+    margin-top:26px;
+    text-align:center;
+    font-size:13px;
+    color:var(--ink-faint);
+  }
+
+  @media (min-width: 880px){
+    .canopy{display:block;}
+    .panel{flex:0.9;}
+  }
+</style>
+</head>
+<body>
+
+<!-- Control para cargar una imagen de fondo personalizada -->
+<div class="bg-upload" id="bgUpload">
+  <label for="bgInput">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+      <rect x="3" y="5" width="18" height="14" rx="2"/>
+      <circle cx="8.5" cy="10" r="1.5"/>
+      <path d="M21 15l-5-5-9 9"/>
+    </svg>
+    Cambiar imagen de fondo
+  </label>
+  <input type="file" id="bgInput" accept="image/*">
+  <button type="button" class="reset-bg" id="resetBg">Quitar imagen</button>
+</div>
+
+<!-- Imagen de fondo personalizada (a pantalla completa, detrás del panel de vidrio) -->
+<div class="bg-photo" id="bgPhoto"></div>
+
+<!-- Follaje SVG de respaldo: se muestra solo mientras no se cargue una imagen propia -->
+<div class="bg-fallback" id="bgFallback">
+    <svg viewBox="0 0 800 1000" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="leafFill" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#2b4a37"/>
+          <stop offset="100%" stop-color="#152720"/>
+        </linearGradient>
+      </defs>
+      <g fill="url(#leafFill)" opacity="0.9">
+        <!-- hojas dispuestas de forma irregular, tipo follaje -->
+        <ellipse cx="90" cy="80" rx="70" ry="24" transform="rotate(35 90 80)"/>
+        <ellipse cx="220" cy="40" rx="80" ry="26" transform="rotate(-20 220 40)"/>
+        <ellipse cx="340" cy="120" rx="75" ry="24" transform="rotate(50 340 120)"/>
+        <ellipse cx="470" cy="60" rx="85" ry="27" transform="rotate(-40 470 60)"/>
+        <ellipse cx="610" cy="110" rx="78" ry="25" transform="rotate(20 610 110)"/>
+        <ellipse cx="740" cy="60" rx="70" ry="23" transform="rotate(-55 740 60)"/>
+
+        <ellipse cx="60" cy="230" rx="82" ry="26" transform="rotate(-30 60 230)"/>
+        <ellipse cx="200" cy="270" rx="76" ry="24" transform="rotate(60 200 270)"/>
+        <ellipse cx="330" cy="220" rx="88" ry="28" transform="rotate(-15 330 220)"/>
+        <ellipse cx="470" cy="260" rx="80" ry="25" transform="rotate(40 470 260)"/>
+        <ellipse cx="610" cy="220" rx="84" ry="26" transform="rotate(-45 610 220)"/>
+        <ellipse cx="750" cy="270" rx="74" ry="23" transform="rotate(25 750 270)"/>
+
+        <ellipse cx="40" cy="410" rx="78" ry="25" transform="rotate(45 40 410)"/>
+        <ellipse cx="180" cy="450" rx="86" ry="27" transform="rotate(-35 180 450)"/>
+        <ellipse cx="320" cy="400" rx="80" ry="26" transform="rotate(15 320 400)"/>
+        <ellipse cx="460" cy="440" rx="90" ry="28" transform="rotate(-55 460 440)"/>
+        <ellipse cx="600" cy="400" rx="78" ry="24" transform="rotate(30 600 400)"/>
+        <ellipse cx="740" cy="450" rx="82" ry="26" transform="rotate(-20 740 450)"/>
+
+        <ellipse cx="70" cy="590" rx="80" ry="26" transform="rotate(-40 70 590)"/>
+        <ellipse cx="210" cy="630" rx="88" ry="28" transform="rotate(25 210 630)"/>
+        <ellipse cx="350" cy="580" rx="78" ry="24" transform="rotate(-15 350 580)"/>
+        <ellipse cx="490" cy="620" rx="86" ry="27" transform="rotate(50 490 620)"/>
+        <ellipse cx="630" cy="580" rx="80" ry="25" transform="rotate(-30 630 580)"/>
+        <ellipse cx="760" cy="630" rx="74" ry="23" transform="rotate(35 760 630)"/>
+
+        <ellipse cx="50" cy="770" rx="82" ry="26" transform="rotate(20 50 770)"/>
+        <ellipse cx="190" cy="810" rx="78" ry="25" transform="rotate(-45 190 810)"/>
+        <ellipse cx="330" cy="760" rx="88" ry="28" transform="rotate(30 330 760)"/>
+        <ellipse cx="470" cy="800" rx="80" ry="26" transform="rotate(-20 470 800)"/>
+        <ellipse cx="610" cy="760" rx="84" ry="27" transform="rotate(40 610 760)"/>
+        <ellipse cx="750" cy="810" rx="76" ry="24" transform="rotate(-35 750 810)"/>
+
+        <ellipse cx="80" cy="950" rx="80" ry="26" transform="rotate(-25 80 950)"/>
+        <ellipse cx="220" cy="990" rx="86" ry="27" transform="rotate(45 220 990)"/>
+        <ellipse cx="360" cy="940" rx="78" ry="24" transform="rotate(-10 360 940)"/>
+        <ellipse cx="500" cy="980" rx="84" ry="26" transform="rotate(30 500 980)"/>
+        <ellipse cx="640" cy="940" rx="80" ry="25" transform="rotate(-40 640 940)"/>
+        <ellipse cx="770" cy="990" rx="74" ry="23" transform="rotate(20 770 990)"/>
+      </g>
+      <!-- nervaduras finas -->
+      <g stroke="rgba(238,242,238,0.06)" stroke-width="1.5">
+        <line x1="0" y1="150" x2="800" y2="150"/>
+        <line x1="0" y1="340" x2="800" y2="340"/>
+        <line x1="0" y1="520" x2="800" y2="520"/>
+        <line x1="0" y1="700" x2="800" y2="700"/>
+        <line x1="0" y1="880" x2="800" y2="880"/>
+      </g>
+    </svg>
+</div>
+
+<div class="stage" id="stage">
+
+  <!-- Zona izquierda: deja ver la imagen de fondo sin overlay -->
+  <div class="canopy">
+    <div class="canopy-tag">
+      <b>Pangea 4.0</b>
+      Monitoreo ambiental en tiempo real
+    </div>
+  </div>
+
+  <!-- Panel de login: vidrio transparente sobre la imagen -->
+  <div class="panel">
+    <div class="card">
+      <p class="eyebrow">Pangea · Plataforma de monitoreo</p>
+      <h1>Bienvenido de nuevo</h1>
+      <p class="sub">Ingresa tus credenciales para continuar.</p>
+
+      <form id="loginForm" novalidate>
+        <div class="field" id="emailField">
+          <label for="email">Correo electrónico</label>
+          <div class="input-wrap">
+            <input type="email" id="email" name="email" placeholder="Ingresa tu correo" autocomplete="username" required>
+          </div>
+          <p class="field-error" id="emailError">Ingresa un correo electrónico válido.</p>
+        </div>
+
+        <div class="field" id="passwordField">
+          <label for="password">Contraseña</label>
+          <div class="input-wrap">
+            <input type="password" id="password" name="password" placeholder="Ingresa tu contraseña" autocomplete="current-password" required>
+            <button type="button" class="toggle-visibility" id="togglePassword" aria-label="Mostrar contraseña">
+              <svg id="eyeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+                <path d="M1.5 12S5 5 12 5s10.5 7 10.5 7-3.5 7-10.5 7S1.5 12 1.5 12Z"/>
+                <circle cx="12" cy="12" r="3"/>
+              </svg>
+            </button>
+          </div>
+          <p class="field-error" id="passwordError">Ingresa tu contraseña.</p>
+        </div>
+
+        <div class="row-between">
+          <label class="remember">
+            <input type="checkbox" id="remember" name="remember">
+            Recordarme
+          </label>
+          <a href="#" class="link" id="forgotLink">¿Olvidaste tu contraseña?</a>
+        </div>
+
+        <button type="submit" class="submit" id="submitBtn">Iniciar sesión</button>
+        <p class="form-msg" id="formMsg"></p>
+      </form>
+
+      <p class="foot-note">Los accesos son creados por un Administrador.<br>Si no tienes cuenta, solicítala a tu área de TI.</p>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  // Cargar imagen de fondo personalizada
+  const bgInput = document.getElementById('bgInput');
+  const bgPhoto = document.getElementById('bgPhoto');
+  const bgFallback = document.getElementById('bgFallback');
+  const bgUpload = document.getElementById('bgUpload');
+  const resetBg = document.getElementById('resetBg');
+
+  bgInput.addEventListener('change', () => {
+    const file = bgInput.files && bgInput.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      bgPhoto.style.backgroundImage = `url('${e.target.result}')`;
+      bgFallback.style.display = 'none';
+      bgUpload.classList.add('has-image');
+    };
+    reader.readAsDataURL(file);
+  });
+
+  resetBg.addEventListener('click', () => {
+    bgPhoto.style.backgroundImage = 'none';
+    bgFallback.style.display = '';
+    bgUpload.classList.remove('has-image');
+    bgInput.value = '';
+  });
+</script>
+
+<script>
+  // Mostrar / ocultar contraseña
+  const toggleBtn = document.getElementById('togglePassword');
+  const passwordInput = document.getElementById('password');
+  const eyeIcon = document.getElementById('eyeIcon');
+
+  toggleBtn.addEventListener('click', () => {
+    const showing = passwordInput.type === 'text';
+    passwordInput.type = showing ? 'password' : 'text';
+    toggleBtn.setAttribute('aria-label', showing ? 'Mostrar contraseña' : 'Ocultar contraseña');
+    eyeIcon.innerHTML = showing
+      ? '<path d="M1.5 12S5 5 12 5s10.5 7 10.5 7-3.5 7-10.5 7S1.5 12 1.5 12Z"/><circle cx="12" cy="12" r="3"/>'
+      : '<path d="M3 3l18 18"/><path d="M10.6 5.2A10.9 10.9 0 0 1 12 5c7 0 10.5 7 10.5 7a13.4 13.4 0 0 1-3.1 4.1M6.2 6.6C3.6 8.3 1.5 12 1.5 12s3.5 7 10.5 7a10.6 10.6 0 0 0 4-.8"/><path d="M9.5 10a3 3 0 0 0 4.2 4.2"/>';
+  });
+
+  // Validación básica en cliente (la autenticación real corre contra el Auth Service / JWT del backend)
+  const form = document.getElementById('loginForm');
+  const emailInput = document.getElementById('email');
+  const emailField = document.getElementById('emailField');
+  const passwordField = document.getElementById('passwordField');
+  const formMsg = document.getElementById('formMsg');
+  const submitBtn = document.getElementById('submitBtn');
+
+  function isValidEmail(value){
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+  }
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    formMsg.textContent = '';
+    formMsg.classList.remove('ok');
+
+    let valid = true;
+
+    if(!isValidEmail(emailInput.value.trim())){
+      emailField.classList.add('has-error');
+      valid = false;
+    } else {
+      emailField.classList.remove('has-error');
+    }
+
+    if(passwordInput.value.length === 0){
+      passwordField.classList.add('has-error');
+      valid = false;
+    } else {
+      passwordField.classList.remove('has-error');
+    }
+
+    if(!valid) return;
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Ingresando…';
+
+    try {
+      // TODO: reemplazar por la llamada real al Auth Service (POST /auth/login)
+      // const res = await fetch('/api/auth/login', {
+      //   method: 'POST',
+      //   headers: { 'Content-Type': 'application/json' },
+      //   body: JSON.stringify({
+      //     email: emailInput.value.trim(),
+      //     password: passwordInput.value,
+      //     remember: document.getElementById('remember').checked
+      //   })
+      // });
+      // if (!res.ok) throw new Error('Credenciales incorrectas');
+      // const data = await res.json(); // { token, role, ... }
+
+      await new Promise(r => setTimeout(r, 700)); // simulación de latencia
+      formMsg.textContent = 'Inicio de sesión simulado correctamente.';
+      formMsg.classList.add('ok');
+    } catch (err) {
+      formMsg.textContent = 'Correo o contraseña incorrectos.';
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Iniciar sesión';
+    }
+  });
+
+  document.getElementById('forgotLink').addEventListener('click', (e) => {
+    e.preventDefault();
+    alert('Aquí se redirige al flujo de "Gestionar contraseña" (HU02): recuperación por correo.');
+  });
+</script>
+
+</body>
+</html>
