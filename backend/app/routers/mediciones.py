@@ -42,7 +42,11 @@ def _ubicaciones_permitidas(db: Session, usuario: dict):
 @router.get("/parametros")
 def listar_parametros_disponibles(
     db: Session = Depends(get_db),
-    usuario: dict = Depends(require_permiso("Mediciones", LECTURA)),
+    # "Mediciones" no es un módulo válido en prms_usr_sd (HT-03: solo
+    # Usuarios/Ubicaciones/Dispositivos/Ingesta/Tableros/Alarmas/Comercial).
+    # La consulta de datos de telemetría cae dentro de "Tableros", que ya
+    # tiene Lectura otorgada al Cliente Final en el seed.
+    usuario: dict = Depends(require_permiso("Tableros", LECTURA)),
 ):
     """CA1: lista los parámetros disponibles asociados a las ubicaciones
     asignadas al usuario. Un parámetro solo aparece si está mapeado (HU 06)
@@ -71,7 +75,11 @@ def listar_mediciones(
     pagina: int = Query(default=1, ge=1),
     por_pagina: int = Query(default=50, ge=1, le=500),
     db: Session = Depends(get_db),
-    usuario: dict = Depends(require_permiso("Mediciones", LECTURA)),
+    # "Mediciones" no es un módulo válido en prms_usr_sd (HT-03: solo
+    # Usuarios/Ubicaciones/Dispositivos/Ingesta/Tableros/Alarmas/Comercial).
+    # La consulta de datos de telemetría cae dentro de "Tableros", que ya
+    # tiene Lectura otorgada al Cliente Final en el seed.
+    usuario: dict = Depends(require_permiso("Tableros", LECTURA)),
 ):
     """CA2-CA4: aplica los filtros de parámetros y/o ubicaciones sobre la
     vista de datos. Si no se selecciona ninguno, se muestran todos los
