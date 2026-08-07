@@ -21,7 +21,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   return (
     <div className={isDarkMode ? "dark" : ""}>
       <div className="flex h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-300 overflow-hidden font-sans">
-        <Sidebar onLogout={handleLogout} />
+        <Sidebar onLogout={handleLogout} activo="dashboard" rol={rol} />
 
         <div className="flex-1 flex flex-col overflow-hidden">
           <Topbar

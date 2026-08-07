@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "../context/AuthContext";
 import ProtectedRoute from "../components/ProtectedRoute";
-import Login from "../pages/Login";
+import Login from "../pages/login";
 import OlvideContrasena from "../pages/OlvideContrasena";
 import RestablecerContrasena from "../pages/RestablecerContrasena";
 import MiPerfil from "../pages/MiPerfil";
@@ -72,10 +72,11 @@ export default function AppRouter() {
               </ProtectedRoute>
             }
           />
+          {/* HU05: acceso restringido a Técnico CENERIS y Administrador */}
           <Route
             path="/conexiones-ftp"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute rolesPermitidos={[ROLES.TECNICO_CENERIS, ROLES.ADMINISTRADOR]}>
                 <ConexionesFTP />
               </ProtectedRoute>
             }
@@ -83,7 +84,7 @@ export default function AppRouter() {
           <Route
             path="/conexiones-ftp/nueva"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute rolesPermitidos={[ROLES.TECNICO_CENERIS, ROLES.ADMINISTRADOR]}>
                 <ConfigurarConexionFTP />
               </ProtectedRoute>
             }
@@ -91,7 +92,7 @@ export default function AppRouter() {
           <Route
             path="/conexiones-ftp/:id/editar"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute rolesPermitidos={[ROLES.TECNICO_CENERIS, ROLES.ADMINISTRADOR]}>
                 <ConfigurarConexionFTP />
               </ProtectedRoute>
             }

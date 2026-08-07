@@ -51,11 +51,21 @@ export default function ConfigurarConexionFTP() {
     );
   }
 
+  // CA: "El directorio remoto es una cadena de texto tipo ruta, por ejemplo /datos/estacion01."
+  function rutaRemotaValida(): boolean {
+    return form.rt_rmt.trim().startsWith("/");
+  }
+
   async function handleProbarConexion() {
     setMensaje("");
     if (!camposObligatoriosCompletos()) {
       setMensajeOk(false);
       setMensaje("Completa todos los campos obligatorios antes de probar la conexión");
+      return;
+    }
+    if (!rutaRemotaValida()) {
+      setMensajeOk(false);
+      setMensaje("El directorio remoto debe ser una ruta absoluta (ej. /datos/estacion01)");
       return;
     }
 
