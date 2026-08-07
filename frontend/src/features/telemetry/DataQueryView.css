@@ -1,0 +1,89 @@
+.data-query-view {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 2rem 1rem;
+  text-align: left;
+}
+
+.data-query-view h1 {
+  font-size: 28px;
+  line-height: 1.3;
+  margin: 0 0 1.5rem;
+}
+
+.filters-panel {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  align-items: flex-start;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  padding: 1rem 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.filter-group {
+  border: none;
+  padding: 0;
+  margin: 0;
+}
+
+.filter-group legend {
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+.filter-options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.filter-option {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
+}
+
+.filter-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+.btn-apply,
+.btn-clear {
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.btn-apply {
+  background-color: #2563eb;
+  color: white;
+}
+
+.btn-clear {
+  background-color: #e5e7eb;
+  color: #111827;
+}
+
+.readings-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.readings-table th,
+.readings-table td {
+  border: 1px solid #ddd;
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+}
+
+.readings-table thead {
+  background-color: #f3f4f6;
+}
