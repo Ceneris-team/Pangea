@@ -14,6 +14,7 @@ import Ubicaciones from "../pages/Ubicaciones";
 import { ROLES } from "../config/roles";
 import ConexionesFTP from "../pages/ConexionesFTP";
 import ConfigurarConexionFTP from "../pages/ConfigurarConexionFTP";
+import ConsultaDatos from "../pages/ConsultaDatos";
 
 export default function AppRouter() {
   return (
@@ -115,6 +116,19 @@ export default function AppRouter() {
               </ProtectedRoute>
             }
           />
+
+          {/* HU13: consulta de datos de telemetría filtrada por parámetros/ubicaciones */}
+          <Route
+            path="/consulta-datos"
+            element={
+              <ProtectedRoute>
+                <ConsultaDatos />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* TODO (equipo): agregar /panel-cliente y /panel-comercial
+              cuando se implementen esas historias. */}
 
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>

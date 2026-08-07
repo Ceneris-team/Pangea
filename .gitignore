@@ -30,3 +30,10 @@ Thumbs.db
 
 # Docker
 *.pid
+docker-compose.override.aws-test.yml
+
+# Archivos de telemetria (.dat): un .dat real de cliente en la maquina de
+# alguien del equipo no debe subirse por accidente. Los fixtures de prueba
+# de backend/tests/ son datos generados internamente y si van al repo.
+*.dat
+!backend/tests/fixtures/*.dat

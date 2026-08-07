@@ -43,6 +43,7 @@ class LoginResponse(BaseModel):
     token_type: str = "bearer"
     rol: str
     nombre_completo: str
+    debe_cambiar_contrasena: bool
 
 
 # Mensaje genérico a propósito: no hay que decirle al atacante si el correo
@@ -94,6 +95,7 @@ def login(request: Request, body: LoginRequest, db: Session = Depends(get_db)):
         access_token=token,
         rol=usuario.rol.nmbr,
         nombre_completo=usuario.nmbr_cmplt,
+        debe_cambiar_contrasena=usuario.dbe_cmbr_pswrd,
     )
 
 
@@ -118,6 +120,7 @@ def mi_perfil(
         "rol": usuario.rol.nmbr,
         "scope": usuario.scp,
         "estado": usuario.estd,
+        "debe_cambiar_contrasena": usuario.dbe_cmbr_pswrd,
     }
 
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { apiFetch, ApiError } from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import Sidebar from "../components/layout/Sidebar";
@@ -28,6 +28,15 @@ const ROLES_DISPONIBLES = [
 
 const POR_PAGINA = 10;
 
+interface FormAgregarUsuario {
+  nmbr_cmplt: string;
+  crr: string;
+  rol_nombre: string;
+  tlfn: string;
+}
+
+const FORM_VACIO: FormAgregarUsuario = { nmbr_cmplt: "", crr: "", rol_nombre: "", tlfn: "" };
+
 function useDebouncedValue<T>(value: T, delayMs: number): T {
   const [debounced, setDebounced] = useState(value);
   useEffect(() => {
@@ -51,6 +60,56 @@ export default function Usuarios() {
   const [data, setData] = useState<ListadoPaginado | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [recargarTick, setRecargarTick] = useState(0);
+
+  // HU04: alta mínima, sin diseño definido todavía.
+  const [mostrarForm, setMostrarForm] = useState(false);
+  const [form, setForm] = useState<FormAgregarUsuario>(FORM_VACIO);
+  const [guardando, setGuardando] = useState(false);
+  const [errorForm, setErrorForm] = useState<string | null>(null);
+
+  function abrirForm() {
+    setForm(FORM_VACIO);
+    setErrorForm(null);
+    setMostrarForm(true);
+  }
+
+  function cancelarForm() {
+    setMostrarForm(false);
+    setForm(FORM_VACIO);
+    setErrorForm(null);
+  }
+
+  async function guardarUsuario(e: FormEvent) {
+    e.preventDefault();
+    setErrorForm(null);
+
+    if (!form.nmbr_cmplt.trim() || !form.crr.trim() || !form.rol_nombre) {
+      setErrorForm("Nombre completo, correo y rol son obligatorios.");
+      return;
+    }
+
+    setGuardando(true);
+    try {
+      await apiFetch("/usuarios", {
+        method: "POST",
+        body: {
+          nmbr_cmplt: form.nmbr_cmplt.trim(),
+          crr: form.crr.trim(),
+          rol_nombre: form.rol_nombre,
+          tlfn: form.tlfn.trim() || undefined,
+        },
+      });
+      setMostrarForm(false);
+      setForm(FORM_VACIO);
+      setRecargarTick((t) => t + 1); // CA3: refresca el listado, usuario nuevo queda "Activo"
+    } catch (err) {
+      setErrorForm(err instanceof ApiError ? err.message : "No se pudo crear el usuario");
+    } finally {
+      setGuardando(false);
+    }
+  }
 
   useEffect(() => {
     setPagina(1);
@@ -84,7 +143,7 @@ export default function Usuarios() {
     return () => {
       cancelado = true;
     };
-  }, [busqueda, rol, estado, pagina]);
+  }, [busqueda, rol, estado, pagina, recargarTick]);
 
   const totalPaginas = data ? Math.max(1, Math.ceil(data.total / data.por_pagina)) : 1;
   const inicioRango = data ? (data.pagina - 1) * data.por_pagina + 1 : 0;
@@ -113,8 +172,88 @@ export default function Usuarios() {
                   Administra los accesos y roles del sistema.
                 </p>
               </div>
+              {!mostrarForm && (
+                <button
+                  onClick={abrirForm}
+                  className="px-4 py-2.5 text-sm font-semibold text-[#5a7000] dark:text-[#ccff00] bg-[#ccff00]/10 hover:bg-[#ccff00]/20 border border-[#ccff00]/30 rounded-xl transition-colors"
+                >
+                  + Agregar usuario
+                </button>
+              )}
             </header>
 
+            {/* HU04: formulario de alta mínimo, sin mockup definido todavía */}
+            {mostrarForm && (
+              <div className="bg-white dark:bg-[#2d3748] rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-5 mb-6">
+                <h2 className="text-base font-bold text-gray-900 dark:text-white mb-4">Agregar usuario</h2>
+                <form onSubmit={guardarUsuario} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm text-gray-600 dark:text-gray-300 mb-1">Nombre completo *</label>
+                    <input
+                      type="text"
+                      value={form.nmbr_cmplt}
+                      onChange={(e) => setForm((f) => ({ ...f, nmbr_cmplt: e.target.value }))}
+                      className="bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-xl block w-full p-2.5 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-600 dark:text-gray-300 mb-1">Correo electrónico *</label>
+                    <input
+                      type="email"
+                      value={form.crr}
+                      onChange={(e) => setForm((f) => ({ ...f, crr: e.target.value }))}
+                      className="bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-xl block w-full p-2.5 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-600 dark:text-gray-300 mb-1">Rol *</label>
+                    <select
+                      value={form.rol_nombre}
+                      onChange={(e) => setForm((f) => ({ ...f, rol_nombre: e.target.value }))}
+                      className="bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-xl block w-full p-2.5 outline-none cursor-pointer"
+                    >
+                      <option value="">Selecciona un rol</option>
+                      {ROLES_DISPONIBLES.map((r) => (
+                        <option key={r} value={r}>{r}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-600 dark:text-gray-300 mb-1">Teléfono (opcional)</label>
+                    <input
+                      type="text"
+                      value={form.tlfn}
+                      onChange={(e) => setForm((f) => ({ ...f, tlfn: e.target.value }))}
+                      className="bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-xl block w-full p-2.5 outline-none"
+                    />
+                  </div>
+
+                  {errorForm && (
+                    <div className="md:col-span-2 text-sm text-red-600 dark:text-red-400">{errorForm}</div>
+                  )}
+
+                  <div className="md:col-span-2 flex gap-3 justify-end">
+                    <button
+                      type="button"
+                      onClick={cancelarForm}
+                      disabled={guardando}
+                      className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 transition-colors"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={guardando}
+                      className="px-4 py-2 text-sm font-semibold text-[#0c1712] bg-[#ccff00] hover:bg-[#b8e600] rounded-lg disabled:opacity-50 transition-colors"
+                    >
+                      {guardando ? "Guardando…" : "Guardar"}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )}
+
+            {/* Contenedor Principal (Tarjeta) */}
             <div className="bg-white dark:bg-[#2d3748] rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden transition-colors duration-300">
               {/* Barra de Herramientas */}
               <div className="p-5 border-b border-gray-100 dark:border-gray-700 flex flex-col lg:flex-row gap-4 items-center">

@@ -1,7 +1,28 @@
-from pydantic import BaseModel, ConfigDict
+from datetime import datetime
+
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
 class UsuarioListItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id_usr: int
+    nmbr_cmplt: str
+    crr: str
+    rol_nombre: str
+    estd: str
+
+
+class UsuarioCrear(BaseModel):
+    """HU04 CA1: campos del formulario de alta. Teléfono es opcional."""
+
+    nmbr_cmplt: str = Field(min_length=1, max_length=150)
+    crr: EmailStr
+    rol_nombre: str
+    tlfn: str | None = Field(default=None, max_length=20)
+
+
+class UsuarioCreado(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id_usr: int
@@ -29,6 +50,16 @@ class ListadoPaginado(BaseModel):
     items: list
 
 
+class MetricasColaIngesta(BaseModel):
+    """HU 09: conteo de archv_ingst agrupado por estado, para el módulo
+    de monitoreo de la cola de procesamiento (HT-05, CA3)."""
+    pendientes: int
+    procesando: int
+    exitosos: int
+    fallidos: int
+    total: int
+
+
 class ConexionFTPListItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -40,6 +71,28 @@ class ConexionFTPListItem(BaseModel):
     rt_rmt: str | None
     frcnc_mnts: int
     estd: str
+
+
+class ParametroListItem(BaseModel):
+    """HU 13: parámetro disponible para selección en el filtro de consulta de datos."""
+    model_config = ConfigDict(from_attributes=True)
+
+    id_prmtr: int
+    nmbr: str
+    undd: str
+
+
+class MedicionListItem(BaseModel):
+    """HU 13: registro de telemetría filtrado por parámetros/ubicaciones."""
+
+    id_lctr: int
+    fch_hr: datetime
+    id_ubccn: int
+    ubicacion_nombre: str
+    id_prmtr: int
+    parametro_nombre: str
+    undd: str
+    vlr: float
 
 
 class ConexionFTPProbarRequest(BaseModel):
