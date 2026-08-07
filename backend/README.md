@@ -32,6 +32,41 @@ pide permiso de *Lectura* y no de Edición, y por eso hay un test
 (`test_no_persiste_nada`) que verifica que los conteos de `mp_frmt` y
 `mp_clmn` no cambian tras previsualizar.
 
+### Bug real encontrado en el motor: CRLF revienta parsear_dat()
+
+Al probar la vista previa con un `.dat` real de datalogger (no uno de los
+fixtures, que usan `LF`), `parsear_dat()` reventaba con
+`_csv.Error: new-line character seen in unquoted field`. Causa: la función
+arma `io.StringIO(contenido)` y se lo pasa a `csv.reader`, pero
+`io.StringIO` **no hace la traducción universal de saltos de línea** que sí
+hace abrir un archivo en modo texto (`open(..., newline=None)`); un `\r`
+suelto que sobrevive dentro de lo que el `csv.reader` trata como una sola
+línea dispara ese error de la librería estándar. Los `.dat` reales de
+Campbell Scientific (y probablemente de otras marcas) vienen con `CRLF`, a
+veces con un byte `NUL` de relleno al final del archivo.
+
+Esto **no es exclusivo de la vista previa**: `app/tasks/ingesta.py` llama a
+`parsear_dat()` con el contenido de `descargar_archivo_dat()`
+(`app/ingesta/ftp_receptor.py`), que descarga por FTP en modo binario y
+decodifica sin ninguna normalización de saltos de línea -el mismo patrón
+que tenía el endpoint nuevo antes de este fix-. Es decir, **la ingesta real
+probablemente falla hoy con cualquier `.dat` que use CRLF**, no solo la
+vista previa de HU06.
+
+Como HU06 tiene explícitamente prohibido tocar `parser.py` y el pipeline de
+ingesta ("son el motor ya probado, solo consumirlos" / "no tocar
+`tasks/ingesta.py`"), el fix se aplicó **solo en la frontera de
+`vista_previa()`**: normaliza `\r\n`/`\r` a `\n` y quita bytes `NUL` antes
+de llamar a `parsear_dat()`, y envuelve la llamada para devolver 422 en vez
+de un 500 crudo si igual falla. La causa raíz sigue viva en
+`parser.parsear_dat()` y en `app/tasks/ingesta.py`, y debería resolverse ahí
+-lo más simple sería aplicar la misma normalización dentro de
+`parsear_dat()`, ya que así cualquier llamador queda cubierto-, pero eso es
+tocar el motor, así que quedó fuera de este cierre a propósito. Hay un test
+de regresión con el archivo real que disparó el bug
+(`tests/fixtures/H_ejemplo_crlf_real.dat`,
+`test_archivo_real_con_crlf_no_revienta`).
+
 ### Formato de fecha: dos lenguajes, una traducción en la frontera
 
 La HU dice que el campo "acepta cadenas tipo `YYYY-MM-DD HH:mm:ss`", pero

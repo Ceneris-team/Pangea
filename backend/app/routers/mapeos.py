@@ -22,6 +22,8 @@ módulo 'Ingesta' (es el módulo del CHECK constraint de prms_usr_sd que
 corresponde a la configuración de la ingesta; no existe un módulo
 'Mapeos'). Lectura para consultar, Edición para crear/actualizar.
 """
+import csv
+
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -405,13 +407,31 @@ async def vista_previa(
         # Los .dat de campo a veces vienen en latin-1 (grados, ñ).
         contenido = contenido_bytes.decode("latin-1")
 
+    # parsear_dat() usa csv.reader sobre un io.StringIO, que NO hace la
+    # traducción universal de saltos de línea que sí hace abrir un archivo
+    # en modo texto. Los .dat reales de datalogger (Campbell Scientific,
+    # entre otros) vienen con CRLF, y a veces con un byte NUL de relleno al
+    # final; sin normalizar esto, el csv del motor revienta con
+    # "new-line character seen in unquoted field" apenas se sube un archivo
+    # real (visto al probar la vista previa con un .dat de campo). Se
+    # normaliza acá, en la frontera de este endpoint -no en parser.py, que
+    # no se toca-, así que la ingesta real (que pasa por el mismo problema,
+    # ver el hallazgo en el README) queda fuera de este cambio.
+    contenido = contenido.replace("\x00", "").replace("\r\n", "\n").replace("\r", "\n")
+
     config = ConfiguracionParseo(
         delimitador=delimitador,
         fila_inicio_datos=fl_inc_dts,
         formato_fecha=a_formato_strptime(frmt_fch),
         columna_fecha=columna_fecha,
     )
-    resultado = parsear_dat(contenido, config)
+    try:
+        resultado = parsear_dat(contenido, config)
+    except csv.Error as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=f"No se pudo interpretar el archivo de muestra con este delimitador/formato: {exc}",
+        )
 
     if not resultado.columnas:
         raise HTTPException(

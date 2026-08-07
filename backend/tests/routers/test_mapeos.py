@@ -356,6 +356,22 @@ class TestVistaPrevia:
     def test_delimitador_no_permitido_devuelve_422(self, client, tecnico_editor):
         assert self._subir(client, "ejemplo_estado_gabinete.dat", dlmtdr="|").status_code == 422
 
+    def test_archivo_real_con_crlf_no_revienta(self, client, tecnico_editor):
+        # Regresión: un .dat real de datalogger (CRLF + NUL de relleno al
+        # final) hacía que parsear_dat() reventara con
+        # "_csv.Error: new-line character seen in unquoted field" en vez de
+        # devolver la vista previa -los fixtures preexistentes usan LF y no
+        # lo detectaban-. Ver el fix en vista_previa() (normaliza saltos de
+        # línea antes de llamar al parser) y el hallazgo en el README.
+        resp = self._subir(client, "H_ejemplo_crlf_real.dat")
+        assert resp.status_code == 200
+
+        body = resp.json()
+        assert body["filas_mostradas"] == 1
+        assert body["filas"][0]["error"] is None
+        assert body["filas"][0]["fecha_hora"] == "2026-06-08T14:35:00"
+        assert len(body["columnas"]) == 23
+
     def test_denegado_sin_permiso(self, client, db_session, fabrica):
         rol = fabrica.rol("Cliente Final")
         sede = fabrica.sede()
