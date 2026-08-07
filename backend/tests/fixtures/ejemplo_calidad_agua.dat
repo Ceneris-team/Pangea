@@ -1,2 +1,0 @@
-Fecha,R,BattV(V),PTemp_C(C°),COxigeno_dis(mg/L),COxigeno_dis_max(mg/L),COxigeno_dis_Tmax,Porcent_Oxigeno_dis(%),Presionp_oxigeno(torr),Temperatura(C°),Conductividad(uS/cm),Salinidad(%),Salinidad_max(%),Salinidad_Tmax,TSD(ppt),Densidad(g/cm3),pH(pH),pH_max(pH),pH_Tmax,ORP(mV),Result_COxigeno_dis,Result_pH,Result_Conductividad
-"2026-06-08 13:20:00",138,11.99,32.41,0,0,"2026-06-08 13:15:15",0,0,0,0,"2026-06-08 13:15:15",0,123.3585,123.3585,123.3585,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
