@@ -125,6 +125,35 @@ def require_permiso(modulo: str, accion: str):
     return dependencia
 
 
+def require_alguno_permiso(*modulos_acciones: tuple[str, str]):
+    """Como require_permiso, pero basta con tener UNO de los permisos de la
+    lista. Existe para los endpoints auxiliares que varios módulos
+    comparten: GET /sedes puebla el selector de sede tanto del formulario
+    de mapeos (HU06, módulo Ingesta) como del de ubicaciones (HU08, módulo
+    Ubicaciones), y exigir Ingesta a quien solo administra Ubicaciones
+    sería un 403 que no responde a ninguna regla de negocio.
+
+    Se mantiene aparte de require_permiso en vez de generalizarlo: los
+    endpoints de un solo módulo son la mayoría y su forma actual -un
+    módulo, una acción- deja más claro qué permiso exigen.
+    """
+
+    def dependencia(
+        usuario: dict = Depends(get_current_user),
+        db: Session = Depends(get_db),
+    ) -> dict:
+        id_usr = int(usuario["sub"])
+        id_sd = usuario.get("sede_id")
+        for modulo, accion in modulos_acciones:
+            if tiene_permiso(db, id_usr, id_sd, modulo, accion):
+                return usuario
+        modulos = "/".join(modulo for modulo, _ in modulos_acciones)
+        _registrar_acceso_denegado(usuario, modulos, "|".join(a for _, a in modulos_acciones))
+        raise HTTPException(status_code=403, detail="No tienes permiso para realizar esta acción")
+
+    return dependencia
+
+
 def verificar_sede(usuario: dict, sede_id_recurso: int, modulo: str = "", accion: str = "") -> None:
     """Aísla el acceso entre sedes: un usuario con scope 'por_sede' solo
     puede operar sobre recursos de su propia sede, aunque tenga permiso de

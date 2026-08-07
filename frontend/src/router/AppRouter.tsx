@@ -11,6 +11,7 @@ import PanelUsuario from "../pages/PanelUsuario";
 import PanelComercial from "../pages/PanelComercial";
 import Usuarios from "../pages/Usuarios";
 import Ubicaciones from "../pages/Ubicaciones";
+import AgregarUbicacion from "../pages/AgregarUbicacion";
 import { ROLES } from "../config/roles";
 import ConexionesFTP from "../pages/ConexionesFTP";
 import ConfigurarConexionFTP from "../pages/ConfigurarConexionFTP";
@@ -25,6 +26,11 @@ const ROLES_MAPEOS = [ROLES.ADMINISTRADOR, ROLES.TECNICO_CENERIS] as const;
 
 // HU09: mismo módulo de permisos ('Ingesta') y mismos roles que HU06.
 const ROLES_COLA_INGESTA = [ROLES.ADMINISTRADOR, ROLES.TECNICO_CENERIS] as const;
+
+// HU08: "Solo los roles Administrador y Técnico CENERIS pueden registrar
+// ubicaciones." El backend lo exige con require_permiso('Ubicaciones',
+// EDICION); el listado (HU07) sigue siendo visible para todos los roles.
+const ROLES_AGREGAR_UBICACION = [ROLES.ADMINISTRADOR, ROLES.TECNICO_CENERIS] as const;
 
 export default function AppRouter() {
   return (
@@ -99,6 +105,15 @@ export default function AppRouter() {
             element={
               <ProtectedRoute>
                 <Ubicaciones />
+              </ProtectedRoute>
+            }
+          />
+          {/* HU08: agregar ubicación */}
+          <Route
+            path="/ubicaciones/nueva"
+            element={
+              <ProtectedRoute rolesPermitidos={ROLES_AGREGAR_UBICACION}>
+                <AgregarUbicacion />
               </ProtectedRoute>
             }
           />

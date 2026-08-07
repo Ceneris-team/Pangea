@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { apiFetch, ApiError } from "../services/api";
 import { useAuth } from "../context/AuthContext";
+import { ROLES } from "../config/roles";
 import Sidebar from "../components/layout/Sidebar";
 import Topbar from "../components/layout/Topbar";
 
@@ -22,6 +24,12 @@ interface ListadoPaginado {
 
 const POR_PAGINA = 10;
 
+// HU08: "Solo los roles Administrador y Técnico CENERIS pueden registrar
+// ubicaciones". El backend lo exige igual vía
+// require_permiso('Ubicaciones', EDICION); esto solo evita mostrar un
+// botón que terminaría en 403.
+const ROLES_PUEDEN_AGREGAR: readonly string[] = [ROLES.ADMINISTRADOR, ROLES.TECNICO_CENERIS];
+
 function useDebouncedValue<T>(value: T, delayMs: number): T {
   const [debounced, setDebounced] = useState(value);
   useEffect(() => {
@@ -33,6 +41,22 @@ function useDebouncedValue<T>(value: T, delayMs: number): T {
 
 export default function Ubicaciones() {
   const { nombreCompleto, rol, logout } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  // HU08 CA3: al volver del formulario, el listado muestra el mensaje de
+  // éxito junto con la ubicación recién registrada.
+  const [mensajeExito, setMensajeExito] = useState<string | null>(
+    (location.state as { mensaje?: string } | null)?.mensaje ?? null
+  );
+
+  // Se limpia el state de navegación para que el mensaje no reaparezca si
+  // el usuario recarga o vuelve atrás.
+  useEffect(() => {
+    if ((location.state as { mensaje?: string } | null)?.mensaje) {
+      navigate(location.pathname, { replace: true, state: null });
+    }
+  }, [location.pathname, location.state, navigate]);
 
   // Estado para el Modo Oscuro (mismo patrón que Usuarios.tsx)
   const [isDarkMode, setIsDarkMode] = useState(false);
@@ -113,7 +137,40 @@ export default function Ubicaciones() {
                   Listado centralizado de estaciones de monitoreo registradas.
                 </p>
               </div>
+
+              {/* HU08 CA1: punto de entrada al formulario de registro. */}
+              {ROLES_PUEDEN_AGREGAR.includes(rol ?? "") && (
+                <button
+                  onClick={() => navigate("/ubicaciones/nueva")}
+                  className="inline-flex items-center px-4 py-2 text-sm font-bold rounded-xl bg-[#ccff00] text-[#1a202c] hover:bg-[#b8e600] transition-colors"
+                >
+                  <svg
+                    className="w-4 h-4 mr-2"
+                    aria-hidden="true"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    strokeWidth="2"
+                    stroke="currentColor"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                  </svg>
+                  Agregar ubicación
+                </button>
+              )}
             </header>
+
+            {mensajeExito && (
+              <div className="mb-4 p-4 rounded-xl bg-[#ccff00]/20 border border-[#ccff00]/40 text-[#5a7000] dark:text-[#ccff00] text-sm flex items-center justify-between">
+                <span>{mensajeExito}</span>
+                <button
+                  onClick={() => setMensajeExito(null)}
+                  className="text-xs font-medium underline"
+                >
+                  Cerrar
+                </button>
+              </div>
+            )}
 
             <div className="bg-white dark:bg-[#2d3748] rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
               {/* Barra de filtros */}
