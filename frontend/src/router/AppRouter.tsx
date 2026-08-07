@@ -12,6 +12,7 @@ import Ubicaciones from "../pages/Ubicaciones";
 import { ROLES } from "../config/roles";
 import ConexionesFTP from "../pages/ConexionesFTP";
 import ConfigurarConexionFTP from "../pages/ConfigurarConexionFTP";
+import ConsultaDatos from "../pages/ConsultaDatos";
 
 export default function AppRouter() {
   return (
@@ -92,6 +93,16 @@ export default function AppRouter() {
             element={
               <ProtectedRoute>
                 <ConfigurarConexionFTP />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* HU13: consulta de datos de telemetría filtrada por parámetros/ubicaciones */}
+          <Route
+            path="/consulta-datos"
+            element={
+              <ProtectedRoute>
+                <ConsultaDatos />
               </ProtectedRoute>
             }
           />
