@@ -25,6 +25,11 @@ interface Parametro {
   dscrpcn: string | null;
 }
 
+interface Sede {
+  id_sd: number;
+  nmbr: string;
+}
+
 interface ColumnaVistaPrevia {
   indc_clmn: number;
   nombre_columna: string;
@@ -55,6 +60,7 @@ interface MapeoColumnaDetalle {
 
 interface MapeoDetalle {
   id_mp: number;
+  id_sd: number;
   mrc: string;
   tp_trm: string;
   dlmtdr: string;
@@ -65,6 +71,7 @@ interface MapeoDetalle {
 }
 
 interface MapeoForm {
+  id_sd: string;
   mrc: string;
   tp_trm: "H" | "E";
   dlmtdr: string;
@@ -82,6 +89,7 @@ const DELIMITADORES = [
 ];
 
 const FORM_VACIO: MapeoForm = {
+  id_sd: "",
   mrc: "",
   tp_trm: "H",
   dlmtdr: ",",
@@ -99,6 +107,7 @@ export default function ConfigurarMapeo() {
 
   const [form, setForm] = useState<MapeoForm>(FORM_VACIO);
   const [parametros, setParametros] = useState<Parametro[]>([]);
+  const [sedes, setSedes] = useState<Sede[]>([]);
 
   const [archivo, setArchivo] = useState<File | null>(null);
   const [vistaPrevia, setVistaPrevia] = useState<VistaPreviaResponse | null>(null);
@@ -123,6 +132,17 @@ export default function ConfigurarMapeo() {
       });
   }, []);
 
+  // Selector de sede: un usuario con scope "global" debe indicar a qué
+  // sede pertenece el mapeo (ver _resolver_sede en el backend).
+  useEffect(() => {
+    apiFetch<Sede[]>("/sedes")
+      .then(setSedes)
+      .catch((err) => {
+        setMensajeOk(false);
+        setMensaje(err instanceof ApiError ? err.message : "No se pudieron cargar las sedes");
+      });
+  }, []);
+
   // CA4: al abrir un mapeo existente se cargan sus datos y su asignación.
   useEffect(() => {
     if (!id) return;
@@ -130,6 +150,7 @@ export default function ConfigurarMapeo() {
     apiFetch<MapeoDetalle>(`/mapeos/${id}`)
       .then((detalle) => {
         setForm({
+          id_sd: String(detalle.id_sd),
           mrc: detalle.mrc,
           tp_trm: detalle.tp_trm === "E" ? "E" : "H",
           dlmtdr: detalle.dlmtdr,
@@ -201,9 +222,16 @@ export default function ConfigurarMapeo() {
 
     // Campos obligatorios según la HU: marca, delimitador y tipo de trama
     // (este último ocupa el lugar de "extensión de archivo", ver README).
+    // id_sd solo es obligatorio al crear: el backend infiere la sede del
+    // usuario "por_sede" y, al editar, la sede del mapeo no se modifica.
     if (!form.mrc.trim() || !form.dlmtdr) {
       setMensajeOk(false);
       setMensaje("La marca y el delimitador son obligatorios");
+      return;
+    }
+    if (!esEdicion && !form.id_sd) {
+      setMensajeOk(false);
+      setMensaje("Selecciona la sede a la que pertenece este mapeo");
       return;
     }
 
@@ -218,6 +246,7 @@ export default function ConfigurarMapeo() {
         }));
 
       const payload = {
+        ...(esEdicion ? {} : { id_sd: Number(form.id_sd) }),
         mrc: form.mrc.trim(),
         tp_trm: form.tp_trm,
         dlmtdr: form.dlmtdr,
@@ -298,6 +327,25 @@ export default function ConfigurarMapeo() {
                   <h2 className="text-base font-bold text-gray-900 dark:text-white mb-4">Datos del formato</h2>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {!esEdicion && (
+                      <div>
+                        <label className={labelClase}>Sede *</label>
+                        <select
+                          required
+                          value={form.id_sd}
+                          onChange={(e) => actualizarCampo("id_sd", e.target.value)}
+                          className={inputClase + " cursor-pointer"}
+                        >
+                          <option value="">— Selecciona una sede —</option>
+                          {sedes.map((s) => (
+                            <option key={s.id_sd} value={s.id_sd}>
+                              {s.nmbr}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
                     <div>
                       <label className={labelClase}>Nombre de marca *</label>
                       <input

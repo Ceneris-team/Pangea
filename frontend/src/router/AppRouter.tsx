@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "../context/AuthContext";
 import ProtectedRoute from "../components/ProtectedRoute";
-import Login from "../pages/login";
+import Login from "../pages/Login";
 import OlvideContrasena from "../pages/OlvideContrasena";
 import RestablecerContrasena from "../pages/RestablecerContrasena";
 import MiPerfil from "../pages/MiPerfil";

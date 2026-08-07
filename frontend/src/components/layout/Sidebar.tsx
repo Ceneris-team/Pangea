@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 import pangeaLogo from "../../assets/pangea-logo.png";
 import { ROLES, rutaPorRol } from "../../config/roles";
 
-type SeccionActiva = "panel" | "usuarios" | "ubicaciones" | "conexiones-ftp" | "dashboard" | "configuracion" | "consulta-datos"| "mapeos";
+export type SeccionActiva = "panel" | "usuarios" | "ubicaciones" | "conexiones-ftp" | "dashboard" | "configuracion" | "consulta-datos"| "mapeos";
 
 interface SidebarProps {
   onLogout: () => void;

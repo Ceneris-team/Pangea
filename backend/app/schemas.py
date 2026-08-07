@@ -132,6 +132,17 @@ class ParametroListItem(BaseModel):
     dscrpcn: str | None
 
 
+class SedeListItem(BaseModel):
+    """Pobla el selector de sede del formulario de mapeos (HU06) para
+    usuarios con scope 'global', que deben indicar id_sd explícitamente
+    (ver _resolver_sede en routers/mapeos.py)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id_sd: int
+    nmbr: str
+
+
 class MapeoColumnaItem(BaseModel):
     """Una fila de la tabla de asignación (mp_clmn).
 

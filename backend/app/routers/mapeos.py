@@ -29,7 +29,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import MapeoColumna, MapeoFormato, Parametro
+from app.models import MapeoColumna, MapeoFormato, Parametro, Sede
 from app.security.permisos import require_permiso, verificar_sede, LECTURA, EDICION
 from app.services.ingesta.parser import ConfiguracionParseo, parsear_dat
 from app.schemas import (
@@ -41,11 +41,13 @@ from app.schemas import (
     MapeoFormatoDetalle,
     MapeoFormatoListItem,
     ParametroListItem,
+    SedeListItem,
     VistaPreviaResponse,
 )
 
 router = APIRouter(prefix="/mapeos", tags=["Mapeos de formato"])
 router_parametros = APIRouter(prefix="/parametros", tags=["Mapeos de formato"])
+router_sedes = APIRouter(prefix="/sedes", tags=["Mapeos de formato"])
 
 # Regla de negocio HU06: "El delimitador acepta solo coma, punto y coma,
 # tabulador o espacio". La clave es lo que manda el frontend; el valor es
@@ -205,6 +207,19 @@ def listar_parametros(
     """CA1: pobla el selector de parámetro estándar del formulario."""
     parametros = db.query(Parametro).order_by(Parametro.nmbr).all()
     return [ParametroListItem.model_validate(p) for p in parametros]
+
+
+@router_sedes.get("", response_model=list[SedeListItem])
+def listar_sedes(
+    db: Session = Depends(get_db),
+    _usuario: dict = Depends(require_permiso("Ingesta", LECTURA)),
+):
+    """Pobla el selector de sede que un usuario 'global' debe llenar al
+    guardar un mapeo (ver _resolver_sede): no existe otro endpoint que
+    liste sedes -GET /ubicaciones es una tabla distinta (ubicaciones
+    dentro de una sede, no sedes)."""
+    sedes = db.query(Sede).order_by(Sede.nmbr).all()
+    return [SedeListItem.model_validate(s) for s in sedes]
 
 
 @router.get("", response_model=dict)
