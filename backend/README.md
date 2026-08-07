@@ -1,5 +1,199 @@
 # Backend - Pangea 4.0
 
+## Mapeo de formato: CRUD y vista previa (HU06)
+
+**Estado: cerrada.** El *motor* de mapeo (`app/services/ingesta/mapeo.py` y
+`parser.py`) ya existía y está en uso por el pipeline de ingesta; lo que
+faltaba para cerrar HU06 era la capa que permite al Técnico CENERIS crear
+y editar los mapeos desde la interfaz, en vez de insertarlos a mano en la
+base de datos. Eso es `app/routers/mapeos.py` + las pantallas
+`frontend/src/pages/Mapeos.tsx` y `ConfigurarMapeo.tsx`.
+
+| CA | Qué pide | Endpoint / pantalla |
+|---|---|---|
+| CA1 | Formulario "Nuevo mapeo" con la tabla de asignación columna→parámetro | `GET /parametros` + `ConfigurarMapeo.tsx` |
+| CA2 | "Vista previa": primeras 10 filas del .dat de muestra interpretadas | `POST /mapeos/vista-previa` |
+| CA3 | "Guardar" → "Mapeo guardado correctamente" | `POST /mapeos` |
+| CA4 | "Actualizar" → "Mapeo actualizado correctamente" | `PUT /mapeos/{id_mp}`, `GET /mapeos/{id_mp}` |
+| CA5 | "Ver mapeos": el registro aparece asociado a su marca | `GET /mapeos` + `Mapeos.tsx` |
+
+Acceso: `require_permiso("Ingesta", …)` (HT-09). No existe un módulo
+"Mapeos" en el CHECK constraint de `prms_usr_sd`; `Ingesta` es el que
+corresponde a la configuración del pipeline. Lectura para consultar y
+previsualizar, Edición para crear/actualizar.
+
+### El archivo de muestra no se persiste (CA2)
+
+Regla explícita de la HU. `POST /mapeos/vista-previa` recibe el `.dat` por
+`multipart/form-data`, lo lee **en memoria** (`await archivo.read()`), lo
+pasa por el `parsear_dat()` que ya existía y devuelve las primeras 10
+filas. No se escribe en disco ni en base de datos: por eso el endpoint
+pide permiso de *Lectura* y no de Edición, y por eso hay un test
+(`test_no_persiste_nada`) que verifica que los conteos de `mp_frmt` y
+`mp_clmn` no cambian tras previsualizar.
+
+### Bug real encontrado en el motor: CRLF revienta parsear_dat()
+
+Al probar la vista previa con un `.dat` real de datalogger (no uno de los
+fixtures, que usan `LF`), `parsear_dat()` reventaba con
+`_csv.Error: new-line character seen in unquoted field`. Causa: la función
+arma `io.StringIO(contenido)` y se lo pasa a `csv.reader`, pero
+`io.StringIO` **no hace la traducción universal de saltos de línea** que sí
+hace abrir un archivo en modo texto (`open(..., newline=None)`); un `\r`
+suelto que sobrevive dentro de lo que el `csv.reader` trata como una sola
+línea dispara ese error de la librería estándar. Los `.dat` reales de
+Campbell Scientific (y probablemente de otras marcas) vienen con `CRLF`, a
+veces con un byte `NUL` de relleno al final del archivo.
+
+Esto **no es exclusivo de la vista previa**: `app/tasks/ingesta.py` llama a
+`parsear_dat()` con el contenido de `descargar_archivo_dat()`
+(`app/ingesta/ftp_receptor.py`), que descarga por FTP en modo binario y
+decodifica sin ninguna normalización de saltos de línea -el mismo patrón
+que tenía el endpoint nuevo antes de este fix-. Es decir, **la ingesta real
+probablemente falla hoy con cualquier `.dat` que use CRLF**, no solo la
+vista previa de HU06.
+
+Como HU06 tiene explícitamente prohibido tocar `parser.py` y el pipeline de
+ingesta ("son el motor ya probado, solo consumirlos" / "no tocar
+`tasks/ingesta.py`"), el fix se aplicó **solo en la frontera de
+`vista_previa()`**: normaliza `\r\n`/`\r` a `\n` y quita bytes `NUL` antes
+de llamar a `parsear_dat()`, y envuelve la llamada para devolver 422 en vez
+de un 500 crudo si igual falla. La causa raíz sigue viva en
+`parser.parsear_dat()` y en `app/tasks/ingesta.py`, y debería resolverse ahí
+-lo más simple sería aplicar la misma normalización dentro de
+`parsear_dat()`, ya que así cualquier llamador queda cubierto-, pero eso es
+tocar el motor, así que quedó fuera de este cierre a propósito. Hay un test
+de regresión con el archivo real que disparó el bug
+(`tests/fixtures/H_ejemplo_crlf_real.dat`,
+`test_archivo_real_con_crlf_no_revienta`).
+
+### Formato de fecha: dos lenguajes, una traducción en la frontera
+
+La HU dice que el campo "acepta cadenas tipo `YYYY-MM-DD HH:mm:ss`", pero
+el motor (`parser._parsear_fecha`) usa `strptime`, y los mapeos sembrados
+antes de HU06 ya están guardados como `%Y-%m-%d %H:%M:%S`. En vez de tocar
+el motor -que está probado y en producción-, la traducción vive en el
+router: `a_formato_strptime()` al guardar y `a_formato_legible()` al leer.
+Un valor que ya venga con `%` se deja pasar tal cual, así los mapeos
+existentes siguen funcionando sin migrar nada.
+
+### Limitaciones del modelo de datos encontradas (no resueltas)
+
+Ninguna se resolvió aquí: HU06 no incluía cambios de esquema y el modelo
+de datos ya se daba por cerrado. Se reportan para decidir aparte.
+
+1. **No hay columna para "Extensión de archivo"**, que CA1 lista como campo
+   obligatorio del formulario. Lo más cercano en `mp_frmt` es `tp_trm`
+   (`'H'`/`'E'`), que no es la extensión sino el *tipo de trama*, y que el
+   motor deduce del **prefijo** del nombre (`H_*.dat` / `E_*.dat`), no de
+   la extensión. El formulario expone `tp_trm` en ese lugar, porque es el
+   campo que el motor realmente usa y forma parte de la clave única
+   `(id_sd, mrc, tp_trm)`. Si el equipo quiere una extensión configurable
+   de verdad (hoy el pipeline solo procesa `.dat`), hace falta una columna
+   nueva **y** que el motor la consuma; agregarla sola sería dato muerto.
+2. **No hay columna para el nombre de la columna de fecha.**
+   `ConfiguracionParseo.columna_fecha` existe en el parser y por defecto
+   vale `"Fecha"`, pero `resolver_formato()` no lo setea, así que el motor
+   siempre usa ese valor fijo. La vista previa acepta `columna_fecha` como
+   parámetro (para poder previsualizar tramas cuyo header use otro nombre)
+   pero **no puede persistirlo**: una marca cuya columna de fecha no se
+   llame "Fecha" se previsualizaría bien y luego fallaría en la ingesta
+   real. Si aparece un datalogger así, hace falta la columna en `mp_frmt`.
+
+## Middleware de autorización (HT-09)
+
+**Estado: cerrada para los endpoints que existen hoy; CA1 queda parcial
+porque HU08/HU10-HU13 todavía no están implementadas.** Ver el detalle CA
+por CA abajo.
+
+`app/security/permisos.py` valida, para cada endpoint protegido, que el
+usuario autenticado (HT-04) tenga el permiso pedido según `prms_usr_sd`
+(HT-03: Usuario-Sede-Rol-Permiso), no según un rol hardcodeado. La primera
+versión de este archivo usaba una matriz `rol -> módulo -> acciones` en
+memoria como implementación provisional; se reemplazó por una consulta
+real a la tabla, que es lo que pedía HT-03 CA4 desde el principio (permisos
+editables en BD, no fijos en código).
+
+| CA | Qué pide | Estado |
+|---|---|---|
+| CA1 | Todos los endpoints del PMV (HU08, HU10, HU11, HU12, HU13) validan permiso | **Parcial.** Esas 5 HU no tienen ningún endpoint implementado todavía (no existe router de dispositivos ni de tableros/dashboards) - no hay nada que conectar. Sí se aplicó/confirmó `require_permiso()` en los 3 endpoints que sí existen y tocan módulos del CHECK constraint de HT-03: `GET /ubicaciones` (HU07), `GET /ingesta/metricas` (HU09) y `GET`+`POST /usuarios` (HU03/HU04), reemplazando en los dos últimos un chequeo de rol hardcodeado por el permiso real. |
+| CA2 | Solo-lectura en Dispositivos -> 403 al intentar HU11 (edición) | **Cerrado.** `tiene_permiso()` consulta `prms_usr_sd` filtrando por usuario+sede+módulo y compara el nivel (`Lectura`/`Edición`/`Ninguno`) contra la acción pedida. Sin fila = sin permiso, igual que `Ninguno`. |
+| CA3 | Usuario `por_sede` de la Sede A no toca la Sede B ni con permiso de edición | **Cerrado**, ya estaba implementado en `verificar_sede()`; se confirmó que sigue aplicando después de conectar CA2 a la BD (son chequeos independientes: uno filtra por módulo/nivel, el otro por sede del recurso). |
+| CA4 | Usuario `global` opera cualquier sede sin asignación previa | **Cerrado, con una decisión documentada.** Ver "Scope global y prms_usr_sd" abajo. |
+| CA5 | Cada acceso denegado queda registrado (usuario, sede, módulo, acción) | **Cerrado**, sin cambios: `_registrar_acceso_denegado()` no dependía de la matriz y sigue funcionando igual con el chequeo basado en BD. |
+
+### Scope global y prms_usr_sd (CA4)
+
+`verificar_sede()` ya eximía a `scope == "global"` del filtro de sede. La
+pregunta que quedaba abierta era si ese usuario también necesita una fila
+en `prms_usr_sd` para el chequeo de módulo/nivel, o si `global` debería
+implicar edición total.
+
+**Decisión (conservadora): sí necesita la fila.** `scope == "global"` solo
+exime del filtro de *sede*, no del de *módulo/nivel* - son dos ejes
+independientes en el modelo de HT-03, y no hay razón para que uno implique
+el otro. Como `prms_usr_sd.id_sd` es `NOT NULL` (no se puede tocar ese
+constraint, es de HT-03), un usuario global no puede tener una fila
+"sede-agnóstica"; `tiene_permiso()` resuelve esto ignorando el filtro de
+sede cuando `id_sd` viene en `None` y aceptando cualquier fila del usuario
+para ese módulo, sea cual sea su sede - consistente con que `verificar_sede`
+ya lo deja operar en cualquier sede de todos modos. Ver el docstring de
+`tiene_permiso()` en `app/security/permisos.py` para el detalle.
+
+### Limitación real encontrada en el modelo de datos
+
+Dos hallazgos de esta conexión, ninguno de los cuales toca el esquema de
+HT-03 ni el JWT de HT-04 (fuera de alcance de HT-09), pero que conviene
+resolver antes de que un usuario `por_sede` real dependa de esto en
+producción:
+
+1. **`POST /auth/login` (HT-04) siempre emite `sede_id=None` en el JWT**,
+   sin importar `usr.scp`. Es un bug de HT-04, no de HT-09, pero bloquea
+   CA3 en la práctica: un usuario `por_sede` real jamás podría pasar
+   `verificar_sede()` ni siquiera para su propia sede, porque
+   `usuario.sede_id` (`None`) nunca es igual al `sede_id_recurso` real. Los
+   tests de HT-09 no lo tocan porque prueban `verificar_sede()` con un
+   payload construido a mano (como lo emitiría un login correcto), no a
+   través del flujo real de `/auth/login`. Queda para quien cierre esa
+   parte de HT-04, o para una HT nueva si HT-04 ya se dio por cerrada.
+2. **`prms_usr_sd.id_sd` es `NOT NULL`**, así que no hay forma de expresar
+   en el esquema actual "este usuario tiene permiso en TODAS las sedes"
+   con una sola fila - ni para roles global ni para sedes que se creen
+   después. Hoy se resuelve en `tiene_permiso()` interpretando "cualquier
+   fila del usuario para ese módulo" como suficiente para un usuario
+   global (ver arriba), pero un usuario global sin ninguna fila para un
+   módulo nuevo queda bloqueado hasta que alguien le cree una fila a mano
+   en alguna sede. Si esto se vuelve un problema operativo real, la
+   solución de fondo (agregar una fila "comodín" con `id_sd` nulleable, o
+   una tabla de permisos separada para scope global) es un cambio de
+   esquema de HT-03 y no se hizo aquí a propósito.
+
+### Correr los tests
+
+Los tests de autorización (`tests/test_permisos.py`,
+`tests/routers/test_autorizacion_endpoints.py`) corren contra una Postgres
+real con las migraciones aplicadas -no contra SQLite-, porque el esquema
+real usa tipos (`JSONB`) que SQLite no puede compilar y porque HT-09
+necesita validar contra `prms_usr_sd` tal como la define la migración de
+HT-03, no una recreación aproximada del modelo.
+
+```bash
+createdb pangea_test
+DATABASE_URL=postgresql+psycopg2://postgres:postgres@localhost:5432/pangea_test \
+    python -m alembic upgrade head
+
+# Redis debe estar corriendo (lo usa el broker de resultados de Celery,
+# que se dispara en el test de POST /usuarios al encolar el correo de
+# bienvenida de HU04).
+TEST_DATABASE_URL=postgresql+psycopg2://postgres:postgres@localhost:5432/pangea_test \
+    python -m pytest tests/test_permisos.py tests/routers/test_autorizacion_endpoints.py -v
+```
+
+Cada test corre dentro de un SAVEPOINT que se revierte al final
+(`tests/conftest.py`), así que no ensucia `pangea_test` ni necesita volver
+a migrar entre corridas.
+
+---
 ## Cola de ingesta (HT-05)
 
 **Estado: cerrada.** Los cuatro criterios de aceptación están implementados y
@@ -152,6 +346,61 @@ minuto, cada conexión solo se sondea de verdad si ya pasó su `frcnc_mnts`
 desde el último sondeo.
 
 ---
+## Mapeo de formato por marca (HU06 / PP-96)
+
+Un datalogger manda **dos formatos de archivo distintos**, con distinto número
+y significado de columnas. El tipo se deduce del prefijo del nombre:
+
+| Prefijo | `mp_frmt.tp_trm` | Contenido |
+|---|---|---|
+| `H_*.dat` | `H` | Datos periódicos (la lectura en tiempo real) |
+| `E_*.dat` | `E` | Estados y eventos que genera el equipo |
+
+Por eso un formato se identifica por **sede + marca + tipo de trama**
+(`uq_mpfrmt_sd_mrc_tptrm`), no solo por marca: sin `tp_trm` no habría forma de
+guardar ambos sin inventar marcas falsas tipo `"Campbell_H"`.
+
+### Cómo se resuelve un archivo
+
+`app/services/ingesta/mapeo.py`, antes de descargar nada:
+
+1. `detectar_tipo_trama()` saca `H`/`E` del prefijo del nombre (tolera
+   minúsculas y rutas).
+2. `resolver_formato()` busca el `mp_frmt` activo de esa sede + marca + trama, y
+   de ahí salen delimitador, fila de inicio de datos y formato de fecha.
+3. Tras parsear el header, `construir_mapeo()` traduce `mp_clmn` a
+   `columna → parámetro`.
+
+**`mp_clmn` referencia las columnas por índice (`indc_clmn`, 0-based sobre el
+header), no por nombre.** Es a propósito: los archivos de campo traen headers
+con nombres inconsistentes, repetidos o con unidades pegadas
+(`Temperatura(C°)`), y el índice es estable frente a eso. El contrapeso es que
+si el datalogger inserta una columna al principio, los índices se desplazan y
+hay que recargar el mapeo.
+
+### Qué pasa si falta el mapeo
+
+Se lanza `MapeoNoEncontradoError`, que el pipeline clasifica como error de datos
+**no reintentable**: el archivo queda `Fallido` con una causa accionable
+("no hay formato activo para sede=X, marca=Y, trama=Z"). No se adivina el
+formato: interpretar un archivo con el mapeo equivocado produciría lecturas
+incorrectas en silencio, que es peor que no procesarlo.
+
+Lo mismo si el archivo no tiene prefijo reconocible, o si ninguna columna del
+mapeo existe en el header.
+
+### Cargar un formato nuevo
+
+Hoy se hace por SQL/seed: una fila en `mp_frmt` (sede, marca, `tp_trm`,
+delimitador, formato de fecha) y una fila en `mp_clmn` por cada columna que se
+quiera capturar, apuntando a su `prmtr`.
+
+> **Resuelto en HU06**: el equipo de telemetría pedía poder crear y editar estos
+> formatos ellos mismos, sin tocar la base de datos. Ya existe el CRUD
+> (`app/routers/mapeos.py`) y la pantalla de configuración - ver "Mapeo de
+> formato: CRUD y vista previa (HU06)" al inicio de este README. Cargar un
+> formato por SQL/seed sigue funcionando, pero ya no es la única vía.
+
 ## Particionamiento de `tlmtr` (HT-08)
 
 **Estado: implementado.** `tlmtr` está particionada por RANGE mensual sobre

@@ -1,14 +1,17 @@
 import { useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
-import Sidebar from "./Sidebar";
+import Sidebar, { type SeccionActiva } from "./Sidebar";
 import Topbar from "./Topbar";
 import { useAuth } from "../../context/AuthContext";
 
 interface DashboardLayoutProps {
   children: ReactNode;
+  /** Sección del sidebar que queda resaltada. Sin esto el layout no
+   *  compila: Sidebar exige `activo` y `rol` (rompía `npm run build`). */
+  activo?: SeccionActiva;
 }
 
-export default function DashboardLayout({ children }: DashboardLayoutProps) {
+export default function DashboardLayout({ children, activo = "panel" }: DashboardLayoutProps) {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const { nombreCompleto, rol, logout } = useAuth();
   const navigate = useNavigate();
@@ -21,7 +24,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   return (
     <div className={isDarkMode ? "dark" : ""}>
       <div className="flex h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-300 overflow-hidden font-sans">
-        <Sidebar onLogout={handleLogout} />
+        <Sidebar onLogout={handleLogout} activo={activo} rol={rol} />
 
         <div className="flex-1 flex flex-col overflow-hidden">
           <Topbar

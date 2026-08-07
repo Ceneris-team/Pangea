@@ -43,11 +43,13 @@ from sqlalchemy import text
 
 from app.database import SessionLocal
 from app.models.archivo_ingesta import ArchivoIngesta
-from app.models.mapeo_dispositivo import Dispositivo, MapeoFormato, Parametro
+from app.models.mapeo_dispositivo import (
+    Dispositivo, MapeoColumna, MapeoFormato, Parametro,
+)
 from app.models.telemetria import Telemetria
 from app.models.ubicacion_conexion import ConexionFTP, Ubicacion
 from app.security.ftp_crypto import encrypt_credential
-from app.services.ingesta.estandarizador import mapeo_prueba_temporal
+from app.services.ingesta.estandarizador import mapeo_de_ejemplo
 from app.tasks.ingesta import procesar_archivo_dat
 
 PREFIJO_PRUEBA = "CARGA_CA4_"
@@ -223,7 +225,7 @@ def asegurar_datos_base(db) -> int:
     # Parámetros del mapeo mock (PP-98): sin fila en prmtr, guardar_lecturas
     # descarta la lectura y no se mediría la escritura en tlmtr.
     existentes = {p.nmbr for p in db.query(Parametro).all()}
-    for nombre in set(mapeo_prueba_temporal().values()):
+    for nombre in set(mapeo_de_ejemplo().values()):
         if nombre not in existentes:
             db.add(Parametro(nmbr=nombre, undd="N/A", dscrpcn=f"{PREFIJO_PRUEBA}parametro"))
     db.commit()
@@ -231,7 +233,24 @@ def asegurar_datos_base(db) -> int:
     return id_sd
 
 
+# Índice de columna (0-based sobre el header) -> parámetro estándar, para
+# cada fixture. PP-96 resuelve el mapeo real desde mp_clmn, que referencia
+# las columnas por índice, así que la prueba tiene que sembrarlo igual.
+COLUMNAS_TRAMA_H = {  # ejemplo_calidad_agua.dat
+    2: "bateria_v",
+    9: "temperatura",
+    10: "conductividad",
+    16: "ph",
+    19: "orp",
+}
+COLUMNAS_TRAMA_E = {  # ejemplo_estado_gabinete.dat
+    4: "contador_puerta",
+}
+
+
 def crear_ubicacion_y_mapeo(db, id_sd: int):
+    """Crea la ubicación y los DOS formatos (H y E) con sus mapeos de
+    columna, que es como PP-96 espera encontrarlos en mp_frmt/mp_clmn."""
     ubicacion = Ubicacion(
         id_sd=id_sd,
         nmbr=f"{PREFIJO_PRUEBA}ubicacion",
@@ -240,13 +259,30 @@ def crear_ubicacion_y_mapeo(db, id_sd: int):
         estd="Activa",
     )
     db.add(ubicacion)
-    mapeo = MapeoFormato(
-        id_sd=id_sd, mrc=f"{PREFIJO_PRUEBA}marca",
-        dlmtdr=",", fl_inc_dts=1, frmt_fch="%Y-%m-%d %H:%M:%S", estd="Activo",
-    )
-    db.add(mapeo)
+    db.flush()
+
+    parametros = {p.nmbr: p.id_prmtr for p in db.query(Parametro).all()}
+    formatos = {}
+    for tipo, columnas in (("H", COLUMNAS_TRAMA_H), ("E", COLUMNAS_TRAMA_E)):
+        formato = MapeoFormato(
+            id_sd=id_sd, mrc=f"{PREFIJO_PRUEBA}marca", tp_trm=tipo,
+            dlmtdr=",", fl_inc_dts=1, frmt_fch="%Y-%m-%d %H:%M:%S", estd="Activo",
+        )
+        db.add(formato)
+        db.flush()
+        for indice, nombre_parametro in columnas.items():
+            db.add(MapeoColumna(
+                id_mp=formato.id_mp,
+                indc_clmn=indice,
+                id_prmtr=parametros[nombre_parametro],
+            ))
+        formatos[tipo] = formato
+
     db.commit()
-    return ubicacion, mapeo
+    # dspstv.id_mp exige un formato; se apunta al de datos periódicos, que
+    # es el que manda el grueso de archivos. La resolución real por archivo
+    # la hace PP-96 con el prefijo, no esta FK.
+    return ubicacion, formatos["H"]
 
 
 def crear_conexiones(db, id_sd: int) -> list:
@@ -382,6 +418,16 @@ def limpiar(db) -> None:
             ConexionFTP.id_cnxn.in_(ids_cnxn)
         ).delete(synchronize_session=False)
 
+    # mp_clmn referencia mp_frmt: hay que borrarlo antes que el formato.
+    ids_mp = [
+        m.id_mp for m in db.query(MapeoFormato).filter(
+            MapeoFormato.mrc.like(f"{PREFIJO_PRUEBA}%")
+        ).all()
+    ]
+    if ids_mp:
+        db.query(MapeoColumna).filter(
+            MapeoColumna.id_mp.in_(ids_mp)
+        ).delete(synchronize_session=False)
     db.query(MapeoFormato).filter(
         MapeoFormato.mrc.like(f"{PREFIJO_PRUEBA}%")
     ).delete(synchronize_session=False)

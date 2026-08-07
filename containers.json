@@ -1,0 +1,37 @@
+{
+  "api": {
+    "image": ":pangea-app.api.1",
+    "environment": {
+      "DATABASE_URL": "postgresql+psycopg2://pangea_admin:Ceneris_2026@ls-3bf8af1a9bd803559a1a9db4dae773344addf0e3.cmzc0qask18r.us-east-1.rds.amazonaws.com:5432/pangea",
+      "CELERY_BROKER_URL": "redis://localhost:6379/2",
+      "CELERY_RESULT_BACKEND": "redis://localhost:6379/3"
+    },
+    "ports": {
+      "8000": "HTTP"
+    }
+  },
+  "worker": {
+    "image": ":pangea-app.worker.2",
+    "command": ["celery", "-A", "app.core.celery_app", "worker", "--loglevel=info", "--concurrency=4"],
+    "environment": {
+      "DATABASE_URL": "postgresql+psycopg2://pangea_admin:Ceneris_2026@ls-3bf8af1a9bd803559a1a9db4dae773344addf0e3.cmzc0qask18r.us-east-1.rds.amazonaws.com:5432/pangea",
+      "CELERY_BROKER_URL": "redis://localhost:6379/2",
+      "CELERY_RESULT_BACKEND": "redis://localhost:6379/3"
+    }
+  },
+  "beat": {
+    "image": ":pangea-app.beat.3",
+    "command": ["celery", "-A", "app.core.celery_app", "beat", "--loglevel=info"],
+    "environment": {
+      "DATABASE_URL": "postgresql+psycopg2://pangea_admin:Ceneris_2026@ls-3bf8af1a9bd803559a1a9db4dae773344addf0e3.cmzc0qask18r.us-east-1.rds.amazonaws.com:5432/pangea",
+      "CELERY_BROKER_URL": "redis://localhost:6379/2",
+      "CELERY_RESULT_BACKEND": "redis://localhost:6379/3"
+    }
+  },
+  "redis": {
+    "image": "redis:7",
+    "ports": {
+      "6379": "TCP"
+    }
+  }
+}

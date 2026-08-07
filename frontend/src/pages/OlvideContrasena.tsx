@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import "./login.css";
+import "./Login.css";
 import { apiFetch, ApiError } from "../services/api";
 
 function isValidEmail(value: string): boolean {

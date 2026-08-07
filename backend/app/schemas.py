@@ -122,3 +122,121 @@ class ConexionFTPUpdate(BaseModel):
     contrasena_ftp: str | None = None  # si viene, se re-cifra; si no, se conserva la actual
     rt_rmt: str | None = None
     frcnc_mnts: int | None = None
+
+
+# ---------------------------------------------------------------------------
+# HU06 - Mapear formato de marca de sensor
+# ---------------------------------------------------------------------------
+
+
+class ParametroListItem(BaseModel):
+    """HU06 CA1: pobla el selector de "parámetro estándar" de la tabla de
+    asignación columna -> parámetro."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id_prmtr: int
+    nmbr: str
+    undd: str
+    dscrpcn: str | None
+
+
+class MapeoColumnaItem(BaseModel):
+    """Una fila de la tabla de asignación (mp_clmn).
+
+    indc_clmn es el índice 0-based de la columna sobre el header del
+    archivo, no su nombre: los .dat de campo traen headers inconsistentes
+    o repetidos y el índice es estable frente a eso (ver mapeo.py).
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    indc_clmn: int = Field(ge=0)
+    id_prmtr: int
+
+
+class MapeoColumnaDetalle(MapeoColumnaItem):
+    """Igual que MapeoColumnaItem pero con el parámetro ya resuelto, para
+    que el frontend no tenga que cruzar contra GET /parametros."""
+
+    parametro_nombre: str
+    parametro_unidad: str
+
+
+class MapeoFormatoBase(BaseModel):
+    mrc: str = Field(min_length=1, max_length=100)  # obligatorio: nombre de marca
+    tp_trm: str = Field(default="H")  # 'H' datos periódicos / 'E' eventos
+    dlmtdr: str  # obligatorio: coma, punto y coma, tabulador o espacio
+    fl_inc_dts: int = Field(default=1, ge=1)  # entero, default 1
+    frmt_fch: str = Field(min_length=1, max_length=50)  # "YYYY-MM-DD HH:mm:ss"
+
+
+class MapeoFormatoCrear(MapeoFormatoBase):
+    id_sd: int | None = None  # requerido solo si el usuario tiene scope "global"
+    columnas: list[MapeoColumnaItem] = Field(default_factory=list)
+
+
+class MapeoFormatoActualizar(BaseModel):
+    """Todos los campos opcionales: CA4 pide "modifica un campo" y
+    actualiza. Si `columnas` viene, reemplaza la tabla de asignación
+    completa; si se omite, las mp_clmn actuales se conservan."""
+
+    mrc: str | None = Field(default=None, min_length=1, max_length=100)
+    tp_trm: str | None = None
+    dlmtdr: str | None = None
+    fl_inc_dts: int | None = Field(default=None, ge=1)
+    frmt_fch: str | None = Field(default=None, min_length=1, max_length=50)
+    estd: str | None = None
+    columnas: list[MapeoColumnaItem] | None = None
+
+
+class MapeoFormatoListItem(BaseModel):
+    """CA5: el listado muestra el mapeo asociado a su marca."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id_mp: int
+    id_sd: int
+    mrc: str
+    tp_trm: str
+    dlmtdr: str
+    fl_inc_dts: int
+    frmt_fch: str
+    estd: str
+    total_columnas: int
+
+
+class MapeoFormatoDetalle(MapeoFormatoListItem):
+    """CA4: al abrir un mapeo existente se necesita también su tabla de
+    asignación para poder editarla."""
+
+    columnas: list[MapeoColumnaDetalle]
+
+
+class FilaVistaPrevia(BaseModel):
+    numero_fila: int
+    fecha_hora: str | None
+    error: str | None
+    # nombre de columna del header -> valor crudo de esa fila
+    valores: dict[str, str | None]
+
+
+class ColumnaVistaPrevia(BaseModel):
+    """Una columna del header del archivo de muestra, con el parámetro
+    estándar que el mapeo en edición le asigna (o None si no tiene)."""
+
+    indc_clmn: int
+    nombre_columna: str
+    parametro_nombre: str | None
+    parametro_unidad: str | None
+
+
+class VistaPreviaResponse(BaseModel):
+    """CA2: primeras 10 filas interpretadas según el mapeo, con el
+    parámetro estándar asignado a cada columna. El archivo de muestra NO
+    se persiste (regla explícita de la HU)."""
+
+    columnas: list[ColumnaVistaPrevia]
+    filas: list[FilaVistaPrevia]
+    total_filas_archivo: int
+    filas_mostradas: int
