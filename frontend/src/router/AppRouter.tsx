@@ -22,6 +22,10 @@ import ConfigurarMapeo from "../pages/ConfigurarMapeo";
 // este módulo." El backend lo exige igual vía require_permiso('Ingesta').
 const ROLES_MAPEOS = [ROLES.ADMINISTRADOR, ROLES.TECNICO_CENERIS] as const;
 
+// HU05: "Solo los roles Técnico CENERIS y Administrador tienen acceso a
+// este módulo." El backend lo exige igual (_requerir_tecnico_o_admin).
+const ROLES_CONEXIONES_FTP = [ROLES.ADMINISTRADOR, ROLES.TECNICO_CENERIS] as const;
+
 export default function AppRouter() {
   return (
     <BrowserRouter>
@@ -101,7 +105,7 @@ export default function AppRouter() {
           <Route
             path="/conexiones-ftp"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute rolesPermitidos={ROLES_CONEXIONES_FTP}>
                 <ConexionesFTP />
               </ProtectedRoute>
             }
@@ -109,7 +113,7 @@ export default function AppRouter() {
           <Route
             path="/conexiones-ftp/nueva"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute rolesPermitidos={ROLES_CONEXIONES_FTP}>
                 <ConfigurarConexionFTP />
               </ProtectedRoute>
             }
@@ -117,7 +121,7 @@ export default function AppRouter() {
           <Route
             path="/conexiones-ftp/:id/editar"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute rolesPermitidos={ROLES_CONEXIONES_FTP}>
                 <ConfigurarConexionFTP />
               </ProtectedRoute>
             }
