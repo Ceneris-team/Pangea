@@ -60,6 +60,32 @@ class MetricasColaIngesta(BaseModel):
     total: int
 
 
+class ArchivoIngestaListItem(BaseModel):
+    """HU09 CA1: una fila de la cola de ingesta. estado ya viene traducido
+    al lenguaje de negocio de la HU (ver ESTADO_BD_A_NEGOCIO en
+    routers/ingesta.py); en BD (archv_ingst.estd) se sigue guardando
+    Pendiente/Procesando/Exitoso/Fallido."""
+
+    id_archv: int
+    nmbr_archv: str
+    datalogger_nombre: str
+    fch_dtccn: datetime
+    estado: str
+
+
+class ArchivoIngestaDetalle(BaseModel):
+    """HU09 CA3: detalle de un archivo de la cola."""
+
+    id_archv: int
+    nmbr_archv: str
+    datalogger_nombre: str
+    estado: str
+    fch_dtccn: datetime
+    fch_prcsd: datetime | None
+    rgstrs_prcsds: int | None
+    mnsj_errr: str | None
+
+
 class ConexionFTPListItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
