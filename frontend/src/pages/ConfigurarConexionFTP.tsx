@@ -1,8 +1,14 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { apiFetch, ApiError } from "../services/api";
 
+interface Sede {
+  id_sd: number;
+  nmbr: string;
+}
+
 interface ConexionFTPForm {
+  id_sd: string;
   nmbr: string;
   hst: string;
   prt: string;
@@ -13,6 +19,7 @@ interface ConexionFTPForm {
 }
 
 const FORM_VACIO: ConexionFTPForm = {
+  id_sd: "",
   nmbr: "",
   hst: "",
   prt: "21", // CA: "el puerto es numérico con valor por defecto 21"
@@ -28,11 +35,24 @@ export default function ConfigurarConexionFTP() {
   const navigate = useNavigate();
 
   const [form, setForm] = useState<ConexionFTPForm>(FORM_VACIO);
+  const [sedes, setSedes] = useState<Sede[]>([]);
   const [probando, setProbando] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [conexionValidada, setConexionValidada] = useState(false); // habilita GUARDAR
   const [mensaje, setMensaje] = useState("");
   const [mensajeOk, setMensajeOk] = useState(false);
+
+  // Selector de sede: un usuario con scope "global" (p. ej. Administrador o
+  // Técnico CENERIS sin sede única asignada) debe indicar a qué sede
+  // pertenece el datalogger (ver _resolver_sede en el backend).
+  useEffect(() => {
+    apiFetch<Sede[]>("/sedes")
+      .then(setSedes)
+      .catch((err) => {
+        setMensajeOk(false);
+        setMensaje(err instanceof ApiError ? err.message : "No se pudieron cargar las sedes");
+      });
+  }, []);
 
   function actualizarCampo<K extends keyof ConexionFTPForm>(campo: K, valor: ConexionFTPForm[K]) {
     setForm((prev) => ({ ...prev, [campo]: valor }));
@@ -97,10 +117,19 @@ export default function ConfigurarConexionFTP() {
     e.preventDefault();
     if (!conexionValidada) return; // CA: GUARDAR solo se habilita tras prueba exitosa
 
+    // id_sd solo es obligatorio al crear: el backend infiere la sede del
+    // usuario "por_sede" y, al editar, la sede de la conexión no se modifica.
+    if (!esEdicion && !form.id_sd) {
+      setMensajeOk(false);
+      setMensaje("Selecciona la sede a la que pertenece este datalogger");
+      return;
+    }
+
     setGuardando(true);
     setMensaje("");
     try {
       const payload = {
+        ...(esEdicion ? {} : { id_sd: Number(form.id_sd) }),
         nmbr: form.nmbr.trim(),
         hst: form.hst.trim(),
         prt: Number(form.prt),
@@ -137,6 +166,25 @@ export default function ConfigurarConexionFTP() {
         </header>
 
         <form onSubmit={handleSubmit} className="space-y-5">
+          {!esEdicion && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Sede</label>
+              <select
+                required
+                value={form.id_sd}
+                onChange={(e) => actualizarCampo("id_sd", e.target.value)}
+                className="bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block w-full p-2.5 outline-none cursor-pointer"
+              >
+                <option value="">— Selecciona una sede —</option>
+                {sedes.map((s) => (
+                  <option key={s.id_sd} value={s.id_sd}>
+                    {s.nmbr}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Nombre del datalogger
