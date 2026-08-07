@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 import pangeaLogo from "../../assets/pangea-logo.png";
 import { ROLES, rutaPorRol } from "../../config/roles";
 
-export type SeccionActiva = "panel" | "usuarios" | "ubicaciones" | "conexiones-ftp" | "dashboard" | "configuracion" | "consulta-datos"| "mapeos";
+export type SeccionActiva = "panel" | "usuarios" | "ubicaciones" | "conexiones-ftp" | "dashboard" | "configuracion" | "consulta-datos"| "mapeos" | "cola-ingesta";
 
 interface SidebarProps {
   onLogout: () => void;
@@ -129,6 +129,30 @@ export default function Sidebar({ onLogout, activo, rol }: SidebarProps) {
               />
             </svg>
             Mapeos de Formato
+          </Link>
+        )}
+
+        {/* HU09: monitoreo de la cola de procesamiento. Mismo criterio de
+            acceso que HU05/HU06: solo Administrador y Tecnico CENERIS. */}
+        {(rol === ROLES.ADMINISTRADOR || rol === ROLES.TECNICO_CENERIS) && (
+          <Link
+            to="/cola-ingesta"
+            className={linkBase + " " + (activo === "cola-ingesta" ? linkActivo : linkInactivo)}
+          >
+            <svg
+              className={"w-5 h-5 " + (activo === "cola-ingesta" ? "text-[#8fb300] dark:text-[#ccff00]" : "")}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+                d="M4 7h16M4 12h16M4 17h16"
+              />
+            </svg>
+            Cola de Ingesta
           </Link>
         )}
 

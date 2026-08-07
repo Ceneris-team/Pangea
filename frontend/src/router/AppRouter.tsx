@@ -17,10 +17,14 @@ import ConfigurarConexionFTP from "../pages/ConfigurarConexionFTP";
 import ConsultaDatos from "../pages/ConsultaDatos";
 import Mapeos from "../pages/Mapeos";
 import ConfigurarMapeo from "../pages/ConfigurarMapeo";
+import ColaIngesta from "../pages/ColaIngesta";
 
 // HU06: "Solo los roles Técnico CENERIS y Administrador tienen acceso a
 // este módulo." El backend lo exige igual vía require_permiso('Ingesta').
 const ROLES_MAPEOS = [ROLES.ADMINISTRADOR, ROLES.TECNICO_CENERIS] as const;
+
+// HU09: mismo módulo de permisos ('Ingesta') y mismos roles que HU06.
+const ROLES_COLA_INGESTA = [ROLES.ADMINISTRADOR, ROLES.TECNICO_CENERIS] as const;
 
 export default function AppRouter() {
   return (
@@ -155,6 +159,16 @@ export default function AppRouter() {
             element={
               <ProtectedRoute rolesPermitidos={ROLES_MAPEOS}>
                 <ConfigurarMapeo />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* HU09: monitorear cola de procesamiento */}
+          <Route
+            path="/cola-ingesta"
+            element={
+              <ProtectedRoute rolesPermitidos={ROLES_COLA_INGESTA}>
+                <ColaIngesta />
               </ProtectedRoute>
             }
           />
