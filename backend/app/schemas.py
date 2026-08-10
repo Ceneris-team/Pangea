@@ -162,6 +162,41 @@ class DispositivoListItem(BaseModel):
     estd: str
 
 
+# HU11 - Añadir dispositivo
+
+
+class DispositivoCrear(BaseModel):
+    """HU11 CA1: campos del formulario (Nombre, Marca, Modelo opcional,
+    Ubicación, Conexión FTP). id_mp (mapeo de formato) y lttd/lngtd NO son
+    campos del formulario: el router los resuelve/copia automáticamente
+    (ver docstring de crear_dispositivo en routers/dispositivos.py)."""
+
+    nmbr: str = Field(min_length=1, max_length=150)
+    mrc: str = Field(min_length=1, max_length=100)
+    mdl: str | None = None
+    id_ubccn: int
+    id_cnxn: int
+
+
+class DispositivoCreado(BaseModel):
+    """HU11 CA2: el dispositivo recién registrado, con el estado 'Activo'
+    que le puso el server_default del modelo. Misma forma que
+    UbicacionCreada (HU08)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id_dspstv: int
+    id_ubccn: int
+    id_cnxn: int
+    id_mp: int
+    nmbr: str
+    mrc: str
+    mdl: str | None
+    lttd: float
+    lngtd: float
+    estd: str
+
+
 class MetricasColaIngesta(BaseModel):
     """HU 09: conteo de archv_ingst agrupado por estado, para el módulo
     de monitoreo de la cola de procesamiento (HT-05, CA3)."""

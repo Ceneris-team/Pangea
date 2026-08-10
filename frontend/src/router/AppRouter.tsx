@@ -12,6 +12,7 @@ import PanelComercial from "../pages/PanelComercial";
 import Usuarios from "../pages/Usuarios";
 import Ubicaciones from "../pages/Ubicaciones";
 import Dispositivos from "../pages/Dispositivos";
+import AgregarDispositivo from "../pages/AgregarDispositivo";
 import AgregarUbicacion from "../pages/AgregarUbicacion";
 import { ROLES } from "../config/roles";
 import ConexionesFTP from "../pages/ConexionesFTP";
@@ -36,6 +37,11 @@ const ROLES_COLA_INGESTA = [ROLES.ADMINISTRADOR, ROLES.TECNICO_CENERIS] as const
 // ubicaciones." El backend lo exige con require_permiso('Ubicaciones',
 // EDICION); el listado (HU07) sigue siendo visible para todos los roles.
 const ROLES_AGREGAR_UBICACION = [ROLES.ADMINISTRADOR, ROLES.TECNICO_CENERIS] as const;
+
+// HU11: "Solo los roles Administrador y Técnico CENERIS pueden añadir
+// dispositivos." El backend lo exige con require_permiso('Dispositivos',
+// EDICION); el listado (HU10) sigue siendo visible para todos los roles.
+const ROLES_AGREGAR_DISPOSITIVO = [ROLES.ADMINISTRADOR, ROLES.TECNICO_CENERIS] as const;
 
 export default function AppRouter() {
   return (
@@ -130,6 +136,15 @@ export default function AppRouter() {
             element={
               <ProtectedRoute>
                 <Dispositivos />
+              </ProtectedRoute>
+            }
+          />
+          {/* HU11: agregar dispositivo */}
+          <Route
+            path="/dispositivos/nueva"
+            element={
+              <ProtectedRoute rolesPermitidos={ROLES_AGREGAR_DISPOSITIVO}>
+                <AgregarDispositivo />
               </ProtectedRoute>
             }
           />

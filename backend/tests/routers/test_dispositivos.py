@@ -57,6 +57,20 @@ def tecnico_lector(db_session, fabrica):
     return sede, rol
 
 
+@pytest.fixture()
+def tecnico_editor(db_session, fabrica):
+    """Técnico CENERIS con permiso de Edición sobre Dispositivos en su
+    sede, ya autenticado (HU11: POST /dispositivos exige EDICION)."""
+    rol = fabrica.rol("Técnico CENERIS")
+    sede = fabrica.sede()
+    usuario = fabrica.usuario(rol=rol)
+    agregar_permiso(db_session, usuario, sede, "Dispositivos", "Edición", rol)
+    app.dependency_overrides[get_current_user] = lambda: usuario_jwt(
+        usuario, rol.nmbr, sede_id=sede.id_sd
+    )
+    return sede, rol
+
+
 def crear_ubicacion(db_session, sede, nombre="Ubicacion de prueba"):
     ubicacion = Ubicacion(
         id_sd=sede.id_sd, nmbr=nombre, lttd=0, lngtd=0, plgn_gjsn=POLIGONO_DUMMY,
@@ -345,3 +359,215 @@ class TestRestriccionPorRol:
 
         resp = client.get("/dispositivos")
         assert resp.json()["total"] == 0
+
+
+# ---------------------------------------------------------------------------
+# HU11 - Añadir dispositivo (POST /dispositivos)
+# ---------------------------------------------------------------------------
+
+
+def cuerpo_valido(ubicacion, conexion, **overrides):
+    cuerpo = {
+        "nmbr": "CR1000-Nuevo",
+        "mrc": "Campbell",
+        "id_ubccn": ubicacion.id_ubccn,
+        "id_cnxn": conexion.id_cnxn,
+    }
+    cuerpo.update(overrides)
+    return cuerpo
+
+
+class TestCrearDispositivo:
+    """CA1/CA2: formulario con Nombre, Marca, Modelo (opcional), Ubicación
+    y Conexión FTP. id_mp y lttd/lngtd se resuelven solos (ver decisiones
+    de diseño documentadas en routers/dispositivos.py)."""
+
+    def test_crear_devuelve_201_y_mensaje(self, client, db_session, tecnico_editor):
+        sede, _ = tecnico_editor
+        ubicacion = crear_ubicacion(db_session, sede)
+        conexion = crear_conexion(db_session, sede)
+        crear_mapeo(db_session, sede, mrc="Campbell")
+
+        resp = client.post("/dispositivos", json=cuerpo_valido(ubicacion, conexion))
+
+        assert resp.status_code == 201
+        cuerpo = resp.json()
+        assert cuerpo["mensaje"] == "Dispositivo añadido correctamente"
+        assert cuerpo["dispositivo"]["nmbr"] == "CR1000-Nuevo"
+
+        guardado = db_session.query(Dispositivo).filter(
+            Dispositivo.id_dspstv == cuerpo["dispositivo"]["id_dspstv"]
+        ).one()
+        assert guardado.mrc == "Campbell"
+        assert guardado.id_ubccn == ubicacion.id_ubccn
+        assert guardado.id_cnxn == conexion.id_cnxn
+
+    def test_queda_activo_por_defecto(self, client, db_session, tecnico_editor):
+        sede, _ = tecnico_editor
+        ubicacion = crear_ubicacion(db_session, sede)
+        conexion = crear_conexion(db_session, sede)
+        crear_mapeo(db_session, sede, mrc="Campbell")
+
+        resp = client.post("/dispositivos", json=cuerpo_valido(ubicacion, conexion))
+        assert resp.json()["dispositivo"]["estd"] == "Activo"
+
+    def test_modelo_es_opcional(self, client, db_session, tecnico_editor):
+        sede, _ = tecnico_editor
+        ubicacion = crear_ubicacion(db_session, sede)
+        conexion = crear_conexion(db_session, sede)
+        crear_mapeo(db_session, sede, mrc="Campbell")
+
+        resp = client.post("/dispositivos", json=cuerpo_valido(ubicacion, conexion))
+        assert resp.status_code == 201
+        assert resp.json()["dispositivo"]["mdl"] is None
+
+    def test_guarda_el_modelo_cuando_se_envia(self, client, db_session, tecnico_editor):
+        sede, _ = tecnico_editor
+        ubicacion = crear_ubicacion(db_session, sede)
+        conexion = crear_conexion(db_session, sede)
+        crear_mapeo(db_session, sede, mrc="Campbell")
+
+        resp = client.post("/dispositivos", json=cuerpo_valido(ubicacion, conexion, mdl="CR1000X"))
+        assert resp.json()["dispositivo"]["mdl"] == "CR1000X"
+
+    @pytest.mark.parametrize("campo", ["nmbr", "mrc", "id_ubccn", "id_cnxn"])
+    def test_campos_obligatorios_faltantes_devuelven_422(self, client, db_session, tecnico_editor, campo):
+        sede, _ = tecnico_editor
+        ubicacion = crear_ubicacion(db_session, sede)
+        conexion = crear_conexion(db_session, sede)
+        crear_mapeo(db_session, sede, mrc="Campbell")
+
+        cuerpo = cuerpo_valido(ubicacion, conexion)
+        del cuerpo[campo]
+
+        assert client.post("/dispositivos", json=cuerpo).status_code == 422
+
+    def test_lttd_lngtd_copian_los_de_la_ubicacion(self, client, db_session, tecnico_editor):
+        """Decisión de diseño HU11: el dispositivo no tiene campo propio de
+        punto GPS en el formulario; se copian de la Ubicación asociada."""
+        sede, _ = tecnico_editor
+        ubicacion = Ubicacion(
+            id_sd=sede.id_sd, nmbr="Ubicacion con coordenadas",
+            lttd=-12.046400, lngtd=-77.042800, plgn_gjsn=POLIGONO_DUMMY,
+        )
+        db_session.add(ubicacion)
+        db_session.flush()
+        conexion = crear_conexion(db_session, sede)
+        crear_mapeo(db_session, sede, mrc="Campbell")
+
+        resp = client.post("/dispositivos", json=cuerpo_valido(ubicacion, conexion))
+        assert resp.status_code == 201
+
+        guardado = db_session.query(Dispositivo).filter(
+            Dispositivo.id_dspstv == resp.json()["dispositivo"]["id_dspstv"]
+        ).one()
+        assert float(guardado.lttd) == pytest.approx(-12.046400)
+        assert float(guardado.lngtd) == pytest.approx(-77.042800)
+
+    def test_ubicacion_inexistente_devuelve_422(self, client, db_session, tecnico_editor):
+        sede, _ = tecnico_editor
+        conexion = crear_conexion(db_session, sede)
+        crear_mapeo(db_session, sede, mrc="Campbell")
+
+        cuerpo = cuerpo_valido(crear_ubicacion(db_session, sede), conexion, id_ubccn=999999)
+        assert client.post("/dispositivos", json=cuerpo).status_code == 422
+
+    def test_ubicacion_inactiva_devuelve_422(self, client, db_session, tecnico_editor):
+        sede, _ = tecnico_editor
+        ubicacion = crear_ubicacion(db_session, sede)
+        ubicacion.estd = "Inactiva"
+        db_session.flush()
+        conexion = crear_conexion(db_session, sede)
+        crear_mapeo(db_session, sede, mrc="Campbell")
+
+        resp = client.post("/dispositivos", json=cuerpo_valido(ubicacion, conexion))
+        assert resp.status_code == 422
+
+    def test_conexion_inexistente_devuelve_422(self, client, db_session, tecnico_editor):
+        sede, _ = tecnico_editor
+        ubicacion = crear_ubicacion(db_session, sede)
+        crear_mapeo(db_session, sede, mrc="Campbell")
+
+        cuerpo = cuerpo_valido(ubicacion, crear_conexion(db_session, sede), id_cnxn=999999)
+        assert client.post("/dispositivos", json=cuerpo).status_code == 422
+
+    def test_sin_mapeo_de_formato_activo_devuelve_422(self, client, db_session, tecnico_editor):
+        """No se crea ningún MapeoFormato para esta marca: HU06 no se
+        configuró todavía y el POST debe fallar con causa clara, no un 500
+        por FK nula al insertar id_mp."""
+        sede, _ = tecnico_editor
+        ubicacion = crear_ubicacion(db_session, sede)
+        conexion = crear_conexion(db_session, sede)
+
+        resp = client.post("/dispositivos", json=cuerpo_valido(ubicacion, conexion, mrc="MarcaSinMapeo"))
+        assert resp.status_code == 422
+        assert "mapeo" in resp.json()["detail"].lower()
+
+    def test_conexion_con_dispositivo_activo_devuelve_409(self, client, db_session, tecnico_editor):
+        sede, _ = tecnico_editor
+        ubicacion = crear_ubicacion(db_session, sede)
+        conexion = crear_conexion(db_session, sede)
+        mapeo = crear_mapeo(db_session, sede, mrc="Campbell")
+        crear_dispositivo(db_session, ubicacion, conexion, mapeo, nombre="Ya-Activo")
+
+        resp = client.post("/dispositivos", json=cuerpo_valido(ubicacion, conexion, nmbr="Otro-Dispositivo"))
+        assert resp.status_code == 409
+        assert "ya tiene un dispositivo activo" in resp.json()["detail"].lower()
+
+    def test_conexion_con_dispositivo_inactivo_permite_crear(self, client, db_session, tecnico_editor):
+        """El 409 es solo contra un dispositivo Activo: uno desactivado no
+        bloquea reemplazarlo por uno nuevo en la misma conexión."""
+        sede, _ = tecnico_editor
+        ubicacion = crear_ubicacion(db_session, sede)
+        conexion = crear_conexion(db_session, sede)
+        mapeo = crear_mapeo(db_session, sede, mrc="Campbell")
+        crear_dispositivo(db_session, ubicacion, conexion, mapeo, nombre="Inactivo-Viejo", estado="Inactivo")
+
+        resp = client.post("/dispositivos", json=cuerpo_valido(ubicacion, conexion, nmbr="Reemplazo"))
+        assert resp.status_code == 201
+
+    def test_usuario_por_sede_no_crea_en_ubicacion_de_otra_sede(self, client, db_session, tecnico_editor, fabrica):
+        """HT-09 CA3: verificar_sede() bloquea aunque el usuario conozca el
+        id_ubccn de una sede ajena."""
+        sede, _ = tecnico_editor
+        conexion = crear_conexion(db_session, sede)
+        crear_mapeo(db_session, sede, mrc="Campbell")
+
+        otra_sede = fabrica.sede()
+        ubicacion_ajena = crear_ubicacion(db_session, otra_sede, nombre="Ubicacion de otra sede")
+
+        resp = client.post("/dispositivos", json=cuerpo_valido(ubicacion_ajena, conexion))
+        assert resp.status_code == 403
+
+    def test_denegado_sin_permiso_de_edicion(self, client, db_session, fabrica):
+        """Cliente Final con solo Lectura ve el listado (HU10) pero no
+        puede añadir dispositivos."""
+        rol = fabrica.rol("Cliente Final")
+        sede = fabrica.sede()
+        usuario = fabrica.usuario(rol=rol)
+        agregar_permiso(db_session, usuario, sede, "Dispositivos", "Lectura", rol)
+        ubicacion = crear_ubicacion(db_session, sede)
+        conexion = crear_conexion(db_session, sede)
+        crear_mapeo(db_session, sede, mrc="Campbell")
+
+        app.dependency_overrides[get_current_user] = lambda: usuario_jwt(
+            usuario, rol.nmbr, sede_id=sede.id_sd
+        )
+
+        resp = client.post("/dispositivos", json=cuerpo_valido(ubicacion, conexion))
+        assert resp.status_code == 403
+
+    def test_denegado_sin_ninguna_fila_de_permiso(self, client, db_session, fabrica):
+        rol = fabrica.rol("Cliente Final")
+        sede = fabrica.sede()
+        usuario = fabrica.usuario(rol=rol)
+        ubicacion = crear_ubicacion(db_session, sede)
+        conexion = crear_conexion(db_session, sede)
+        crear_mapeo(db_session, sede, mrc="Campbell")
+
+        app.dependency_overrides[get_current_user] = lambda: usuario_jwt(
+            usuario, rol.nmbr, sede_id=sede.id_sd
+        )
+
+        resp = client.post("/dispositivos", json=cuerpo_valido(ubicacion, conexion))
+        assert resp.status_code == 403
