@@ -11,6 +11,7 @@ import PanelUsuario from "../pages/PanelUsuario";
 import PanelComercial from "../pages/PanelComercial";
 import Usuarios from "../pages/Usuarios";
 import Ubicaciones from "../pages/Ubicaciones";
+import Dispositivos from "../pages/Dispositivos";
 import AgregarUbicacion from "../pages/AgregarUbicacion";
 import { ROLES } from "../config/roles";
 import ConexionesFTP from "../pages/ConexionesFTP";
@@ -118,6 +119,17 @@ export default function AppRouter() {
             element={
               <ProtectedRoute rolesPermitidos={ROLES_AGREGAR_UBICACION}>
                 <AgregarUbicacion />
+              </ProtectedRoute>
+            }
+          />
+          {/* HU10: listar dispositivos. Sin restricción de rol adicional:
+              el backend ya filtra qué ve cada uno (Cliente Final incluido,
+              tiene Lectura sembrada en el módulo 'Dispositivos'). */}
+          <Route
+            path="/dispositivos"
+            element={
+              <ProtectedRoute>
+                <Dispositivos />
               </ProtectedRoute>
             }
           />

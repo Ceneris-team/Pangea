@@ -149,6 +149,19 @@ class ListadoPaginado(BaseModel):
     items: list
 
 
+# HU10 - Listar dispositivos
+
+
+class DispositivoListItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id_dspstv: int
+    nmbr: str
+    mrc: str
+    ubicacion_nombre: str
+    estd: str
+
+
 class MetricasColaIngesta(BaseModel):
     """HU 09: conteo de archv_ingst agrupado por estado, para el módulo
     de monitoreo de la cola de procesamiento (HT-05, CA3)."""

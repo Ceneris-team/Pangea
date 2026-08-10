@@ -6,7 +6,9 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 
-from app.routers import usuarios, ubicaciones, auth, ingesta, conexiones_ftp, mediciones, mapeos
+from app.routers import (
+    usuarios, ubicaciones, auth, ingesta, conexiones_ftp, mediciones, mapeos, dispositivos,
+)
 
 RATELIMIT_STORAGE_URL = os.environ.get(
     "RATELIMIT_STORAGE_URL", "redis://localhost:6379/1"
@@ -37,6 +39,7 @@ app.include_router(mediciones.router)
 app.include_router(mapeos.router)
 app.include_router(mapeos.router_parametros)
 app.include_router(mapeos.router_sedes)
+app.include_router(dispositivos.router)
 
 
 @app.get("/")

@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 import pangeaLogo from "../../assets/pangea-logo.png";
 import { ROLES, rutaPorRol } from "../../config/roles";
 
-export type SeccionActiva = "panel" | "usuarios" | "ubicaciones" | "conexiones-ftp" | "dashboard" | "configuracion" | "consulta-datos"| "mapeos" | "cola-ingesta";
+export type SeccionActiva = "panel" | "usuarios" | "ubicaciones" | "dispositivos" | "conexiones-ftp" | "dashboard" | "configuracion" | "consulta-datos"| "mapeos" | "cola-ingesta";
 
 interface SidebarProps {
   onLogout: () => void;
@@ -175,6 +175,28 @@ export default function Sidebar({ onLogout, activo, rol }: SidebarProps) {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
           </svg>
           Gestion de Ubicaciones
+        </Link>
+
+        {/* HU10: listar dispositivos. Visible para todos los roles, igual
+            que Ubicaciones: el backend ya filtra qué ve cada uno. */}
+        <Link
+          to="/dispositivos"
+          className={linkBase + " " + (activo === "dispositivos" ? linkActivo : linkInactivo)}
+        >
+          <svg
+            className={"w-5 h-5 " + (activo === "dispositivos" ? "text-[#8fb300] dark:text-[#ccff00]" : "")}
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="2"
+              d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"
+            />
+          </svg>
+          Gestion de Dispositivos
         </Link>
 
         {/* HU13: consulta de datos de telemetria filtrada por parametros/ubicaciones */}
