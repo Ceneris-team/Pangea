@@ -17,6 +17,7 @@ Cobertura por CA:
 """
 import datetime as dt
 
+import jwt
 import pytest
 from fastapi.testclient import TestClient
 
@@ -25,7 +26,7 @@ from app.routers.auth import limiter as limiter_auth
 from app.database import get_db
 from app.models import TokenRecuperacion, Usuario
 from app.security.hashing import hash_password
-from app.security.jwt_auth import create_access_token
+from app.security.jwt_auth import ALGORITHM, SECRET_KEY, create_access_token
 
 PASSWORD_ORIGINAL = "Pangea2026"
 PASSWORD_NUEVA = "Pangea2027"
@@ -459,50 +460,57 @@ class TestInvalidacionDeSesionesPrevias:
         )
         assert cambio.status_code == 200
 
-        db_session.refresh(usuario)
-        usuario.fch_cntrsn_actlzd = usuario.fch_cntrsn_actlzd - dt.timedelta(seconds=1)
-        db_session.flush()
-
         login = client.post(
             "/auth/login", json={"correo": usuario.crr, "contrasena": PASSWORD_NUEVA}
         )
         assert login.status_code == 200
         token_nuevo = login.json()["access_token"]
+
+        # Se retrocede fch_cntrsn_actlzd por debajo del segundo del `iat`
+        # del token nuevo, para medir la regla de negocio y no el
+        # truncamiento (ver el test del borde, más abajo).
+        db_session.refresh(usuario)
+        iat_nuevo = dt.datetime.fromtimestamp(
+            jwt.decode(token_nuevo, SECRET_KEY, algorithms=[ALGORITHM])["iat"],
+            tz=dt.timezone.utc,
+        )
+        usuario.fch_cntrsn_actlzd = iat_nuevo - dt.timedelta(seconds=1)
+        db_session.flush()
+
         assert client.get("/auth/perfil", headers=auth(token_nuevo)).status_code == 200
 
-    def test_relogin_en_el_mismo_segundo_del_cambio_queda_invalidado(
-        self, client, usuario_con_password
+    def test_token_emitido_en_el_mismo_segundo_del_cambio_queda_invalidado(
+        self, client, db_session, usuario_con_password
     ):
         """Documenta el borde encontrado al escribir estos tests (NO es el
-        comportamiento deseado, ver resumen de cierre): como `iat` va en
-        segundos enteros y fch_cntrsn_actlzd en microsegundos, el usuario
-        que vuelve a entrar dentro del mismo segundo en que cambió su
-        contraseña recibe un token que get_current_user rechaza.
+        comportamiento deseado, ver resumen de cierre): `iat` viaja en
+        segundos enteros y fch_cntrsn_actlzd guarda microsegundos, así que
+        un token emitido en el mismo segundo del cambio -pero unos
+        microsegundos antes, según el reloj de la BD- se rechaza.
 
-        Se deja registrado como test para que, si se corrige (p. ej.
-        truncando fch_cntrsn_actlzd a segundos o dando un margen de
-        tolerancia), este test falle y obligue a actualizar la expectativa
-        de forma consciente.
+        La condición se fuerza explícitamente (fch_cntrsn_actlzd al final
+        del mismo segundo del iat) en vez de depender de dónde caiga el
+        reloj durante la corrida: escrito como carrera real, el test pasa o
+        falla según el momento en que se ejecute.
+
+        Si algún día se corrige (truncando fch_cntrsn_actlzd a segundos o
+        dando un margen de tolerancia), este test falla y obliga a
+        actualizar la expectativa de forma consciente.
         """
         usuario, _ = usuario_con_password
+        token = token_de(usuario)
 
-        client.put(
-            "/auth/cambiar-contrasena",
-            headers=auth(token_de(usuario)),
-            json={
-                "contrasena_actual": PASSWORD_ORIGINAL,
-                "nueva_contrasena": PASSWORD_NUEVA,
-                "confirmar_contrasena": PASSWORD_NUEVA,
-            },
+        # Momento exacto en que se emitió el token, tal como lo ve el
+        # backend al decodificarlo (segundos enteros).
+        iat = dt.datetime.fromtimestamp(
+            jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])["iat"], tz=dt.timezone.utc
         )
 
-        login = client.post(
-            "/auth/login", json={"correo": usuario.crr, "contrasena": PASSWORD_NUEVA}
-        )
-        assert login.status_code == 200  # el login en sí funciona...
+        # Contraseña cambiada dentro de ESE MISMO segundo, 999 ms después.
+        usuario.fch_cntrsn_actlzd = iat + dt.timedelta(microseconds=999_000)
+        db_session.flush()
 
-        # ...pero el token que entrega no sirve todavía (truncamiento del iat).
-        resp = client.get("/auth/perfil", headers=auth(login.json()["access_token"]))
+        resp = client.get("/auth/perfil", headers=auth(token))
         assert resp.status_code == 401
 
     def test_restablecer_por_enlace_tambien_invalida_sesiones_previas(
