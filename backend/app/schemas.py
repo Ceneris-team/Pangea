@@ -3,6 +3,14 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 
+def _validar_ruta_remota(valor: str) -> str:
+    """HU05: 'El directorio remoto es una cadena de texto tipo ruta,
+    por ejemplo /datos/estacion01.'"""
+    if not valor.startswith("/"):
+        raise ValueError("El directorio remoto debe ser una ruta absoluta (ej. /datos/estacion01)")
+    return valor
+
+
 class UsuarioListItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -210,6 +218,8 @@ class ConexionFTPProbarRequest(BaseModel):
     contrasena_ftp: str
     rt_rmt: str
 
+    _validar_rt_rmt = field_validator("rt_rmt")(_validar_ruta_remota)
+
 
 class ConexionFTPCreate(BaseModel):
     nmbr: str
@@ -221,6 +231,8 @@ class ConexionFTPCreate(BaseModel):
     frcnc_mnts: int  # 1 = cada minuto, 60 = cada hora (CA HU05)
     id_sd: int | None = None  # requerido si el usuario tiene scope "global"
 
+    _validar_rt_rmt = field_validator("rt_rmt")(_validar_ruta_remota)
+
 
 class ConexionFTPUpdate(BaseModel):
     nmbr: str | None = None
@@ -230,6 +242,13 @@ class ConexionFTPUpdate(BaseModel):
     contrasena_ftp: str | None = None  # si viene, se re-cifra; si no, se conserva la actual
     rt_rmt: str | None = None
     frcnc_mnts: int | None = None
+
+    @field_validator("rt_rmt")
+    @classmethod
+    def _validar_rt_rmt(cls, valor: str | None) -> str | None:
+        if valor is None:
+            return valor
+        return _validar_ruta_remota(valor)
 
 
 # ---------------------------------------------------------------------------
