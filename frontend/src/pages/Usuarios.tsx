@@ -1,10 +1,20 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { apiFetch, ApiError } from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import Sidebar from "../components/layout/Sidebar";
 import Topbar from "../components/layout/Topbar";
 
 interface UsuarioListItem {
+  id_usr: number;
+  nmbr_cmplt: string;
+  crr: string;
+  rol_nombre: string;
+  estd: string;
+}
+
+/** HU04 CA2: respuesta de POST /usuarios, con el mensaje de éxito. */
+interface UsuarioCreadoResponse {
+  mensaje: string;
   id_usr: number;
   nmbr_cmplt: string;
   crr: string;
@@ -69,9 +79,20 @@ export default function Usuarios() {
   const [guardando, setGuardando] = useState(false);
   const [errorForm, setErrorForm] = useState<string | null>(null);
 
+  // HU04 CA2/CA3: tras guardar, el formulario se reemplaza por un estado de
+  // confirmación con el mensaje de éxito y el botón "VER USUARIOS". Ir al
+  // listado es una acción explícita del usuario (CA3), no un refresco
+  // automático: por eso `creado` se mantiene hasta que hace clic.
+  const [creado, setCreado] = useState<UsuarioCreadoResponse | null>(null);
+
+  // Fila a resaltar brevemente al volver al listado (CA3).
+  const [idResaltado, setIdResaltado] = useState<number | null>(null);
+  const filaResaltadaRef = useRef<HTMLTableRowElement | null>(null);
+
   function abrirForm() {
     setForm(FORM_VACIO);
     setErrorForm(null);
+    setCreado(null);
     setMostrarForm(true);
   }
 
@@ -79,6 +100,18 @@ export default function Usuarios() {
     setMostrarForm(false);
     setForm(FORM_VACIO);
     setErrorForm(null);
+    setCreado(null);
+  }
+
+  /** CA3: "CUANDO selecciono 'VER USUARIOS', ENTONCES redirige al listado
+   *  con el nuevo usuario en estado 'Activo'." */
+  function verUsuarios() {
+    const idNuevo = creado?.id_usr ?? null;
+    setMostrarForm(false);
+    setCreado(null);
+    setForm(FORM_VACIO);
+    setRecargarTick((t) => t + 1);
+    setIdResaltado(idNuevo);
   }
 
   async function guardarUsuario(e: FormEvent) {
@@ -92,7 +125,7 @@ export default function Usuarios() {
 
     setGuardando(true);
     try {
-      await apiFetch("/usuarios", {
+      const data = await apiFetch<UsuarioCreadoResponse>("/usuarios", {
         method: "POST",
         body: {
           nmbr_cmplt: form.nmbr_cmplt.trim(),
@@ -101,15 +134,23 @@ export default function Usuarios() {
           tlfn: form.tlfn.trim() || undefined,
         },
       });
-      setMostrarForm(false);
-      setForm(FORM_VACIO);
-      setRecargarTick((t) => t + 1); // CA3: refresca el listado, usuario nuevo queda "Activo"
+      // CA2: se muestra "Usuario creado exitosamente" (mensaje del backend).
+      setCreado(data);
     } catch (err) {
       setErrorForm(err instanceof ApiError ? err.message : "No se pudo crear el usuario");
     } finally {
       setGuardando(false);
     }
   }
+
+  // CA3: al volver al listado, la fila del usuario nuevo se resalta y se
+  // trae a la vista; el resaltado se apaga solo a los pocos segundos.
+  useEffect(() => {
+    if (idResaltado === null) return;
+    filaResaltadaRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    const timeout = setTimeout(() => setIdResaltado(null), 3000);
+    return () => clearTimeout(timeout);
+  }, [idResaltado, data]);
 
   useEffect(() => {
     setPagina(1);
@@ -182,8 +223,49 @@ export default function Usuarios() {
               )}
             </header>
 
+            {/* HU04 CA2/CA3: confirmación tras crear. Reemplaza al formulario
+                y exige un clic explícito en "VER USUARIOS" para ir al listado. */}
+            {mostrarForm && creado && (
+              <div className="bg-white dark:bg-[#2d3748] rounded-2xl shadow-sm border border-[#ccff00]/40 p-5 mb-6">
+                <div className="flex items-start gap-3">
+                  <span className="mt-0.5 inline-flex items-center justify-center w-8 h-8 rounded-full bg-[#ccff00]/20 text-[#5a7000] dark:text-[#ccff00]">
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth="2.5" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                    </svg>
+                  </span>
+                  <div className="flex-1">
+                    <h2 className="text-base font-bold text-gray-900 dark:text-white">
+                      {creado.mensaje}
+                    </h2>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                      <span className="font-medium text-gray-700 dark:text-gray-200">{creado.nmbr_cmplt}</span>{" "}
+                      ({creado.crr}) · {creado.rol_nombre} · Estado {creado.estd}. Se le envió un correo de
+                      bienvenida con sus credenciales temporales.
+                    </p>
+
+                    <div className="flex gap-3 mt-4">
+                      <button
+                        type="button"
+                        onClick={verUsuarios}
+                        className="px-4 py-2 text-sm font-semibold text-[#0c1712] bg-[#ccff00] hover:bg-[#b8e600] rounded-lg transition-colors"
+                      >
+                        VER USUARIOS
+                      </button>
+                      <button
+                        type="button"
+                        onClick={abrirForm}
+                        className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                      >
+                        Agregar otro
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* HU04: formulario de alta mínimo, sin mockup definido todavía */}
-            {mostrarForm && (
+            {mostrarForm && !creado && (
               <div className="bg-white dark:bg-[#2d3748] rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-5 mb-6">
                 <h2 className="text-base font-bold text-gray-900 dark:text-white mb-4">Agregar usuario</h2>
                 <form onSubmit={guardarUsuario} className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -340,7 +422,14 @@ export default function Usuarios() {
                       data?.items.map((u) => (
                         <tr
                           key={u.id_usr}
-                          className="bg-white dark:bg-[#2d3748] border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors group"
+                          // CA3: la fila del usuario recién creado se resalta
+                          // brevemente y se trae a la vista al volver al listado.
+                          ref={u.id_usr === idResaltado ? filaResaltadaRef : undefined}
+                          className={`border-b border-gray-100 dark:border-gray-700 transition-colors group ${
+                            u.id_usr === idResaltado
+                              ? "bg-[#ccff00]/20 dark:bg-[#ccff00]/10"
+                              : "bg-white dark:bg-[#2d3748] hover:bg-gray-50 dark:hover:bg-gray-800/50"
+                          }`}
                         >
                           <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">{u.nmbr_cmplt}</td>
                           <td className="px-6 py-4">{u.crr}</td>

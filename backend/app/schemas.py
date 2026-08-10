@@ -31,8 +31,13 @@ class UsuarioCrear(BaseModel):
 
 
 class UsuarioCreado(BaseModel):
+    """HU04 CA2: el usuario recién creado, con el mensaje de éxito que la
+    interfaz muestra tras guardar. Mismo patrón de respuesta que usan
+    HU05/HU06/HU08/HU11 al crear un recurso ({"mensaje": ..., ...})."""
+
     model_config = ConfigDict(from_attributes=True)
 
+    mensaje: str = "Usuario creado exitosamente"
     id_usr: int
     nmbr_cmplt: str
     crr: str

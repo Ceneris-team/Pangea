@@ -51,6 +51,15 @@ export default function Login() {
       setFormMsg(`Bienvenido, ${data.nombre_completo}`);
       setFormOk(true);
 
+      // HU04: la contraseña temporal generada al crear el usuario "deberá
+      // cambiarla en su primer inicio de sesión". Se le manda al formulario
+      // de cambio de contraseña (HU02 CA3) en vez de al panel de su rol;
+      // ProtectedRoute mantiene el bloqueo si intenta navegar a otra ruta.
+      if (data.debe_cambiar_contrasena) {
+        navigate("/mi-perfil", { replace: true });
+        return;
+      }
+
       // HU01 CA: "el sistema me autentica y me redirige al panel principal
       // correspondiente a mi rol."
       navigate(rutaPorRol(data.rol), { replace: true });
