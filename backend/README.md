@@ -411,9 +411,15 @@ hay tres piezas que garantizan que eso no ocurra en operación normal.
 | CA | Qué pide | Dónde está |
 |---|---|---|
 | CA1 | Tabla particionada por rango de fecha | `app/models/telemetria.py` (RANGE sobre `fch_hr`, PK compuesta, BRIN + índices por `id_dspstv`/`id_sd`) |
-| CA2 | Las consultas por rango excluyen particiones irrelevantes | Verificado con `EXPLAIN ANALYZE`, ver abajo |
+| CA2 | Las consultas por rango excluyen particiones irrelevantes | Verificado con `EXPLAIN ANALYZE`, ver abajo. Reproducible con `python -m app.scripts.medir_pruning_ht08` |
 | CA3 | Particiones creadas automáticamente con anticipación | `app/tasks/particiones.py` + `beat_schedule` |
 | CA4 | Insertar fuera de rango no genera un error no controlado | `ParticionInexistenteError`, ver "Fecha sin partición" |
+
+Cubierto por tests automatizados en `tests/services/test_particiones.py`: cálculo de
+nombres/rangos, idempotencia y reparación de huecos de `asegurar_particiones` contra
+Postgres real, clasificación de `es_error_de_particion_faltante` (sin confundirla con
+otro `CHECK` que use el mismo SQLSTATE), y el flujo completo de `guardar_lecturas`
+insertando en una partición existente vs. una fecha sin partición (CA4).
 
 ### Piezas
 
@@ -490,8 +496,33 @@ Execution Time: 0.952 ms
 El planner descarta las 12 particiones irrelevantes y ataca solo
 `tlmtr_2026_09` por el índice `(id_sd, fch_hr)`. CA2 cumplido.
 
-> Nota para HT-16 (optimización de índices, sprint posterior): esta medición
-> es la línea base. Se hizo con datos sintéticos de un solo dispositivo y una
-> sola sede; para HT-16 conviene repetirla con varias sedes y dispositivos,
-> que es cuando el índice `(id_sd, fch_hr)` empieza a competir de verdad con
-> el BRIN sobre `fch_hr`.
+**Medición reproducible:** `python -m app.scripts.medir_pruning_ht08` siembra datos
+sintéticos (2 sedes, idempotente: limpia su propia corrida anterior antes de sembrar)
+y corre `EXPLAIN (ANALYZE, BUFFERS)` con y sin filtro de fecha, dejando el número de
+particiones tocadas en cada caso. La tabla de arriba corresponde a una corrida de este
+script (`--meses 7`); Postgres reporta explícitamente `Subplans Removed: 12` en el plan
+con filtro.
+
+> Nota para HT-16 (optimización de índices, sprint posterior): esta medición es la
+> línea base. `medir_pruning_ht08.py` ya siembra dos sedes, pero sigue siendo un solo
+> dispositivo por sede; para HT-16 conviene extenderlo con más dispositivos por sede y
+> volumen mayor, que es cuando el índice `(id_sd, fch_hr)` empieza a competir de
+> verdad con el BRIN sobre `fch_hr`.
+
+### Pendientes fuera de alcance de HT-08 (para otro ticket)
+
+Estos dos puntos aparecieron durante la auditoría de HT-08 pero **no** son parte de
+sus 4 CA, así que quedan documentados en vez de implementados aquí:
+
+- **El endpoint de HU12/HU13 (`GET /mediciones` en `app/routers/mediciones.py`) no
+  filtra por rango de fechas todavía**, ni lo hace el frontend
+  (`ConsultaDatos.tsx`). Filtra por ubicación/parámetro, pero sin filtro de fecha la
+  consulta toca las 13 particiones (confirmado con `medir_pruning_ht08.py` contra la
+  forma real del endpoint). El particionamiento de HT-08 ya deja el terreno listo
+  -índice `(id_sd, fch_hr)` e índice BRIN sobre `fch_hr`- para que ese filtro sea
+  barato en cuanto HU12 (u HT-16) lo agregue; hoy simplemente no se usa porque nadie
+  lo pide.
+- **HT-16** (optimización de índices) debería repetir la medición de CA2 con varias
+  sedes y dispositivos y volumen realista -el script de arriba es el punto de partida-,
+  y **HT-18** (pruebas de carga con Locust) queda para su propio sprint. Ninguno de los
+  dos se tocó en este trabajo.

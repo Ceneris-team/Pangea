@@ -30,7 +30,9 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import MapeoColumna, MapeoFormato, Parametro, Sede
-from app.security.permisos import require_permiso, verificar_sede, LECTURA, EDICION
+from app.security.permisos import (
+    require_permiso, require_alguno_permiso, verificar_sede, LECTURA, EDICION,
+)
 from app.services.ingesta.parser import ConfiguracionParseo, parsear_dat
 from app.schemas import (
     ColumnaVistaPrevia,
@@ -238,12 +240,19 @@ def crear_parametro(
 @router_sedes.get("", response_model=list[SedeListItem])
 def listar_sedes(
     db: Session = Depends(get_db),
-    _usuario: dict = Depends(require_permiso("Ingesta", LECTURA)),
+    _usuario: dict = Depends(
+        require_alguno_permiso(("Ingesta", LECTURA), ("Ubicaciones", LECTURA))
+    ),
 ):
     """Pobla el selector de sede que un usuario 'global' debe llenar al
     guardar un mapeo (ver _resolver_sede): no existe otro endpoint que
     liste sedes -GET /ubicaciones es una tabla distinta (ubicaciones
-    dentro de una sede, no sedes)."""
+    dentro de una sede, no sedes).
+
+    HU08 reusa este mismo selector para registrar una ubicación, así que
+    el permiso admite también Ubicaciones/lectura: el endpoint solo
+    expone id y nombre de sede, y negárselo a quien administra
+    ubicaciones no respondería a ninguna regla de negocio."""
     sedes = db.query(Sede).order_by(Sede.nmbr).all()
     return [SedeListItem.model_validate(s) for s in sedes]
 

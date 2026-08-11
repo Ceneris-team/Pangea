@@ -16,13 +16,16 @@ function esPasswordValido(password: string): boolean {
 }
 
 export default function MiPerfil() {
-  const { logout } = useAuth();
+  const { logout, debeCambiarContrasena, marcarContrasenaCambiada } = useAuth();
   const navigate = useNavigate();
 
   const [perfil, setPerfil] = useState<PerfilResponse | null>(null);
   const [errorPerfil, setErrorPerfil] = useState<string | null>(null);
 
-  const [mostrarForm, setMostrarForm] = useState(false);
+  // HU04: si viene de un primer login con contraseña temporal, el formulario
+  // de cambio arranca abierto y no se puede cancelar (ProtectedRoute lo
+  // devuelve aquí mientras el flag siga activo).
+  const [mostrarForm, setMostrarForm] = useState(debeCambiarContrasena);
   const [contrasenaActual, setContrasenaActual] = useState("");
   const [nuevaContrasena, setNuevaContrasena] = useState("");
   const [confirmarContrasena, setConfirmarContrasena] = useState("");
@@ -62,6 +65,10 @@ export default function MiPerfil() {
       });
       setFormMsg(data.mensaje);
       setFormOk(true);
+      // Levanta el bloqueo de HU04 (contraseña temporal ya cambiada) para
+      // que ProtectedRoute no siga redirigiendo aquí en el intervalo previo
+      // al logout.
+      marcarContrasenaCambiada();
       // El cambio de contraseña invalida la sesión actual: se cierra sesión
       // localmente y se vuelve al login.
       setTimeout(() => {
@@ -80,8 +87,25 @@ export default function MiPerfil() {
     <div style={{ padding: 32, fontFamily: "system-ui, sans-serif", maxWidth: 560 }}>
       <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <h1>Mi perfil</h1>
-        <button onClick={() => navigate(-1)}>Volver</button>
+        {/* Con el cambio de contraseña pendiente no hay a dónde volver:
+            ProtectedRoute redirige de vuelta aquí (HU04). */}
+        {!debeCambiarContrasena && <button onClick={() => navigate(-1)}>Volver</button>}
       </header>
+
+      {debeCambiarContrasena && (
+        <p
+          style={{
+            marginTop: 12,
+            padding: 12,
+            borderRadius: 8,
+            background: "#fff4e5",
+            border: "1px solid #f0c48a",
+            color: "#8a5300",
+          }}
+        >
+          Estás usando una contraseña temporal. Debes cambiarla antes de continuar.
+        </p>
+      )}
 
       {errorPerfil && <p style={{ color: "#b3261e" }}>{errorPerfil}</p>}
 
@@ -164,9 +188,12 @@ export default function MiPerfil() {
               <button type="submit" disabled={loading || !puedeGuardar}>
                 {loading ? "Guardando…" : "Guardar"}
               </button>
-              <button type="button" onClick={() => setMostrarForm(false)} disabled={loading}>
-                Cancelar
-              </button>
+              {/* Cancelar no se ofrece si el cambio es obligatorio (HU04). */}
+              {!debeCambiarContrasena && (
+                <button type="button" onClick={() => setMostrarForm(false)} disabled={loading}>
+                  Cancelar
+                </button>
+              )}
             </div>
 
             <p style={{ color: formOk ? "#1e7a34" : "#b3261e", minHeight: 18 }}>{formMsg}</p>

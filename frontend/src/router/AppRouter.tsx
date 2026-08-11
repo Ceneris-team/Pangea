@@ -11,6 +11,9 @@ import PanelUsuario from "../pages/PanelUsuario";
 import PanelComercial from "../pages/PanelComercial";
 import Usuarios from "../pages/Usuarios";
 import Ubicaciones from "../pages/Ubicaciones";
+import Dispositivos from "../pages/Dispositivos";
+import AgregarDispositivo from "../pages/AgregarDispositivo";
+import AgregarUbicacion from "../pages/AgregarUbicacion";
 import { ROLES } from "../config/roles";
 import ConexionesFTP from "../pages/ConexionesFTP";
 import ConfigurarConexionFTP from "../pages/ConfigurarConexionFTP";
@@ -18,6 +21,7 @@ import ConsultaDatos from "../pages/ConsultaDatos";
 import Mapeos from "../pages/Mapeos";
 import ConfigurarMapeo from "../pages/ConfigurarMapeo";
 import Parametros from "../pages/Parametros";
+import ColaIngesta from "../pages/ColaIngesta";
 
 // HU06: "Solo los roles Técnico CENERIS y Administrador tienen acceso a
 // este módulo." El backend lo exige igual vía require_permiso('Ingesta').
@@ -26,6 +30,19 @@ const ROLES_MAPEOS = [ROLES.ADMINISTRADOR, ROLES.TECNICO_CENERIS] as const;
 // HU05: "Solo los roles Técnico CENERIS y Administrador tienen acceso a
 // este módulo." El backend lo exige igual (_requerir_tecnico_o_admin).
 const ROLES_CONEXIONES_FTP = [ROLES.ADMINISTRADOR, ROLES.TECNICO_CENERIS] as const;
+
+// HU09: mismo módulo de permisos ('Ingesta') y mismos roles que HU06.
+const ROLES_COLA_INGESTA = [ROLES.ADMINISTRADOR, ROLES.TECNICO_CENERIS] as const;
+
+// HU08: "Solo los roles Administrador y Técnico CENERIS pueden registrar
+// ubicaciones." El backend lo exige con require_permiso('Ubicaciones',
+// EDICION); el listado (HU07) sigue siendo visible para todos los roles.
+const ROLES_AGREGAR_UBICACION = [ROLES.ADMINISTRADOR, ROLES.TECNICO_CENERIS] as const;
+
+// HU11: "Solo los roles Administrador y Técnico CENERIS pueden añadir
+// dispositivos." El backend lo exige con require_permiso('Dispositivos',
+// EDICION); el listado (HU10) sigue siendo visible para todos los roles.
+const ROLES_AGREGAR_DISPOSITIVO = [ROLES.ADMINISTRADOR, ROLES.TECNICO_CENERIS] as const;
 
 export default function AppRouter() {
   return (
@@ -103,6 +120,35 @@ export default function AppRouter() {
               </ProtectedRoute>
             }
           />
+          {/* HU08: agregar ubicación */}
+          <Route
+            path="/ubicaciones/nueva"
+            element={
+              <ProtectedRoute rolesPermitidos={ROLES_AGREGAR_UBICACION}>
+                <AgregarUbicacion />
+              </ProtectedRoute>
+            }
+          />
+          {/* HU10: listar dispositivos. Sin restricción de rol adicional:
+              el backend ya filtra qué ve cada uno (Cliente Final incluido,
+              tiene Lectura sembrada en el módulo 'Dispositivos'). */}
+          <Route
+            path="/dispositivos"
+            element={
+              <ProtectedRoute>
+                <Dispositivos />
+              </ProtectedRoute>
+            }
+          />
+          {/* HU11: agregar dispositivo */}
+          <Route
+            path="/dispositivos/nueva"
+            element={
+              <ProtectedRoute rolesPermitidos={ROLES_AGREGAR_DISPOSITIVO}>
+                <AgregarDispositivo />
+              </ProtectedRoute>
+            }
+          />
           <Route
             path="/conexiones-ftp"
             element={
@@ -170,6 +216,16 @@ export default function AppRouter() {
             element={
               <ProtectedRoute rolesPermitidos={ROLES_MAPEOS}>
                 <Parametros />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* HU09: monitorear cola de procesamiento */}
+          <Route
+            path="/cola-ingesta"
+            element={
+              <ProtectedRoute rolesPermitidos={ROLES_COLA_INGESTA}>
+                <ColaIngesta />
               </ProtectedRoute>
             }
           />

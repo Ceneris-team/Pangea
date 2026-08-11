@@ -31,8 +31,13 @@ class UsuarioCrear(BaseModel):
 
 
 class UsuarioCreado(BaseModel):
+    """HU04 CA2: el usuario recién creado, con el mensaje de éxito que la
+    interfaz muestra tras guardar. Mismo patrón de respuesta que usan
+    HU05/HU06/HU08/HU11 al crear un recurso ({"mensaje": ..., ...})."""
+
     model_config = ConfigDict(from_attributes=True)
 
+    mensaje: str = "Usuario creado exitosamente"
     id_usr: int
     nmbr_cmplt: str
     crr: str
@@ -51,11 +56,150 @@ class UbicacionListItem(BaseModel):
     estd: str
 
 
+class UbicacionCrear(BaseModel):
+    """HU08 CA1/CA2: campos del formulario de alta de ubicación.
+
+    Geometría: un DISPOSITIVO se ubica con un punto GPS simple, pero una
+    UBICACIÓN (zona/sede) se delimita con un polígono GeoJSON de varios
+    vértices, para representar el contorno real e irregular del terreno.
+    Por eso van los dos campos y los dos son obligatorios: lttd/lngtd es
+    el punto de referencia (centro) y plgn_gjsn el contorno. El modelo
+    Ubicacion declara plgn_gjsn NOT NULL, así que omitirlo reventaría
+    como IntegrityError; se valida acá para dar el mensaje claro.
+
+    Los rangos de lat/lng ya los garantizan los CheckConstraint
+    ubccn_lttd_check / ubccn_lngtd_check, pero se repiten en Pydantic
+    para responder 422 con la causa real antes de tocar la BD.
+    """
+
+    nmbr: str = Field(min_length=1, max_length=150)
+    dscrpcn: str | None = Field(default=None, max_length=300)
+    lttd: float = Field(ge=-90, le=90)
+    lngtd: float = Field(ge=-180, le=180)
+    plgn_gjsn: dict
+    id_sd: int | None = None  # requerido solo si el usuario tiene scope "global"
+
+    @field_validator("nmbr")
+    @classmethod
+    def _nombre_no_vacio(cls, valor: str) -> str:
+        """Un nombre de solo espacios pasa min_length=1 pero no es un
+        nombre: se normaliza acá para que el UNIQUE por sede compare
+        siempre el valor ya recortado."""
+        recortado = valor.strip()
+        if not recortado:
+            raise ValueError("El nombre es obligatorio")
+        return recortado
+
+    @field_validator("plgn_gjsn")
+    @classmethod
+    def _poligono_valido(cls, valor: dict) -> dict:
+        """Valida la forma mínima de un GeoJSON Polygon: un anillo
+        exterior cerrado (primer vértice == último) de al menos 3 vértices
+        distintos, con coordenadas en rango. Sin esto entraría a JSONB
+        cualquier objeto -incluido `{}`- y el campo dejaría de significar
+        "el contorno de la zona"."""
+        if valor.get("type") != "Polygon":
+            raise ValueError("El polígono debe ser un GeoJSON de tipo 'Polygon'")
+
+        anillos = valor.get("coordinates")
+        if not isinstance(anillos, list) or not anillos:
+            raise ValueError("El polígono debe tener al menos un anillo de coordenadas")
+
+        exterior = anillos[0]
+        if not isinstance(exterior, list) or len(exterior) < 4:
+            raise ValueError(
+                "El polígono debe tener al menos 3 vértices para delimitar la zona"
+            )
+
+        for vertice in exterior:
+            if not isinstance(vertice, (list, tuple)) or len(vertice) < 2:
+                raise ValueError("Cada vértice del polígono debe ser un par [lng, lat]")
+            lng, lat = vertice[0], vertice[1]
+            if not isinstance(lng, (int, float)) or not isinstance(lat, (int, float)):
+                raise ValueError("Las coordenadas del polígono deben ser numéricas")
+            # GeoJSON usa el orden [longitud, latitud], no [lat, lng].
+            if not -180 <= lng <= 180:
+                raise ValueError("La longitud de cada vértice debe estar entre -180 y 180")
+            if not -90 <= lat <= 90:
+                raise ValueError("La latitud de cada vértice debe estar entre -90 y 90")
+
+        if list(exterior[0][:2]) != list(exterior[-1][:2]):
+            raise ValueError(
+                "El polígono debe estar cerrado: el último vértice debe coincidir con el primero"
+            )
+
+        return valor
+
+
+class UbicacionCreada(BaseModel):
+    """HU08 CA2: la ubicación recién registrada, con el estado 'Activa'
+    que le puso el server_default del modelo."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id_ubccn: int
+    id_sd: int
+    nmbr: str
+    dscrpcn: str | None
+    lttd: float
+    lngtd: float
+    plgn_gjsn: dict
+    estd: str
+
+
 class ListadoPaginado(BaseModel):
     total: int
     pagina: int
     por_pagina: int
     items: list
+
+
+# HU10 - Listar dispositivos
+
+
+class DispositivoListItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id_dspstv: int
+    nmbr: str
+    mrc: str
+    ubicacion_nombre: str
+    estd: str
+
+
+# HU11 - Añadir dispositivo
+
+
+class DispositivoCrear(BaseModel):
+    """HU11 CA1: campos del formulario (Nombre, Marca, Modelo opcional,
+    Ubicación, Conexión FTP). id_mp (mapeo de formato) y lttd/lngtd NO son
+    campos del formulario: el router los resuelve/copia automáticamente
+    (ver docstring de crear_dispositivo en routers/dispositivos.py)."""
+
+    nmbr: str = Field(min_length=1, max_length=150)
+    mrc: str = Field(min_length=1, max_length=100)
+    mdl: str | None = None
+    id_ubccn: int
+    id_cnxn: int
+
+
+class DispositivoCreado(BaseModel):
+    """HU11 CA2: el dispositivo recién registrado, con el estado 'Activo'
+    que le puso el server_default del modelo. Misma forma que
+    UbicacionCreada (HU08)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id_dspstv: int
+    id_ubccn: int
+    id_cnxn: int
+    id_mp: int
+    nmbr: str
+    mrc: str
+    mdl: str | None
+    lttd: float
+    lngtd: float
+    estd: str
 
 
 class MetricasColaIngesta(BaseModel):
@@ -66,6 +210,32 @@ class MetricasColaIngesta(BaseModel):
     exitosos: int
     fallidos: int
     total: int
+
+
+class ArchivoIngestaListItem(BaseModel):
+    """HU09 CA1: una fila de la cola de ingesta. estado ya viene traducido
+    al lenguaje de negocio de la HU (ver ESTADO_BD_A_NEGOCIO en
+    routers/ingesta.py); en BD (archv_ingst.estd) se sigue guardando
+    Pendiente/Procesando/Exitoso/Fallido."""
+
+    id_archv: int
+    nmbr_archv: str
+    datalogger_nombre: str
+    fch_dtccn: datetime
+    estado: str
+
+
+class ArchivoIngestaDetalle(BaseModel):
+    """HU09 CA3: detalle de un archivo de la cola."""
+
+    id_archv: int
+    nmbr_archv: str
+    datalogger_nombre: str
+    estado: str
+    fch_dtccn: datetime
+    fch_prcsd: datetime | None
+    rgstrs_prcsds: int | None
+    mnsj_errr: str | None
 
 
 class ConexionFTPListItem(BaseModel):

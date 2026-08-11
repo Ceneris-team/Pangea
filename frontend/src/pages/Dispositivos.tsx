@@ -6,12 +6,11 @@ import { ROLES } from "../config/roles";
 import Sidebar from "../components/layout/Sidebar";
 import Topbar from "../components/layout/Topbar";
 
-interface UbicacionListItem {
-  id_ubccn: number;
+interface DispositivoListItem {
+  id_dspstv: number;
   nmbr: string;
-  dscrpcn: string | null;
-  lttd: number;
-  lngtd: number;
+  mrc: string;
+  ubicacion_nombre: string;
   estd: string;
 }
 
@@ -19,15 +18,21 @@ interface ListadoPaginado {
   total: number;
   pagina: number;
   por_pagina: number;
-  items: UbicacionListItem[];
+  items: DispositivoListItem[];
+}
+
+interface UbicacionListItem {
+  id_ubccn: number;
+  nmbr: string;
 }
 
 const POR_PAGINA = 10;
 
-// HU08: "Solo los roles Administrador y Técnico CENERIS pueden registrar
-// ubicaciones". El backend lo exige igual vía
-// require_permiso('Ubicaciones', EDICION); esto solo evita mostrar un
-// botón que terminaría en 403.
+// HU11: "Solo los roles Administrador y Técnico CENERIS pueden añadir
+// dispositivos". El backend lo exige igual vía require_permiso
+// ('Dispositivos', EDICION); esto solo evita mostrar un botón que
+// terminaría en 403. Mismo criterio que ROLES_PUEDEN_AGREGAR en
+// Ubicaciones.tsx (HU08).
 const ROLES_PUEDEN_AGREGAR: readonly string[] = [ROLES.ADMINISTRADOR, ROLES.TECNICO_CENERIS];
 
 function useDebouncedValue<T>(value: T, delayMs: number): T {
@@ -39,13 +44,14 @@ function useDebouncedValue<T>(value: T, delayMs: number): T {
   return debounced;
 }
 
-export default function Ubicaciones() {
+export default function Dispositivos() {
   const { nombreCompleto, rol, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
-  // HU08 CA3: al volver del formulario, el listado muestra el mensaje de
-  // éxito junto con la ubicación recién registrada.
+  // HU11 CA3: al volver del formulario, el listado muestra el mensaje de
+  // éxito junto con el dispositivo recién registrado. Mismo patrón que
+  // Ubicaciones.tsx usa tras HU08.
   const [mensajeExito, setMensajeExito] = useState<string | null>(
     (location.state as { mensaje?: string } | null)?.mensaje ?? null
   );
@@ -58,14 +64,15 @@ export default function Ubicaciones() {
     }
   }, [location.pathname, location.state, navigate]);
 
-  // Estado para el Modo Oscuro (mismo patrón que Usuarios.tsx)
+  // Estado para el Modo Oscuro (mismo patrón que Ubicaciones.tsx)
   const [isDarkMode, setIsDarkMode] = useState(false);
 
-  // CA HU07: búsqueda por nombre, insensible a mayúsculas/minúsculas
+  // CA HU10: búsqueda por nombre o marca, insensible a mayúsculas/minúsculas
   const [busquedaInput, setBusquedaInput] = useState("");
   const busqueda = useDebouncedValue(busquedaInput, 400);
 
-  // CA HU07: filtro por estado (Activa / Inactiva)
+  // CA HU10: filtro por ubicación y por estado
+  const [idUbccn, setIdUbccn] = useState("");
   const [estado, setEstado] = useState("");
   const [pagina, setPagina] = useState(1);
 
@@ -73,18 +80,31 @@ export default function Ubicaciones() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // El selector de "Ubicación" se puebla con GET /ubicaciones (HU07 ya
+  // existente): no hace falta otro endpoint para esto.
+  const [ubicaciones, setUbicaciones] = useState<UbicacionListItem[]>([]);
+
+  useEffect(() => {
+    apiFetch<{ items: UbicacionListItem[] }>("/ubicaciones", {
+      params: { por_pagina: 100 },
+    })
+      .then((res) => setUbicaciones(res.items))
+      .catch(() => setUbicaciones([]));
+  }, []);
+
   useEffect(() => {
     setPagina(1);
-  }, [busqueda, estado]);
+  }, [busqueda, idUbccn, estado]);
 
   useEffect(() => {
     let cancelado = false;
     setLoading(true);
     setError(null);
 
-    apiFetch<ListadoPaginado>("/ubicaciones", {
+    apiFetch<ListadoPaginado>("/dispositivos", {
       params: {
         busqueda: busqueda || undefined,
+        id_ubccn: idUbccn || undefined,
         estado: estado || undefined,
         pagina,
         por_pagina: POR_PAGINA,
@@ -104,18 +124,26 @@ export default function Ubicaciones() {
     return () => {
       cancelado = true;
     };
-  }, [busqueda, estado, pagina]);
+  }, [busqueda, idUbccn, estado, pagina]);
 
   const totalPaginas = data ? Math.max(1, Math.ceil(data.total / data.por_pagina)) : 1;
   const inicioRango = data ? (data.pagina - 1) * data.por_pagina + 1 : 0;
   const finRango = data ? Math.min(data.pagina * data.por_pagina, data.total) : 0;
+
+  const hayFiltrosActivos = busquedaInput !== "" || idUbccn !== "" || estado !== "";
+
+  function limpiarFiltros() {
+    setBusquedaInput("");
+    setIdUbccn("");
+    setEstado("");
+  }
 
   return (
     <div className={`${isDarkMode ? "dark" : ""} font-sans`}>
       <div className="flex h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-300 overflow-hidden">
 
         {/* SIDEBAR */}
-        <Sidebar onLogout={logout} activo="ubicaciones" rol={rol} />
+        <Sidebar onLogout={logout} activo="dispositivos" rol={rol} />
 
         {/* ÁREA PRINCIPAL */}
         <div className="flex-1 flex flex-col overflow-hidden">
@@ -128,20 +156,20 @@ export default function Ubicaciones() {
             rol={rol}
             />
 
-          {/* CONTENIDO DE LA PÁGINA (Ubicaciones) */}
+          {/* CONTENIDO DE LA PÁGINA (Dispositivos) */}
           <main className="flex-1 overflow-y-auto p-6 md:p-8">
             <header className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div>
-                <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Gestión de Ubicaciones</h1>
+                <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Gestión de Dispositivos</h1>
                 <p className="text-sm text-gray-500 dark:text-gray-400">
-                  Listado centralizado de estaciones de monitoreo registradas.
+                  Listado centralizado de dispositivos de monitoreo registrados.
                 </p>
               </div>
 
-              {/* HU08 CA1: punto de entrada al formulario de registro. */}
+              {/* HU11 CA1: punto de entrada al formulario de registro. */}
               {ROLES_PUEDEN_AGREGAR.includes(rol ?? "") && (
                 <button
-                  onClick={() => navigate("/ubicaciones/nueva")}
+                  onClick={() => navigate("/dispositivos/nueva")}
                   className="inline-flex items-center px-4 py-2 text-sm font-bold rounded-xl bg-[#ccff00] text-[#1a202c] hover:bg-[#b8e600] transition-colors"
                 >
                   <svg
@@ -155,7 +183,7 @@ export default function Ubicaciones() {
                   >
                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
                   </svg>
-                  Agregar ubicación
+                  Añadir dispositivo
                 </button>
               )}
             </header>
@@ -185,21 +213,43 @@ export default function Ubicaciones() {
                     type="text"
                     value={busquedaInput}
                     onChange={(e) => setBusquedaInput(e.target.value)}
-                    placeholder="Buscar por nombre de ubicación..."
+                    placeholder="Buscar por nombre o marca..."
                     className="bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block w-full pl-10 p-2.5 transition-all outline-none placeholder-gray-400 dark:placeholder-gray-500"
                   />
                 </div>
 
                 <div className="flex w-full lg:w-auto gap-3">
                   <select
+                    value={idUbccn}
+                    onChange={(e) => setIdUbccn(e.target.value)}
+                    className="bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block p-2.5 outline-none cursor-pointer"
+                  >
+                    <option value="">Todas las ubicaciones</option>
+                    {ubicaciones.map((u) => (
+                      <option key={u.id_ubccn} value={u.id_ubccn}>
+                        {u.nmbr}
+                      </option>
+                    ))}
+                  </select>
+
+                  <select
                     value={estado}
                     onChange={(e) => setEstado(e.target.value)}
                     className="bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block p-2.5 outline-none cursor-pointer"
                   >
                     <option value="">Todos los estados</option>
-                    <option value="Activa">Activa</option>
-                    <option value="Inactiva">Inactiva</option>
+                    <option value="Activo">Activo</option>
+                    <option value="Inactivo">Inactivo</option>
                   </select>
+
+                  {hayFiltrosActivos && (
+                    <button
+                      onClick={limpiarFiltros}
+                      className="px-3 py-2.5 text-sm font-medium rounded-xl border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors whitespace-nowrap"
+                    >
+                      Limpiar filtros
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -215,9 +265,8 @@ export default function Ubicaciones() {
                   <thead className="text-xs text-gray-500 dark:text-gray-400 uppercase bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700">
                     <tr>
                       <th className="px-6 py-4 font-bold tracking-wider">Nombre</th>
-                      <th className="px-6 py-4 font-bold tracking-wider">Descripción</th>
-                      <th className="px-6 py-4 font-bold tracking-wider">Latitud</th>
-                      <th className="px-6 py-4 font-bold tracking-wider">Longitud</th>
+                      <th className="px-6 py-4 font-bold tracking-wider">Marca</th>
+                      <th className="px-6 py-4 font-bold tracking-wider">Ubicación</th>
                       <th className="px-6 py-4 font-bold tracking-wider">Estado</th>
                       <th className="px-6 py-4 font-bold tracking-wider text-right">Acciones</th>
                     </tr>
@@ -225,7 +274,7 @@ export default function Ubicaciones() {
                   <tbody>
                     {loading && (
                       <tr>
-                        <td colSpan={6} className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
+                        <td colSpan={5} className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
                           <div className="flex justify-center items-center gap-2">
                             <div className="w-4 h-4 rounded-full bg-[#ccff00] animate-bounce"></div>
                             <span>Cargando datos...</span>
@@ -236,36 +285,36 @@ export default function Ubicaciones() {
 
                     {!loading && data?.items.length === 0 && (
                       <tr>
-                        <td colSpan={6} className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
-                          No se encontraron ubicaciones con ese criterio.
+                        <td colSpan={5} className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
+                          No se encontraron dispositivos con ese criterio.
                         </td>
                       </tr>
                     )}
 
                     {!loading &&
-                      data?.items.map((u) => (
+                      data?.items.map((d) => (
                         <tr
-                          key={u.id_ubccn}
+                          key={d.id_dspstv}
                           className="bg-white dark:bg-[#2d3748] border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors group"
                         >
-                          <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">{u.nmbr}</td>
-                          <td className="px-6 py-4">{u.dscrpcn ?? "—"}</td>
-                          <td className="px-6 py-4">{u.lttd}</td>
-                          <td className="px-6 py-4">{u.lngtd}</td>
+                          <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">{d.nmbr}</td>
+                          <td className="px-6 py-4">{d.mrc}</td>
+                          <td className="px-6 py-4">{d.ubicacion_nombre}</td>
                           <td className="px-6 py-4">
                             <span
                               className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold border ${
-                                u.estd === "Activa"
+                                d.estd === "Activo"
                                   ? "bg-[#ccff00]/20 text-[#5a7000] dark:text-[#ccff00] border-[#ccff00]/30"
                                   : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-600"
                               }`}
                             >
-                              {u.estd === "Activa" && (
+                              {d.estd === "Activo" && (
                                 <span className="w-1.5 h-1.5 mr-1.5 rounded-full bg-[#8fb300] dark:bg-[#ccff00]"></span>
                               )}
-                              {u.estd}
+                              {d.estd}
                             </span>
                           </td>
+                          {/* Acciones: placeholder, se implementa en HU18/HU19 (Sprint 3) */}
                           <td className="px-6 py-4 text-right">
                             <button
                               disabled
