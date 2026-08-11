@@ -40,6 +40,7 @@ from app.schemas import (
     MapeoFormatoCrear,
     MapeoFormatoDetalle,
     MapeoFormatoListItem,
+    ParametroCrear,
     ParametroListItem,
     SedeListItem,
     VistaPreviaResponse,
@@ -207,6 +208,31 @@ def listar_parametros(
     """CA1: pobla el selector de parámetro estándar del formulario."""
     parametros = db.query(Parametro).order_by(Parametro.nmbr).all()
     return [ParametroListItem.model_validate(p) for p in parametros]
+
+
+@router_parametros.post("", response_model=ParametroListItem, status_code=201)
+def crear_parametro(
+    body: ParametroCrear,
+    db: Session = Depends(get_db),
+    _usuario: dict = Depends(require_permiso("Ingesta", EDICION)),
+):
+    """Alta de un parámetro estándar en el catálogo (prmtr). No es parte de
+    los CA de HU06 -que solo lista lo ya existente- sino del hueco que
+    dejaba: antes de esto un parámetro nuevo solo se podía insertar a mano
+    en la BD, lo mismo que HU06 resolvió para los mapeos."""
+    ya_existe = db.query(Parametro).filter(Parametro.nmbr == body.nmbr).first()
+    if ya_existe is not None:
+        raise HTTPException(status_code=409, detail=f"Ya existe un parámetro llamado '{body.nmbr}'")
+
+    parametro = Parametro(nmbr=body.nmbr, undd=body.undd, dscrpcn=body.dscrpcn)
+    db.add(parametro)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=f"Ya existe un parámetro llamado '{body.nmbr}'")
+    db.refresh(parametro)
+    return ParametroListItem.model_validate(parametro)
 
 
 @router_sedes.get("", response_model=list[SedeListItem])

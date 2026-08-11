@@ -151,6 +151,24 @@ class ParametroListItem(BaseModel):
     dscrpcn: str | None
 
 
+class ParametroCrear(BaseModel):
+    """Alta de un parámetro estándar nuevo en el catálogo (prmtr), para que
+    el Técnico CENERIS no dependa de un INSERT manual cuando un mapeo
+    necesita un parámetro que todavía no existe."""
+
+    nmbr: str = Field(..., min_length=1, max_length=100)
+    undd: str = Field(..., min_length=1, max_length=30)
+    dscrpcn: str | None = Field(default=None, max_length=200)
+
+    @field_validator("nmbr", "undd")
+    @classmethod
+    def _no_vacio(cls, valor: str) -> str:
+        valor = valor.strip()
+        if not valor:
+            raise ValueError("No puede estar vacío")
+        return valor
+
+
 class SedeListItem(BaseModel):
     """Pobla el selector de sede del formulario de mapeos (HU06) para
     usuarios con scope 'global', que deben indicar id_sd explícitamente

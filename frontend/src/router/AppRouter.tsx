@@ -17,6 +17,7 @@ import ConfigurarConexionFTP from "../pages/ConfigurarConexionFTP";
 import ConsultaDatos from "../pages/ConsultaDatos";
 import Mapeos from "../pages/Mapeos";
 import ConfigurarMapeo from "../pages/ConfigurarMapeo";
+import Parametros from "../pages/Parametros";
 
 // HU06: "Solo los roles Técnico CENERIS y Administrador tienen acceso a
 // este módulo." El backend lo exige igual vía require_permiso('Ingesta').
@@ -159,6 +160,16 @@ export default function AppRouter() {
             element={
               <ProtectedRoute rolesPermitidos={ROLES_MAPEOS}>
                 <ConfigurarMapeo />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Catálogo de parámetros estándar que consume HU06 */}
+          <Route
+            path="/parametros"
+            element={
+              <ProtectedRoute rolesPermitidos={ROLES_MAPEOS}>
+                <Parametros />
               </ProtectedRoute>
             }
           />
