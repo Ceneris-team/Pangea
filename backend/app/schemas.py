@@ -193,7 +193,6 @@ class DispositivoCreado(BaseModel):
     id_dspstv: int
     id_ubccn: int
     id_cnxn: int
-    id_mp: int
     nmbr: str
     mrc: str
     mdl: str | None
@@ -340,9 +339,9 @@ class ParametroCrear(BaseModel):
 
 
 class SedeListItem(BaseModel):
-    """Pobla el selector de sede del formulario de mapeos (HU06) para
-    usuarios con scope 'global', que deben indicar id_sd explícitamente
-    (ver _resolver_sede en routers/mapeos.py)."""
+    """Pobla el selector de sede de formularios donde un usuario con scope
+    'global' debe indicar id_sd explícitamente (Agregar Ubicación,
+    Conexiones FTP)."""
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -373,7 +372,6 @@ class MapeoColumnaDetalle(MapeoColumnaItem):
 
 
 class MapeoFormatoBase(BaseModel):
-    mrc: str = Field(min_length=1, max_length=100)  # obligatorio: nombre de marca
     tp_trm: str = Field(default="H")  # 'H' datos periódicos / 'E' eventos
     dlmtdr: str  # obligatorio: coma, punto y coma, tabulador o espacio
     fl_inc_dts: int = Field(default=1, ge=1)  # entero, default 1
@@ -381,16 +379,18 @@ class MapeoFormatoBase(BaseModel):
 
 
 class MapeoFormatoCrear(MapeoFormatoBase):
-    id_sd: int | None = None  # requerido solo si el usuario tiene scope "global"
+    id_dspstv: int  # el dispositivo al que pertenece este mapeo
     columnas: list[MapeoColumnaItem] = Field(default_factory=list)
 
 
 class MapeoFormatoActualizar(BaseModel):
     """Todos los campos opcionales: CA4 pide "modifica un campo" y
     actualiza. Si `columnas` viene, reemplaza la tabla de asignación
-    completa; si se omite, las mp_clmn actuales se conservan."""
+    completa; si se omite, las mp_clmn actuales se conservan.
 
-    mrc: str | None = Field(default=None, min_length=1, max_length=100)
+    id_dspstv NO es editable: un mapeo no cambia de dueño, se crea otro
+    para el nuevo dispositivo."""
+
     tp_trm: str | None = None
     dlmtdr: str | None = None
     fl_inc_dts: int | None = Field(default=None, ge=1)
@@ -400,13 +400,14 @@ class MapeoFormatoActualizar(BaseModel):
 
 
 class MapeoFormatoListItem(BaseModel):
-    """CA5: el listado muestra el mapeo asociado a su marca."""
+    """CA5: el listado muestra el mapeo asociado a su dispositivo."""
 
     model_config = ConfigDict(from_attributes=True)
 
     id_mp: int
-    id_sd: int
-    mrc: str
+    id_dspstv: int
+    dispositivo_nombre: str
+    dispositivo_marca: str
     tp_trm: str
     dlmtdr: str
     fl_inc_dts: int

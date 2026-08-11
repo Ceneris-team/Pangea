@@ -42,6 +42,15 @@ def _limpiar_corrida_anterior(db) -> None:
     if cliente is not None:
         for sede in db.query(Sede).filter(Sede.id_clnt == cliente.id_clnt):
             db.execute(text("DELETE FROM tlmtr WHERE id_sd = :id_sd"), {"id_sd": sede.id_sd})
+        # MapeoFormato ahora cuelga de Dispositivo (id_dspstv), así que se
+        # borra antes que Dispositivo, no después.
+        db.query(MapeoFormato).filter(
+            MapeoFormato.id_dspstv.in_(
+                db.query(Dispositivo.id_dspstv).join(Ubicacion).join(Sede).filter(
+                    Sede.id_clnt == cliente.id_clnt
+                )
+            )
+        ).delete(synchronize_session=False)
         db.query(Dispositivo).filter(
             Dispositivo.id_ubccn.in_(
                 db.query(Ubicacion.id_ubccn).join(Sede).filter(Sede.id_clnt == cliente.id_clnt)
@@ -52,9 +61,6 @@ def _limpiar_corrida_anterior(db) -> None:
         ).delete(synchronize_session=False)
         db.query(ConexionFTP).filter(
             ConexionFTP.id_sd.in_(db.query(Sede.id_sd).filter(Sede.id_clnt == cliente.id_clnt))
-        ).delete(synchronize_session=False)
-        db.query(MapeoFormato).filter(
-            MapeoFormato.id_sd.in_(db.query(Sede.id_sd).filter(Sede.id_clnt == cliente.id_clnt))
         ).delete(synchronize_session=False)
         db.query(Sede).filter(Sede.id_clnt == cliente.id_clnt).delete(synchronize_session=False)
         db.query(Cliente).filter(Cliente.id_clnt == cliente.id_clnt).delete(synchronize_session=False)
@@ -84,14 +90,18 @@ def _sembrar(db, meses: int, horas_entre_lecturas: int):
         conexion = ConexionFTP(
             id_sd=sede.id_sd, nmbr=f"FTP {sede.nmbr}", hst="host", usr_ftp="u", rt_rmt="/", crdncl_cfrd="x"
         )
-        mapeo = MapeoFormato(id_sd=sede.id_sd, mrc="Marca pruning", frmt_fch="%Y-%m-%d %H:%M:%S")
-        db.add_all([ubicacion, conexion, mapeo])
+        db.add_all([ubicacion, conexion])
         db.flush()
         dispositivo = Dispositivo(
-            id_ubccn=ubicacion.id_ubccn, id_cnxn=conexion.id_cnxn, id_mp=mapeo.id_mp,
+            id_ubccn=ubicacion.id_ubccn, id_cnxn=conexion.id_cnxn,
             nmbr=f"Disp {sede.nmbr}", mrc="Marca pruning", lttd=4.6, lngtd=-74.0,
         )
         db.add(dispositivo)
+        db.flush()
+        mapeo = MapeoFormato(
+            id_dspstv=dispositivo.id_dspstv, frmt_fch="%Y-%m-%d %H:%M:%S",
+        )
+        db.add(mapeo)
         db.flush()
         dispositivos.append((dispositivo, sede))
 

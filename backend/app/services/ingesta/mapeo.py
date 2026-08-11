@@ -34,7 +34,7 @@ PREFIJOS_TIPO_TRAMA = {
 
 
 class MapeoNoEncontradoError(Exception):
-    """No hay un mp_frmt activo para esa sede + marca + tipo de trama.
+    """No hay un mp_frmt activo para ese dispositivo + tipo de trama.
 
     Es un error de configuración, no transitorio: reintentar no lo
     resuelve. El llamador debe tratarlo como error de datos (ver
@@ -68,14 +68,18 @@ def detectar_tipo_trama(nombre_archivo: str) -> str | None:
 
 def resolver_formato(
     db: Session,
-    id_sd: int,
-    marca: str,
+    id_dspstv: int,
     nombre_archivo: str,
 ) -> FormatoResuelto:
     """Resuelve el formato y el mapeo real para un archivo dado.
 
+    El dispositivo ya se resolvió antes de llamar esto (ver
+    app.tasks.ingesta): el mapeo cuelga directamente de él, no de su
+    sede+marca, porque dos dispositivos de la misma marca pueden traer
+    columnas en distinto orden.
+
     Levanta MapeoNoEncontradoError si el archivo no tiene un prefijo
-    reconocible o si no hay un mp_frmt activo para esa combinación: sin
+    reconocible o si no hay un mp_frmt activo para ese dispositivo: sin
     mapeo no se puede interpretar el archivo, y adivinar produciría
     lecturas incorrectas en silencio.
     """
@@ -90,8 +94,7 @@ def resolver_formato(
     formato = (
         db.query(MapeoFormato)
         .filter(
-            MapeoFormato.id_sd == id_sd,
-            MapeoFormato.mrc == marca,
+            MapeoFormato.id_dspstv == id_dspstv,
             MapeoFormato.tp_trm == tipo_trama,
             MapeoFormato.estd == "Activo",
         )
@@ -99,8 +102,8 @@ def resolver_formato(
     )
     if formato is None:
         raise MapeoNoEncontradoError(
-            f"No hay un formato activo (mp_frmt) para sede={id_sd}, "
-            f"marca='{marca}', tipo de trama='{tipo_trama}'. Cárgalo antes de "
+            f"No hay un formato activo (mp_frmt) para el dispositivo "
+            f"id={id_dspstv}, tipo de trama='{tipo_trama}'. Cárgalo antes de "
             f"procesar archivos de este datalogger."
         )
 

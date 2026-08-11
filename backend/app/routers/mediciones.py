@@ -14,6 +14,7 @@ from app.database import get_db
 from app.models import (
     Dispositivo,
     MapeoColumna,
+    MapeoFormato,
     Parametro,
     PermisoUbicacion,
     Telemetria,
@@ -58,7 +59,8 @@ def listar_parametros_disponibles(
     parametros = (
         db.query(Parametro)
         .join(MapeoColumna, MapeoColumna.id_prmtr == Parametro.id_prmtr)
-        .join(Dispositivo, Dispositivo.id_mp == MapeoColumna.id_mp)
+        .join(MapeoFormato, MapeoFormato.id_mp == MapeoColumna.id_mp)
+        .join(Dispositivo, Dispositivo.id_dspstv == MapeoFormato.id_dspstv)
         .filter(Dispositivo.id_ubccn.in_(ids_ubicaciones))
         .distinct()
         .order_by(Parametro.nmbr)

@@ -7,11 +7,15 @@ from app.database import Base
 
 
 class MapeoFormato(Base):
-    """HU 06: mini-ETL por marca de sensor.
+    """HU 06: mini-ETL por DISPOSITIVO (antes era por marca de sensor,
+    compartido entre todos los dispositivos de esa marca; se corrigió
+    porque dos dispositivos de la misma marca en campo pueden traer sus
+    columnas en distinto orden, y un mapeo por marca no puede representar
+    eso).
 
-    Un datalogger de una misma marca manda dos formatos distintos de
-    archivo, con distinto número y significado de columnas, y por eso el
-    formato se identifica por sede + marca + tipo de trama (PP-96):
+    Un mismo dispositivo manda dos formatos distintos de archivo, con
+    distinto número y significado de columnas, y por eso el formato se
+    identifica por dispositivo + tipo de trama:
 
       tp_trm='H' -> archivos H_*.dat: datos periódicos (lectura real)
       tp_trm='E' -> archivos E_*.dat: estados y eventos del equipo
@@ -19,12 +23,11 @@ class MapeoFormato(Base):
     __tablename__ = "mp_frmt"
     __table_args__ = (
         CheckConstraint("tp_trm IN ('H','E')", name="mpfrmt_tptrm_check"),
-        UniqueConstraint("id_sd", "mrc", "tp_trm", name="uq_mpfrmt_sd_mrc_tptrm"),
+        UniqueConstraint("id_dspstv", "tp_trm", name="uq_mpfrmt_dspstv_tptrm"),
     )
 
     id_mp = Column(Integer, primary_key=True, autoincrement=True)
-    id_sd = Column(Integer, ForeignKey("sd.id_sd"), nullable=False)
-    mrc = Column(String(100), nullable=False)
+    id_dspstv = Column(Integer, ForeignKey("dspstv.id_dspstv"), nullable=False)
     tp_trm = Column(String(5), nullable=False, server_default="H")
     dlmtdr = Column(String(5), nullable=False, server_default=",")
     fl_inc_dts = Column(Integer, nullable=False, server_default="1")
@@ -66,7 +69,6 @@ class Dispositivo(Base):
     id_dspstv = Column(Integer, primary_key=True, autoincrement=True)
     id_ubccn = Column(Integer, ForeignKey("ubccn.id_ubccn"), nullable=False)
     id_cnxn = Column(Integer, ForeignKey("cnxn_ftp.id_cnxn"), nullable=False)
-    id_mp = Column(Integer, ForeignKey("mp_frmt.id_mp"), nullable=False)
     nmbr = Column(String(150), nullable=False)
     mrc = Column(String(100), nullable=False)
     mdl = Column(String(100))

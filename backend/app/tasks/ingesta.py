@@ -6,7 +6,7 @@ from app.core.celery_app import celery_app
 from app.database import SessionLocal
 from app.ingesta.ftp_receptor import descargar_archivo_dat, listar_archivos_dat
 from app.models.archivo_ingesta import ArchivoIngesta
-from app.models.ubicacion_conexion import ConexionFTP, Ubicacion
+from app.models.ubicacion_conexion import ConexionFTP
 from app.services.ingesta.estandarizador import estandarizar_filas
 from app.services.ingesta.mapeo import (
     MapeoNoEncontradoError,
@@ -98,21 +98,14 @@ def procesar_archivo_dat(self, id_archv: int) -> dict:
         except DispositivoNoResueltoError as exc:
             raise ErrorDatosNoRecuperable(str(exc)) from exc
 
-        # PP-96: el formato aplicable sale de mp_frmt según la sede, la
-        # marca del datalogger y el tipo de trama, que se deduce del
-        # prefijo del nombre del archivo (H_ = datos periódicos,
-        # E_ = estados/eventos). Se resuelve ANTES de descargar: si no hay
-        # mapeo cargado, no tiene sentido bajar el archivo.
-        ubicacion = db.get(Ubicacion, dispositivo.id_ubccn)
-        if ubicacion is None:
-            raise ErrorDatosNoRecuperable(
-                f"El dispositivo id={dispositivo.id_dspstv} apunta a una ubicación "
-                f"inexistente (id_ubccn={dispositivo.id_ubccn})"
-            )
-
+        # El formato aplicable sale de mp_frmt según el dispositivo (ya
+        # resuelto arriba) y el tipo de trama, que se deduce del prefijo
+        # del nombre del archivo (H_ = datos periódicos, E_ = eventos). Se
+        # resuelve ANTES de descargar: si no hay mapeo cargado, no tiene
+        # sentido bajar el archivo.
         try:
             formato = resolver_formato(
-                db, ubicacion.id_sd, dispositivo.mrc, archivo.nmbr_archv,
+                db, dispositivo.id_dspstv, archivo.nmbr_archv,
             )
         except MapeoNoEncontradoError as exc:
             raise ErrorDatosNoRecuperable(str(exc)) from exc

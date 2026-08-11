@@ -1,17 +1,22 @@
 import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { apiFetch, apiUpload, ApiError } from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import Sidebar from "../components/layout/Sidebar";
 import Topbar from "../components/layout/Topbar";
 
 /**
- * HU06 - Mapear formato de marca de sensor.
+ * HU06 - Mapear formato de dispositivo.
  *
  *   CA1  formulario "Nuevo mapeo" + tabla de asignación columna -> parámetro
  *   CA2  "Vista previa" con un .dat de muestra (el archivo NO se persiste)
  *   CA3  "Guardar"    -> "Mapeo guardado correctamente"
  *   CA4  "Actualizar" -> "Mapeo actualizado correctamente"
+ *
+ * El mapeo cuelga del DISPOSITIVO (no de la marca): dos dispositivos de la
+ * misma marca pueden traer sus columnas en distinto orden en campo, así
+ * que ya no hay un mapeo compartido por marca+sede. El dispositivo se
+ * elige al crear y no cambia al editar.
  *
  * La tabla de asignación se puebla sola tras la vista previa: es el
  * momento en que se conocen los nombres reales de las columnas del
@@ -25,9 +30,12 @@ interface Parametro {
   dscrpcn: string | null;
 }
 
-interface Sede {
-  id_sd: number;
+interface DispositivoOption {
+  id_dspstv: number;
   nmbr: string;
+  mrc: string;
+  ubicacion_nombre: string;
+  estd: string;
 }
 
 interface ColumnaVistaPrevia {
@@ -60,8 +68,9 @@ interface MapeoColumnaDetalle {
 
 interface MapeoDetalle {
   id_mp: number;
-  id_sd: number;
-  mrc: string;
+  id_dspstv: number;
+  dispositivo_nombre: string;
+  dispositivo_marca: string;
   tp_trm: string;
   dlmtdr: string;
   fl_inc_dts: number;
@@ -71,8 +80,7 @@ interface MapeoDetalle {
 }
 
 interface MapeoForm {
-  id_sd: string;
-  mrc: string;
+  id_dspstv: string;
   tp_trm: "H" | "E";
   dlmtdr: string;
   fl_inc_dts: string;
@@ -89,8 +97,7 @@ const DELIMITADORES = [
 ];
 
 const FORM_VACIO: MapeoForm = {
-  id_sd: "",
-  mrc: "",
+  id_dspstv: "",
   tp_trm: "H",
   dlmtdr: ",",
   fl_inc_dts: "1", // regla de negocio: entero, por defecto 1
@@ -100,19 +107,30 @@ const FORM_VACIO: MapeoForm = {
 
 export default function ConfigurarMapeo() {
   const { id } = useParams();
+  const [searchParams] = useSearchParams();
   const esEdicion = Boolean(id);
   const navigate = useNavigate();
   const { nombreCompleto, rol, logout } = useAuth();
   const [isDarkMode, setIsDarkMode] = useState(false);
 
-  const [form, setForm] = useState<MapeoForm>(FORM_VACIO);
+  // Al llegar desde "Configurar mapeo" en Dispositivos, el dispositivo
+  // viene preseleccionado por query param.
+  const [form, setForm] = useState<MapeoForm>({
+    ...FORM_VACIO,
+    id_dspstv: searchParams.get("id_dspstv") ?? "",
+  });
   const [parametros, setParametros] = useState<Parametro[]>([]);
-  const [sedes, setSedes] = useState<Sede[]>([]);
+  const [dispositivos, setDispositivos] = useState<DispositivoOption[]>([]);
 
   const [archivo, setArchivo] = useState<File | null>(null);
   const [vistaPrevia, setVistaPrevia] = useState<VistaPreviaResponse | null>(null);
   // indice de columna -> id_prmtr asignado. Es la tabla de asignación de CA1.
   const [asignaciones, setAsignaciones] = useState<Record<number, number>>({});
+
+  // Solo para mostrar en modo edición (id_dspstv no es editable).
+  const [dispositivoInfo, setDispositivoInfo] = useState<{ nombre: string; marca: string } | null>(
+    null
+  );
 
   const [cargando, setCargando] = useState(false);
   const [previsualizando, setPrevisualizando] = useState(false);
@@ -132,16 +150,17 @@ export default function ConfigurarMapeo() {
       });
   }, []);
 
-  // Selector de sede: un usuario con scope "global" debe indicar a qué
-  // sede pertenece el mapeo (ver _resolver_sede en el backend).
+  // Selector de dispositivo: el mapeo se crea para un dispositivo
+  // concreto, ya existente (HU11 lo da de alta sin mapeo todavía).
   useEffect(() => {
-    apiFetch<Sede[]>("/sedes")
-      .then(setSedes)
+    if (esEdicion) return;
+    apiFetch<{ items: DispositivoOption[] }>("/dispositivos", { params: { por_pagina: 100 } })
+      .then((res) => setDispositivos(res.items))
       .catch((err) => {
         setMensajeOk(false);
-        setMensaje(err instanceof ApiError ? err.message : "No se pudieron cargar las sedes");
+        setMensaje(err instanceof ApiError ? err.message : "No se pudieron cargar los dispositivos");
       });
-  }, []);
+  }, [esEdicion]);
 
   // CA4: al abrir un mapeo existente se cargan sus datos y su asignación.
   useEffect(() => {
@@ -150,14 +169,14 @@ export default function ConfigurarMapeo() {
     apiFetch<MapeoDetalle>(`/mapeos/${id}`)
       .then((detalle) => {
         setForm({
-          id_sd: String(detalle.id_sd),
-          mrc: detalle.mrc,
+          id_dspstv: String(detalle.id_dspstv),
           tp_trm: detalle.tp_trm === "E" ? "E" : "H",
           dlmtdr: detalle.dlmtdr,
           fl_inc_dts: String(detalle.fl_inc_dts),
           frmt_fch: detalle.frmt_fch,
           columna_fecha: FORM_VACIO.columna_fecha,
         });
+        setDispositivoInfo({ nombre: detalle.dispositivo_nombre, marca: detalle.dispositivo_marca });
         setAsignaciones(
           Object.fromEntries(detalle.columnas.map((c) => [c.indc_clmn, c.id_prmtr]))
         );
@@ -220,18 +239,18 @@ export default function ConfigurarMapeo() {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
 
-    // Campos obligatorios según la HU: marca, delimitador y tipo de trama
-    // (este último ocupa el lugar de "extensión de archivo", ver README).
-    // id_sd solo es obligatorio al crear: el backend infiere la sede del
-    // usuario "por_sede" y, al editar, la sede del mapeo no se modifica.
-    if (!form.mrc.trim() || !form.dlmtdr) {
+    // Campos obligatorios según la HU: delimitador y tipo de trama (este
+    // último ocupa el lugar de "extensión de archivo", ver README).
+    // id_dspstv solo se pide al crear: el dispositivo del mapeo no se
+    // modifica al editar.
+    if (!form.dlmtdr) {
       setMensajeOk(false);
-      setMensaje("La marca y el delimitador son obligatorios");
+      setMensaje("El delimitador es obligatorio");
       return;
     }
-    if (!esEdicion && !form.id_sd) {
+    if (!esEdicion && !form.id_dspstv) {
       setMensajeOk(false);
-      setMensaje("Selecciona la sede a la que pertenece este mapeo");
+      setMensaje("Selecciona el dispositivo al que pertenece este mapeo");
       return;
     }
 
@@ -246,8 +265,7 @@ export default function ConfigurarMapeo() {
         }));
 
       const payload = {
-        ...(esEdicion ? {} : { id_sd: Number(form.id_sd) }),
-        mrc: form.mrc.trim(),
+        ...(esEdicion ? {} : { id_dspstv: Number(form.id_dspstv) }),
         tp_trm: form.tp_trm,
         dlmtdr: form.dlmtdr,
         fl_inc_dts: Number(form.fl_inc_dts),
@@ -314,7 +332,7 @@ export default function ConfigurarMapeo() {
                 {esEdicion ? "Editar mapeo de formato" : "Nuevo mapeo de formato"}
               </h1>
               <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 font-light">
-                Define cómo se interpretan los archivos .dat de una marca de sensor.
+                Define cómo se interpretan los archivos .dat de un dispositivo.
               </p>
             </header>
 
@@ -327,36 +345,33 @@ export default function ConfigurarMapeo() {
                   <h2 className="text-base font-bold text-gray-900 dark:text-white mb-4">Datos del formato</h2>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {!esEdicion && (
-                      <div>
-                        <label className={labelClase}>Sede *</label>
+                    {esEdicion ? (
+                      <div className="md:col-span-2">
+                        <label className={labelClase}>Dispositivo</label>
+                        <div className={inputClase + " bg-gray-100 dark:bg-gray-900"}>
+                          {dispositivoInfo
+                            ? `${dispositivoInfo.nombre} (${dispositivoInfo.marca})`
+                            : "—"}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="md:col-span-2">
+                        <label className={labelClase}>Dispositivo *</label>
                         <select
                           required
-                          value={form.id_sd}
-                          onChange={(e) => actualizarCampo("id_sd", e.target.value)}
+                          value={form.id_dspstv}
+                          onChange={(e) => actualizarCampo("id_dspstv", e.target.value)}
                           className={inputClase + " cursor-pointer"}
                         >
-                          <option value="">— Selecciona una sede —</option>
-                          {sedes.map((s) => (
-                            <option key={s.id_sd} value={s.id_sd}>
-                              {s.nmbr}
+                          <option value="">— Selecciona un dispositivo —</option>
+                          {dispositivos.map((d) => (
+                            <option key={d.id_dspstv} value={d.id_dspstv}>
+                              {d.nmbr} — {d.mrc} ({d.ubicacion_nombre})
                             </option>
                           ))}
                         </select>
                       </div>
                     )}
-
-                    <div>
-                      <label className={labelClase}>Nombre de marca *</label>
-                      <input
-                        type="text"
-                        required
-                        placeholder="Campbell Scientific"
-                        value={form.mrc}
-                        onChange={(e) => actualizarCampo("mrc", e.target.value)}
-                        className={inputClase}
-                      />
-                    </div>
 
                     <div>
                       <label className={labelClase}>Tipo de trama *</label>
