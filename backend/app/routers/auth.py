@@ -193,6 +193,11 @@ def restablecer_contrasena(
 
     usuario.cntrsn_hsh = hash_password(body.nueva_contrasena)
     usuario.fch_cntrsn_actlzd = ahora
+    # HU04: la contraseña temporal ya se reemplazó, así que deja de exigirse
+    # el cambio en el próximo login. Sin esto el flag queda pegado en True y
+    # el usuario entra en un bucle: cambia la contraseña, vuelve a entrar, y
+    # el sistema le sigue pidiendo cambiarla.
+    usuario.dbe_cmbr_pswrd = False
     token.usad = True
     db.commit()
 
@@ -227,6 +232,10 @@ def cambiar_contrasena(
 
     usuario.cntrsn_hsh = hash_password(body.nueva_contrasena)
     usuario.fch_cntrsn_actlzd = dt.datetime.now(dt.timezone.utc)
+    # Ver restablecer_contrasena: este es el flujo por el que pasa el
+    # usuario nuevo al que se le forzó el cambio en su primer login (HU04),
+    # así que es el que tiene que bajar el flag.
+    usuario.dbe_cmbr_pswrd = False
     db.commit()
 
     return {"mensaje": "Contraseña actualizada exitosamente"}

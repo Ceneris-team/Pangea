@@ -389,6 +389,89 @@ class TestCambiarContrasena:
 
 
 # ---------------------------------------------------------------------------
+# HU04 - El cambio apaga la exigencia de cambiar la contraseña temporal
+# ---------------------------------------------------------------------------
+
+
+class TestFlagDebeCambiarContrasena:
+    """Regresión: `dbe_cmbr_pswrd` se ponía en True al crear el usuario
+    (HU04) y NADIE lo volvía a poner en False. Mientras el flag era solo
+    informativo el defecto no se notaba; al forzarse el cambio en el primer
+    login, el usuario quedaba en bucle: cambiaba la contraseña, volvía a
+    entrar, y el sistema se la seguía pidiendo.
+    """
+
+    def test_cambiar_contrasena_apaga_el_flag(self, client, db_session, usuario_con_password):
+        usuario, _ = usuario_con_password
+        usuario.dbe_cmbr_pswrd = True
+        db_session.flush()
+
+        resp = client.put(
+            "/auth/cambiar-contrasena",
+            headers=auth(token_de(usuario)),
+            json={
+                "contrasena_actual": PASSWORD_ORIGINAL,
+                "nueva_contrasena": PASSWORD_NUEVA,
+                "confirmar_contrasena": PASSWORD_NUEVA,
+            },
+        )
+        assert resp.status_code == 200
+
+        db_session.refresh(usuario)
+        assert usuario.dbe_cmbr_pswrd is False
+
+    def test_restablecer_por_enlace_apaga_el_flag(self, client, db_session, usuario_con_password):
+        usuario, _ = usuario_con_password
+        usuario.dbe_cmbr_pswrd = True
+        db_session.flush()
+        token = crear_token_recuperacion(db_session, usuario)
+
+        resp = client.post(
+            "/auth/restablecer-contrasena",
+            json={
+                "token": token.tkn,
+                "nueva_contrasena": PASSWORD_NUEVA,
+                "confirmar_contrasena": PASSWORD_NUEVA,
+            },
+        )
+        assert resp.status_code == 200
+
+        db_session.refresh(usuario)
+        assert usuario.dbe_cmbr_pswrd is False
+
+    def test_el_login_siguiente_ya_no_exige_cambiar_la_contrasena(
+        self, client, db_session, usuario_con_password
+    ):
+        """El caso reportado de punta a punta: usuario con contraseña
+        temporal -> primer login pide cambio -> cambia -> vuelve a entrar
+        con la contraseña nueva y YA NO se le pide otra vez."""
+        usuario, _ = usuario_con_password
+        usuario.dbe_cmbr_pswrd = True
+        db_session.flush()
+
+        primer_login = client.post(
+            "/auth/login", json={"correo": usuario.crr, "contrasena": PASSWORD_ORIGINAL}
+        )
+        assert primer_login.json()["debe_cambiar_contrasena"] is True
+
+        client.put(
+            "/auth/cambiar-contrasena",
+            headers=auth(primer_login.json()["access_token"]),
+            json={
+                "contrasena_actual": PASSWORD_ORIGINAL,
+                "nueva_contrasena": PASSWORD_NUEVA,
+                "confirmar_contrasena": PASSWORD_NUEVA,
+            },
+        )
+
+        segundo_login = client.post(
+            "/auth/login", json={"correo": usuario.crr, "contrasena": PASSWORD_NUEVA}
+        )
+        assert segundo_login.status_code == 200
+        assert segundo_login.json()["debe_cambiar_contrasena"] is False
+
+
+# ---------------------------------------------------------------------------
 # CRÍTICO - El cambio de contraseña invalida TODAS las sesiones previas
 # ---------------------------------------------------------------------------
 
