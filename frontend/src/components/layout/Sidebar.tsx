@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 import pangeaLogo from "../../assets/pangea-logo.png";
 import { ROLES, rutaPorRol } from "../../config/roles";
 
-export type SeccionActiva = "panel" | "usuarios" | "ubicaciones" | "dispositivos" | "conexiones-ftp" | "dashboard" | "configuracion" | "consulta-datos"| "mapeos" | "cola-ingesta";
+export type SeccionActiva = "panel" | "usuarios" | "ubicaciones" | "dispositivos" | "conexiones-ftp" | "dashboard" | "configuracion" | "consulta-datos"| "mapeos" | "parametros" | "cola-ingesta";
 
 interface SidebarProps {
   onLogout: () => void;
@@ -129,6 +129,30 @@ export default function Sidebar({ onLogout, activo, rol }: SidebarProps) {
               />
             </svg>
             Mapeos de Formato
+          </Link>
+        )}
+
+        {/* Catálogo de parámetros estándar que consume HU06. Mismo
+            criterio de acceso: solo Administrador y Técnico CENERIS. */}
+        {(rol === ROLES.ADMINISTRADOR || rol === ROLES.TECNICO_CENERIS) && (
+          <Link
+            to="/parametros"
+            className={linkBase + " " + (activo === "parametros" ? linkActivo : linkInactivo)}
+          >
+            <svg
+              className={"w-5 h-5 " + (activo === "parametros" ? "text-[#8fb300] dark:text-[#ccff00]" : "")}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+                d="M9 17V7m3 10V11m3 6V9M5 21h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2z"
+              />
+            </svg>
+            Parámetros
           </Link>
         )}
 
