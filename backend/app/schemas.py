@@ -56,6 +56,14 @@ class UbicacionListItem(BaseModel):
     estd: str
 
 
+class UbicacionDetalle(UbicacionListItem):
+    """Ficha de una ubicación: lo mismo que el listado (HU07) más el
+    polígono, para poder mostrar el contorno en un mapa de detalle."""
+
+    id_sd: int
+    plgn_gjsn: dict
+
+
 class UbicacionCrear(BaseModel):
     """HU08 CA1/CA2: campos del formulario de alta de ubicación.
 

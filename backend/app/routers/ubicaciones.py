@@ -23,9 +23,13 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import Sede, Ubicacion, PermisoUbicacion
+from app.models import (
+    Dispositivo, MapeoColumna, MapeoFormato, Parametro, Sede, Ubicacion, PermisoUbicacion,
+)
 from app.security.permisos import require_permiso, verificar_sede, LECTURA, EDICION
-from app.schemas import UbicacionCrear, UbicacionCreada, UbicacionListItem
+from app.schemas import (
+    ParametroListItem, UbicacionCrear, UbicacionCreada, UbicacionDetalle, UbicacionListItem,
+)
 
 router = APIRouter(prefix="/ubicaciones", tags=["Ubicaciones"])
 
@@ -67,6 +71,74 @@ def listar_ubicaciones(
     items = [UbicacionListItem.model_validate(u) for u in ubicaciones]
 
     return {"total": total, "pagina": pagina, "por_pagina": por_pagina, "items": items}
+
+
+def _verificar_acceso_ubicacion(db: Session, usuario: dict, ubicacion: Ubicacion) -> None:
+    """Mismo criterio de listar_ubicaciones: Administrador/Técnico ven
+    cualquier ubicación (dentro de su sede, ver verificar_sede);
+    Cliente Final solo la suya, vía PermisoUbicacion (HU 21)."""
+    verificar_sede(usuario, ubicacion.id_sd, modulo="Ubicaciones", accion=LECTURA)
+    if usuario.get("rol") not in ROLES_CON_ACCESO_TOTAL:
+        id_usr = int(usuario["sub"])
+        tiene_permiso = (
+            db.query(PermisoUbicacion)
+            .filter(
+                PermisoUbicacion.id_ubccn == ubicacion.id_ubccn,
+                PermisoUbicacion.id_usr == id_usr,
+            )
+            .first()
+        )
+        if tiene_permiso is None:
+            raise HTTPException(status_code=404, detail="Ubicación no encontrada")
+
+
+@router.get("/{id_ubccn}", response_model=UbicacionDetalle)
+def obtener_ubicacion(
+    id_ubccn: int,
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(require_permiso("Ubicaciones", LECTURA)),
+):
+    """Ficha de una ubicación: mismos datos del listado (HU07) más el
+    polígono, para un mapa de detalle."""
+    ubicacion = db.query(Ubicacion).filter(Ubicacion.id_ubccn == id_ubccn).first()
+    if ubicacion is None:
+        raise HTTPException(status_code=404, detail="Ubicación no encontrada")
+
+    _verificar_acceso_ubicacion(db, usuario, ubicacion)
+
+    return UbicacionDetalle.model_validate(ubicacion)
+
+
+@router.get("/{id_ubccn}/parametros", response_model=dict)
+def parametros_en_uso(
+    id_ubccn: int,
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(require_permiso("Ubicaciones", LECTURA)),
+):
+    """Qué parámetros se están midiendo hoy en esta ubicación, derivado de
+    los mapeos de formato de sus dispositivos (mismo criterio que HU13,
+    GET /mediciones/parametros, pero para UNA ubicación puntual en vez del
+    conjunto asignado al usuario). No es una lista editable a mano: si un
+    parámetro no aparece acá es porque ningún dispositivo de esta
+    ubicación tiene una columna mapeada a él todavía (ver HU06)."""
+    ubicacion = db.query(Ubicacion).filter(Ubicacion.id_ubccn == id_ubccn).first()
+    if ubicacion is None:
+        raise HTTPException(status_code=404, detail="Ubicación no encontrada")
+
+    _verificar_acceso_ubicacion(db, usuario, ubicacion)
+
+    parametros = (
+        db.query(Parametro)
+        .join(MapeoColumna, MapeoColumna.id_prmtr == Parametro.id_prmtr)
+        .join(MapeoFormato, MapeoFormato.id_mp == MapeoColumna.id_mp)
+        .join(Dispositivo, Dispositivo.id_dspstv == MapeoFormato.id_dspstv)
+        .filter(Dispositivo.id_ubccn == id_ubccn)
+        .distinct()
+        .order_by(Parametro.nmbr)
+        .all()
+    )
+    items = [ParametroListItem.model_validate(p) for p in parametros]
+    return {"items": items}
 
 
 def _resolver_sede(usuario: dict, id_sd_body: int | None) -> int:
