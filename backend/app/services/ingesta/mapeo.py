@@ -51,6 +51,10 @@ class FormatoResuelto:
     id_mp: int
     tipo_trama: str
     config: ConfiguracionParseo
+    # Va aparte de `config` porque no interviene en el parseo (el parser
+    # devuelve el valor crudo sin castear): lo consume la validación, que
+    # es quien convierte a float. Ver validador.validar_lecturas.
+    delimitador_decimal: str = "."
 
 
 def detectar_tipo_trama(nombre_archivo: str) -> str | None:
@@ -120,6 +124,7 @@ def resolver_formato(
         id_mp=formato.id_mp,
         tipo_trama=tipo_trama,
         config=config,
+        delimitador_decimal=formato.dlmtdr_dcml,
     )
 
 

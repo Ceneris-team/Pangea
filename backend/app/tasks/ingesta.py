@@ -41,6 +41,64 @@ class ErrorDatosNoRecuperable(Exception):
     reintenta: reintentar no cambia el resultado."""
 
 
+def normalizar_contenido_dat(contenido: str) -> str:
+    """Quita el byte NUL de relleno y unifica CRLF/CR a '\\n'.
+
+    parsear_dat() corre csv.reader sobre un io.StringIO, que no hace la
+    traducción universal de saltos de línea de un archivo abierto en modo
+    texto. Los .dat de campo (Campbell Scientific, entre otros) vienen con
+    CRLF y a veces con NUL al final: sin esto el csv revienta con
+    "new-line character seen in unquoted field".
+    """
+    return contenido.replace("\x00", "").replace("\r\n", "\n").replace("\r", "\n")
+
+
+def interpretar_y_guardar(
+    db,
+    contenido: str,
+    formato,
+    dispositivo,
+    id_cnxn: int,
+    id_archv: int,
+    nombre_archivo: str,
+):
+    """Etapas PP-97..100 sobre el contenido ya obtenido de un .dat.
+
+    Es el tramo del pipeline que NO depende de cómo llegó el archivo, y
+    por eso vive acá y no dentro de la tarea Celery: la ingesta automática
+    lo llama con lo que bajó por FTP, y la carga manual de la ficha del
+    dispositivo (IMP-06, routers/dispositivos.py) con lo que subió el
+    usuario. Duplicar estas etapas era la vía directa a que el archivo
+    subido a mano se interpretara distinto que el mismo archivo entrando
+    por FTP.
+
+    No hace commit: la transacción la controla el llamador, igual que
+    guardar_lecturas().
+    """
+    resultado_parseo = parsear_dat(normalizar_contenido_dat(contenido), formato.config)
+
+    # mp_clmn referencia las columnas por índice, así que el mapeo se
+    # arma con el header ya leído.
+    mapeo = construir_mapeo(db, formato.id_mp, resultado_parseo.columnas)
+    if not mapeo:
+        raise ErrorDatosNoRecuperable(
+            f"El formato mp_frmt id={formato.id_mp} (trama '{formato.tipo_trama}') "
+            f"no tiene ninguna columna mapeada que exista en el header de "
+            f"'{nombre_archivo}'; no se puede interpretar el archivo."
+        )
+
+    lecturas_estandar = estandarizar_filas(
+        resultado_parseo, id_cnxn=id_cnxn, mapeo=mapeo,
+    )
+    resultado_validacion = validar_lecturas(
+        lecturas_estandar, delimitador_decimal=formato.delimitador_decimal,
+    )
+    resultado_persistencia = guardar_lecturas(
+        db, resultado_validacion.validas, dispositivo, id_archv,
+    )
+    return resultado_validacion, resultado_persistencia
+
+
 @celery_app.task(
     name="app.tasks.ingesta.procesar_archivo_dat",
     bind=True,
@@ -111,27 +169,16 @@ def procesar_archivo_dat(self, id_archv: int) -> dict:
             raise ErrorDatosNoRecuperable(str(exc)) from exc
 
         contenido = descargar_archivo_dat(cnxn, archivo.nmbr_archv)
-        resultado_parseo = parsear_dat(contenido, formato.config)
-
-        # mp_clmn referencia las columnas por índice, así que el mapeo se
-        # arma con el header ya leído.
-        mapeo = construir_mapeo(db, formato.id_mp, resultado_parseo.columnas)
-        if not mapeo:
-            raise ErrorDatosNoRecuperable(
-                f"El formato mp_frmt id={formato.id_mp} (trama '{formato.tipo_trama}') "
-                f"no tiene ninguna columna mapeada que exista en el header de "
-                f"'{archivo.nmbr_archv}'; no se puede interpretar el archivo."
-            )
-
-        lecturas_estandar = estandarizar_filas(
-            resultado_parseo, id_cnxn=archivo.id_cnxn, mapeo=mapeo,
-        )
-
-        resultado_validacion = validar_lecturas(lecturas_estandar)
 
         try:
-            resultado_persistencia = guardar_lecturas(
-                db, resultado_validacion.validas, dispositivo, id_archv,
+            resultado_validacion, resultado_persistencia = interpretar_y_guardar(
+                db,
+                contenido=contenido,
+                formato=formato,
+                dispositivo=dispositivo,
+                id_cnxn=archivo.id_cnxn,
+                id_archv=id_archv,
+                nombre_archivo=archivo.nmbr_archv,
             )
         except ParticionInexistenteError as exc:
             # HT-08 CA4: falta la partición de tlmtr para esas fechas.

@@ -39,18 +39,32 @@ def _es_valor_vacio(valor_crudo) -> bool:
     return valor_crudo is None or (isinstance(valor_crudo, str) and valor_crudo.strip() == "")
 
 
-def _parsear_numero(valor_crudo):
+def _parsear_numero(valor_crudo, delimitador_decimal: str = "."):
     """Devuelve (valor_float_o_None, error_o_None). Vacío y "0" son
-    válidos; texto no numérico no lo es."""
+    válidos; texto no numérico no lo es.
+
+    Con delimitador_decimal=',' (mp_frmt.dlmtdr_dcml) el valor viene en
+    locale europeo -"23,5"-: se traduce a punto antes de float(), que es
+    lo único que Python entiende. El separador de miles NO se soporta a
+    propósito: un .dat de datalogger no lo usa, y aceptarlo obligaría a
+    adivinar si "1,234" son mil doscientos treinta y cuatro o 1.234.
+    """
     if _es_valor_vacio(valor_crudo):
         return None, None
+    valor_normalizado = valor_crudo
+    if delimitador_decimal == "," and isinstance(valor_crudo, str):
+        valor_normalizado = valor_crudo.replace(",", ".", 1)
     try:
-        return float(valor_crudo), None
+        return float(valor_normalizado), None
     except (TypeError, ValueError):
         return None, f"valor '{valor_crudo}' no es numérico"
 
 
-def validar_lecturas(lecturas: list, ahora: dt.datetime = None) -> ResultadoValidacion:
+def validar_lecturas(
+    lecturas: list,
+    ahora: dt.datetime = None,
+    delimitador_decimal: str = ".",
+) -> ResultadoValidacion:
     ahora = ahora or dt.datetime.now(dt.timezone.utc)
     validas = []
     errores = []
@@ -84,7 +98,7 @@ def validar_lecturas(lecturas: list, ahora: dt.datetime = None) -> ResultadoVali
             ))
             continue
 
-        valor, error_numero = _parsear_numero(lectura.valor_crudo)
+        valor, error_numero = _parsear_numero(lectura.valor_crudo, delimitador_decimal)
         if error_numero:
             errores.append(ErrorValidacion(
                 numero_fila=lectura.numero_fila,

@@ -295,7 +295,8 @@ export default function Dispositivos() {
                       data?.items.map((d) => (
                         <tr
                           key={d.id_dspstv}
-                          className="bg-white dark:bg-[#2d3748] border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors group"
+                          onClick={() => navigate(`/dispositivos/${d.id_dspstv}`)}
+                          className="bg-white dark:bg-[#2d3748] border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors group cursor-pointer"
                         >
                           <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">{d.nmbr}</td>
                           <td className="px-6 py-4">{d.mrc}</td>
@@ -314,17 +315,20 @@ export default function Dispositivos() {
                               {d.estd}
                             </span>
                           </td>
-                          {/* Acciones: placeholder, se implementa en HU18/HU19 (Sprint 3) */}
+                          {/* DEC-09: abre la ficha del dispositivo, donde se
+                              configura su formato y su mapeo de columnas. */}
                           <td className="px-6 py-4 text-right">
                             <button
-                              disabled
-                              title="Próximamente"
-                              className="inline-flex items-center justify-center px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-transparent border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white focus:ring-4 focus:outline-none focus:ring-gray-200 dark:focus:ring-gray-800 disabled:opacity-50 disabled:hover:bg-white dark:disabled:hover:bg-transparent transition-all"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                navigate(`/dispositivos/${d.id_dspstv}`);
+                              }}
+                              className="inline-flex items-center justify-center px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-transparent border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white focus:ring-4 focus:outline-none focus:ring-gray-200 dark:focus:ring-gray-800 transition-all"
                             >
                               <svg className="w-4 h-4 mr-2 text-gray-500 dark:text-gray-400" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                               </svg>
-                              Editar
+                              Configurar
                             </button>
                           </td>
                         </tr>

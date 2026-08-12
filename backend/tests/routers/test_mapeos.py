@@ -153,6 +153,39 @@ class TestCrearMapeo:
         assert mapeo["total_columnas"] == 2
         # El formato de fecha vuelve en el lenguaje de la HU, no en strptime.
         assert mapeo["frmt_fch"] == "YYYY-MM-DD HH:mm:ss"
+        # DEC-09: por defecto el separador decimal es punto, que es el
+        # comportamiento que tenía el motor antes de que fuera configurable.
+        assert mapeo["dlmtdr_dcml"] == "."
+
+    def test_crear_con_columna_y_decimal_ambos_coma_devuelve_422(
+        self, client, db_session, tecnico_editor, parametros
+    ):
+        """"23,5" en una línea separada por comas son dos campos, no un
+        número: se rechaza al guardar en vez de producir lecturas partidas
+        en silencio."""
+        sede, _ = tecnico_editor
+        dispositivo = crear_dispositivo(db_session, sede)
+
+        resp = client.post(
+            "/mapeos",
+            json=cuerpo_mapeo(
+                parametros, dispositivo.id_dspstv, dlmtdr=",", dlmtdr_dcml=",",
+            ),
+        )
+        assert resp.status_code == 422
+        assert "ambos coma" in resp.json()["detail"]
+
+    def test_delimitador_decimal_invalido_devuelve_422(
+        self, client, db_session, tecnico_editor, parametros
+    ):
+        sede, _ = tecnico_editor
+        dispositivo = crear_dispositivo(db_session, sede)
+
+        resp = client.post(
+            "/mapeos",
+            json=cuerpo_mapeo(parametros, dispositivo.id_dspstv, dlmtdr_dcml="|"),
+        )
+        assert resp.status_code == 422
 
     def test_guarda_el_formato_de_fecha_como_strptime(self, client, db_session, tecnico_editor, parametros):
         # El motor (parser._parsear_fecha) usa strptime: lo que se persiste
@@ -491,6 +524,35 @@ class TestActualizarMapeo:
 
     def test_mapeo_inexistente_devuelve_404(self, client, tecnico_editor):
         assert client.put("/mapeos/999999", json={"dlmtdr": ";"}).status_code == 404
+
+    def test_cambiar_solo_el_decimal_a_coma_choca_con_la_coma_de_columna(
+        self, client, db_session, tecnico_editor, parametros
+    ):
+        """DEC-09: el conflicto se evalúa contra el valor ya guardado, no
+        solo contra el body. El mapeo se creó con ',' de columna, así que
+        pasar el decimal a ',' lo deja indecidible."""
+        sede, _ = tecnico_editor
+        dispositivo = crear_dispositivo(db_session, sede)
+        id_mp = client.post(
+            "/mapeos", json=cuerpo_mapeo(parametros, dispositivo.id_dspstv)
+        ).json()["mapeo"]["id_mp"]
+
+        resp = client.put(f"/mapeos/{id_mp}", json={"dlmtdr_dcml": ","})
+        assert resp.status_code == 422
+        assert "ambos coma" in resp.json()["detail"]
+
+    def test_decimal_coma_con_columna_punto_y_coma_se_acepta(
+        self, client, db_session, tecnico_editor, parametros
+    ):
+        sede, _ = tecnico_editor
+        dispositivo = crear_dispositivo(db_session, sede)
+        id_mp = client.post(
+            "/mapeos", json=cuerpo_mapeo(parametros, dispositivo.id_dspstv)
+        ).json()["mapeo"]["id_mp"]
+
+        resp = client.put(f"/mapeos/{id_mp}", json={"dlmtdr": ";", "dlmtdr_dcml": ","})
+        assert resp.status_code == 200
+        assert resp.json()["mapeo"]["dlmtdr_dcml"] == ","
 
     def test_denegado_con_permiso_de_solo_lectura(self, client, db_session, tecnico_editor, fabrica, parametros):
         sede, _ = tecnico_editor

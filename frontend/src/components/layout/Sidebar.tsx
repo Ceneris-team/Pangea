@@ -108,29 +108,12 @@ export default function Sidebar({ onLogout, activo, rol }: SidebarProps) {
           </Link>
         )}
 
-        {/* HU06: mapeo de formato por marca de sensor. Mismo criterio de
-            acceso que HU05: solo Administrador y Tecnico CENERIS. */}
-        {(rol === ROLES.ADMINISTRADOR || rol === ROLES.TECNICO_CENERIS) && (
-          <Link
-            to="/mapeos"
-            className={linkBase + " " + (activo === "mapeos" ? linkActivo : linkInactivo)}
-          >
-            <svg
-              className={"w-5 h-5 " + (activo === "mapeos" ? "text-[#8fb300] dark:text-[#ccff00]" : "")}
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2zM10 7h4a2 2 0 012 2v4"
-              />
-            </svg>
-            Mapeos de Formato
-          </Link>
-        )}
+        {/* DEC-09: el link "Mapeos de Formato" se retiró. El formato ya no
+            es un módulo propio navegable por sede+marca: se configura
+            dentro de la ficha de cada Dispositivo (Gestión de Dispositivos
+            -> click en el dispositivo -> pestañas Formato y Datos), porque
+            el mapeo depende de qué sensores tiene cableados ese datalogger
+            concreto. */}
 
         {/* Catálogo de parámetros estándar que consume HU06. Mismo
             criterio de acceso: solo Administrador y Técnico CENERIS. */}
