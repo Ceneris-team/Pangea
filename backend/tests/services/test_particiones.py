@@ -16,7 +16,7 @@ import datetime as dt
 import pytest
 from sqlalchemy import text
 
-from app.models.mapeo_dispositivo import Dispositivo, MapeoFormato, Parametro
+from app.models.mapeo_dispositivo import Dispositivo, Parametro
 from app.models.ubicacion_conexion import ConexionFTP, Ubicacion
 from app.services.ingesta.persistencia import guardar_lecturas
 from app.services.ingesta.validador import LecturaValidada
@@ -143,6 +143,9 @@ def test_asegurar_particiones_repara_huecos(db_session):
 
 @pytest.fixture()
 def dispositivo_de_prueba(db_session, fabrica):
+    """DEC-09: el dispositivo ya no necesita un MapeoFormato para crearse
+    (columna dspstv.id_mp eliminada); estos tests de particionamiento no
+    ejercitan el mapeo, así que no hace falta crear uno."""
     sede = fabrica.sede()
     ubicacion = Ubicacion(
         id_sd=sede.id_sd, nmbr="Ubicación HT-08", lttd=4.6, lngtd=-74.0, plgn_gjsn={},
@@ -150,11 +153,10 @@ def dispositivo_de_prueba(db_session, fabrica):
     conexion_ftp = ConexionFTP(
         id_sd=sede.id_sd, nmbr="FTP HT-08", hst="host", usr_ftp="u", rt_rmt="/", crdncl_cfrd="x",
     )
-    mapeo = MapeoFormato(id_sd=sede.id_sd, mrc="Marca HT-08", frmt_fch="%Y-%m-%d %H:%M:%S")
-    db_session.add_all([ubicacion, conexion_ftp, mapeo])
+    db_session.add_all([ubicacion, conexion_ftp])
     db_session.flush()
     dispositivo = Dispositivo(
-        id_ubccn=ubicacion.id_ubccn, id_cnxn=conexion_ftp.id_cnxn, id_mp=mapeo.id_mp,
+        id_ubccn=ubicacion.id_ubccn, id_cnxn=conexion_ftp.id_cnxn,
         nmbr="Dispositivo HT-08", mrc="Marca HT-08", lttd=4.6, lngtd=-74.0,
     )
     db_session.add(dispositivo)

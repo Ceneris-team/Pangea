@@ -6,7 +6,7 @@ from app.core.celery_app import celery_app
 from app.database import SessionLocal
 from app.ingesta.ftp_receptor import descargar_archivo_dat, listar_archivos_dat
 from app.models.archivo_ingesta import ArchivoIngesta
-from app.models.ubicacion_conexion import ConexionFTP, Ubicacion
+from app.models.ubicacion_conexion import ConexionFTP
 from app.services.ingesta.estandarizador import estandarizar_filas
 from app.services.ingesta.mapeo import (
     MapeoNoEncontradoError,
@@ -62,9 +62,9 @@ def procesar_archivo_dat(self, id_archv: int) -> dict:
 
     Pipeline PP-96..100 (HU06): resuelve el formato -> descarga -> parsea
     -> estandariza -> valida -> persiste en tlmtr. El formato y el mapeo
-    columna->parámetro salen de mp_frmt/mp_clmn/prmtr según la sede, la
-    marca del datalogger y el tipo de trama (prefijo H_/E_ del nombre del
-    archivo); ver app.services.ingesta.mapeo.
+    columna->parámetro salen de mp_frmt/mp_clmn/prmtr según el DISPOSITIVO
+    (DEC-09) y el tipo de trama (prefijo H_/E_ del nombre del archivo);
+    ver app.services.ingesta.mapeo.
 
     Reintentos (CA2): hasta 5 intentos con backoff exponencial + jitter
     (tope 600s entre intentos), pero solo ante errores transitorios
@@ -98,22 +98,15 @@ def procesar_archivo_dat(self, id_archv: int) -> dict:
         except DispositivoNoResueltoError as exc:
             raise ErrorDatosNoRecuperable(str(exc)) from exc
 
-        # PP-96: el formato aplicable sale de mp_frmt según la sede, la
-        # marca del datalogger y el tipo de trama, que se deduce del
+        # DEC-09 (PP-96): el formato aplicable sale de mp_frmt según el
+        # DISPOSITIVO ya resuelto y el tipo de trama, que se deduce del
         # prefijo del nombre del archivo (H_ = datos periódicos,
-        # E_ = estados/eventos). Se resuelve ANTES de descargar: si no hay
+        # E_ = estados/eventos). Antes se resolvía por sede+marca, lo que
+        # hacía que dos dataloggers de la misma marca en la misma sede
+        # compartieran mapeo. Se resuelve ANTES de descargar: si no hay
         # mapeo cargado, no tiene sentido bajar el archivo.
-        ubicacion = db.get(Ubicacion, dispositivo.id_ubccn)
-        if ubicacion is None:
-            raise ErrorDatosNoRecuperable(
-                f"El dispositivo id={dispositivo.id_dspstv} apunta a una ubicación "
-                f"inexistente (id_ubccn={dispositivo.id_ubccn})"
-            )
-
         try:
-            formato = resolver_formato(
-                db, ubicacion.id_sd, dispositivo.mrc, archivo.nmbr_archv,
-            )
+            formato = resolver_formato(db, dispositivo.id_dspstv, archivo.nmbr_archv)
         except MapeoNoEncontradoError as exc:
             raise ErrorDatosNoRecuperable(str(exc)) from exc
 

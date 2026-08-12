@@ -34,7 +34,7 @@ PREFIJOS_TIPO_TRAMA = {
 
 
 class MapeoNoEncontradoError(Exception):
-    """No hay un mp_frmt activo para esa sede + marca + tipo de trama.
+    """No hay un mp_frmt activo para ese dispositivo + tipo de trama.
 
     Es un error de configuración, no transitorio: reintentar no lo
     resuelve. El llamador debe tratarlo como error de datos (ver
@@ -68,11 +68,18 @@ def detectar_tipo_trama(nombre_archivo: str) -> str | None:
 
 def resolver_formato(
     db: Session,
-    id_sd: int,
-    marca: str,
+    id_dspstv: int,
     nombre_archivo: str,
 ) -> FormatoResuelto:
     """Resuelve el formato y el mapeo real para un archivo dado.
+
+    DEC-09: el formato se busca por DISPOSITIVO + tipo de trama, no por
+    sede + marca. Dos dataloggers de la misma marca en la misma sede
+    pueden tener sensores distintos conectados; con el criterio anterior
+    compartían mapeo y las lecturas del segundo se guardaban bajo el
+    parámetro equivocado sin ningún error visible. El dispositivo ya viene
+    resuelto por resolver_dispositivo() a partir de la conexión FTP
+    entrante, que es exclusiva de un solo datalogger físico.
 
     Levanta MapeoNoEncontradoError si el archivo no tiene un prefijo
     reconocible o si no hay un mp_frmt activo para esa combinación: sin
@@ -90,8 +97,7 @@ def resolver_formato(
     formato = (
         db.query(MapeoFormato)
         .filter(
-            MapeoFormato.id_sd == id_sd,
-            MapeoFormato.mrc == marca,
+            MapeoFormato.id_dspstv == id_dspstv,
             MapeoFormato.tp_trm == tipo_trama,
             MapeoFormato.estd == "Activo",
         )
@@ -99,9 +105,9 @@ def resolver_formato(
     )
     if formato is None:
         raise MapeoNoEncontradoError(
-            f"No hay un formato activo (mp_frmt) para sede={id_sd}, "
-            f"marca='{marca}', tipo de trama='{tipo_trama}'. Cárgalo antes de "
-            f"procesar archivos de este datalogger."
+            f"No hay un formato activo (mp_frmt) para el dispositivo "
+            f"id={id_dspstv} y el tipo de trama='{tipo_trama}'. Cárgalo antes "
+            f"de procesar archivos de este datalogger."
         )
 
     config = ConfiguracionParseo(

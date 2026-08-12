@@ -7,11 +7,17 @@ import Topbar from "../components/layout/Topbar";
 
 /**
  * HU06 CA5 - "VER MAPEOS": listado donde el mapeo recién creado aparece
- * asociado a su marca.
+ * asociado a su dispositivo.
+ *
+ * DEC-09: el mapeo se identifica por dispositivo + tipo de trama, no por
+ * sede + marca. Marca y sede ahora vienen derivadas del JOIN del backend
+ * (mp_frmt -> dspstv -> ubccn), no de columnas propias de mp_frmt.
  */
 
 interface MapeoListItem {
   id_mp: number;
+  id_dspstv: number;
+  dispositivo_nombre: string;
   id_sd: number;
   mrc: string;
   tp_trm: string;
@@ -135,6 +141,7 @@ export default function Mapeos() {
                 <table className="w-full text-sm text-left text-gray-500 dark:text-gray-400">
                   <thead className="text-xs text-gray-500 dark:text-gray-400 uppercase bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700">
                     <tr>
+                      <th className="px-6 py-4 font-bold tracking-wider">Dispositivo</th>
                       <th className="px-6 py-4 font-bold tracking-wider">Marca</th>
                       <th className="px-6 py-4 font-bold tracking-wider">Tipo de trama</th>
                       <th className="px-6 py-4 font-bold tracking-wider">Delimitador</th>
@@ -147,7 +154,7 @@ export default function Mapeos() {
                   <tbody>
                     {loading && (
                       <tr>
-                        <td colSpan={7} className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
+                        <td colSpan={8} className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
                           <div className="flex justify-center items-center gap-2">
                             <div className="w-4 h-4 rounded-full bg-[#ccff00] animate-bounce"></div>
                             <span>Cargando mapeos...</span>
@@ -158,7 +165,7 @@ export default function Mapeos() {
 
                     {!loading && data?.items.length === 0 && (
                       <tr>
-                        <td colSpan={7} className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
+                        <td colSpan={8} className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
                           Todavía no hay mapeos registrados. Crea el primero con "Nuevo mapeo".
                         </td>
                       </tr>
@@ -170,7 +177,8 @@ export default function Mapeos() {
                           key={m.id_mp}
                           className="bg-white dark:bg-[#2d3748] border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
                         >
-                          <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">{m.mrc}</td>
+                          <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">{m.dispositivo_nombre}</td>
+                          <td className="px-6 py-4">{m.mrc}</td>
                           <td className="px-6 py-4">{ETIQUETA_TRAMA[m.tp_trm] ?? m.tp_trm}</td>
                           <td className="px-6 py-4">{ETIQUETA_DELIMITADOR[m.dlmtdr] ?? m.dlmtdr}</td>
                           <td className="px-6 py-4 font-mono text-xs">{m.frmt_fch}</td>

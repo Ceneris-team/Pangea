@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.database import get_db
 from app.security.dependencies import get_current_user
-from app.models import ArchivoIngesta, ConexionFTP, Dispositivo, MapeoFormato, Ubicacion
+from app.models import ArchivoIngesta, ConexionFTP, Dispositivo, Ubicacion
 from app.models.suscripcion import PermisoUsuarioSede
 
 POLIGONO_DUMMY = {"type": "Polygon", "coordinates": [[[0, 0], [0, 1], [1, 1], [1, 0], [0, 0]]]}
@@ -78,25 +78,22 @@ def crear_archivo(db_session, conexion, nombre="H_ejemplo.dat", estd="Pendiente"
 
 
 def crear_dispositivo(db_session, sede, conexion, nombre="CR1000-01", estd="Activo"):
-    """Cadena completa (Ubicacion + MapeoFormato + Dispositivo) para poder
-    resolver dspstv.nmbr como nombre del datalogger (ver _mapa_dataloggers
-    en routers/ingesta.py)."""
+    """Cadena completa (Ubicacion + Dispositivo) para poder resolver
+    dspstv.nmbr como nombre del datalogger (ver _mapa_dataloggers en
+    routers/ingesta.py).
+
+    DEC-09: ya no crea un MapeoFormato -no hace falta para resolver el
+    nombre del datalogger en la cola- ni pasa id_mp al Dispositivo (columna
+    eliminada)."""
     ubicacion = Ubicacion(
         id_sd=sede.id_sd, nmbr="Ubicacion de prueba", lttd=0, lngtd=0, plgn_gjsn=POLIGONO_DUMMY,
     )
     db_session.add(ubicacion)
     db_session.flush()
 
-    mapeo = MapeoFormato(
-        id_sd=sede.id_sd, mrc="Campbell", tp_trm="H", dlmtdr=",", fl_inc_dts=1, frmt_fch="%Y-%m-%d %H:%M:%S",
-    )
-    db_session.add(mapeo)
-    db_session.flush()
-
     dispositivo = Dispositivo(
         id_ubccn=ubicacion.id_ubccn,
         id_cnxn=conexion.id_cnxn,
-        id_mp=mapeo.id_mp,
         nmbr=nombre,
         mrc="Campbell",
         lttd=0,

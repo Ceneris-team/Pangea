@@ -25,9 +25,15 @@ interface Parametro {
   dscrpcn: string | null;
 }
 
-interface Sede {
-  id_sd: number;
+/** DEC-09: el mapeo se cuelga de un dispositivo concreto. La marca y la
+ *  ubicación/sede se muestran en solo-lectura a partir del dispositivo
+ *  elegido; ya no se eligen ni se tipean aparte. */
+interface DispositivoOption {
+  id_dspstv: number;
   nmbr: string;
+  mrc: string;
+  ubicacion_nombre: string;
+  estd: string;
 }
 
 interface ColumnaVistaPrevia {
@@ -60,6 +66,8 @@ interface MapeoColumnaDetalle {
 
 interface MapeoDetalle {
   id_mp: number;
+  id_dspstv: number;
+  dispositivo_nombre: string;
   id_sd: number;
   mrc: string;
   tp_trm: string;
@@ -71,8 +79,7 @@ interface MapeoDetalle {
 }
 
 interface MapeoForm {
-  id_sd: string;
-  mrc: string;
+  id_dspstv: string;
   tp_trm: "H" | "E";
   dlmtdr: string;
   fl_inc_dts: string;
@@ -89,8 +96,7 @@ const DELIMITADORES = [
 ];
 
 const FORM_VACIO: MapeoForm = {
-  id_sd: "",
-  mrc: "",
+  id_dspstv: "",
   tp_trm: "H",
   dlmtdr: ",",
   fl_inc_dts: "1", // regla de negocio: entero, por defecto 1
@@ -107,7 +113,7 @@ export default function ConfigurarMapeo() {
 
   const [form, setForm] = useState<MapeoForm>(FORM_VACIO);
   const [parametros, setParametros] = useState<Parametro[]>([]);
-  const [sedes, setSedes] = useState<Sede[]>([]);
+  const [dispositivos, setDispositivos] = useState<DispositivoOption[]>([]);
 
   const [archivo, setArchivo] = useState<File | null>(null);
   const [vistaPrevia, setVistaPrevia] = useState<VistaPreviaResponse | null>(null);
@@ -132,14 +138,18 @@ export default function ConfigurarMapeo() {
       });
   }, []);
 
-  // Selector de sede: un usuario con scope "global" debe indicar a qué
-  // sede pertenece el mapeo (ver _resolver_sede en el backend).
+  // DEC-09 CA1: selector de Dispositivo. Reusa GET /dispositivos (HU10),
+  // mismo patrón de fetch que AgregarDispositivo.tsx usa para sus selectores.
   useEffect(() => {
-    apiFetch<Sede[]>("/sedes")
-      .then(setSedes)
+    apiFetch<{ items: DispositivoOption[] }>("/dispositivos", {
+      params: { por_pagina: 100 },
+    })
+      .then((res) => setDispositivos(res.items))
       .catch((err) => {
         setMensajeOk(false);
-        setMensaje(err instanceof ApiError ? err.message : "No se pudieron cargar las sedes");
+        setMensaje(
+          err instanceof ApiError ? err.message : "No se pudieron cargar los dispositivos"
+        );
       });
   }, []);
 
@@ -150,8 +160,7 @@ export default function ConfigurarMapeo() {
     apiFetch<MapeoDetalle>(`/mapeos/${id}`)
       .then((detalle) => {
         setForm({
-          id_sd: String(detalle.id_sd),
-          mrc: detalle.mrc,
+          id_dspstv: String(detalle.id_dspstv),
           tp_trm: detalle.tp_trm === "E" ? "E" : "H",
           dlmtdr: detalle.dlmtdr,
           fl_inc_dts: String(detalle.fl_inc_dts),
@@ -172,6 +181,11 @@ export default function ConfigurarMapeo() {
   function actualizarCampo<K extends keyof MapeoForm>(campo: K, valor: MapeoForm[K]) {
     setForm((prev) => ({ ...prev, [campo]: valor }));
   }
+
+  // DEC-09: marca y ubicación se muestran a partir del dispositivo elegido,
+  // en vez de ser campos propios del formulario.
+  const dispositivoSeleccionado =
+    dispositivos.find((d) => String(d.id_dspstv) === form.id_dspstv) ?? null;
 
   function seleccionarArchivo(e: ChangeEvent<HTMLInputElement>) {
     setArchivo(e.target.files?.[0] ?? null);
@@ -204,6 +218,11 @@ export default function ConfigurarMapeo() {
       formData.append("frmt_fch", form.frmt_fch);
       formData.append("columna_fecha", form.columna_fecha);
       formData.append("asignaciones", serializarAsignaciones());
+      // DEC-09: la vista previa no lo necesita para interpretar el archivo,
+      // pero se manda para que el request sea consistente con el formulario.
+      if (form.id_dspstv) {
+        formData.append("id_dspstv", form.id_dspstv);
+      }
 
       const res = await apiUpload<VistaPreviaResponse>("/mapeos/vista-previa", formData);
       setVistaPrevia(res);
@@ -220,18 +239,18 @@ export default function ConfigurarMapeo() {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
 
-    // Campos obligatorios según la HU: marca, delimitador y tipo de trama
-    // (este último ocupa el lugar de "extensión de archivo", ver README).
-    // id_sd solo es obligatorio al crear: el backend infiere la sede del
-    // usuario "por_sede" y, al editar, la sede del mapeo no se modifica.
-    if (!form.mrc.trim() || !form.dlmtdr) {
+    // Campos obligatorios según la HU: delimitador y tipo de trama (este
+    // último ocupa el lugar de "extensión de archivo", ver README).
+    // DEC-09: el dispositivo reemplaza a sede+marca y solo se elige al
+    // crear; al editar, el mapeo no se mueve de dispositivo.
+    if (!form.dlmtdr) {
       setMensajeOk(false);
-      setMensaje("La marca y el delimitador son obligatorios");
+      setMensaje("El delimitador es obligatorio");
       return;
     }
-    if (!esEdicion && !form.id_sd) {
+    if (!esEdicion && !form.id_dspstv) {
       setMensajeOk(false);
-      setMensaje("Selecciona la sede a la que pertenece este mapeo");
+      setMensaje("Selecciona el dispositivo al que pertenece este mapeo");
       return;
     }
 
@@ -246,8 +265,7 @@ export default function ConfigurarMapeo() {
         }));
 
       const payload = {
-        ...(esEdicion ? {} : { id_sd: Number(form.id_sd) }),
-        mrc: form.mrc.trim(),
+        ...(esEdicion ? {} : { id_dspstv: Number(form.id_dspstv) }),
         tp_trm: form.tp_trm,
         dlmtdr: form.dlmtdr,
         fl_inc_dts: Number(form.fl_inc_dts),
@@ -327,35 +345,51 @@ export default function ConfigurarMapeo() {
                   <h2 className="text-base font-bold text-gray-900 dark:text-white mb-4">Datos del formato</h2>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {!esEdicion && (
-                      <div>
-                        <label className={labelClase}>Sede *</label>
+                    {/* DEC-09: el mapeo se cuelga de un dispositivo concreto.
+                        Al editar no se puede mover a otro dispositivo: se
+                        muestra cuál es, en solo lectura. */}
+                    <div className="md:col-span-2">
+                      <label className={labelClase}>Dispositivo *</label>
+                      {esEdicion ? (
+                        <p className="text-sm text-gray-900 dark:text-white py-2.5">
+                          {dispositivoSeleccionado
+                            ? `${dispositivoSeleccionado.nmbr} · ${dispositivoSeleccionado.mrc}`
+                            : "—"}
+                        </p>
+                      ) : (
                         <select
                           required
-                          value={form.id_sd}
-                          onChange={(e) => actualizarCampo("id_sd", e.target.value)}
+                          value={form.id_dspstv}
+                          onChange={(e) => actualizarCampo("id_dspstv", e.target.value)}
                           className={inputClase + " cursor-pointer"}
                         >
-                          <option value="">— Selecciona una sede —</option>
-                          {sedes.map((s) => (
-                            <option key={s.id_sd} value={s.id_sd}>
-                              {s.nmbr}
+                          <option value="">— Selecciona un dispositivo —</option>
+                          {dispositivos.map((d) => (
+                            <option key={d.id_dspstv} value={d.id_dspstv}>
+                              {d.nmbr} · {d.mrc}
                             </option>
                           ))}
                         </select>
-                      </div>
-                    )}
+                      )}
 
-                    <div>
-                      <label className={labelClase}>Nombre de marca *</label>
-                      <input
-                        type="text"
-                        required
-                        placeholder="Campbell Scientific"
-                        value={form.mrc}
-                        onChange={(e) => actualizarCampo("mrc", e.target.value)}
-                        className={inputClase}
-                      />
+                      {/* Marca y ubicación del dispositivo elegido, en modo
+                          solo lectura: ya no se tipean ni se eligen aparte. */}
+                      {dispositivoSeleccionado && (
+                        <div className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
+                          <span>
+                            Marca:{" "}
+                            <span className="font-medium text-gray-700 dark:text-gray-200">
+                              {dispositivoSeleccionado.mrc}
+                            </span>
+                          </span>
+                          <span>
+                            Ubicación:{" "}
+                            <span className="font-medium text-gray-700 dark:text-gray-200">
+                              {dispositivoSeleccionado.ubicacion_nombre}
+                            </span>
+                          </span>
+                        </div>
+                      )}
                     </div>
 
                     <div>

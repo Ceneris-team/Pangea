@@ -14,12 +14,12 @@ import Topbar from "../components/layout/Topbar";
  *   CA3  tras guardar, vuelve al listado (HU10) con el nuevo dispositivo
  *   CA4  "Cancelar" descarta el formulario sin llamar al backend
  *
- * id_mp (mapeo de formato) y lttd/lngtd NO son campos de este formulario:
- * el backend los resuelve/copia automáticamente (ver
- * routers/dispositivos.py, crear_dispositivo). Si el backend responde 422
- * porque no hay un mapeo de formato activo para la marca ingresada, el
- * mensaje de error ya trae la causa ("Configúrelo primero en Mapeo de
- * Formatos") y se muestra tal cual, sin traducirlo.
+ * lttd/lngtd NO son campos de este formulario: el backend los copia de la
+ * Ubicación elegida (ver routers/dispositivos.py, crear_dispositivo).
+ *
+ * DEC-09: el dispositivo ya no necesita un mapeo de formato previo para
+ * crearse. El mapeo (marca/tipo de trama/columnas) se configura después,
+ * en Mapeo de Formatos (HU06), y cuelga de este dispositivo.
  */
 
 interface UbicacionOption {

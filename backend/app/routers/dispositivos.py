@@ -14,17 +14,18 @@ criterio que mapeos.py e ingesta.py usan con su propio id_sd.
 HU 11 - Añadir dispositivo
 
 CA1: formulario con Nombre, Marca, Modelo (opcional), Ubicación y Conexión
-FTP. Dos campos del modelo NO están en el formulario y el POST los resuelve
+FTP. Un campo del modelo NO está en el formulario y el POST lo resuelve
 solo (documentado en crear_dispositivo):
-
-  id_mp (mapeo de formato, NOT NULL): se busca el MapeoFormato Activo de
-  tipo 'H' para la sede de la ubicación elegida y la marca ingresada. Si no
-  existe, es un error de datos (422): el mapeo se configura antes, en HU06.
 
   lttd/lngtd (NOT NULL, punto GPS del dispositivo): se copian de la
   Ubicación elegida como valor por defecto. Son columnas independientes de
   las de Ubicacion (no hay FK), así que un dispositivo con punto propio
   distinto al de su ubicación es una decisión de una HU futura, no de esta.
+
+DEC-09: el dispositivo ya NO resuelve un mapeo de formato al crearse. El
+mapeo pasó a colgar del dispositivo (mp_frmt.id_dspstv), así que primero
+existe el dispositivo y después se le configura su mapeo en HU06; crear un
+dispositivo sin mapeo es un estado válido (todavía no ingesta nada).
 
 Además valida (no es un CA literal, pero lo exige la arquitectura de
 ingesta ya existente): resolver_dispositivo() en
@@ -38,7 +39,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import ConexionFTP, Dispositivo, MapeoFormato, Ubicacion, PermisoUbicacion
+from app.models import ConexionFTP, Dispositivo, Ubicacion, PermisoUbicacion
 from app.security.permisos import require_permiso, verificar_sede, LECTURA, EDICION
 from app.schemas import DispositivoCreado, DispositivoCrear, DispositivoListItem
 
@@ -144,29 +145,9 @@ def crear_dispositivo(
             detail="Esta conexión FTP ya tiene un dispositivo activo asociado",
         )
 
-    mapeo = (
-        db.query(MapeoFormato)
-        .filter(
-            MapeoFormato.id_sd == ubicacion.id_sd,
-            MapeoFormato.mrc == body.mrc,
-            MapeoFormato.tp_trm == "H",
-            MapeoFormato.estd == "Activo",
-        )
-        .first()
-    )
-    if mapeo is None:
-        raise HTTPException(
-            status_code=422,
-            detail=(
-                f"No existe un mapeo de formato activo para la marca '{body.mrc}'. "
-                "Configúrelo primero en Mapeo de Formatos (HU06)."
-            ),
-        )
-
     dispositivo = Dispositivo(
         id_ubccn=ubicacion.id_ubccn,
         id_cnxn=conexion.id_cnxn,
-        id_mp=mapeo.id_mp,
         nmbr=body.nmbr,
         mrc=body.mrc,
         mdl=body.mdl,
