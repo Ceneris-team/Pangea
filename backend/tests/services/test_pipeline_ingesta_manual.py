@@ -7,6 +7,7 @@ Correr con:
     cd backend
     ./venv/Scripts/python.exe tests/services/test_pipeline_ingesta_manual.py
 """
+
 import pathlib
 import sys
 
@@ -31,18 +32,22 @@ def correr(nombre_archivo: str, id_cnxn: int = 1):
 
     lecturas = estandarizar_filas(resultado_parseo, id_cnxn=id_cnxn, mapeo=mapeo_de_ejemplo())
     print(f"lecturas estandarizadas (mapeo mock): {len(lecturas)}")
-    for l in lecturas:
-        print(f"  {l.parametro} = {l.valor_crudo!r} (fila {l.numero_fila})")
+    for lectura in lecturas:
+        print(f"  {lectura.parametro} = {lectura.valor_crudo!r} (fila {lectura.numero_fila})")
 
     resultado_validacion = validar_lecturas(lecturas)
-    print(f"válidas: {len(resultado_validacion.validas)}, con error: {len(resultado_validacion.errores)}")
+    print(
+        f"válidas: {len(resultado_validacion.validas)}, con error: {len(resultado_validacion.errores)}"
+    )
     for v in resultado_validacion.validas:
         print(f"  OK  {v.parametro} = {v.valor} @ {v.fecha_hora}")
     for e in resultado_validacion.errores:
         print(f"  ERR fila={e.numero_fila} parametro={e.parametro} motivo={e.motivo}")
 
     assert resultado_parseo.filas, f"{nombre_archivo}: no se parseó ninguna fila"
-    assert all(f.error is None for f in resultado_parseo.filas), f"{nombre_archivo}: fila con error de parseo inesperado"
+    assert all(
+        f.error is None for f in resultado_parseo.filas
+    ), f"{nombre_archivo}: fila con error de parseo inesperado"
 
 
 if __name__ == "__main__":

@@ -9,15 +9,16 @@ Cobertura por CA:
   Permisos: 403 sin Lectura sobre "Dispositivos"
   Aislamiento por sede (HT-09 CA3) y restricción por rol (PermisoUbicacion)
 """
+
 import pytest
 from fastapi.testclient import TestClient
 
-from app.main import app
 from app.database import get_db
-from app.security.dependencies import get_current_user
+from app.main import app
 from app.models import ConexionFTP, Dispositivo, MapeoFormato, Ubicacion
 from app.models.permiso_ubicacion import PermisoUbicacion
 from app.models.suscripcion import PermisoUsuarioSede
+from app.security.dependencies import get_current_user
 
 POLIGONO_DUMMY = {"type": "Polygon", "coordinates": [[[0, 0], [0, 1], [1, 1], [1, 0], [0, 0]]]}
 
@@ -73,7 +74,11 @@ def tecnico_editor(db_session, fabrica):
 
 def crear_ubicacion(db_session, sede, nombre="Ubicacion de prueba"):
     ubicacion = Ubicacion(
-        id_sd=sede.id_sd, nmbr=nombre, lttd=0, lngtd=0, plgn_gjsn=POLIGONO_DUMMY,
+        id_sd=sede.id_sd,
+        nmbr=nombre,
+        lttd=0,
+        lngtd=0,
+        plgn_gjsn=POLIGONO_DUMMY,
     )
     db_session.add(ubicacion)
     db_session.flush()
@@ -114,7 +119,10 @@ def crear_mapeo(db_session, dispositivo, tp_trm="H"):
     if existente is not None:
         return existente
     mapeo = MapeoFormato(
-        id_dspstv=dispositivo.id_dspstv, tp_trm=tp_trm, dlmtdr=",", fl_inc_dts=1,
+        id_dspstv=dispositivo.id_dspstv,
+        tp_trm=tp_trm,
+        dlmtdr=",",
+        fl_inc_dts=1,
         frmt_fch="%Y-%m-%d %H:%M:%S",
     )
     db_session.add(mapeo)
@@ -122,7 +130,9 @@ def crear_mapeo(db_session, dispositivo, tp_trm="H"):
     return mapeo
 
 
-def crear_dispositivo(db_session, ubicacion, conexion, nombre="CR1000-01", marca="Campbell", estado="Activo"):
+def crear_dispositivo(
+    db_session, ubicacion, conexion, nombre="CR1000-01", marca="Campbell", estado="Activo"
+):
     """DEC-09: ya no recibe un mapeo. El dispositivo existe primero y el
     mapeo se le cuelga después (o nunca: es un estado válido)."""
     dispositivo = Dispositivo(
@@ -139,7 +149,9 @@ def crear_dispositivo(db_session, ubicacion, conexion, nombre="CR1000-01", marca
     return dispositivo
 
 
-def preparar_dispositivo(db_session, sede, nombre="CR1000-01", marca="Campbell", estado="Activo", ubicacion=None):
+def preparar_dispositivo(
+    db_session, sede, nombre="CR1000-01", marca="Campbell", estado="Activo", ubicacion=None
+):
     """Cadena completa (Ubicacion + ConexionFTP + Dispositivo).
 
     ubccn tiene UNIQUE (id_sd, nmbr): si no se pasa una ubicación explícita
@@ -151,7 +163,9 @@ def preparar_dispositivo(db_session, sede, nombre="CR1000-01", marca="Campbell",
     """
     ubicacion = ubicacion or crear_ubicacion(db_session, sede, nombre=f"Ubicacion de {nombre}")
     conexion = crear_conexion(db_session, sede, nombre=f"Conexion {nombre}")
-    return crear_dispositivo(db_session, ubicacion, conexion, nombre=nombre, marca=marca, estado=estado)
+    return crear_dispositivo(
+        db_session, ubicacion, conexion, nombre=nombre, marca=marca, estado=estado
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -266,9 +280,15 @@ class TestFiltros:
         sede, _ = tecnico_lector
         ubicacion_a = crear_ubicacion(db_session, sede, nombre="Ubicacion A")
         ubicacion_b = crear_ubicacion(db_session, sede, nombre="Ubicacion B")
-        preparar_dispositivo(db_session, sede, nombre="Disp-A-Activo", estado="Activo", ubicacion=ubicacion_a)
-        preparar_dispositivo(db_session, sede, nombre="Disp-A-Inactivo", estado="Inactivo", ubicacion=ubicacion_a)
-        preparar_dispositivo(db_session, sede, nombre="Disp-B-Activo", estado="Activo", ubicacion=ubicacion_b)
+        preparar_dispositivo(
+            db_session, sede, nombre="Disp-A-Activo", estado="Activo", ubicacion=ubicacion_a
+        )
+        preparar_dispositivo(
+            db_session, sede, nombre="Disp-A-Inactivo", estado="Inactivo", ubicacion=ubicacion_a
+        )
+        preparar_dispositivo(
+            db_session, sede, nombre="Disp-B-Activo", estado="Activo", ubicacion=ubicacion_b
+        )
 
         resp = client.get(
             "/dispositivos", params={"id_ubccn": ubicacion_a.id_ubccn, "estado": "Activo"}
@@ -312,7 +332,9 @@ class TestPaginacion:
 
 
 class TestAislamientoPorSede:
-    def test_usuario_por_sede_no_ve_dispositivos_de_otra_sede(self, client, db_session, tecnico_lector, fabrica):
+    def test_usuario_por_sede_no_ve_dispositivos_de_otra_sede(
+        self, client, db_session, tecnico_lector, fabrica
+    ):
         sede, _ = tecnico_lector
         preparar_dispositivo(db_session, sede, nombre="Disp-Sede-A")
 
@@ -331,7 +353,9 @@ class TestAislamientoPorSede:
 
 
 class TestRestriccionPorRol:
-    def test_cliente_final_solo_ve_dispositivos_de_su_ubicacion_asignada(self, client, db_session, fabrica):
+    def test_cliente_final_solo_ve_dispositivos_de_su_ubicacion_asignada(
+        self, client, db_session, fabrica
+    ):
         rol = fabrica.rol("Cliente Final")
         sede = fabrica.sede()
         usuario = fabrica.usuario(rol=rol)
@@ -404,13 +428,18 @@ class TestCrearDispositivo:
         resp = client.post("/dispositivos", json=cuerpo_valido(ubicacion, conexion))
 
         assert resp.status_code == 201
-        creado = db_session.query(Dispositivo).filter(
-            Dispositivo.id_dspstv == resp.json()["dispositivo"]["id_dspstv"]
-        ).one()
+        creado = (
+            db_session.query(Dispositivo)
+            .filter(Dispositivo.id_dspstv == resp.json()["dispositivo"]["id_dspstv"])
+            .one()
+        )
         # Sin mapeos todavía: es un estado válido.
-        assert db_session.query(MapeoFormato).filter(
-            MapeoFormato.id_dspstv == creado.id_dspstv
-        ).count() == 0
+        assert (
+            db_session.query(MapeoFormato)
+            .filter(MapeoFormato.id_dspstv == creado.id_dspstv)
+            .count()
+            == 0
+        )
 
     def test_crear_devuelve_201_y_mensaje(self, client, db_session, tecnico_editor):
         sede, _ = tecnico_editor
@@ -424,9 +453,11 @@ class TestCrearDispositivo:
         assert cuerpo["mensaje"] == "Dispositivo añadido correctamente"
         assert cuerpo["dispositivo"]["nmbr"] == "CR1000-Nuevo"
 
-        guardado = db_session.query(Dispositivo).filter(
-            Dispositivo.id_dspstv == cuerpo["dispositivo"]["id_dspstv"]
-        ).one()
+        guardado = (
+            db_session.query(Dispositivo)
+            .filter(Dispositivo.id_dspstv == cuerpo["dispositivo"]["id_dspstv"])
+            .one()
+        )
         assert guardado.mrc == "Campbell"
         assert guardado.id_ubccn == ubicacion.id_ubccn
         assert guardado.id_cnxn == conexion.id_cnxn
@@ -457,7 +488,9 @@ class TestCrearDispositivo:
         assert resp.json()["dispositivo"]["mdl"] == "CR1000X"
 
     @pytest.mark.parametrize("campo", ["nmbr", "mrc", "id_ubccn", "id_cnxn"])
-    def test_campos_obligatorios_faltantes_devuelven_422(self, client, db_session, tecnico_editor, campo):
+    def test_campos_obligatorios_faltantes_devuelven_422(
+        self, client, db_session, tecnico_editor, campo
+    ):
         sede, _ = tecnico_editor
         ubicacion = crear_ubicacion(db_session, sede)
         conexion = crear_conexion(db_session, sede)
@@ -472,8 +505,11 @@ class TestCrearDispositivo:
         punto GPS en el formulario; se copian de la Ubicación asociada."""
         sede, _ = tecnico_editor
         ubicacion = Ubicacion(
-            id_sd=sede.id_sd, nmbr="Ubicacion con coordenadas",
-            lttd=-12.046400, lngtd=-77.042800, plgn_gjsn=POLIGONO_DUMMY,
+            id_sd=sede.id_sd,
+            nmbr="Ubicacion con coordenadas",
+            lttd=-12.046400,
+            lngtd=-77.042800,
+            plgn_gjsn=POLIGONO_DUMMY,
         )
         db_session.add(ubicacion)
         db_session.flush()
@@ -482,9 +518,11 @@ class TestCrearDispositivo:
         resp = client.post("/dispositivos", json=cuerpo_valido(ubicacion, conexion))
         assert resp.status_code == 201
 
-        guardado = db_session.query(Dispositivo).filter(
-            Dispositivo.id_dspstv == resp.json()["dispositivo"]["id_dspstv"]
-        ).one()
+        guardado = (
+            db_session.query(Dispositivo)
+            .filter(Dispositivo.id_dspstv == resp.json()["dispositivo"]["id_dspstv"])
+            .one()
+        )
         assert float(guardado.lttd) == pytest.approx(-12.046400)
         assert float(guardado.lngtd) == pytest.approx(-77.042800)
 
@@ -518,22 +556,32 @@ class TestCrearDispositivo:
         conexion = crear_conexion(db_session, sede)
         crear_dispositivo(db_session, ubicacion, conexion, nombre="Ya-Activo")
 
-        resp = client.post("/dispositivos", json=cuerpo_valido(ubicacion, conexion, nmbr="Otro-Dispositivo"))
+        resp = client.post(
+            "/dispositivos", json=cuerpo_valido(ubicacion, conexion, nmbr="Otro-Dispositivo")
+        )
         assert resp.status_code == 409
         assert "ya tiene un dispositivo activo" in resp.json()["detail"].lower()
 
-    def test_conexion_con_dispositivo_inactivo_permite_crear(self, client, db_session, tecnico_editor):
+    def test_conexion_con_dispositivo_inactivo_permite_crear(
+        self, client, db_session, tecnico_editor
+    ):
         """El 409 es solo contra un dispositivo Activo: uno desactivado no
         bloquea reemplazarlo por uno nuevo en la misma conexión."""
         sede, _ = tecnico_editor
         ubicacion = crear_ubicacion(db_session, sede)
         conexion = crear_conexion(db_session, sede)
-        crear_dispositivo(db_session, ubicacion, conexion, nombre="Inactivo-Viejo", estado="Inactivo")
+        crear_dispositivo(
+            db_session, ubicacion, conexion, nombre="Inactivo-Viejo", estado="Inactivo"
+        )
 
-        resp = client.post("/dispositivos", json=cuerpo_valido(ubicacion, conexion, nmbr="Reemplazo"))
+        resp = client.post(
+            "/dispositivos", json=cuerpo_valido(ubicacion, conexion, nmbr="Reemplazo")
+        )
         assert resp.status_code == 201
 
-    def test_usuario_por_sede_no_crea_en_ubicacion_de_otra_sede(self, client, db_session, tecnico_editor, fabrica):
+    def test_usuario_por_sede_no_crea_en_ubicacion_de_otra_sede(
+        self, client, db_session, tecnico_editor, fabrica
+    ):
         """HT-09 CA3: verificar_sede() bloquea aunque el usuario conozca el
         id_ubccn de una sede ajena."""
         sede, _ = tecnico_editor

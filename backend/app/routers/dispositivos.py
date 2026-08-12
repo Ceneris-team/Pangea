@@ -34,6 +34,7 @@ por conexión FTP para poder resolver a qué dispositivo pertenece un
 archivo entrante. Un segundo dispositivo Activo en la misma conexión
 rompería esa resolución en silencio, así que se rechaza con 409.
 """
+
 import datetime as dt
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
@@ -42,17 +43,10 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import ConexionFTP, Dispositivo, Ubicacion, PermisoUbicacion
+from app.models import ConexionFTP, Dispositivo, PermisoUbicacion, Ubicacion
 from app.models.archivo_ingesta import ArchivoIngesta
 from app.models.mapeo_dispositivo import MapeoColumna, MapeoFormato
 from app.models.telemetria import Telemetria
-from app.security.permisos import require_permiso, verificar_sede, LECTURA, EDICION
-from app.services.ingesta.mapeo import MapeoNoEncontradoError, resolver_formato
-from app.services.particiones import (
-    ParticionInexistenteError,
-    es_error_de_particion_faltante,
-)
-from app.tasks.ingesta import ErrorDatosNoRecuperable, interpretar_y_guardar
 from app.schemas import (
     CargaManualRequest,
     DispositivoCreado,
@@ -61,6 +55,13 @@ from app.schemas import (
     DispositivoListItem,
     LogIngestaListItem,
 )
+from app.security.permisos import EDICION, LECTURA, require_permiso, verificar_sede
+from app.services.ingesta.mapeo import MapeoNoEncontradoError, resolver_formato
+from app.services.particiones import (
+    ParticionInexistenteError,
+    es_error_de_particion_faltante,
+)
+from app.tasks.ingesta import ErrorDatosNoRecuperable, interpretar_y_guardar
 
 router = APIRouter(prefix="/dispositivos", tags=["Dispositivos"])
 
@@ -69,7 +70,9 @@ ROLES_CON_ACCESO_TOTAL = {"Administrador", "Tecnico CENERIS", "Técnico CENERIS"
 
 @router.get("")
 def listar_dispositivos(
-    busqueda: str | None = Query(default=None, description="Nombre o marca del dispositivo, parcial"),
+    busqueda: str | None = Query(
+        default=None, description="Nombre o marca del dispositivo, parcial"
+    ),
     id_ubccn: int | None = Query(default=None, description="Filtrar por ubicación"),
     estado: str | None = Query(default=None, description="Activo / Inactivo"),
     pagina: int = Query(default=1, ge=1),
@@ -105,10 +108,7 @@ def listar_dispositivos(
 
     total = query.count()
     filas = (
-        query.order_by(Dispositivo.nmbr)
-        .offset((pagina - 1) * por_pagina)
-        .limit(por_pagina)
-        .all()
+        query.order_by(Dispositivo.nmbr).offset((pagina - 1) * por_pagina).limit(por_pagina).all()
     )
 
     items = [
@@ -138,9 +138,7 @@ def crear_dispositivo(
     if ubicacion is None:
         raise HTTPException(status_code=422, detail=f"La ubicación {body.id_ubccn} no existe")
     if ubicacion.estd != "Activa":
-        raise HTTPException(
-            status_code=422, detail="La ubicación elegida no está Activa"
-        )
+        raise HTTPException(status_code=422, detail="La ubicación elegida no está Activa")
 
     conexion = db.query(ConexionFTP).filter(ConexionFTP.id_cnxn == body.id_cnxn).first()
     if conexion is None:
@@ -419,7 +417,8 @@ def cargar_punto_manual(
         )
     if len(pedidos) != len(set(pedidos)):
         raise HTTPException(
-            status_code=422, detail="Hay un parámetro repetido en la carga",
+            status_code=422,
+            detail="Hay un parámetro repetido en la carga",
         )
 
     fecha_hora = body.fch_hr
@@ -429,18 +428,21 @@ def cargar_punto_manual(
         fecha_hora = fecha_hora.replace(tzinfo=dt.timezone.utc)
     if fecha_hora > dt.datetime.now(dt.timezone.utc):
         raise HTTPException(
-            status_code=422, detail="La fecha y hora de la medición no puede ser futura",
+            status_code=422,
+            detail="La fecha y hora de la medición no puede ser futura",
         )
 
     for item in body.valores:
-        db.add(Telemetria(
-            fch_hr=fecha_hora,
-            id_dspstv=dispositivo.id_dspstv,
-            id_prmtr=item.id_prmtr,
-            id_sd=ubicacion.id_sd,
-            vlr=item.vlr,
-            id_archv=None,  # no hay archivo de origen: es captura manual
-        ))
+        db.add(
+            Telemetria(
+                fch_hr=fecha_hora,
+                id_dspstv=dispositivo.id_dspstv,
+                id_prmtr=item.id_prmtr,
+                id_sd=ubicacion.id_sd,
+                vlr=item.vlr,
+                id_archv=None,  # no hay archivo de origen: es captura manual
+            )
+        )
 
     try:
         db.commit()

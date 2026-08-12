@@ -10,6 +10,7 @@ sede, marca y tipo de trama, y traduce mp_clmn.indc_clmn -> prmtr.nmbr.
 Esta etapa sigue recibiendo el mapeo ya resuelto como parámetro y no sabe
 nada de mp_frmt/mp_clmn, para poder probarse sin base de datos.
 """
+
 import dataclasses
 import datetime as dt
 
@@ -64,24 +65,28 @@ def estandarizar_filas(resultado: ResultadoParseo, id_cnxn: int, mapeo: dict) ->
 
 def _estandarizar_fila(fila: FilaParseada, id_cnxn: int, mapeo: dict) -> list:
     if fila.error:
-        return [LecturaEstandar(
-            fecha_hora=fila.fecha_hora,
-            id_cnxn=id_cnxn,
-            parametro=None,
-            valor_crudo=None,
-            numero_fila=fila.numero_fila,
-            error_parseo=fila.error,
-        )]
+        return [
+            LecturaEstandar(
+                fecha_hora=fila.fecha_hora,
+                id_cnxn=id_cnxn,
+                parametro=None,
+                valor_crudo=None,
+                numero_fila=fila.numero_fila,
+                error_parseo=fila.error,
+            )
+        ]
 
     lecturas = []
     for columna_original, parametro in mapeo.items():
         if columna_original not in fila.valores:
             continue
-        lecturas.append(LecturaEstandar(
-            fecha_hora=fila.fecha_hora,
-            id_cnxn=id_cnxn,
-            parametro=parametro,
-            valor_crudo=fila.valores[columna_original],
-            numero_fila=fila.numero_fila,
-        ))
+        lecturas.append(
+            LecturaEstandar(
+                fecha_hora=fila.fecha_hora,
+                id_cnxn=id_cnxn,
+                parametro=parametro,
+                valor_crudo=fila.valores[columna_original],
+                numero_fila=fila.numero_fila,
+            )
+        )
     return lecturas

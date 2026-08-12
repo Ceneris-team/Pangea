@@ -10,8 +10,8 @@ fila en tlmtr. Si en el futuro se necesita conservar "vacíos" como
 lecturas reales, requiere volver nullable tlmtr.vlr (decisión de negocio,
 fuera de alcance de PP-97..100).
 """
+
 import dataclasses
-import datetime as dt
 import logging
 
 from sqlalchemy.exc import IntegrityError
@@ -20,7 +20,6 @@ from sqlalchemy.orm import Session
 from app.models.mapeo_dispositivo import Dispositivo, Parametro
 from app.models.telemetria import Telemetria
 from app.models.ubicacion_conexion import Ubicacion
-from app.services.ingesta.validador import LecturaValidada
 from app.services.particiones import (
     ParticionInexistenteError,
     es_error_de_particion_faltante,
@@ -89,14 +88,16 @@ def guardar_lecturas(
             parametros_desconocidos.add(lectura.parametro)
             continue
 
-        db.add(Telemetria(
-            fch_hr=lectura.fecha_hora,
-            id_dspstv=dispositivo.id_dspstv,
-            id_prmtr=id_prmtr,
-            id_sd=ubicacion.id_sd,
-            vlr=lectura.valor,
-            id_archv=id_archv,
-        ))
+        db.add(
+            Telemetria(
+                fch_hr=lectura.fecha_hora,
+                id_dspstv=dispositivo.id_dspstv,
+                id_prmtr=id_prmtr,
+                id_sd=ubicacion.id_sd,
+                vlr=lectura.valor,
+                id_archv=id_archv,
+            )
+        )
         guardadas += 1
 
     # flush explícito para que el INSERT viaje a Postgres AQUÍ y no en el
@@ -110,12 +111,11 @@ def guardar_lecturas(
         except IntegrityError as exc:
             db.rollback()
             if es_error_de_particion_faltante(exc):
-                fechas = sorted({
-                    l.fecha_hora for l in lecturas if l.valor is not None
-                })
+                fechas = sorted(
+                    {lectura.fecha_hora for lectura in lecturas if lectura.valor is not None}
+                )
                 rango = (
-                    f"{fechas[0]:%Y-%m-%d} .. {fechas[-1]:%Y-%m-%d}"
-                    if fechas else "desconocido"
+                    f"{fechas[0]:%Y-%m-%d} .. {fechas[-1]:%Y-%m-%d}" if fechas else "desconocido"
                 )
                 raise ParticionInexistenteError(
                     f"No existe partición de tlmtr para las lecturas del archivo "

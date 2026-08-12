@@ -7,6 +7,7 @@ todos los datos disponibles para la cuenta. Los parámetros y ubicaciones
 ofrecidos dependen de lo asignado al usuario (prms_ubccn, HU 21) y del
 catálogo de parámetros mapeados (mp_clmn/prmtr, HU 06).
 """
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 

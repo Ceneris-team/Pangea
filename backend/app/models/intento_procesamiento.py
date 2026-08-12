@@ -1,10 +1,11 @@
-from sqlalchemy import BigInteger, Column, Integer, String, ForeignKey, TIMESTAMP, text
+from sqlalchemy import TIMESTAMP, BigInteger, Column, ForeignKey, Integer, String, text
 
 from app.database import Base
 
 
 class IntentoProcesamiento(Base):
     """Historial de reprocesos (HU 31)."""
+
     __tablename__ = "intnt_prcsmnt"
 
     id_intnt = Column(BigInteger, primary_key=True, autoincrement=True)

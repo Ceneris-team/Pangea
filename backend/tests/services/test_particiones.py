@@ -11,6 +11,7 @@ Los tests de asegurar_particiones usan fechas lejanas en el futuro
 (2031+) para no pisar el rango que la migración a7f31c4b9e02 y el job de
 Beat ya mantienen creado alrededor de la fecha real de hoy.
 """
+
 import datetime as dt
 
 import pytest
@@ -24,8 +25,8 @@ from app.services.particiones import (
     ParticionInexistenteError,
     asegurar_particiones,
     es_error_de_particion_faltante,
-    meses_a_cubrir,
     mes_siguiente,
+    meses_a_cubrir,
     nombre_particion,
     particiones_existentes,
     primer_dia_del_mes,
@@ -33,10 +34,10 @@ from app.services.particiones import (
     sql_crear_particion,
 )
 
-
 # ---------------------------------------------------------------------
 # Cálculo de nombres/rangos: funciones puras, sin BD.
 # ---------------------------------------------------------------------
+
 
 def test_nombre_particion_formatea_anio_mes():
     assert nombre_particion(dt.date(2026, 8, 7)) == "tlmtr_2026_08"
@@ -78,6 +79,7 @@ def test_sql_crear_particion_es_if_not_exists_y_rango_correcto():
 # constraint que también use el SQLSTATE 23514.
 # ---------------------------------------------------------------------
 
+
 class _ExcepcionOrigFalsa(Exception):
     def __init__(self, pgcode, mensaje):
         super().__init__(mensaje)
@@ -106,6 +108,7 @@ def test_no_confunde_otro_sqlstate():
 # asegurar_particiones contra Postgres real: idempotencia y reparación
 # de huecos (lo que corre a diario el job de Celery Beat).
 # ---------------------------------------------------------------------
+
 
 def test_asegurar_particiones_es_idempotente(db_session):
     conexion = db_session.connection()
@@ -141,6 +144,7 @@ def test_asegurar_particiones_repara_huecos(db_session):
 # existentes no revienta con el traceback crudo de Postgres.
 # ---------------------------------------------------------------------
 
+
 @pytest.fixture()
 def dispositivo_de_prueba(db_session, fabrica):
     """DEC-09: el dispositivo ya no necesita un MapeoFormato para crearse
@@ -148,16 +152,29 @@ def dispositivo_de_prueba(db_session, fabrica):
     ejercitan el mapeo, así que no hace falta crear uno."""
     sede = fabrica.sede()
     ubicacion = Ubicacion(
-        id_sd=sede.id_sd, nmbr="Ubicación HT-08", lttd=4.6, lngtd=-74.0, plgn_gjsn={},
+        id_sd=sede.id_sd,
+        nmbr="Ubicación HT-08",
+        lttd=4.6,
+        lngtd=-74.0,
+        plgn_gjsn={},
     )
     conexion_ftp = ConexionFTP(
-        id_sd=sede.id_sd, nmbr="FTP HT-08", hst="host", usr_ftp="u", rt_rmt="/", crdncl_cfrd="x",
+        id_sd=sede.id_sd,
+        nmbr="FTP HT-08",
+        hst="host",
+        usr_ftp="u",
+        rt_rmt="/",
+        crdncl_cfrd="x",
     )
     db_session.add_all([ubicacion, conexion_ftp])
     db_session.flush()
     dispositivo = Dispositivo(
-        id_ubccn=ubicacion.id_ubccn, id_cnxn=conexion_ftp.id_cnxn,
-        nmbr="Dispositivo HT-08", mrc="Marca HT-08", lttd=4.6, lngtd=-74.0,
+        id_ubccn=ubicacion.id_ubccn,
+        id_cnxn=conexion_ftp.id_cnxn,
+        nmbr="Dispositivo HT-08",
+        mrc="Marca HT-08",
+        lttd=4.6,
+        lngtd=-74.0,
     )
     db_session.add(dispositivo)
     db_session.flush()

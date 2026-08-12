@@ -1,0 +1,131 @@
+name: CI
+
+# HT-07: pipeline de CI para el backend (lint + test + build de imagen).
+# CA1: dispara en cada push a jareth/main y en cada PR hacia cualquiera de
+# las dos, sin intervención manual.
+on:
+  push:
+    branches: [jareth, main]
+  pull_request:
+    branches: [jareth, main]
+
+defaults:
+  run:
+    working-directory: backend
+
+env:
+  PYTHON_VERSION: "3.12"
+  # Mismas credenciales que el fallback de app/database.py, .env.example y
+  # docker-compose.yml (servicio "db"), para que el job no dependa de
+  # secrets que todavía no existen en este repo.
+  DATABASE_URL: postgresql+psycopg2://postgres:postgres@localhost:5432/pangea_dev
+  TEST_DATABASE_URL: postgresql+psycopg2://postgres:postgres@localhost:5432/pangea_test
+  JWT_SECRET: ci-clave-de-pruebas-no-usar-en-produccion
+  FTP_CREDENTIAL_KEY: ""
+
+jobs:
+  lint:
+    name: Lint (ruff + black)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+          cache-dependency-path: backend/requirements-dev.txt
+
+      - name: Instalar dependencias de desarrollo
+        run: pip install -r requirements-dev.txt
+
+      # CA2: el job falla (bloquea el pipeline) si ruff encuentra errores.
+      - name: ruff check
+        run: python -m ruff check .
+
+      # CA2: el job falla si el código no está formateado con black.
+      - name: black --check
+        run: python -m black --check .
+
+  test:
+    name: Tests (pytest)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: pangea_dev
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Instalar dependencias
+        run: pip install -r requirements.txt
+
+      - name: Crear base de datos de pruebas
+        run: |
+          PGPASSWORD=postgres psql -h localhost -U postgres -d postgres \
+            -c "CREATE DATABASE pangea_test;"
+
+      - name: Aplicar migraciones (Alembic) sobre pangea_test
+        run: python -m alembic upgrade head
+        env:
+          DATABASE_URL: ${{ env.TEST_DATABASE_URL }}
+
+      # CA2: el job falla (bloquea el pipeline) si algún test falla.
+      # Suite completa: autenticación, permisos, modelo de datos y el resto
+      # (246 tests verificados en local a la fecha de esta HT).
+      - name: pytest (suite completa)
+        run: python -m pytest -v
+
+  build:
+    name: Build imagen Docker
+    runs-on: ubuntu-latest
+    needs: [lint, test]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Calcular tag con el hash corto del commit
+        id: vars
+        run: echo "sha_short=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+      # CA3: cada imagen queda etiquetada con el hash del commit
+      # correspondiente. No se publica a ningún registry (fuera de alcance
+      # de HT-07) - solo se construye para verificar que el build no falla.
+      - name: Build imagen (sin publicar)
+        run: |
+          docker build -t "pangea-api:${{ steps.vars.outputs.sha_short }}" .
+        working-directory: backend
+
+  # CA4: placeholder para la HT futura de despliegue de frontend + extensión
+  # del pipeline a deploy real en Lightsail. Este job NO hace nada todavía:
+  # solo deja preparada la estructura (job separado, condicionado a tags de
+  # versión sobre main) para que esa HT lo complete sin tener que rediseñar
+  # el trigger. NO implementar pasos reales de deploy aquí como parte de
+  # HT-07 (ver "NO TOQUES" del backlog de esta HT).
+  deploy-production:
+    name: Deploy a producción (placeholder)
+    runs-on: ubuntu-latest
+    needs: [build]
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - name: TODO - deploy a Lightsail (HT futura)
+        run: |
+          echo "Placeholder: el deploy real a Lightsail se implementa en la HT de despliegue de frontend."
+          echo "Este job solo confirma que el trigger por tag (refs/tags/v*) sobre main queda preparado."

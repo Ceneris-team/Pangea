@@ -13,6 +13,7 @@ Uso en un endpoint:
         sede_id = usuario["sede_id"]  # None si scope == "global"
         ...
 """
+
 import datetime as dt
 
 from fastapi import Depends, Header, HTTPException
@@ -20,7 +21,8 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import Usuario
-from .jwt_auth import decode_access_token, TokenExpirado, TokenInvalido
+
+from .jwt_auth import TokenExpirado, TokenInvalido, decode_access_token
 
 
 def get_current_user(

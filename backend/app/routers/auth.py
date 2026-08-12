@@ -10,6 +10,7 @@ HU 02 agrega tres flujos: solicitar enlace de recuperación (olvidé mi
 contraseña), restablecerla con ese enlace, y cambiarla estando autenticado
 desde "Mi perfil".
 """
+
 import datetime as dt
 import os
 import secrets
@@ -22,16 +23,14 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
 from app.models import TokenRecuperacion, Usuario
+from app.security.dependencies import get_current_user
 from app.security.hashing import hash_password, verify_password
 from app.security.jwt_auth import create_access_token
-from app.security.dependencies import get_current_user
 from app.security.mailer import enviar_correo_recuperacion
 from app.security.password_policy import MSG_POLITICA_INVALIDA, es_password_valido
 
 router = APIRouter(prefix="/auth", tags=["Autenticación"])
-RATELIMIT_STORAGE_URL = os.environ.get(
-    "RATELIMIT_STORAGE_URL", "redis://localhost:6379/1"
-)
+RATELIMIT_STORAGE_URL = os.environ.get("RATELIMIT_STORAGE_URL", "redis://localhost:6379/1")
 limiter = Limiter(key_func=get_remote_address, storage_uri=RATELIMIT_STORAGE_URL)
 MAX_INTENTOS = 5
 VIGENCIA_TOKEN_RECUPERACION_MINUTOS = 30
@@ -137,7 +136,9 @@ MSG_CORREO_ENVIADO = "Te hemos enviado un correo con las instrucciones para recu
 
 @router.post("/olvide-contrasena")
 @limiter.limit("5/15minutes")
-def olvide_contrasena(request: Request, body: OlvideContrasenaRequest, db: Session = Depends(get_db)):
+def olvide_contrasena(
+    request: Request, body: OlvideContrasenaRequest, db: Session = Depends(get_db)
+):
     """HU 02 CA 1: solicitar el enlace de recuperación desde el login."""
     usuario = db.query(Usuario).filter(Usuario.crr == body.correo.lower()).first()
 

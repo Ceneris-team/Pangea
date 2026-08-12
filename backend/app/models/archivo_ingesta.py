@@ -1,6 +1,13 @@
 from sqlalchemy import (
-    BigInteger, Column, Integer, String, ForeignKey, TIMESTAMP,
-    CheckConstraint, Index, text,
+    TIMESTAMP,
+    BigInteger,
+    CheckConstraint,
+    Column,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    text,
 )
 
 from app.database import Base
@@ -12,6 +19,7 @@ class ArchivoIngesta(Base):
     métricas de la cola (CA3). El CHECK de estados no está en el
     diccionario de datos original pero se agrega como capa extra de
     validación a nivel BD."""
+
     __tablename__ = "archv_ingst"
     __table_args__ = (
         CheckConstraint(
