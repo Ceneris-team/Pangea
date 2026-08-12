@@ -19,6 +19,7 @@ Uso (contra una BD de dev/test, NUNCA producción):
     python -m app.scripts.medir_pruning_ht08
     python -m app.scripts.medir_pruning_ht08 --meses 7 --horas 3
 """
+
 import argparse
 import datetime as dt
 
@@ -50,9 +51,9 @@ def _limpiar_corrida_anterior(db) -> None:
                 db.query(Ubicacion.id_ubccn).join(Sede).filter(Sede.id_clnt == cliente.id_clnt)
             )
         )
-        db.query(MapeoFormato).filter(
-            MapeoFormato.id_dspstv.in_(ids_dispositivos)
-        ).delete(synchronize_session=False)
+        db.query(MapeoFormato).filter(MapeoFormato.id_dspstv.in_(ids_dispositivos)).delete(
+            synchronize_session=False
+        )
         db.query(Dispositivo).filter(
             Dispositivo.id_ubccn.in_(
                 db.query(Ubicacion.id_ubccn).join(Sede).filter(Sede.id_clnt == cliente.id_clnt)
@@ -65,7 +66,9 @@ def _limpiar_corrida_anterior(db) -> None:
             ConexionFTP.id_sd.in_(db.query(Sede.id_sd).filter(Sede.id_clnt == cliente.id_clnt))
         ).delete(synchronize_session=False)
         db.query(Sede).filter(Sede.id_clnt == cliente.id_clnt).delete(synchronize_session=False)
-        db.query(Cliente).filter(Cliente.id_clnt == cliente.id_clnt).delete(synchronize_session=False)
+        db.query(Cliente).filter(Cliente.id_clnt == cliente.id_clnt).delete(
+            synchronize_session=False
+        )
 
     db.query(Parametro).filter(Parametro.nmbr == NOMBRE_PARAMETRO).delete(synchronize_session=False)
     db.flush()
@@ -90,20 +93,30 @@ def _sembrar(db, meses: int, horas_entre_lecturas: int):
             id_sd=sede.id_sd, nmbr=f"Ubicación {sede.nmbr}", lttd=4.6, lngtd=-74.0, plgn_gjsn={}
         )
         conexion = ConexionFTP(
-            id_sd=sede.id_sd, nmbr=f"FTP {sede.nmbr}", hst="host", usr_ftp="u", rt_rmt="/", crdncl_cfrd="x"
+            id_sd=sede.id_sd,
+            nmbr=f"FTP {sede.nmbr}",
+            hst="host",
+            usr_ftp="u",
+            rt_rmt="/",
+            crdncl_cfrd="x",
         )
         db.add_all([ubicacion, conexion])
         db.flush()
         # DEC-09: primero el dispositivo, y el mapeo cuelga de él.
         dispositivo = Dispositivo(
-            id_ubccn=ubicacion.id_ubccn, id_cnxn=conexion.id_cnxn,
-            nmbr=f"Disp {sede.nmbr}", mrc="Marca pruning", lttd=4.6, lngtd=-74.0,
+            id_ubccn=ubicacion.id_ubccn,
+            id_cnxn=conexion.id_cnxn,
+            nmbr=f"Disp {sede.nmbr}",
+            mrc="Marca pruning",
+            lttd=4.6,
+            lngtd=-74.0,
         )
         db.add(dispositivo)
         db.flush()
         db.add(
             MapeoFormato(
-                id_dspstv=dispositivo.id_dspstv, frmt_fch="%Y-%m-%d %H:%M:%S",
+                id_dspstv=dispositivo.id_dspstv,
+                frmt_fch="%Y-%m-%d %H:%M:%S",
             )
         )
         db.flush()
@@ -161,14 +174,17 @@ def _explicar_sin_filtro_fecha(db, id_sd: int) -> str:
 
 def _contar_particiones_tocadas(plan_texto: str) -> int:
     return sum(
-        1 for linea in plan_texto.splitlines()
+        1
+        for linea in plan_texto.splitlines()
         if (" on tlmtr_" in linea) and ("Seq Scan" in linea or "Index" in linea)
     )
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--meses", type=int, default=7, help="meses de datos a generar (default: 7)")
+    parser.add_argument(
+        "--meses", type=int, default=7, help="meses de datos a generar (default: 7)"
+    )
     parser.add_argument(
         "--horas", type=int, default=3, help="horas entre lecturas sintéticas (default: 3)"
     )
@@ -180,15 +196,21 @@ def main():
         sede, desde = _sembrar(db, args.meses, args.horas)
         db.commit()
 
-        total = db.execute(text("SELECT count(*) FROM tlmtr WHERE id_sd = :id_sd"), {"id_sd": sede.id_sd}).scalar()
+        total = db.execute(
+            text("SELECT count(*) FROM tlmtr WHERE id_sd = :id_sd"), {"id_sd": sede.id_sd}
+        ).scalar()
         particiones = db.execute(
             text("SELECT count(*) FROM pg_tables WHERE tablename ~ '^tlmtr_[0-9]{4}_[0-9]{2}$'")
         ).scalar()
 
-        print(f"Datos sintéticos: {total} filas para sede id_sd={sede.id_sd}, {particiones} particiones existentes\n")
+        print(
+            f"Datos sintéticos: {total} filas para sede id_sd={sede.id_sd}, {particiones} particiones existentes\n"
+        )
 
         print("=" * 70)
-        print(f"CON filtro de sede + rango de fecha (mes de {desde.isoformat()}, forma de HU12/HU13):")
+        print(
+            f"CON filtro de sede + rango de fecha (mes de {desde.isoformat()}, forma de HU12/HU13):"
+        )
         print("=" * 70)
         plan_con_filtro = _explicar(db, sede.id_sd, desde)
         print(plan_con_filtro)
@@ -204,10 +226,16 @@ def main():
         print("\n" + "=" * 70)
         print("RESUMEN (CA2)")
         print("=" * 70)
-        print(f"Con filtro de rango mensual: {tocadas_con_filtro} de {particiones} particiones tocadas")
-        print(f"Sin filtro de fecha:         {tocadas_sin_filtro} de {particiones} particiones tocadas")
+        print(
+            f"Con filtro de rango mensual: {tocadas_con_filtro} de {particiones} particiones tocadas"
+        )
+        print(
+            f"Sin filtro de fecha:         {tocadas_sin_filtro} de {particiones} particiones tocadas"
+        )
         if tocadas_con_filtro < particiones:
-            print("\nOK: el planner descarta particiones irrelevantes con el filtro de fecha. CA2 cumplido.")
+            print(
+                "\nOK: el planner descarta particiones irrelevantes con el filtro de fecha. CA2 cumplido."
+            )
         else:
             print("\nADVERTENCIA: el filtro de fecha no redujo las particiones tocadas, revisar.")
     finally:

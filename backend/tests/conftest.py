@@ -19,13 +19,14 @@ y migrada una vez:
     DATABASE_URL=postgresql+psycopg2://postgres:postgres@localhost:5432/pangea_test \
         python -m alembic upgrade head
 """
+
 import os
 
 import pytest
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 
-from app.models import Rol, Usuario, Cliente, Sede
+from app.models import Cliente, Rol, Sede, Usuario
 from app.security.hashing import hash_password
 
 TEST_DATABASE_URL = os.environ.get(

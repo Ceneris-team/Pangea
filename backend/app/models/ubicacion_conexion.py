@@ -1,9 +1,16 @@
 from sqlalchemy import (
-    Column, Integer, String, ForeignKey, TIMESTAMP, Numeric, CheckConstraint,
-    Index, UniqueConstraint, text,
+    TIMESTAMP,
+    CheckConstraint,
+    Column,
+    ForeignKey,
+    Index,
+    Integer,
+    Numeric,
+    String,
+    UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import relationship
 
 from app.database import Base
 

@@ -30,6 +30,7 @@ backend/tests/fixtures/, con las columnas que espera cada mapeo:
 El prefijo H_/E_ del nombre es lo que decide el tipo de trama, así que si
 los renombras tiene que conservarse.
 """
+
 import argparse
 import datetime as dt
 import sys
@@ -98,7 +99,9 @@ def asegurar_parametros(db: Session) -> dict:
     for nombre, unidad in PARAMETROS.items():
         parametro = db.query(Parametro).filter(Parametro.nmbr == nombre).first()
         if parametro is None:
-            parametro = Parametro(nmbr=nombre, undd=unidad, dscrpcn="Sembrado por el script de demo")
+            parametro = Parametro(
+                nmbr=nombre, undd=unidad, dscrpcn="Sembrado por el script de demo"
+            )
             db.add(parametro)
             db.flush()
             _log(f"parámetro creado: {nombre} ({unidad})")
@@ -108,9 +111,7 @@ def asegurar_parametros(db: Session) -> dict:
 
 def asegurar_ubicacion(db: Session, sede: Sede, nombre: str) -> Ubicacion:
     ubicacion = (
-        db.query(Ubicacion)
-        .filter(Ubicacion.id_sd == sede.id_sd, Ubicacion.nmbr == nombre)
-        .first()
+        db.query(Ubicacion).filter(Ubicacion.id_sd == sede.id_sd, Ubicacion.nmbr == nombre).first()
     )
     if ubicacion is None:
         ubicacion = Ubicacion(
@@ -128,7 +129,9 @@ def asegurar_ubicacion(db: Session, sede: Sede, nombre: str) -> Ubicacion:
     return ubicacion
 
 
-def asegurar_conexion(db: Session, sede: Sede, nombre: str, ruta: str, frecuencia: int) -> ConexionFTP:
+def asegurar_conexion(
+    db: Session, sede: Sede, nombre: str, ruta: str, frecuencia: int
+) -> ConexionFTP:
     conexion = (
         db.query(ConexionFTP)
         .filter(ConexionFTP.id_sd == sede.id_sd, ConexionFTP.nmbr == nombre)
@@ -156,8 +159,13 @@ def asegurar_conexion(db: Session, sede: Sede, nombre: str, ruta: str, frecuenci
 
 
 def asegurar_dispositivo(
-    db: Session, ubicacion: Ubicacion, conexion: ConexionFTP, nombre: str,
-    marca: str, modelo: str, estado: str = "Activo",
+    db: Session,
+    ubicacion: Ubicacion,
+    conexion: ConexionFTP,
+    nombre: str,
+    marca: str,
+    modelo: str,
+    estado: str = "Activo",
 ) -> Dispositivo:
     dispositivo = db.query(Dispositivo).filter(Dispositivo.nmbr == nombre).first()
     if dispositivo is None:
@@ -178,8 +186,12 @@ def asegurar_dispositivo(
 
 
 def asegurar_mapeo(
-    db: Session, dispositivo: Dispositivo, tp_trm: str, columnas: dict,
-    dlmtdr: str = ",", dlmtdr_dcml: str = ".",
+    db: Session,
+    dispositivo: Dispositivo,
+    tp_trm: str,
+    columnas: dict,
+    dlmtdr: str = ",",
+    dlmtdr_dcml: str = ".",
 ) -> MapeoFormato:
     """columnas: {indice_de_columna: Parametro}."""
     mapeo = (
@@ -227,16 +239,21 @@ def sembrar_logs(db: Session, conexion: ConexionFTP, nombres_estados: list) -> N
         )
         if ya_existe is not None:
             continue
-        db.add(ArchivoIngesta(
-            id_cnxn=conexion.id_cnxn,
-            nmbr_archv=nombre,
-            estd=estado,
-            fch_dtccn=ahora - dt.timedelta(hours=desfase + 1),
-            fch_prcsd=(ahora - dt.timedelta(hours=desfase + 1, minutes=-2)
-                       if estado in ("Exitoso", "Fallido") else None),
-            mnsj_errr=mensaje,
-            rgstrs_prcsds=12 if estado == "Exitoso" else None,
-        ))
+        db.add(
+            ArchivoIngesta(
+                id_cnxn=conexion.id_cnxn,
+                nmbr_archv=nombre,
+                estd=estado,
+                fch_dtccn=ahora - dt.timedelta(hours=desfase + 1),
+                fch_prcsd=(
+                    ahora - dt.timedelta(hours=desfase + 1, minutes=-2)
+                    if estado in ("Exitoso", "Fallido")
+                    else None
+                ),
+                mnsj_errr=mensaje,
+                rgstrs_prcsds=12 if estado == "Exitoso" else None,
+            )
+        )
     db.flush()
 
 
@@ -250,20 +267,24 @@ def limpiar(db: Session) -> None:
         db.query(Telemetria).filter(Telemetria.id_dspstv.in_(ids)).delete(synchronize_session=False)
         mapeos = db.query(MapeoFormato).filter(MapeoFormato.id_dspstv.in_(ids)).all()
         if mapeos:
-            db.query(MapeoColumna).filter(
-                MapeoColumna.id_mp.in_([m.id_mp for m in mapeos])
-            ).delete(synchronize_session=False)
-            db.query(MapeoFormato).filter(
-                MapeoFormato.id_dspstv.in_(ids)
-            ).delete(synchronize_session=False)
+            db.query(MapeoColumna).filter(MapeoColumna.id_mp.in_([m.id_mp for m in mapeos])).delete(
+                synchronize_session=False
+            )
+            db.query(MapeoFormato).filter(MapeoFormato.id_dspstv.in_(ids)).delete(
+                synchronize_session=False
+            )
     if conexiones:
-        db.query(ArchivoIngesta).filter(
-            ArchivoIngesta.id_cnxn.in_(conexiones)
-        ).delete(synchronize_session=False)
+        db.query(ArchivoIngesta).filter(ArchivoIngesta.id_cnxn.in_(conexiones)).delete(
+            synchronize_session=False
+        )
     if ids:
-        db.query(Dispositivo).filter(Dispositivo.id_dspstv.in_(ids)).delete(synchronize_session=False)
+        db.query(Dispositivo).filter(Dispositivo.id_dspstv.in_(ids)).delete(
+            synchronize_session=False
+        )
     if conexiones:
-        db.query(ConexionFTP).filter(ConexionFTP.id_cnxn.in_(conexiones)).delete(synchronize_session=False)
+        db.query(ConexionFTP).filter(ConexionFTP.id_cnxn.in_(conexiones)).delete(
+            synchronize_session=False
+        )
 
     db.query(Ubicacion).filter(Ubicacion.nmbr.like(f"{PREFIJO}%")).delete(synchronize_session=False)
     db.commit()
@@ -283,14 +304,24 @@ def sembrar(db: Session) -> None:
     # lecturas del segundo se guardaban bajo el parámetro del primero.
     cnxn_a = asegurar_conexion(db, sede, f"{PREFIJO} FTP Río - Estación A", "/datos/estacion_a", 15)
     disp_a = asegurar_dispositivo(
-        db, ubicacion_rio, cnxn_a, f"{PREFIJO} CR1000 Río A", "Campbell", "CR1000X",
+        db,
+        ubicacion_rio,
+        cnxn_a,
+        f"{PREFIJO} CR1000 Río A",
+        "Campbell",
+        "CR1000X",
     )
     # Calidad de agua: pH, conductividad, ORP.
     asegurar_mapeo(db, disp_a, "H", {1: p["ph"], 2: p["conductividad"], 3: p["orp"]})
 
     cnxn_b = asegurar_conexion(db, sede, f"{PREFIJO} FTP Río - Estación B", "/datos/estacion_b", 30)
     disp_b = asegurar_dispositivo(
-        db, ubicacion_rio, cnxn_b, f"{PREFIJO} CR1000 Río B", "Campbell", "CR1000X",
+        db,
+        ubicacion_rio,
+        cnxn_b,
+        f"{PREFIJO} CR1000 Río B",
+        "Campbell",
+        "CR1000X",
     )
     # MISMA marca, MISMA sede, pero acá hay sensores de temperatura/batería.
     asegurar_mapeo(db, disp_b, "H", {1: p["temperatura"], 2: p["bateria_v"]})
@@ -298,30 +329,53 @@ def sembrar(db: Session) -> None:
     # --- CASO 3: un dispositivo con mapeo H y E a la vez -------------------
     cnxn_c = asegurar_conexion(db, sede, f"{PREFIJO} FTP Planta - Gabinete", "/datos/gabinete", 10)
     disp_c = asegurar_dispositivo(
-        db, ubicacion_planta, cnxn_c, f"{PREFIJO} Gabinete Planta (H+E)", "Campbell", "CR300",
+        db,
+        ubicacion_planta,
+        cnxn_c,
+        f"{PREFIJO} Gabinete Planta (H+E)",
+        "Campbell",
+        "CR300",
     )
     asegurar_mapeo(db, disp_c, "H", {1: p["temperatura"], 2: p["bateria_v"]})
     asegurar_mapeo(
-        db, disp_c, "E",
+        db,
+        disp_c,
+        "E",
         {1: p["estado_gabinete"], 2: p["estado_puerta"], 3: p["contador_puerta"]},
     )
-    sembrar_logs(db, cnxn_c, [
-        ("H_20260812_1200.dat", "Exitoso", None),
-        ("E_20260812_1200.dat", "Exitoso", None),
-        ("H_20260812_1100.dat", "Fallido",
-         "No hay un formato activo (mp_frmt) para el dispositivo y el tipo de trama"),
-        ("H_20260812_1300.dat", "Pendiente", None),
-    ])
+    sembrar_logs(
+        db,
+        cnxn_c,
+        [
+            ("H_20260812_1200.dat", "Exitoso", None),
+            ("E_20260812_1200.dat", "Exitoso", None),
+            (
+                "H_20260812_1100.dat",
+                "Fallido",
+                "No hay un formato activo (mp_frmt) para el dispositivo y el tipo de trama",
+            ),
+            ("H_20260812_1300.dat", "Pendiente", None),
+        ],
+    )
 
     # --- CASO 4: locale europeo (decimal con coma) ------------------------
     cnxn_d = asegurar_conexion(db, sede, f"{PREFIJO} FTP Planta - Sonda EU", "/datos/sonda_eu", 20)
     disp_d = asegurar_dispositivo(
-        db, ubicacion_planta, cnxn_d, f"{PREFIJO} Sonda EU (decimal coma)", "OTT HydroMet", "ecoN",
+        db,
+        ubicacion_planta,
+        cnxn_d,
+        f"{PREFIJO} Sonda EU (decimal coma)",
+        "OTT HydroMet",
+        "ecoN",
     )
     # ';' de columna + ',' decimal: "23,5" es un número, no dos campos.
     asegurar_mapeo(
-        db, disp_d, "H", {1: p["temperatura"], 2: p["ph"]},
-        dlmtdr=";", dlmtdr_dcml=",",
+        db,
+        disp_d,
+        "H",
+        {1: p["temperatura"], 2: p["ph"]},
+        dlmtdr=";",
+        dlmtdr_dcml=",",
     )
 
     # --- CASO 5: sin mapeo (recién creado) --------------------------------
@@ -330,14 +384,24 @@ def sembrar(db: Session) -> None:
     # "dispositivo sin configurar para este tipo de trama".
     cnxn_e = asegurar_conexion(db, sede, f"{PREFIJO} FTP Río - Estación Nueva", "/datos/nueva", 15)
     asegurar_dispositivo(
-        db, ubicacion_rio, cnxn_e, f"{PREFIJO} Estación Nueva (sin mapeo)", "Sutron", "XLink 500",
+        db,
+        ubicacion_rio,
+        cnxn_e,
+        f"{PREFIJO} Estación Nueva (sin mapeo)",
+        "Sutron",
+        "XLink 500",
     )
 
     # --- CASO 6: dispositivo inactivo -------------------------------------
     # Para probar el filtro por estado del listado (HU10).
     cnxn_f = asegurar_conexion(db, sede, f"{PREFIJO} FTP Planta - Retirada", "/datos/retirada", 60)
     disp_f = asegurar_dispositivo(
-        db, ubicacion_planta, cnxn_f, f"{PREFIJO} Sonda Retirada", "Hach", "SC200",
+        db,
+        ubicacion_planta,
+        cnxn_f,
+        f"{PREFIJO} Sonda Retirada",
+        "Hach",
+        "SC200",
         estado="Inactivo",
     )
     asegurar_mapeo(db, disp_f, "H", {1: p["ph"]})
@@ -348,7 +412,8 @@ def sembrar(db: Session) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--reset", action="store_true",
+        "--reset",
+        action="store_true",
         help="borra lo sembrado por este script antes de volver a sembrarlo",
     )
     args = parser.parse_args()

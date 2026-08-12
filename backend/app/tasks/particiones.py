@@ -8,6 +8,7 @@ Este job corre a diario vía Celery Beat y garantiza que siempre haya
 particiones creadas con antelación, para que ese caso no ocurra en
 operación normal.
 """
+
 import datetime as dt
 import logging
 

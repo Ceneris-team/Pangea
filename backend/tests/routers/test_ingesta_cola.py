@@ -3,16 +3,17 @@ HU09 - Monitorear cola de procesamiento: tests de CA1 (listado paginado),
 CA2 (filtro por estado) y CA3 (detalle). No cubre /ingesta/metricas
 (HT-05 CA3), que ya tiene tests propios y no se toca en esta HU.
 """
+
 import datetime as dt
 
 import pytest
 from fastapi.testclient import TestClient
 
-from app.main import app
 from app.database import get_db
-from app.security.dependencies import get_current_user
+from app.main import app
 from app.models import ArchivoIngesta, ConexionFTP, Dispositivo, Ubicacion
 from app.models.suscripcion import PermisoUsuarioSede
+from app.security.dependencies import get_current_user
 
 POLIGONO_DUMMY = {"type": "Polygon", "coordinates": [[[0, 0], [0, 1], [1, 1], [1, 0], [0, 0]]]}
 
@@ -86,7 +87,11 @@ def crear_dispositivo(db_session, sede, conexion, nombre="CR1000-01", estd="Acti
     nombre del datalogger en la cola- ni pasa id_mp al Dispositivo (columna
     eliminada)."""
     ubicacion = Ubicacion(
-        id_sd=sede.id_sd, nmbr="Ubicacion de prueba", lttd=0, lngtd=0, plgn_gjsn=POLIGONO_DUMMY,
+        id_sd=sede.id_sd,
+        nmbr="Ubicacion de prueba",
+        lttd=0,
+        lngtd=0,
+        plgn_gjsn=POLIGONO_DUMMY,
     )
     db_session.add(ubicacion)
     db_session.flush()
@@ -137,14 +142,18 @@ class TestListarColaIngesta:
         sede, _ = tecnico_lector
         conexion = crear_conexion(db_session, sede)
         ahora = dt.datetime.now(dt.timezone.utc)
-        crear_archivo(db_session, conexion, nombre="H_viejo.dat", fch_dtccn=ahora - dt.timedelta(hours=2))
+        crear_archivo(
+            db_session, conexion, nombre="H_viejo.dat", fch_dtccn=ahora - dt.timedelta(hours=2)
+        )
         crear_archivo(db_session, conexion, nombre="H_nuevo.dat", fch_dtccn=ahora)
 
         resp = client.get("/ingesta/cola")
         nombres = [item["nmbr_archv"] for item in resp.json()["items"]]
         assert nombres == ["H_nuevo.dat", "H_viejo.dat"]
 
-    def test_datalogger_de_origen_usa_nombre_de_la_conexion_por_defecto(self, client, db_session, tecnico_lector):
+    def test_datalogger_de_origen_usa_nombre_de_la_conexion_por_defecto(
+        self, client, db_session, tecnico_lector
+    ):
         sede, _ = tecnico_lector
         conexion = crear_conexion(db_session, sede, nombre="FTP Estacion Norte")
         crear_archivo(db_session, conexion)
@@ -152,7 +161,9 @@ class TestListarColaIngesta:
         resp = client.get("/ingesta/cola")
         assert resp.json()["items"][0]["datalogger_nombre"] == "FTP Estacion Norte"
 
-    def test_datalogger_de_origen_prefiere_el_nombre_del_dispositivo(self, client, db_session, tecnico_lector):
+    def test_datalogger_de_origen_prefiere_el_nombre_del_dispositivo(
+        self, client, db_session, tecnico_lector
+    ):
         sede, _ = tecnico_lector
         conexion = crear_conexion(db_session, sede, nombre="FTP Estacion Norte")
         crear_dispositivo(db_session, sede, conexion, nombre="CR1000-Norte")
@@ -161,7 +172,9 @@ class TestListarColaIngesta:
         resp = client.get("/ingesta/cola")
         assert resp.json()["items"][0]["datalogger_nombre"] == "CR1000-Norte"
 
-    def test_usuario_de_otra_sede_no_ve_archivos_ajenos(self, client, db_session, tecnico_lector, fabrica):
+    def test_usuario_de_otra_sede_no_ve_archivos_ajenos(
+        self, client, db_session, tecnico_lector, fabrica
+    ):
         sede, _ = tecnico_lector
         crear_archivo(db_session, crear_conexion(db_session, sede))
 
@@ -233,7 +246,11 @@ class TestDetalleArchivoIngesta:
         conexion = crear_conexion(db_session, sede)
         ahora = dt.datetime.now(dt.timezone.utc)
         archivo = crear_archivo(
-            db_session, conexion, estd="Exitoso", fch_prcsd=ahora, rgstrs_prcsds=120,
+            db_session,
+            conexion,
+            estd="Exitoso",
+            fch_prcsd=ahora,
+            rgstrs_prcsds=120,
         )
 
         resp = client.get(f"/ingesta/cola/{archivo.id_archv}")
@@ -243,11 +260,16 @@ class TestDetalleArchivoIngesta:
         assert body["rgstrs_prcsds"] == 120
         assert body["mnsj_errr"] is None
 
-    def test_devuelve_el_mensaje_de_error_de_un_archivo_fallido(self, client, db_session, tecnico_lector):
+    def test_devuelve_el_mensaje_de_error_de_un_archivo_fallido(
+        self, client, db_session, tecnico_lector
+    ):
         sede, _ = tecnico_lector
         conexion = crear_conexion(db_session, sede)
         archivo = crear_archivo(
-            db_session, conexion, estd="Fallido", mnsj_errr="dispositivo no resoluble",
+            db_session,
+            conexion,
+            estd="Fallido",
+            mnsj_errr="dispositivo no resoluble",
         )
 
         resp = client.get(f"/ingesta/cola/{archivo.id_archv}")
@@ -258,7 +280,9 @@ class TestDetalleArchivoIngesta:
     def test_archivo_inexistente_devuelve_404(self, client, tecnico_lector):
         assert client.get("/ingesta/cola/999999").status_code == 404
 
-    def test_usuario_de_otra_sede_no_ve_el_detalle(self, client, db_session, tecnico_lector, fabrica):
+    def test_usuario_de_otra_sede_no_ve_el_detalle(
+        self, client, db_session, tecnico_lector, fabrica
+    ):
         sede, _ = tecnico_lector
         conexion = crear_conexion(db_session, sede)
         archivo = crear_archivo(db_session, conexion)

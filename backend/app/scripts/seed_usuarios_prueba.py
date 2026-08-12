@@ -16,8 +16,9 @@ equipo de producto editando prms_usr_sd directamente, no este script-.
 Uso:
     python -m app.scripts.seed_usuarios_prueba
 """
+
 from app.database import SessionLocal
-from app.models import Rol, Usuario, Cliente, Sede, PermisoUsuarioSede
+from app.models import Cliente, PermisoUsuarioSede, Rol, Sede, Usuario
 from app.security.hashing import hash_password  # ver sección 2 si no existe aún
 
 ROLES = ["Administrador", "Técnico CENERIS", "Cliente Final", "Administrador Comercial"]
@@ -30,16 +31,24 @@ MODULOS = ["Usuarios", "Ubicaciones", "Dispositivos", "Ingesta", "Tableros", "Al
 PERMISOS_POR_ROL = {
     "Administrador": {modulo: "Edición" for modulo in MODULOS},
     "Técnico CENERIS": {
-        "Ubicaciones": "Edición", "Dispositivos": "Edición", "Ingesta": "Edición",
-        "Tableros": "Edición", "Alarmas": "Edición",
-        "Usuarios": "Lectura", "Comercial": "Lectura",
+        "Ubicaciones": "Edición",
+        "Dispositivos": "Edición",
+        "Ingesta": "Edición",
+        "Tableros": "Edición",
+        "Alarmas": "Edición",
+        "Usuarios": "Lectura",
+        "Comercial": "Lectura",
     },
     "Cliente Final": {
-        "Ubicaciones": "Lectura", "Dispositivos": "Lectura",
-        "Tableros": "Lectura", "Alarmas": "Lectura",
+        "Ubicaciones": "Lectura",
+        "Dispositivos": "Lectura",
+        "Tableros": "Lectura",
+        "Alarmas": "Lectura",
     },
     "Administrador Comercial": {
-        "Comercial": "Edición", "Ubicaciones": "Lectura", "Dispositivos": "Lectura",
+        "Comercial": "Edición",
+        "Ubicaciones": "Lectura",
+        "Dispositivos": "Lectura",
     },
 }
 

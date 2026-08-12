@@ -15,16 +15,18 @@ Cobertura por CA:
   usr.fch_cntrsn_actlzd). Se verifica con DOS tokens emitidos antes del
   cambio, no solo con el de la sesión que hizo el cambio.
 """
+
 import datetime as dt
 
 import jwt
 import pytest
 from fastapi.testclient import TestClient
 
-from app.main import app, limiter as limiter_app
-from app.routers.auth import limiter as limiter_auth
 from app.database import get_db
+from app.main import app
+from app.main import limiter as limiter_app
 from app.models import TokenRecuperacion, Usuario
+from app.routers.auth import limiter as limiter_auth
 from app.security.hashing import hash_password
 from app.security.jwt_auth import ALGORITHM, SECRET_KEY, create_access_token
 
@@ -105,7 +107,9 @@ class TestLogin:
         assert resp.status_code == 401
         assert resp.json()["detail"] == "Correo o contraseña incorrectos"
 
-    def test_correo_inexistente_devuelve_401_con_el_mismo_mensaje(self, client, usuario_con_password):
+    def test_correo_inexistente_devuelve_401_con_el_mismo_mensaje(
+        self, client, usuario_con_password
+    ):
         """El mensaje es idéntico al de contraseña incorrecta: no se revela
         si la cuenta existe (HT-04)."""
         resp = client.post(
@@ -170,7 +174,9 @@ class TestPerfil:
 
 
 class TestOlvideContrasena:
-    def test_correo_existente_devuelve_200_y_crea_token(self, client, db_session, usuario_con_password):
+    def test_correo_existente_devuelve_200_y_crea_token(
+        self, client, db_session, usuario_con_password
+    ):
         usuario, _ = usuario_con_password
 
         resp = client.post("/auth/olvide-contrasena", json={"correo": usuario.crr})
@@ -237,12 +243,18 @@ class TestRestablecerContrasena:
         assert resp.json()["mensaje"] == "Tu contraseña ha sido actualizada correctamente"
 
         # La contraseña nueva sirve para entrar y la vieja ya no.
-        assert client.post(
-            "/auth/login", json={"correo": usuario.crr, "contrasena": PASSWORD_NUEVA}
-        ).status_code == 200
-        assert client.post(
-            "/auth/login", json={"correo": usuario.crr, "contrasena": PASSWORD_ORIGINAL}
-        ).status_code == 401
+        assert (
+            client.post(
+                "/auth/login", json={"correo": usuario.crr, "contrasena": PASSWORD_NUEVA}
+            ).status_code
+            == 200
+        )
+        assert (
+            client.post(
+                "/auth/login", json={"correo": usuario.crr, "contrasena": PASSWORD_ORIGINAL}
+            ).status_code
+            == 401
+        )
 
     def test_token_queda_marcado_como_usado(self, client, db_session, usuario_con_password):
         usuario, _ = usuario_con_password
@@ -302,7 +314,9 @@ class TestRestablecerContrasena:
         )
         assert resp.status_code == 400
 
-    def test_confirmacion_que_no_coincide_es_rechazada(self, client, db_session, usuario_con_password):
+    def test_confirmacion_que_no_coincide_es_rechazada(
+        self, client, db_session, usuario_con_password
+    ):
         usuario, _ = usuario_con_password
         token = crear_token_recuperacion(db_session, usuario)
 

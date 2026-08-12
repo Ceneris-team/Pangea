@@ -107,9 +107,7 @@ class UbicacionCrear(BaseModel):
 
         exterior = anillos[0]
         if not isinstance(exterior, list) or len(exterior) < 4:
-            raise ValueError(
-                "El polígono debe tener al menos 3 vértices para delimitar la zona"
-            )
+            raise ValueError("El polígono debe tener al menos 3 vértices para delimitar la zona")
 
         for vertice in exterior:
             if not isinstance(vertice, (list, tuple)) or len(vertice) < 2:
@@ -272,6 +270,7 @@ class LogIngestaListItem(BaseModel):
 class MetricasColaIngesta(BaseModel):
     """HU 09: conteo de archv_ingst agrupado por estado, para el módulo
     de monitoreo de la cola de procesamiento (HT-05, CA3)."""
+
     pendientes: int
     procesando: int
     exitosos: int

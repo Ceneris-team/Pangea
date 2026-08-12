@@ -5,7 +5,8 @@ Token de un solo uso para el flujo de "¿Olvidaste tu contraseña?". Vive
 30 minutos (fch_exp) y queda inutilizable después de canjearse (usad) o de
 vencer, según el detalle de conversación de la historia.
 """
-from sqlalchemy import Column, Integer, String, ForeignKey, TIMESTAMP, Boolean, text
+
+from sqlalchemy import TIMESTAMP, Boolean, Column, ForeignKey, Integer, String, text
 from sqlalchemy.orm import relationship
 
 from app.database import Base
