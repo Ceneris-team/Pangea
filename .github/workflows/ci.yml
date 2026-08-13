@@ -21,7 +21,11 @@ env:
   DATABASE_URL: postgresql+psycopg2://postgres:postgres@localhost:5432/pangea_dev
   TEST_DATABASE_URL: postgresql+psycopg2://postgres:postgres@localhost:5432/pangea_test
   JWT_SECRET: ci-clave-de-pruebas-no-usar-en-produccion
-  FTP_CREDENTIAL_KEY: ""
+  # FTP_CREDENTIAL_KEY se deja sin declarar a propósito: si se pone como
+  # string vacío, os.environ.get(...) en app/security/ftp_crypto.py
+  # devuelve "" (no None) y el fallback dev-safe del código no se activa,
+  # rompiendo Fernet("") al importar. Sin la variable en el entorno, el
+  # fallback sí corre y genera una key válida en cada job.
 
 jobs:
   lint:
