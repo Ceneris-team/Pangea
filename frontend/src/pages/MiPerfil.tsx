@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
+import "./MiPerfil.css";
 import { useAuth } from "../context/AuthContext";
 import { apiFetch, ApiError } from "../services/api";
 
@@ -84,122 +85,139 @@ export default function MiPerfil() {
   }
 
   return (
-    <div style={{ padding: 32, fontFamily: "system-ui, sans-serif", maxWidth: 560 }}>
-      <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <h1>Mi perfil</h1>
-        {/* Con el cambio de contraseña pendiente no hay a dónde volver:
-            ProtectedRoute redirige de vuelta aquí (HU04). */}
-        {!debeCambiarContrasena && <button onClick={() => navigate(-1)}>Volver</button>}
-      </header>
+    <div className="miperfil-page">
+      <div className="miperfil-card">
+        <header className="miperfil-header">
+          <h1>Mi perfil</h1>
+          {/* Con el cambio de contraseña pendiente no hay a dónde volver:
+              ProtectedRoute redirige de vuelta aquí (HU04). */}
+          {!debeCambiarContrasena && (
+            <button className="miperfil-btn-ghost" onClick={() => navigate(-1)}>
+              Volver
+            </button>
+          )}
+        </header>
 
-      {debeCambiarContrasena && (
-        <p
-          style={{
-            marginTop: 12,
-            padding: 12,
-            borderRadius: 8,
-            background: "#fff4e5",
-            border: "1px solid #f0c48a",
-            color: "#8a5300",
-          }}
-        >
-          Estás usando una contraseña temporal. Debes cambiarla antes de continuar.
-        </p>
-      )}
-
-      {errorPerfil && <p style={{ color: "#b3261e" }}>{errorPerfil}</p>}
-
-      {perfil && (
-        <section style={{ marginTop: 16 }}>
-          <p>
-            <strong>Nombre:</strong> {perfil.nombre_completo}
-          </p>
-          <p>
-            <strong>Correo:</strong> {perfil.correo}
-          </p>
-          <p>
-            <strong>Rol:</strong> {perfil.rol}
-          </p>
-          <p>
-            <strong>Estado:</strong> {perfil.estado}
-          </p>
-        </section>
-      )}
-
-      <section style={{ marginTop: 24 }}>
-        {!mostrarForm ? (
-          <button onClick={() => setMostrarForm(true)}>Cambiar contraseña</button>
-        ) : (
-          <form onSubmit={handleGuardar} noValidate style={{ display: "grid", gap: 12, maxWidth: 360 }}>
-            <label>
-              Contraseña actual
-              <input
-                type={showPassword ? "text" : "password"}
-                autoComplete="current-password"
-                value={contrasenaActual}
-                onChange={(e) => setContrasenaActual(e.target.value)}
-                required
-                style={{ display: "block", width: "100%" }}
+        {debeCambiarContrasena && (
+          <div className="miperfil-alert" role="alert">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path
+                d="M12 9v4m0 4h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+                strokeLinejoin="round"
               />
-            </label>
-
-            <label>
-              Nueva contraseña
-              <input
-                type={showPassword ? "text" : "password"}
-                autoComplete="new-password"
-                value={nuevaContrasena}
-                onChange={(e) => setNuevaContrasena(e.target.value)}
-                required
-                style={{ display: "block", width: "100%" }}
-              />
-              {nuevaContrasena.length > 0 && !passwordOk && (
-                <small style={{ color: "#b3261e" }}>
-                  Debe tener mínimo 8 caracteres, al menos 1 mayúscula y 1 número.
-                </small>
-              )}
-            </label>
-
-            <label>
-              Confirmar nueva contraseña
-              <input
-                type={showPassword ? "text" : "password"}
-                autoComplete="new-password"
-                value={confirmarContrasena}
-                onChange={(e) => setConfirmarContrasena(e.target.value)}
-                required
-                style={{ display: "block", width: "100%" }}
-              />
-              {confirmarContrasena.length > 0 && !coinciden && (
-                <small style={{ color: "#b3261e" }}>Las contraseñas no coinciden.</small>
-              )}
-            </label>
-
-            <label style={{ fontSize: 13 }}>
-              <input
-                type="checkbox"
-                checked={showPassword}
-                onChange={(e) => setShowPassword(e.target.checked)}
-              />{" "}
-              Mostrar contraseñas
-            </label>
-
-            <div style={{ display: "flex", gap: 8 }}>
-              <button type="submit" disabled={loading || !puedeGuardar}>
-                {loading ? "Guardando…" : "Guardar"}
-              </button>
-              {/* Cancelar no se ofrece si el cambio es obligatorio (HU04). */}
-              {!debeCambiarContrasena && (
-                <button type="button" onClick={() => setMostrarForm(false)} disabled={loading}>
-                  Cancelar
-                </button>
-              )}
-            </div>
-
-            <p style={{ color: formOk ? "#1e7a34" : "#b3261e", minHeight: 18 }}>{formMsg}</p>
-          </form>
+            </svg>
+            <span>Estás usando una contraseña temporal. Debes cambiarla antes de continuar.</span>
+          </div>
         )}
-      </section>
+
+        {errorPerfil && <div className="miperfil-error">{errorPerfil}</div>}
+
+        {perfil && (
+          <section className="miperfil-panel">
+            <dl className="miperfil-info">
+              <dt>Nombre</dt>
+              <dd>{perfil.nombre_completo}</dd>
+              <dt>Correo</dt>
+              <dd>{perfil.correo}</dd>
+              <dt>Rol</dt>
+              <dd>{perfil.rol}</dd>
+              <dt>Estado</dt>
+              <dd>
+                <span className="miperfil-badge">{perfil.estado}</span>
+              </dd>
+            </dl>
+          </section>
+        )}
+
+        <section className="miperfil-panel">
+          {!mostrarForm ? (
+            <>
+              <h2 className="miperfil-panel-title">Seguridad</h2>
+              <button className="miperfil-btn-primary" onClick={() => setMostrarForm(true)}>
+                Cambiar contraseña
+              </button>
+            </>
+          ) : (
+            <>
+              <h2 className="miperfil-panel-title">Cambiar contraseña</h2>
+              <form onSubmit={handleGuardar} noValidate className="miperfil-form">
+                <div className="miperfil-field">
+                  <label htmlFor="contrasena-actual">Contraseña actual</label>
+                  <input
+                    id="contrasena-actual"
+                    type={showPassword ? "text" : "password"}
+                    autoComplete="current-password"
+                    value={contrasenaActual}
+                    onChange={(e) => setContrasenaActual(e.target.value)}
+                    required
+                  />
+                </div>
+
+                <div className="miperfil-field">
+                  <label htmlFor="nueva-contrasena">Nueva contraseña</label>
+                  <input
+                    id="nueva-contrasena"
+                    type={showPassword ? "text" : "password"}
+                    autoComplete="new-password"
+                    value={nuevaContrasena}
+                    onChange={(e) => setNuevaContrasena(e.target.value)}
+                    required
+                  />
+                  {nuevaContrasena.length > 0 && !passwordOk && (
+                    <small>Debe tener mínimo 8 caracteres, al menos 1 mayúscula y 1 número.</small>
+                  )}
+                </div>
+
+                <div className="miperfil-field">
+                  <label htmlFor="confirmar-contrasena">Confirmar nueva contraseña</label>
+                  <input
+                    id="confirmar-contrasena"
+                    type={showPassword ? "text" : "password"}
+                    autoComplete="new-password"
+                    value={confirmarContrasena}
+                    onChange={(e) => setConfirmarContrasena(e.target.value)}
+                    required
+                  />
+                  {confirmarContrasena.length > 0 && !coinciden && (
+                    <small>Las contraseñas no coinciden.</small>
+                  )}
+                </div>
+
+                <label className="miperfil-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={showPassword}
+                    onChange={(e) => setShowPassword(e.target.checked)}
+                  />
+                  Mostrar contraseñas
+                </label>
+
+                <div className="miperfil-actions">
+                  <button className="miperfil-btn-primary" type="submit" disabled={loading || !puedeGuardar}>
+                    {loading ? "Guardando…" : "Guardar"}
+                  </button>
+                  {/* Cancelar no se ofrece si el cambio es obligatorio (HU04). */}
+                  {!debeCambiarContrasena && (
+                    <button
+                      className="miperfil-btn-secondary"
+                      type="button"
+                      onClick={() => setMostrarForm(false)}
+                      disabled={loading}
+                    >
+                      Cancelar
+                    </button>
+                  )}
+                </div>
+
+                {formMsg && <p className={`miperfil-form-msg ${formOk ? "ok" : "err"}`}>{formMsg}</p>}
+              </form>
+            </>
+          )}
+        </section>
+      </div>
     </div>
   );
 }
