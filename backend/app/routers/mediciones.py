@@ -56,6 +56,9 @@ def listar_parametros_disponibles(
     if not ids_ubicaciones:
         return {"items": []}
 
+    # DEC-09: el mapeo ya no cuelga de dspstv.id_mp (columna eliminada),
+    # sino al revés: mp_frmt.id_dspstv apunta al dispositivo. El join pasa
+    # por mp_frmt para llegar del parámetro al dispositivo.
     parametros = (
         db.query(Parametro)
         .join(MapeoColumna, MapeoColumna.id_prmtr == Parametro.id_prmtr)

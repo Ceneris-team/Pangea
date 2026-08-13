@@ -30,6 +30,12 @@ interface Parametro {
   dscrpcn: string | null;
 }
 
+<<<<<<< HEAD
+=======
+/** DEC-09: el mapeo se cuelga de un dispositivo concreto. La marca y la
+ *  ubicación/sede se muestran en solo-lectura a partir del dispositivo
+ *  elegido; ya no se eligen ni se tipean aparte. */
+>>>>>>> 9cc2710c1fbe0adfb3cde23c8f9f64de00d99853
 interface DispositivoOption {
   id_dspstv: number;
   nmbr: string;
@@ -82,7 +88,12 @@ interface MapeoDetalle {
   id_mp: number;
   id_dspstv: number;
   dispositivo_nombre: string;
+<<<<<<< HEAD
   dispositivo_marca: string;
+=======
+  id_sd: number;
+  mrc: string;
+>>>>>>> 9cc2710c1fbe0adfb3cde23c8f9f64de00d99853
   tp_trm: string;
   dlmtdr: string;
   fl_inc_dts: number;
@@ -132,7 +143,11 @@ export default function ConfigurarMapeo() {
     id_dspstv: searchParams.get("id_dspstv") ?? "",
   });
   const [parametros, setParametros] = useState<Parametro[]>([]);
+<<<<<<< HEAD
   
+=======
+  const [dispositivos, setDispositivos] = useState<DispositivoOption[]>([]);
+>>>>>>> 9cc2710c1fbe0adfb3cde23c8f9f64de00d99853
 
   const [archivo, setArchivo] = useState<File | null>(null);
   const [vistaPrevia, setVistaPrevia] = useState<VistaPreviaResponse | null>(null);
@@ -171,6 +186,7 @@ export default function ConfigurarMapeo() {
       });
   }, []);
 
+<<<<<<< HEAD
   // Selector de dispositivo: el mapeo se crea para un dispositivo
   // concreto, ya existente (HU11 lo da de alta sin mapeo todavía).
   useEffect(() => {
@@ -190,6 +206,20 @@ export default function ConfigurarMapeo() {
       .catch(() => {
         // No es un campo obligatorio del formulario: si falla, el usuario
         // igual puede seguir subiendo el .dat a mano.
+=======
+  // DEC-09 CA1: selector de Dispositivo. Reusa GET /dispositivos (HU10),
+  // mismo patrón de fetch que AgregarDispositivo.tsx usa para sus selectores.
+  useEffect(() => {
+    apiFetch<{ items: DispositivoOption[] }>("/dispositivos", {
+      params: { por_pagina: 100 },
+    })
+      .then((res) => setDispositivos(res.items))
+      .catch((err) => {
+        setMensajeOk(false);
+        setMensaje(
+          err instanceof ApiError ? err.message : "No se pudieron cargar los dispositivos"
+        );
+>>>>>>> 9cc2710c1fbe0adfb3cde23c8f9f64de00d99853
       });
   }, []);
 
@@ -253,6 +283,11 @@ export default function ConfigurarMapeo() {
     setForm((prev) => ({ ...prev, [campo]: valor }));
   }
 
+  // DEC-09: marca y ubicación se muestran a partir del dispositivo elegido,
+  // en vez de ser campos propios del formulario.
+  const dispositivoSeleccionado =
+    dispositivos.find((d) => String(d.id_dspstv) === form.id_dspstv) ?? null;
+
   function seleccionarArchivo(e: ChangeEvent<HTMLInputElement>) {
     setArchivo(e.target.files?.[0] ?? null);
     setVistaPrevia(null);
@@ -297,6 +332,11 @@ export default function ConfigurarMapeo() {
       formData.append("frmt_fch", form.frmt_fch);
       formData.append("columna_fecha", form.columna_fecha);
       formData.append("asignaciones", serializarAsignaciones());
+      // DEC-09: la vista previa no lo necesita para interpretar el archivo,
+      // pero se manda para que el request sea consistente con el formulario.
+      if (form.id_dspstv) {
+        formData.append("id_dspstv", form.id_dspstv);
+      }
 
       const endpoint = fuenteMuestra === "archivo" ? "/mapeos/vista-previa" : "/mapeos/vista-previa-ftp";
       const res = await apiUpload<VistaPreviaResponse>(endpoint, formData);
@@ -328,8 +368,13 @@ export default function ConfigurarMapeo() {
 
     // Campos obligatorios según la HU: delimitador y tipo de trama (este
     // último ocupa el lugar de "extensión de archivo", ver README).
+<<<<<<< HEAD
     // id_dspstv solo se pide al crear: el dispositivo del mapeo no se
     // modifica al editar.
+=======
+    // DEC-09: el dispositivo reemplaza a sede+marca y solo se elige al
+    // crear; al editar, el mapeo no se mueve de dispositivo.
+>>>>>>> 9cc2710c1fbe0adfb3cde23c8f9f64de00d99853
     if (!form.dlmtdr) {
       setMensajeOk(false);
       setMensaje("El delimitador es obligatorio");
@@ -432,6 +477,7 @@ export default function ConfigurarMapeo() {
                   <h2 className="text-base font-bold text-gray-900 dark:text-white mb-4">Datos del formato</h2>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+<<<<<<< HEAD
                     {esEdicion ? (
                       <div className="md:col-span-2">
                         <label className={labelClase}>Dispositivo</label>
@@ -444,6 +490,20 @@ export default function ConfigurarMapeo() {
                     ) : (
                       <div className="md:col-span-2">
                         <label className={labelClase}>Dispositivo *</label>
+=======
+                    {/* DEC-09: el mapeo se cuelga de un dispositivo concreto.
+                        Al editar no se puede mover a otro dispositivo: se
+                        muestra cuál es, en solo lectura. */}
+                    <div className="md:col-span-2">
+                      <label className={labelClase}>Dispositivo *</label>
+                      {esEdicion ? (
+                        <p className="text-sm text-gray-900 dark:text-white py-2.5">
+                          {dispositivoSeleccionado
+                            ? `${dispositivoSeleccionado.nmbr} · ${dispositivoSeleccionado.mrc}`
+                            : "—"}
+                        </p>
+                      ) : (
+>>>>>>> 9cc2710c1fbe0adfb3cde23c8f9f64de00d99853
                         <select
                           required
                           value={form.id_dspstv}
@@ -453,13 +513,39 @@ export default function ConfigurarMapeo() {
                           <option value="">— Selecciona un dispositivo —</option>
                           {dispositivos.map((d) => (
                             <option key={d.id_dspstv} value={d.id_dspstv}>
+<<<<<<< HEAD
                               {d.nmbr} — {d.mrc} ({d.ubicacion_nombre})
+=======
+                              {d.nmbr} · {d.mrc}
+>>>>>>> 9cc2710c1fbe0adfb3cde23c8f9f64de00d99853
                             </option>
                           ))}
                         </select>
-                      </div>
-                    )}
+                      )}
 
+<<<<<<< HEAD
+=======
+                      {/* Marca y ubicación del dispositivo elegido, en modo
+                          solo lectura: ya no se tipean ni se eligen aparte. */}
+                      {dispositivoSeleccionado && (
+                        <div className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
+                          <span>
+                            Marca:{" "}
+                            <span className="font-medium text-gray-700 dark:text-gray-200">
+                              {dispositivoSeleccionado.mrc}
+                            </span>
+                          </span>
+                          <span>
+                            Ubicación:{" "}
+                            <span className="font-medium text-gray-700 dark:text-gray-200">
+                              {dispositivoSeleccionado.ubicacion_nombre}
+                            </span>
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+>>>>>>> 9cc2710c1fbe0adfb3cde23c8f9f64de00d99853
                     <div>
                       <label className={labelClase}>Tipo de trama *</label>
                       <select

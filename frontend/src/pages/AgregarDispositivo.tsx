@@ -14,6 +14,7 @@ import Topbar from "../components/layout/Topbar";
  *   CA3  tras guardar, vuelve al listado (HU10) con el nuevo dispositivo
  *   CA4  "Cancelar" descarta el formulario sin llamar al backend
  *
+<<<<<<< HEAD
  * lttd/lngtd NO son campos de este formulario: se copian de la Ubicación
  * elegida (ver routers/dispositivos.py, crear_dispositivo).
  *
@@ -21,6 +22,14 @@ import Topbar from "../components/layout/Topbar";
  * marca+sede y tenía que existir de antemano; ahora cuelga del
  * dispositivo mismo, así que se configura DESPUÉS de crearlo, desde el
  * listado de Dispositivos ("Configurar mapeo").
+=======
+ * lttd/lngtd NO son campos de este formulario: el backend los copia de la
+ * Ubicación elegida (ver routers/dispositivos.py, crear_dispositivo).
+ *
+ * DEC-09: el dispositivo ya no necesita un mapeo de formato previo para
+ * crearse. El mapeo (marca/tipo de trama/columnas) se configura después,
+ * en Mapeo de Formatos (HU06), y cuelga de este dispositivo.
+>>>>>>> 9cc2710c1fbe0adfb3cde23c8f9f64de00d99853
  */
 
 interface UbicacionOption {

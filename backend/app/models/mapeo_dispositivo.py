@@ -7,6 +7,7 @@ from app.database import Base
 
 
 class MapeoFormato(Base):
+<<<<<<< HEAD
     """HU 06: mini-ETL por DISPOSITIVO (antes era por marca de sensor,
     compartido entre todos los dispositivos de esa marca; se corrigió
     porque dos dispositivos de la misma marca en campo pueden traer sus
@@ -16,14 +17,47 @@ class MapeoFormato(Base):
     Un mismo dispositivo manda dos formatos distintos de archivo, con
     distinto número y significado de columnas, y por eso el formato se
     identifica por dispositivo + tipo de trama:
+=======
+    """HU 06: mini-ETL por DISPOSITIVO (DEC-09).
+
+    Un datalogger manda dos formatos distintos de archivo, con distinto
+    número y significado de columnas, y por eso el formato se identifica
+    por dispositivo + tipo de trama (PP-96):
+>>>>>>> 9cc2710c1fbe0adfb3cde23c8f9f64de00d99853
 
       tp_trm='H' -> archivos H_*.dat: datos periódicos (lectura real)
       tp_trm='E' -> archivos E_*.dat: estados y eventos del equipo
+
+    DEC-09: antes el formato colgaba de (id_sd, mrc). Dos dataloggers de
+    la misma marca en la misma sede, pero con sensores distintos
+    conectados, compartían mapeo y las lecturas del segundo se guardaban
+    bajo el parámetro equivocado, sin ningún error visible. Cada
+    datalogger tiene su propia carpeta FTP exclusiva (cnxn_ftp, HU05) y
+    un único dispositivo activo asociado (HU11), así que el dispositivo
+    es la unidad correcta para colgar el mapeo. La marca y la sede se
+    derivan del dispositivo (Dispositivo.mrc, Ubicacion.id_sd) en vez de
+    duplicarse acá.
     """
     __tablename__ = "mp_frmt"
     __table_args__ = (
         CheckConstraint("tp_trm IN ('H','E')", name="mpfrmt_tptrm_check"),
+<<<<<<< HEAD
         UniqueConstraint("id_dspstv", "tp_trm", name="uq_mpfrmt_dspstv_tptrm"),
+=======
+        # Un dispositivo puede tener como máximo un mapeo ACTIVO por tipo
+        # de trama (uno H y uno E). El parcial sobre estd deja convivir
+        # versiones anteriores desactivadas del mismo mapeo; se declara
+        # como Index con postgresql_where porque UniqueConstraint no
+        # admite condición.
+        Index(
+            "uq_mpfrmt_dspstv_tptrm_activo",
+            "id_dspstv",
+            "tp_trm",
+            unique=True,
+            postgresql_where=text("estd = 'Activo'"),
+        ),
+        Index("idx_mpfrmt_dspstv", "id_dspstv"),
+>>>>>>> 9cc2710c1fbe0adfb3cde23c8f9f64de00d99853
     )
 
     id_mp = Column(Integer, primary_key=True, autoincrement=True)
@@ -58,7 +92,12 @@ class MapeoColumna(Base):
 
 
 class Dispositivo(Base):
-    """HU 10-11, HU 18-19, HU 36."""
+    """HU 10-11, HU 18-19, HU 36.
+
+    DEC-09: ya no lleva id_mp. Un dispositivo puede tener 0, 1 o 2 mapeos
+    de formato (uno por tipo de trama), así que la relación no cabe en una
+    sola FK; vive del lado de MapeoFormato.id_dspstv.
+    """
     __tablename__ = "dspstv"
     __table_args__ = (
         CheckConstraint("lttd BETWEEN -90 AND 90", name="dspstv_lttd_check"),

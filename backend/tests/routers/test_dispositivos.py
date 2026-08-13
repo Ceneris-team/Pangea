@@ -98,30 +98,36 @@ def crear_conexion(db_session, sede, nombre="Datalogger Estacion A"):
     return conexion
 
 
-def crear_mapeo(db_session, sede, mrc="Campbell"):
-    """mp_frmt tiene UNIQUE (id_sd, mrc, tp_trm): se reusa el mapeo si ya
-    existe uno para esta sede+marca, en vez de reventar al crear varios
-    dispositivos de la misma marca en un mismo test."""
+def crear_mapeo(db_session, dispositivo, tp_trm="H"):
+    """DEC-09: el mapeo cuelga del dispositivo. El índice único parcial
+    (id_dspstv, tp_trm) WHERE estd='Activo' admite como máximo uno activo
+    por tipo de trama, así que se reusa si ya existe."""
     existente = (
         db_session.query(MapeoFormato)
-        .filter(MapeoFormato.id_sd == sede.id_sd, MapeoFormato.mrc == mrc, MapeoFormato.tp_trm == "H")
+        .filter(
+            MapeoFormato.id_dspstv == dispositivo.id_dspstv,
+            MapeoFormato.tp_trm == tp_trm,
+            MapeoFormato.estd == "Activo",
+        )
         .first()
     )
     if existente is not None:
         return existente
     mapeo = MapeoFormato(
-        id_sd=sede.id_sd, mrc=mrc, tp_trm="H", dlmtdr=",", fl_inc_dts=1, frmt_fch="%Y-%m-%d %H:%M:%S",
+        id_dspstv=dispositivo.id_dspstv, tp_trm=tp_trm, dlmtdr=",", fl_inc_dts=1,
+        frmt_fch="%Y-%m-%d %H:%M:%S",
     )
     db_session.add(mapeo)
     db_session.flush()
     return mapeo
 
 
-def crear_dispositivo(db_session, ubicacion, conexion, mapeo, nombre="CR1000-01", marca="Campbell", estado="Activo"):
+def crear_dispositivo(db_session, ubicacion, conexion, nombre="CR1000-01", marca="Campbell", estado="Activo"):
+    """DEC-09: ya no recibe un mapeo. El dispositivo existe primero y el
+    mapeo se le cuelga después (o nunca: es un estado válido)."""
     dispositivo = Dispositivo(
         id_ubccn=ubicacion.id_ubccn,
         id_cnxn=conexion.id_cnxn,
-        id_mp=mapeo.id_mp,
         nmbr=nombre,
         mrc=marca,
         lttd=0,
@@ -134,16 +140,18 @@ def crear_dispositivo(db_session, ubicacion, conexion, mapeo, nombre="CR1000-01"
 
 
 def preparar_dispositivo(db_session, sede, nombre="CR1000-01", marca="Campbell", estado="Activo", ubicacion=None):
-    """Cadena completa (Ubicacion + ConexionFTP + MapeoFormato + Dispositivo).
+    """Cadena completa (Ubicacion + ConexionFTP + Dispositivo).
 
     ubccn tiene UNIQUE (id_sd, nmbr): si no se pasa una ubicación explícita
     se crea una nueva con nombre derivado del dispositivo, para no chocar
     al llamar esta función varias veces en el mismo test/sede.
+
+    DEC-09: no crea mapeo. Los tests que lo necesiten llaman a crear_mapeo()
+    con el dispositivo ya creado.
     """
     ubicacion = ubicacion or crear_ubicacion(db_session, sede, nombre=f"Ubicacion de {nombre}")
     conexion = crear_conexion(db_session, sede, nombre=f"Conexion {nombre}")
-    mapeo = crear_mapeo(db_session, sede, mrc=marca)
-    return crear_dispositivo(db_session, ubicacion, conexion, mapeo, nombre=nombre, marca=marca, estado=estado)
+    return crear_dispositivo(db_session, ubicacion, conexion, nombre=nombre, marca=marca, estado=estado)
 
 
 # ---------------------------------------------------------------------------
@@ -379,14 +387,35 @@ def cuerpo_valido(ubicacion, conexion, **overrides):
 
 class TestCrearDispositivo:
     """CA1/CA2: formulario con Nombre, Marca, Modelo (opcional), Ubicación
-    y Conexión FTP. id_mp y lttd/lngtd se resuelven solos (ver decisiones
-    de diseño documentadas en routers/dispositivos.py)."""
+    y Conexión FTP. lttd/lngtd se copian de la Ubicación (ver decisiones de
+    diseño documentadas en routers/dispositivos.py).
+
+    DEC-09: el dispositivo ya no necesita un mapeo de formato previo; el
+    mapeo se configura después y cuelga de él (mp_frmt.id_dspstv)."""
+
+    def test_se_crea_sin_mapeo_de_formato_previo(self, client, db_session, tecnico_editor):
+        """DEC-09: antes esto devolvía 422 ("No existe un mapeo de formato
+        activo para la marca..."). Ahora es el flujo normal: primero el
+        dispositivo, después su mapeo."""
+        sede, _ = tecnico_editor
+        ubicacion = crear_ubicacion(db_session, sede)
+        conexion = crear_conexion(db_session, sede)
+
+        resp = client.post("/dispositivos", json=cuerpo_valido(ubicacion, conexion))
+
+        assert resp.status_code == 201
+        creado = db_session.query(Dispositivo).filter(
+            Dispositivo.id_dspstv == resp.json()["dispositivo"]["id_dspstv"]
+        ).one()
+        # Sin mapeos todavía: es un estado válido.
+        assert db_session.query(MapeoFormato).filter(
+            MapeoFormato.id_dspstv == creado.id_dspstv
+        ).count() == 0
 
     def test_crear_devuelve_201_y_mensaje(self, client, db_session, tecnico_editor):
         sede, _ = tecnico_editor
         ubicacion = crear_ubicacion(db_session, sede)
         conexion = crear_conexion(db_session, sede)
-        crear_mapeo(db_session, sede, mrc="Campbell")
 
         resp = client.post("/dispositivos", json=cuerpo_valido(ubicacion, conexion))
 
@@ -406,7 +435,6 @@ class TestCrearDispositivo:
         sede, _ = tecnico_editor
         ubicacion = crear_ubicacion(db_session, sede)
         conexion = crear_conexion(db_session, sede)
-        crear_mapeo(db_session, sede, mrc="Campbell")
 
         resp = client.post("/dispositivos", json=cuerpo_valido(ubicacion, conexion))
         assert resp.json()["dispositivo"]["estd"] == "Activo"
@@ -415,7 +443,6 @@ class TestCrearDispositivo:
         sede, _ = tecnico_editor
         ubicacion = crear_ubicacion(db_session, sede)
         conexion = crear_conexion(db_session, sede)
-        crear_mapeo(db_session, sede, mrc="Campbell")
 
         resp = client.post("/dispositivos", json=cuerpo_valido(ubicacion, conexion))
         assert resp.status_code == 201
@@ -425,7 +452,6 @@ class TestCrearDispositivo:
         sede, _ = tecnico_editor
         ubicacion = crear_ubicacion(db_session, sede)
         conexion = crear_conexion(db_session, sede)
-        crear_mapeo(db_session, sede, mrc="Campbell")
 
         resp = client.post("/dispositivos", json=cuerpo_valido(ubicacion, conexion, mdl="CR1000X"))
         assert resp.json()["dispositivo"]["mdl"] == "CR1000X"
@@ -435,7 +461,6 @@ class TestCrearDispositivo:
         sede, _ = tecnico_editor
         ubicacion = crear_ubicacion(db_session, sede)
         conexion = crear_conexion(db_session, sede)
-        crear_mapeo(db_session, sede, mrc="Campbell")
 
         cuerpo = cuerpo_valido(ubicacion, conexion)
         del cuerpo[campo]
@@ -453,7 +478,6 @@ class TestCrearDispositivo:
         db_session.add(ubicacion)
         db_session.flush()
         conexion = crear_conexion(db_session, sede)
-        crear_mapeo(db_session, sede, mrc="Campbell")
 
         resp = client.post("/dispositivos", json=cuerpo_valido(ubicacion, conexion))
         assert resp.status_code == 201
@@ -467,7 +491,6 @@ class TestCrearDispositivo:
     def test_ubicacion_inexistente_devuelve_422(self, client, db_session, tecnico_editor):
         sede, _ = tecnico_editor
         conexion = crear_conexion(db_session, sede)
-        crear_mapeo(db_session, sede, mrc="Campbell")
 
         cuerpo = cuerpo_valido(crear_ubicacion(db_session, sede), conexion, id_ubccn=999999)
         assert client.post("/dispositivos", json=cuerpo).status_code == 422
@@ -478,7 +501,6 @@ class TestCrearDispositivo:
         ubicacion.estd = "Inactiva"
         db_session.flush()
         conexion = crear_conexion(db_session, sede)
-        crear_mapeo(db_session, sede, mrc="Campbell")
 
         resp = client.post("/dispositivos", json=cuerpo_valido(ubicacion, conexion))
         assert resp.status_code == 422
@@ -486,29 +508,15 @@ class TestCrearDispositivo:
     def test_conexion_inexistente_devuelve_422(self, client, db_session, tecnico_editor):
         sede, _ = tecnico_editor
         ubicacion = crear_ubicacion(db_session, sede)
-        crear_mapeo(db_session, sede, mrc="Campbell")
 
         cuerpo = cuerpo_valido(ubicacion, crear_conexion(db_session, sede), id_cnxn=999999)
         assert client.post("/dispositivos", json=cuerpo).status_code == 422
-
-    def test_sin_mapeo_de_formato_activo_devuelve_422(self, client, db_session, tecnico_editor):
-        """No se crea ningún MapeoFormato para esta marca: HU06 no se
-        configuró todavía y el POST debe fallar con causa clara, no un 500
-        por FK nula al insertar id_mp."""
-        sede, _ = tecnico_editor
-        ubicacion = crear_ubicacion(db_session, sede)
-        conexion = crear_conexion(db_session, sede)
-
-        resp = client.post("/dispositivos", json=cuerpo_valido(ubicacion, conexion, mrc="MarcaSinMapeo"))
-        assert resp.status_code == 422
-        assert "mapeo" in resp.json()["detail"].lower()
 
     def test_conexion_con_dispositivo_activo_devuelve_409(self, client, db_session, tecnico_editor):
         sede, _ = tecnico_editor
         ubicacion = crear_ubicacion(db_session, sede)
         conexion = crear_conexion(db_session, sede)
-        mapeo = crear_mapeo(db_session, sede, mrc="Campbell")
-        crear_dispositivo(db_session, ubicacion, conexion, mapeo, nombre="Ya-Activo")
+        crear_dispositivo(db_session, ubicacion, conexion, nombre="Ya-Activo")
 
         resp = client.post("/dispositivos", json=cuerpo_valido(ubicacion, conexion, nmbr="Otro-Dispositivo"))
         assert resp.status_code == 409
@@ -520,8 +528,7 @@ class TestCrearDispositivo:
         sede, _ = tecnico_editor
         ubicacion = crear_ubicacion(db_session, sede)
         conexion = crear_conexion(db_session, sede)
-        mapeo = crear_mapeo(db_session, sede, mrc="Campbell")
-        crear_dispositivo(db_session, ubicacion, conexion, mapeo, nombre="Inactivo-Viejo", estado="Inactivo")
+        crear_dispositivo(db_session, ubicacion, conexion, nombre="Inactivo-Viejo", estado="Inactivo")
 
         resp = client.post("/dispositivos", json=cuerpo_valido(ubicacion, conexion, nmbr="Reemplazo"))
         assert resp.status_code == 201
@@ -531,7 +538,6 @@ class TestCrearDispositivo:
         id_ubccn de una sede ajena."""
         sede, _ = tecnico_editor
         conexion = crear_conexion(db_session, sede)
-        crear_mapeo(db_session, sede, mrc="Campbell")
 
         otra_sede = fabrica.sede()
         ubicacion_ajena = crear_ubicacion(db_session, otra_sede, nombre="Ubicacion de otra sede")
@@ -548,7 +554,6 @@ class TestCrearDispositivo:
         agregar_permiso(db_session, usuario, sede, "Dispositivos", "Lectura", rol)
         ubicacion = crear_ubicacion(db_session, sede)
         conexion = crear_conexion(db_session, sede)
-        crear_mapeo(db_session, sede, mrc="Campbell")
 
         app.dependency_overrides[get_current_user] = lambda: usuario_jwt(
             usuario, rol.nmbr, sede_id=sede.id_sd
@@ -563,7 +568,6 @@ class TestCrearDispositivo:
         usuario = fabrica.usuario(rol=rol)
         ubicacion = crear_ubicacion(db_session, sede)
         conexion = crear_conexion(db_session, sede)
-        crear_mapeo(db_session, sede, mrc="Campbell")
 
         app.dependency_overrides[get_current_user] = lambda: usuario_jwt(
             usuario, rol.nmbr, sede_id=sede.id_sd

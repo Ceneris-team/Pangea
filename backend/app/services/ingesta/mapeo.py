@@ -73,10 +73,20 @@ def resolver_formato(
 ) -> FormatoResuelto:
     """Resuelve el formato y el mapeo real para un archivo dado.
 
+<<<<<<< HEAD
     El dispositivo ya se resolvió antes de llamar esto (ver
     app.tasks.ingesta): el mapeo cuelga directamente de él, no de su
     sede+marca, porque dos dispositivos de la misma marca pueden traer
     columnas en distinto orden.
+=======
+    DEC-09: el formato se busca por DISPOSITIVO + tipo de trama, no por
+    sede + marca. Dos dataloggers de la misma marca en la misma sede
+    pueden tener sensores distintos conectados; con el criterio anterior
+    compartían mapeo y las lecturas del segundo se guardaban bajo el
+    parámetro equivocado sin ningún error visible. El dispositivo ya viene
+    resuelto por resolver_dispositivo() a partir de la conexión FTP
+    entrante, que es exclusiva de un solo datalogger físico.
+>>>>>>> 9cc2710c1fbe0adfb3cde23c8f9f64de00d99853
 
     Levanta MapeoNoEncontradoError si el archivo no tiene un prefijo
     reconocible o si no hay un mp_frmt activo para ese dispositivo: sin
@@ -103,8 +113,13 @@ def resolver_formato(
     if formato is None:
         raise MapeoNoEncontradoError(
             f"No hay un formato activo (mp_frmt) para el dispositivo "
+<<<<<<< HEAD
             f"id={id_dspstv}, tipo de trama='{tipo_trama}'. Cárgalo antes de "
             f"procesar archivos de este datalogger."
+=======
+            f"id={id_dspstv} y el tipo de trama='{tipo_trama}'. Cárgalo antes "
+            f"de procesar archivos de este datalogger."
+>>>>>>> 9cc2710c1fbe0adfb3cde23c8f9f64de00d99853
         )
 
     config = ConfiguracionParseo(

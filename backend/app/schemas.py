@@ -180,9 +180,12 @@ class DispositivoListItem(BaseModel):
 
 class DispositivoCrear(BaseModel):
     """HU11 CA1: campos del formulario (Nombre, Marca, Modelo opcional,
-    Ubicación, Conexión FTP). id_mp (mapeo de formato) y lttd/lngtd NO son
-    campos del formulario: el router los resuelve/copia automáticamente
-    (ver docstring de crear_dispositivo en routers/dispositivos.py)."""
+    Ubicación, Conexión FTP). lttd/lngtd NO son campos del formulario: se
+    copian de la Ubicación elegida (ver crear_dispositivo en
+    routers/dispositivos.py).
+
+    DEC-09: el dispositivo ya no necesita un mapeo de formato previo para
+    crearse; el mapeo se configura después, apuntando a este dispositivo."""
 
     nmbr: str = Field(min_length=1, max_length=150)
     mrc: str = Field(min_length=1, max_length=100)
@@ -387,7 +390,15 @@ class MapeoFormatoBase(BaseModel):
 
 
 class MapeoFormatoCrear(MapeoFormatoBase):
+<<<<<<< HEAD
     id_dspstv: int  # el dispositivo al que pertenece este mapeo
+=======
+    """DEC-09: el mapeo se cuelga de un DISPOSITIVO concreto, no de
+    sede+marca. La marca y la sede se derivan del dispositivo elegido, así
+    que ya no son campos del formulario."""
+
+    id_dspstv: int
+>>>>>>> 9cc2710c1fbe0adfb3cde23c8f9f64de00d99853
     columnas: list[MapeoColumnaItem] = Field(default_factory=list)
 
 
@@ -396,8 +407,14 @@ class MapeoFormatoActualizar(BaseModel):
     actualiza. Si `columnas` viene, reemplaza la tabla de asignación
     completa; si se omite, las mp_clmn actuales se conservan.
 
+<<<<<<< HEAD
     id_dspstv NO es editable: un mapeo no cambia de dueño, se crea otro
     para el nuevo dispositivo."""
+=======
+    DEC-09: `mrc` ya no se edita acá (es del dispositivo). Mover un mapeo
+    a otro dispositivo tampoco se permite: se crea uno nuevo en el
+    dispositivo correcto."""
+>>>>>>> 9cc2710c1fbe0adfb3cde23c8f9f64de00d99853
 
     tp_trm: str | None = None
     dlmtdr: str | None = None
@@ -408,14 +425,27 @@ class MapeoFormatoActualizar(BaseModel):
 
 
 class MapeoFormatoListItem(BaseModel):
+<<<<<<< HEAD
     """CA5: el listado muestra el mapeo asociado a su dispositivo."""
+=======
+    """CA5: el listado muestra el mapeo asociado a su dispositivo.
+
+    DEC-09: id_sd y mrc ya no son columnas de mp_frmt; se derivan por JOIN
+    (mp_frmt -> dspstv -> ubccn) y se exponen igual para que la tabla del
+    frontend siga mostrando Marca y Sede."""
+>>>>>>> 9cc2710c1fbe0adfb3cde23c8f9f64de00d99853
 
     model_config = ConfigDict(from_attributes=True)
 
     id_mp: int
     id_dspstv: int
     dispositivo_nombre: str
+<<<<<<< HEAD
     dispositivo_marca: str
+=======
+    id_sd: int
+    mrc: str
+>>>>>>> 9cc2710c1fbe0adfb3cde23c8f9f64de00d99853
     tp_trm: str
     dlmtdr: str
     fl_inc_dts: int

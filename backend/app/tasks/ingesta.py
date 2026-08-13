@@ -62,9 +62,9 @@ def procesar_archivo_dat(self, id_archv: int) -> dict:
 
     Pipeline PP-96..100 (HU06): resuelve el formato -> descarga -> parsea
     -> estandariza -> valida -> persiste en tlmtr. El formato y el mapeo
-    columna->parámetro salen de mp_frmt/mp_clmn/prmtr según la sede, la
-    marca del datalogger y el tipo de trama (prefijo H_/E_ del nombre del
-    archivo); ver app.services.ingesta.mapeo.
+    columna->parámetro salen de mp_frmt/mp_clmn/prmtr según el DISPOSITIVO
+    (DEC-09) y el tipo de trama (prefijo H_/E_ del nombre del archivo);
+    ver app.services.ingesta.mapeo.
 
     Reintentos (CA2): hasta 5 intentos con backoff exponencial + jitter
     (tope 600s entre intentos), pero solo ante errores transitorios
@@ -98,6 +98,7 @@ def procesar_archivo_dat(self, id_archv: int) -> dict:
         except DispositivoNoResueltoError as exc:
             raise ErrorDatosNoRecuperable(str(exc)) from exc
 
+<<<<<<< HEAD
         # El formato aplicable sale de mp_frmt según el dispositivo (ya
         # resuelto arriba) y el tipo de trama, que se deduce del prefijo
         # del nombre del archivo (H_ = datos periódicos, E_ = eventos). Se
@@ -107,6 +108,17 @@ def procesar_archivo_dat(self, id_archv: int) -> dict:
             formato = resolver_formato(
                 db, dispositivo.id_dspstv, archivo.nmbr_archv,
             )
+=======
+        # DEC-09 (PP-96): el formato aplicable sale de mp_frmt según el
+        # DISPOSITIVO ya resuelto y el tipo de trama, que se deduce del
+        # prefijo del nombre del archivo (H_ = datos periódicos,
+        # E_ = estados/eventos). Antes se resolvía por sede+marca, lo que
+        # hacía que dos dataloggers de la misma marca en la misma sede
+        # compartieran mapeo. Se resuelve ANTES de descargar: si no hay
+        # mapeo cargado, no tiene sentido bajar el archivo.
+        try:
+            formato = resolver_formato(db, dispositivo.id_dspstv, archivo.nmbr_archv)
+>>>>>>> 9cc2710c1fbe0adfb3cde23c8f9f64de00d99853
         except MapeoNoEncontradoError as exc:
             raise ErrorDatosNoRecuperable(str(exc)) from exc
 

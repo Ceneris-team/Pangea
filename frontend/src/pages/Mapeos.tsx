@@ -8,13 +8,25 @@ import Topbar from "../components/layout/Topbar";
 /**
  * HU06 CA5 - "VER MAPEOS": listado donde el mapeo recién creado aparece
  * asociado a su dispositivo.
+<<<<<<< HEAD
+=======
+ *
+ * DEC-09: el mapeo se identifica por dispositivo + tipo de trama, no por
+ * sede + marca. Marca y sede ahora vienen derivadas del JOIN del backend
+ * (mp_frmt -> dspstv -> ubccn), no de columnas propias de mp_frmt.
+>>>>>>> 9cc2710c1fbe0adfb3cde23c8f9f64de00d99853
  */
 
 interface MapeoListItem {
   id_mp: number;
   id_dspstv: number;
   dispositivo_nombre: string;
+<<<<<<< HEAD
   dispositivo_marca: string;
+=======
+  id_sd: number;
+  mrc: string;
+>>>>>>> 9cc2710c1fbe0adfb3cde23c8f9f64de00d99853
   tp_trm: string;
   dlmtdr: string;
   fl_inc_dts: number;
@@ -172,9 +184,13 @@ export default function Mapeos() {
                     {!loading && itemsFiltrados.length === 0 && (
                       <tr>
                         <td colSpan={8} className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
+<<<<<<< HEAD
                           {data?.items.length
                             ? "Ningún mapeo coincide con la búsqueda."
                             : 'Todavía no hay mapeos registrados. Crea el primero con "Nuevo mapeo".'}
+=======
+                          Todavía no hay mapeos registrados. Crea el primero con "Nuevo mapeo".
+>>>>>>> 9cc2710c1fbe0adfb3cde23c8f9f64de00d99853
                         </td>
                       </tr>
                     )}
@@ -185,10 +201,15 @@ export default function Mapeos() {
                           key={m.id_mp}
                           className="bg-white dark:bg-[#2d3748] border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
                         >
+<<<<<<< HEAD
                           <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">
                             {m.dispositivo_nombre}
                           </td>
                           <td className="px-6 py-4">{m.dispositivo_marca}</td>
+=======
+                          <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">{m.dispositivo_nombre}</td>
+                          <td className="px-6 py-4">{m.mrc}</td>
+>>>>>>> 9cc2710c1fbe0adfb3cde23c8f9f64de00d99853
                           <td className="px-6 py-4">{ETIQUETA_TRAMA[m.tp_trm] ?? m.tp_trm}</td>
                           <td className="px-6 py-4">{ETIQUETA_DELIMITADOR[m.dlmtdr] ?? m.dlmtdr}</td>
                           <td className="px-6 py-4 font-mono text-xs">{m.frmt_fch}</td>

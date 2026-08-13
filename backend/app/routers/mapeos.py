@@ -36,8 +36,11 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import Dispositivo, MapeoColumna, MapeoFormato, Parametro, Sede, Ubicacion
+<<<<<<< HEAD
 from app.ingesta.ftp_receptor import descargar_archivo_dat, listar_archivos_dat
 from app.models import ConexionFTP, Dispositivo, MapeoColumna, MapeoFormato, Parametro, Sede
+=======
+>>>>>>> 9cc2710c1fbe0adfb3cde23c8f9f64de00d99853
 from app.security.permisos import (
     require_permiso, require_alguno_permiso, verificar_sede, LECTURA, EDICION,
 )
@@ -132,6 +135,7 @@ def _validar_tipo_trama(tp_trm: str) -> str:
     return tp_trm
 
 
+<<<<<<< HEAD
 def _resolver_dispositivo(db: Session, id_dspstv: int) -> Dispositivo:
     dispositivo = db.query(Dispositivo).filter(Dispositivo.id_dspstv == id_dspstv).first()
     if dispositivo is None:
@@ -150,6 +154,25 @@ def _sede_de_dispositivo(db: Session, dispositivo: Dispositivo) -> int:
             detail=f"El dispositivo {dispositivo.id_dspstv} apunta a una ubicación inexistente",
         )
     return ubicacion.id_sd
+=======
+def _resolver_dispositivo(db: Session, id_dspstv: int) -> tuple[Dispositivo, Ubicacion]:
+    """DEC-09: el mapeo cuelga de un dispositivo. Devuelve el dispositivo y
+    su ubicación (de donde sale la sede para verificar_sede, mismo patrón
+    que POST /dispositivos en HU11)."""
+    dispositivo = db.query(Dispositivo).filter(Dispositivo.id_dspstv == id_dspstv).first()
+    if dispositivo is None:
+        raise HTTPException(status_code=422, detail=f"El dispositivo {id_dspstv} no existe")
+
+    ubicacion = db.query(Ubicacion).filter(Ubicacion.id_ubccn == dispositivo.id_ubccn).first()
+    if ubicacion is None:
+        # El FK lo impide en la práctica; si pasara, es un dato roto y no
+        # se puede decidir la sede a la que pertenece el mapeo.
+        raise HTTPException(
+            status_code=422,
+            detail=f"El dispositivo {id_dspstv} apunta a una ubicación inexistente",
+        )
+    return dispositivo, ubicacion
+>>>>>>> 9cc2710c1fbe0adfb3cde23c8f9f64de00d99853
 
 
 def _validar_parametros_existen(db: Session, columnas) -> None:
@@ -187,6 +210,7 @@ def _contar_columnas(db: Session, id_mp: int) -> int:
 
 
 def _a_list_item(
+<<<<<<< HEAD
     formato: MapeoFormato, total_columnas: int, dispositivo: Dispositivo,
 ) -> MapeoFormatoListItem:
     return MapeoFormatoListItem(
@@ -194,6 +218,22 @@ def _a_list_item(
         id_dspstv=formato.id_dspstv,
         dispositivo_nombre=dispositivo.nmbr,
         dispositivo_marca=dispositivo.mrc,
+=======
+    formato: MapeoFormato,
+    dispositivo: Dispositivo,
+    ubicacion: Ubicacion,
+    total_columnas: int,
+) -> MapeoFormatoListItem:
+    """DEC-09: la marca y la sede ya no viven en mp_frmt; se derivan del
+    dispositivo y de su ubicación, y se siguen exponiendo igual para no
+    romper la tabla del frontend."""
+    return MapeoFormatoListItem(
+        id_mp=formato.id_mp,
+        id_dspstv=dispositivo.id_dspstv,
+        dispositivo_nombre=dispositivo.nmbr,
+        id_sd=ubicacion.id_sd,
+        mrc=dispositivo.mrc,
+>>>>>>> 9cc2710c1fbe0adfb3cde23c8f9f64de00d99853
         tp_trm=formato.tp_trm,
         dlmtdr=formato.dlmtdr,
         fl_inc_dts=formato.fl_inc_dts,
@@ -201,6 +241,25 @@ def _a_list_item(
         estd=formato.estd,
         total_columnas=total_columnas,
     )
+
+
+def _cargar_contexto(db: Session, formato: MapeoFormato) -> tuple[Dispositivo, Ubicacion]:
+    """Dispositivo + Ubicación de un mapeo ya cargado, para poder armar su
+    list item (marca, sede) y verificar la sede."""
+    dispositivo = (
+        db.query(Dispositivo).filter(Dispositivo.id_dspstv == formato.id_dspstv).first()
+    )
+    ubicacion = (
+        db.query(Ubicacion).filter(Ubicacion.id_ubccn == dispositivo.id_ubccn).first()
+        if dispositivo is not None
+        else None
+    )
+    if dispositivo is None or ubicacion is None:
+        raise HTTPException(
+            status_code=422,
+            detail=f"El mapeo {formato.id_mp} apunta a un dispositivo/ubicación inexistente",
+        )
+    return dispositivo, ubicacion
 
 
 def _columnas_detalle(db: Session, id_mp: int) -> list[MapeoColumnaDetalle]:
@@ -282,12 +341,18 @@ def listar_sedes(
 
 @router.get("", response_model=dict)
 def listar_mapeos(
+<<<<<<< HEAD
     id_dspstv: int | None = Query(default=None, description="Filtrar por dispositivo"),
+=======
+    marca: str | None = Query(default=None, description="Filtrar por marca del dispositivo, exacto"),
+>>>>>>> 9cc2710c1fbe0adfb3cde23c8f9f64de00d99853
     id_sd: int | None = Query(default=None, description="Filtrar por sede"),
+    id_dspstv: int | None = Query(default=None, description="Filtrar por dispositivo"),
     db: Session = Depends(get_db),
     usuario: dict = Depends(require_permiso("Ingesta", LECTURA)),
 ):
     """CA5: 'VER MAPEOS' muestra el listado, donde el registro nuevo
+<<<<<<< HEAD
     aparece asociado a su dispositivo."""
     query = db.query(MapeoFormato, Dispositivo).join(
         Dispositivo, Dispositivo.id_dspstv == MapeoFormato.id_dspstv
@@ -295,11 +360,23 @@ def listar_mapeos(
 
     if id_dspstv is not None:
         query = query.filter(MapeoFormato.id_dspstv == id_dspstv)
+=======
+    aparece asociado a su dispositivo.
+
+    DEC-09: la marca y la sede salen del JOIN mp_frmt -> dspstv -> ubccn,
+    mismo patrón que GET /dispositivos usa para aislar por sede."""
+    query = (
+        db.query(MapeoFormato, Dispositivo, Ubicacion)
+        .join(Dispositivo, Dispositivo.id_dspstv == MapeoFormato.id_dspstv)
+        .join(Ubicacion, Ubicacion.id_ubccn == Dispositivo.id_ubccn)
+    )
+>>>>>>> 9cc2710c1fbe0adfb3cde23c8f9f64de00d99853
 
     # Aislamiento por sede (HT-09 CA3): un usuario 'por_sede' solo ve los
     # mapeos de dispositivos de su sede, aunque pida otra explícitamente.
     # La sede sale de la ubicación del dispositivo (ver _sede_de_dispositivo).
     if usuario.get("scope") == "por_sede":
+<<<<<<< HEAD
         query = query.join(Ubicacion, Ubicacion.id_ubccn == Dispositivo.id_ubccn).filter(
             Ubicacion.id_sd == usuario["sede_id"]
         )
@@ -312,6 +389,21 @@ def listar_mapeos(
     items = [
         _a_list_item(formato, _contar_columnas(db, formato.id_mp), dispositivo)
         for formato, dispositivo in filas
+=======
+        query = query.filter(Ubicacion.id_sd == usuario["sede_id"])
+    elif id_sd is not None:
+        query = query.filter(Ubicacion.id_sd == id_sd)
+
+    if marca:
+        query = query.filter(Dispositivo.mrc == marca)
+    if id_dspstv is not None:
+        query = query.filter(MapeoFormato.id_dspstv == id_dspstv)
+
+    filas = query.order_by(Dispositivo.nmbr, MapeoFormato.tp_trm).all()
+    items = [
+        _a_list_item(formato, dispositivo, ubicacion, _contar_columnas(db, formato.id_mp))
+        for formato, dispositivo, ubicacion in filas
+>>>>>>> 9cc2710c1fbe0adfb3cde23c8f9f64de00d99853
     ]
     return {"total": len(items), "items": items}
 
@@ -328,10 +420,17 @@ def obtener_mapeo(
     if formato is None:
         raise HTTPException(status_code=404, detail="Mapeo no encontrado")
 
+<<<<<<< HEAD
     dispositivo = _resolver_dispositivo(db, formato.id_dspstv)
     verificar_sede(usuario, _sede_de_dispositivo(db, dispositivo), modulo="Ingesta", accion=LECTURA)
 
     base = _a_list_item(formato, _contar_columnas(db, formato.id_mp), dispositivo)
+=======
+    dispositivo, ubicacion = _cargar_contexto(db, formato)
+    verificar_sede(usuario, ubicacion.id_sd, modulo="Ingesta", accion=LECTURA)
+
+    base = _a_list_item(formato, dispositivo, ubicacion, _contar_columnas(db, formato.id_mp))
+>>>>>>> 9cc2710c1fbe0adfb3cde23c8f9f64de00d99853
     return MapeoFormatoDetalle(
         **base.model_dump(),
         columnas=_columnas_detalle(db, formato.id_mp),
@@ -348,11 +447,42 @@ def crear_mapeo(
     devuelve 'Mapeo guardado correctamente'."""
     delimitador = _validar_delimitador(body.dlmtdr)
     tipo_trama = _validar_tipo_trama(body.tp_trm)
+<<<<<<< HEAD
     dispositivo = _resolver_dispositivo(db, body.id_dspstv)
     verificar_sede(usuario, _sede_de_dispositivo(db, dispositivo), modulo="Ingesta", accion=EDICION)
+=======
+
+    # DEC-09: la sede sale del dispositivo (dspstv -> ubccn), mismo patrón
+    # que POST /dispositivos (HU11): un usuario 'por_sede' no puede colgar
+    # un mapeo de un dispositivo de otra sede aunque conozca su id.
+    dispositivo, ubicacion = _resolver_dispositivo(db, body.id_dspstv)
+    verificar_sede(usuario, ubicacion.id_sd, modulo="Ingesta", accion=EDICION)
+>>>>>>> 9cc2710c1fbe0adfb3cde23c8f9f64de00d99853
 
     _validar_indices_unicos(body.columnas)
     _validar_parametros_existen(db, body.columnas)
+
+    # El índice único parcial (id_dspstv, tp_trm) WHERE estd='Activo' ya lo
+    # garantiza; se chequea antes para devolver el 409 con el mensaje de
+    # negocio en vez de un IntegrityError crudo (mismo criterio que el 409
+    # de nombre duplicado en HU08 y el de conexión ocupada en HU11).
+    duplicado = (
+        db.query(MapeoFormato)
+        .filter(
+            MapeoFormato.id_dspstv == dispositivo.id_dspstv,
+            MapeoFormato.tp_trm == tipo_trama,
+            MapeoFormato.estd == "Activo",
+        )
+        .first()
+    )
+    if duplicado is not None:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"El dispositivo '{dispositivo.nmbr}' ya tiene un mapeo activo "
+                f"para el tipo de trama '{tipo_trama}'"
+            ),
+        )
 
     formato = MapeoFormato(
         id_dspstv=dispositivo.id_dspstv,
@@ -370,7 +500,14 @@ def crear_mapeo(
         db.rollback()
         raise HTTPException(
             status_code=409,
+<<<<<<< HEAD
             detail=f"El dispositivo '{dispositivo.nmbr}' ya tiene un mapeo para el tipo de trama '{tipo_trama}'",
+=======
+            detail=(
+                f"El dispositivo '{dispositivo.nmbr}' ya tiene un mapeo activo "
+                f"para el tipo de trama '{tipo_trama}'"
+            ),
+>>>>>>> 9cc2710c1fbe0adfb3cde23c8f9f64de00d99853
         )
 
     for columna in body.columnas:
@@ -388,13 +525,26 @@ def crear_mapeo(
         db.rollback()
         raise HTTPException(
             status_code=409,
+<<<<<<< HEAD
             detail=f"El dispositivo '{dispositivo.nmbr}' ya tiene un mapeo para el tipo de trama '{tipo_trama}'",
+=======
+            detail=(
+                f"El dispositivo '{dispositivo.nmbr}' ya tiene un mapeo activo "
+                f"para el tipo de trama '{tipo_trama}'"
+            ),
+>>>>>>> 9cc2710c1fbe0adfb3cde23c8f9f64de00d99853
         )
     db.refresh(formato)
 
     return {
         "mensaje": "Mapeo guardado correctamente",
+<<<<<<< HEAD
         "mapeo": _a_list_item(formato, _contar_columnas(db, formato.id_mp), dispositivo),
+=======
+        "mapeo": _a_list_item(
+            formato, dispositivo, ubicacion, _contar_columnas(db, formato.id_mp)
+        ),
+>>>>>>> 9cc2710c1fbe0adfb3cde23c8f9f64de00d99853
     }
 
 
@@ -411,8 +561,13 @@ def actualizar_mapeo(
     if formato is None:
         raise HTTPException(status_code=404, detail="Mapeo no encontrado")
 
+<<<<<<< HEAD
     dispositivo = _resolver_dispositivo(db, formato.id_dspstv)
     verificar_sede(usuario, _sede_de_dispositivo(db, dispositivo), modulo="Ingesta", accion=EDICION)
+=======
+    dispositivo, ubicacion = _cargar_contexto(db, formato)
+    verificar_sede(usuario, ubicacion.id_sd, modulo="Ingesta", accion=EDICION)
+>>>>>>> 9cc2710c1fbe0adfb3cde23c8f9f64de00d99853
 
     if body.dlmtdr is not None:
         formato.dlmtdr = _validar_delimitador(body.dlmtdr)
@@ -448,17 +603,73 @@ def actualizar_mapeo(
         db.rollback()
         raise HTTPException(
             status_code=409,
+<<<<<<< HEAD
             detail=f"El dispositivo '{dispositivo.nmbr}' ya tiene un mapeo para ese tipo de trama",
+=======
+            detail=(
+                f"El dispositivo '{dispositivo.nmbr}' ya tiene un mapeo activo "
+                f"para ese tipo de trama"
+            ),
+>>>>>>> 9cc2710c1fbe0adfb3cde23c8f9f64de00d99853
         )
     db.refresh(formato)
 
     return {
         "mensaje": "Mapeo actualizado correctamente",
+<<<<<<< HEAD
         "mapeo": _a_list_item(formato, _contar_columnas(db, formato.id_mp), dispositivo),
     }
 
 
 def _normalizar_saltos_de_linea(contenido: str) -> str:
+=======
+        "mapeo": _a_list_item(
+            formato, dispositivo, ubicacion, _contar_columnas(db, formato.id_mp)
+        ),
+    }
+
+
+@router.post("/vista-previa", response_model=VistaPreviaResponse)
+async def vista_previa(
+    archivo: UploadFile = File(..., description="Archivo .dat de muestra"),
+    dlmtdr: str = Form(default=","),
+    fl_inc_dts: int = Form(default=1),
+    frmt_fch: str = Form(default="YYYY-MM-DD HH:mm:ss"),
+    columna_fecha: str = Form(default="Fecha"),
+    asignaciones: str = Form(
+        default="",
+        description='Asignación columna->parámetro como "indice:id_prmtr" separadas por coma, p. ej. "0:3,2:7"',
+    ),
+    id_dspstv: int | None = Form(
+        default=None,
+        description=(
+            "Dispositivo al que se le está configurando el mapeo (DEC-09). "
+            "La vista previa no lo necesita -interpreta el archivo con los "
+            "valores del formulario en curso-, se acepta para que el request "
+            "sea consistente con el resto del formulario."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    _usuario: dict = Depends(require_permiso("Ingesta", LECTURA)),
+):
+    """CA2: interpreta el archivo de muestra con la configuración en
+    edición y devuelve las primeras 10 filas, indicando qué parámetro
+    estándar quedó asignado a cada columna.
+
+    El archivo de muestra es TEMPORAL: se lee en memoria y NO se persiste
+    en base de datos ni en disco (regla explícita de la HU). Por eso este
+    endpoint solo requiere permiso de LECTURA: no escribe nada.
+    """
+    delimitador = _validar_delimitador(dlmtdr)
+
+    contenido_bytes = await archivo.read()
+    try:
+        contenido = contenido_bytes.decode("utf-8")
+    except UnicodeDecodeError:
+        # Los .dat de campo a veces vienen en latin-1 (grados, ñ).
+        contenido = contenido_bytes.decode("latin-1")
+
+>>>>>>> 9cc2710c1fbe0adfb3cde23c8f9f64de00d99853
     # parsear_dat() usa csv.reader sobre un io.StringIO, que NO hace la
     # traducción universal de saltos de línea que sí hace abrir un archivo
     # en modo texto. Los .dat reales de datalogger (Campbell Scientific,
