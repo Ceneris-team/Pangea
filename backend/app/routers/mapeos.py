@@ -23,19 +23,23 @@ corresponde a la configuración de la ingesta; no existe un módulo
 'Mapeos'). Lectura para consultar, Edición para crear/actualizar.
 """
 import csv
+import ftplib
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import MapeoColumna, MapeoFormato, Parametro, Sede
+from app.ingesta.ftp_receptor import descargar_archivo_dat, listar_archivos_dat
+from app.models import ConexionFTP, Dispositivo, MapeoColumna, MapeoFormato, Parametro, Sede
 from app.security.permisos import (
     require_permiso, require_alguno_permiso, verificar_sede, LECTURA, EDICION,
 )
 from app.services.ingesta.parser import ConfiguracionParseo, parsear_dat
 from app.schemas import (
+    ArchivoFtpDisponible,
     ColumnaVistaPrevia,
+    DispositivoParaMapeo,
     FilaVistaPrevia,
     MapeoColumnaDetalle,
     MapeoFormatoActualizar,
@@ -51,6 +55,7 @@ from app.schemas import (
 router = APIRouter(prefix="/mapeos", tags=["Mapeos de formato"])
 router_parametros = APIRouter(prefix="/parametros", tags=["Mapeos de formato"])
 router_sedes = APIRouter(prefix="/sedes", tags=["Mapeos de formato"])
+router_dispositivos_mapeo = APIRouter(prefix="/mapeos/dispositivos", tags=["Mapeos de formato"])
 
 # Regla de negocio HU06: "El delimitador acepta solo coma, punto y coma,
 # tabulador o espacio". La clave es lo que manda el frontend; el valor es
@@ -426,37 +431,7 @@ def actualizar_mapeo(
     }
 
 
-@router.post("/vista-previa", response_model=VistaPreviaResponse)
-async def vista_previa(
-    archivo: UploadFile = File(..., description="Archivo .dat de muestra"),
-    dlmtdr: str = Form(default=","),
-    fl_inc_dts: int = Form(default=1),
-    frmt_fch: str = Form(default="YYYY-MM-DD HH:mm:ss"),
-    columna_fecha: str = Form(default="Fecha"),
-    asignaciones: str = Form(
-        default="",
-        description='Asignación columna->parámetro como "indice:id_prmtr" separadas por coma, p. ej. "0:3,2:7"',
-    ),
-    db: Session = Depends(get_db),
-    _usuario: dict = Depends(require_permiso("Ingesta", LECTURA)),
-):
-    """CA2: interpreta el archivo de muestra con la configuración en
-    edición y devuelve las primeras 10 filas, indicando qué parámetro
-    estándar quedó asignado a cada columna.
-
-    El archivo de muestra es TEMPORAL: se lee en memoria y NO se persiste
-    en base de datos ni en disco (regla explícita de la HU). Por eso este
-    endpoint solo requiere permiso de LECTURA: no escribe nada.
-    """
-    delimitador = _validar_delimitador(dlmtdr)
-
-    contenido_bytes = await archivo.read()
-    try:
-        contenido = contenido_bytes.decode("utf-8")
-    except UnicodeDecodeError:
-        # Los .dat de campo a veces vienen en latin-1 (grados, ñ).
-        contenido = contenido_bytes.decode("latin-1")
-
+def _normalizar_saltos_de_linea(contenido: str) -> str:
     # parsear_dat() usa csv.reader sobre un io.StringIO, que NO hace la
     # traducción universal de saltos de línea que sí hace abrir un archivo
     # en modo texto. Los .dat reales de datalogger (Campbell Scientific,
@@ -464,11 +439,49 @@ async def vista_previa(
     # final; sin normalizar esto, el csv del motor revienta con
     # "new-line character seen in unquoted field" apenas se sube un archivo
     # real (visto al probar la vista previa con un .dat de campo). Se
-    # normaliza acá, en la frontera de este endpoint -no en parser.py, que
+    # normaliza acá, en la frontera de este router -no en parser.py, que
     # no se toca-, así que la ingesta real (que pasa por el mismo problema,
     # ver el hallazgo en el README) queda fuera de este cambio.
-    contenido = contenido.replace("\x00", "").replace("\r\n", "\n").replace("\r", "\n")
+    return contenido.replace("\x00", "").replace("\r\n", "\n").replace("\r", "\n")
 
+
+def _decodificar_dat(contenido_bytes: bytes) -> str:
+    try:
+        contenido = contenido_bytes.decode("utf-8")
+    except UnicodeDecodeError:
+        # Los .dat de campo a veces vienen en latin-1 (grados, ñ).
+        contenido = contenido_bytes.decode("latin-1")
+    return _normalizar_saltos_de_linea(contenido)
+
+
+def _sugerir_parametros(db: Session, nombres_columnas: list[str]) -> dict[int, int]:
+    """Sugiere, por coincidencia EXACTA de nombre (insensible a mayúsculas
+    y espacios), qué parámetro estándar corresponde a cada columna del
+    header. Es solo una sugerencia para prellenar el formulario: nunca se
+    persiste sola, el Técnico CENERIS confirma o corrige cada columna
+    antes de guardar (ver Asignación de columnas). No se intenta fuzzy
+    matching más allá de esto -un match aproximado incorrecto sería peor
+    que no sugerir nada, porque entraría a producción sin que nadie lo
+    note."""
+    catalogo = {p.nmbr.strip().lower(): p.id_prmtr for p in db.query(Parametro).all()}
+    sugerencias = {}
+    for indice, nombre in enumerate(nombres_columnas):
+        id_prmtr = catalogo.get(nombre.strip().lower())
+        if id_prmtr is not None:
+            sugerencias[indice] = id_prmtr
+    return sugerencias
+
+
+def _construir_vista_previa(
+    db: Session,
+    contenido: str,
+    dlmtdr: str,
+    fl_inc_dts: int,
+    frmt_fch: str,
+    columna_fecha: str,
+    asignaciones: str,
+) -> VistaPreviaResponse:
+    delimitador = _validar_delimitador(dlmtdr)
     config = ConfiguracionParseo(
         delimitador=delimitador,
         fila_inicio_datos=fl_inc_dts,
@@ -490,6 +503,7 @@ async def vista_previa(
         )
 
     indice_a_parametro = _parsear_asignaciones(db, asignaciones, len(resultado.columnas))
+    sugerencias = _sugerir_parametros(db, resultado.columnas)
 
     columnas = [
         ColumnaVistaPrevia(
@@ -497,6 +511,7 @@ async def vista_previa(
             nombre_columna=nombre,
             parametro_nombre=indice_a_parametro.get(indice, (None, None))[0],
             parametro_unidad=indice_a_parametro.get(indice, (None, None))[1],
+            id_prmtr_sugerido=sugerencias.get(indice) if indice not in indice_a_parametro else None,
         )
         for indice, nombre in enumerate(resultado.columnas)
     ]
@@ -517,6 +532,126 @@ async def vista_previa(
         total_filas_archivo=len(resultado.filas),
         filas_mostradas=len(filas),
     )
+
+
+@router.post("/vista-previa", response_model=VistaPreviaResponse)
+async def vista_previa(
+    archivo: UploadFile = File(..., description="Archivo .dat de muestra"),
+    dlmtdr: str = Form(default=","),
+    fl_inc_dts: int = Form(default=1),
+    frmt_fch: str = Form(default="YYYY-MM-DD HH:mm:ss"),
+    columna_fecha: str = Form(default="Fecha"),
+    asignaciones: str = Form(
+        default="",
+        description='Asignación columna->parámetro como "indice:id_prmtr" separadas por coma, p. ej. "0:3,2:7"',
+    ),
+    db: Session = Depends(get_db),
+    _usuario: dict = Depends(require_permiso("Ingesta", LECTURA)),
+):
+    """CA2: interpreta el archivo de muestra con la configuración en
+    edición y devuelve las primeras 10 filas, indicando qué parámetro
+    estándar quedó asignado a cada columna (y, para las que no tienen
+    asignación confirmada todavía, una sugerencia por nombre -ver
+    id_prmtr_sugerido en ColumnaVistaPrevia-).
+
+    El archivo de muestra es TEMPORAL: se lee en memoria y NO se persiste
+    en base de datos ni en disco (regla explícita de la HU). Por eso este
+    endpoint solo requiere permiso de LECTURA: no escribe nada.
+    """
+    contenido = _decodificar_dat(await archivo.read())
+    return _construir_vista_previa(db, contenido, dlmtdr, fl_inc_dts, frmt_fch, columna_fecha, asignaciones)
+
+
+@router_dispositivos_mapeo.get("", response_model=list[DispositivoParaMapeo])
+def listar_dispositivos_para_mapeo(
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(require_permiso("Ingesta", LECTURA)),
+):
+    """Pobla el selector 'Dispositivo' de la vista previa: elegir uno para
+    traer un .dat que ya llegó por FTP, en vez de subirlo a mano. Solo
+    dispositivos con conexión FTP (prtcl='FTP'): es el único protocolo que
+    se puede listar/descargar por polling (ver ftp_receptor.py)."""
+    query = (
+        db.query(Dispositivo)
+        .join(ConexionFTP, ConexionFTP.id_cnxn == Dispositivo.id_cnxn)
+        .filter(ConexionFTP.prtcl == "FTP")
+    )
+    if usuario.get("scope") == "por_sede":
+        query = query.filter(ConexionFTP.id_sd == usuario["sede_id"])
+
+    dispositivos = query.order_by(Dispositivo.nmbr).all()
+    return [DispositivoParaMapeo.model_validate(d) for d in dispositivos]
+
+
+def _conexion_del_dispositivo(db: Session, usuario: dict, id_dspstv: int) -> ConexionFTP:
+    dispositivo = db.query(Dispositivo).filter(Dispositivo.id_dspstv == id_dspstv).first()
+    if dispositivo is None:
+        raise HTTPException(status_code=404, detail="Dispositivo no encontrado")
+
+    cnxn = db.query(ConexionFTP).filter(ConexionFTP.id_cnxn == dispositivo.id_cnxn).first()
+    if cnxn is None or cnxn.prtcl != "FTP":
+        raise HTTPException(
+            status_code=422, detail="Este dispositivo no tiene una conexión FTP configurada"
+        )
+
+    verificar_sede(usuario, cnxn.id_sd, modulo="Ingesta", accion=LECTURA)
+    return cnxn
+
+
+@router_dispositivos_mapeo.get("/{id_dspstv}/archivos-ftp", response_model=list[ArchivoFtpDisponible])
+def listar_archivos_ftp_dispositivo(
+    id_dspstv: int,
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(require_permiso("Ingesta", LECTURA)),
+):
+    """Lista los .dat presentes ahora mismo en la carpeta remota del
+    dispositivo, para elegir uno como muestra sin bajarlo/subirlo a
+    mano."""
+    cnxn = _conexion_del_dispositivo(db, usuario, id_dspstv)
+    try:
+        nombres = listar_archivos_dat(cnxn)
+    except ftplib.all_errors as exc:
+        raise HTTPException(
+            status_code=502, detail=f"No se pudo listar los archivos del servidor FTP: {exc}"
+        )
+    return [ArchivoFtpDisponible(nombre_archivo=n) for n in sorted(nombres, reverse=True)]
+
+
+@router.post("/vista-previa-ftp", response_model=VistaPreviaResponse)
+def vista_previa_ftp(
+    id_dspstv: int = Form(...),
+    nombre_archivo: str = Form(...),
+    dlmtdr: str = Form(default=","),
+    fl_inc_dts: int = Form(default=1),
+    frmt_fch: str = Form(default="YYYY-MM-DD HH:mm:ss"),
+    columna_fecha: str = Form(default="Fecha"),
+    asignaciones: str = Form(default=""),
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(require_permiso("Ingesta", LECTURA)),
+):
+    """Misma vista previa de CA2, pero con la muestra tomada directo de un
+    .dat ya recibido por FTP (ver listar_archivos_ftp_dispositivo) en vez
+    de subida a mano. Tampoco se persiste: se descarga a memoria, se
+    interpreta y se descarta."""
+    cnxn = _conexion_del_dispositivo(db, usuario, id_dspstv)
+    try:
+        if nombre_archivo not in listar_archivos_dat(cnxn):
+            raise HTTPException(
+                status_code=404,
+                detail=f"'{nombre_archivo}' ya no está en la carpeta remota de este dispositivo",
+            )
+        # latin-1 decodifica cualquier secuencia de bytes sin levantar
+        # UnicodeDecodeError (es una tabla de 256 puntos, uno por byte), así
+        # que sirve como intento único acá -no hace falta el fallback de
+        # _decodificar_dat, pensado para bytes ya en memoria de un upload.
+        contenido = descargar_archivo_dat(cnxn, nombre_archivo, encoding="latin-1")
+    except ftplib.all_errors as exc:
+        raise HTTPException(
+            status_code=502, detail=f"No se pudo descargar el archivo del servidor FTP: {exc}"
+        )
+
+    contenido = _normalizar_saltos_de_linea(contenido)
+    return _construir_vista_previa(db, contenido, dlmtdr, fl_inc_dts, frmt_fch, columna_fecha, asignaciones)
 
 
 def _parsear_asignaciones(db: Session, asignaciones: str, total_columnas: int) -> dict:

@@ -35,6 +35,18 @@ interface ColumnaVistaPrevia {
   nombre_columna: string;
   parametro_nombre: string | null;
   parametro_unidad: string | null;
+  id_prmtr_sugerido: number | null;
+}
+
+interface DispositivoParaMapeo {
+  id_dspstv: number;
+  nmbr: string;
+  mrc: string;
+  mdl: string | null;
+}
+
+interface ArchivoFtpDisponible {
+  nombre_archivo: string;
 }
 
 interface FilaVistaPrevia {
@@ -114,6 +126,16 @@ export default function ConfigurarMapeo() {
   // indice de columna -> id_prmtr asignado. Es la tabla de asignación de CA1.
   const [asignaciones, setAsignaciones] = useState<Record<number, number>>({});
 
+  // Fuente de la muestra para la vista previa: subir un .dat a mano, o
+  // elegir uno ya recibido por FTP para un dispositivo (evita el paso
+  // manual de bajarlo del servidor y volverlo a subir).
+  const [fuenteMuestra, setFuenteMuestra] = useState<"archivo" | "ftp">("archivo");
+  const [dispositivos, setDispositivos] = useState<DispositivoParaMapeo[]>([]);
+  const [dispositivoFtp, setDispositivoFtp] = useState("");
+  const [archivosFtp, setArchivosFtp] = useState<ArchivoFtpDisponible[]>([]);
+  const [archivoFtpElegido, setArchivoFtpElegido] = useState("");
+  const [cargandoArchivosFtp, setCargandoArchivosFtp] = useState(false);
+
   const [cargando, setCargando] = useState(false);
   const [previsualizando, setPrevisualizando] = useState(false);
   const [guardando, setGuardando] = useState(false);
@@ -142,6 +164,46 @@ export default function ConfigurarMapeo() {
         setMensaje(err instanceof ApiError ? err.message : "No se pudieron cargar las sedes");
       });
   }, []);
+
+  // Selector de dispositivo para la fuente "ftp" de la vista previa.
+  useEffect(() => {
+    apiFetch<DispositivoParaMapeo[]>("/mapeos/dispositivos")
+      .then(setDispositivos)
+      .catch(() => {
+        // No es un campo obligatorio del formulario: si falla, el usuario
+        // igual puede seguir subiendo el .dat a mano.
+      });
+  }, []);
+
+  // Al elegir un dispositivo, lista los .dat que están ahora mismo en su
+  // carpeta remota para poder elegir uno como muestra.
+  useEffect(() => {
+    if (!dispositivoFtp) {
+      setArchivosFtp([]);
+      setArchivoFtpElegido("");
+      return;
+    }
+    let cancelado = false;
+    setCargandoArchivosFtp(true);
+    setArchivosFtp([]);
+    setArchivoFtpElegido("");
+    apiFetch<ArchivoFtpDisponible[]>(`/mapeos/dispositivos/${dispositivoFtp}/archivos-ftp`)
+      .then((res) => {
+        if (cancelado) return;
+        setArchivosFtp(res);
+      })
+      .catch((err) => {
+        if (cancelado) return;
+        setMensajeOk(false);
+        setMensaje(err instanceof ApiError ? err.message : "No se pudo listar los archivos del FTP");
+      })
+      .finally(() => {
+        if (!cancelado) setCargandoArchivosFtp(false);
+      });
+    return () => {
+      cancelado = true;
+    };
+  }, [dispositivoFtp]);
 
   // CA4: al abrir un mapeo existente se cargan sus datos y su asignación.
   useEffect(() => {
@@ -185,12 +247,20 @@ export default function ConfigurarMapeo() {
       .join(",");
   }
 
-  /** CA2: sube el .dat de muestra y muestra las 10 primeras filas ya
-   *  interpretadas. El archivo es temporal: no se guarda en la BD. */
+  /** CA2: interpreta el .dat de muestra (subido a mano o traído por FTP) y
+   *  muestra las 10 primeras filas. El archivo es temporal: no se guarda
+   *  en la BD. Las columnas sin asignación confirmada llegan con una
+   *  sugerencia (id_prmtr_sugerido) que se prellena en la tabla de abajo,
+   *  editable antes de guardar. */
   async function handleVistaPrevia() {
-    if (!archivo) {
+    if (fuenteMuestra === "archivo" && !archivo) {
       setMensajeOk(false);
       setMensaje("Selecciona un archivo .dat de muestra para ver la vista previa");
+      return;
+    }
+    if (fuenteMuestra === "ftp" && (!dispositivoFtp || !archivoFtpElegido)) {
+      setMensajeOk(false);
+      setMensaje("Selecciona un dispositivo y un archivo recibido por FTP");
       return;
     }
 
@@ -198,15 +268,33 @@ export default function ConfigurarMapeo() {
     setMensaje("");
     try {
       const formData = new FormData();
-      formData.append("archivo", archivo);
+      if (fuenteMuestra === "archivo" && archivo) {
+        formData.append("archivo", archivo);
+      } else {
+        formData.append("id_dspstv", dispositivoFtp);
+        formData.append("nombre_archivo", archivoFtpElegido);
+      }
       formData.append("dlmtdr", form.dlmtdr);
       formData.append("fl_inc_dts", form.fl_inc_dts);
       formData.append("frmt_fch", form.frmt_fch);
       formData.append("columna_fecha", form.columna_fecha);
       formData.append("asignaciones", serializarAsignaciones());
 
-      const res = await apiUpload<VistaPreviaResponse>("/mapeos/vista-previa", formData);
+      const endpoint = fuenteMuestra === "archivo" ? "/mapeos/vista-previa" : "/mapeos/vista-previa-ftp";
+      const res = await apiUpload<VistaPreviaResponse>(endpoint, formData);
       setVistaPrevia(res);
+
+      // Prellena solo las columnas que el usuario todavía no asignó a
+      // mano: una sugerencia nunca pisa una elección ya hecha.
+      setAsignaciones((prev) => {
+        const siguiente = { ...prev };
+        for (const columna of res.columnas) {
+          if (columna.id_prmtr_sugerido && !(columna.indc_clmn in siguiente)) {
+            siguiente[columna.indc_clmn] = columna.id_prmtr_sugerido;
+          }
+        }
+        return siguiente;
+      });
     } catch (err) {
       setVistaPrevia(null);
       setMensajeOk(false);
@@ -430,26 +518,98 @@ export default function ConfigurarMapeo() {
                 <section className="bg-white dark:bg-[#2d3748] rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
                   <h2 className="text-base font-bold text-gray-900 dark:text-white mb-1">Vista previa</h2>
                   <p className="text-sm text-gray-500 dark:text-gray-400 mb-4 font-light">
-                    Carga un archivo .dat de muestra para ver las primeras 10 filas interpretadas. El archivo
-                    no se guarda.
+                    Usa un .dat de muestra para ver las primeras 10 filas interpretadas. El archivo no se
+                    guarda.
                   </p>
 
-                  <div className="flex flex-wrap items-center gap-3">
-                    <input
-                      type="file"
-                      accept=".dat,.csv,.txt"
-                      onChange={seleccionarArchivo}
-                      className="text-sm text-gray-600 dark:text-gray-300 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-[#ccff00]/10 file:text-[#5a7000] dark:file:text-[#ccff00] hover:file:bg-[#ccff00]/20 file:cursor-pointer"
-                    />
+                  <div className="flex flex-wrap gap-2 mb-4">
                     <button
                       type="button"
-                      onClick={handleVistaPrevia}
-                      disabled={previsualizando || !archivo}
-                      className="px-4 py-2.5 text-sm font-medium text-gray-900 dark:text-white bg-white dark:bg-transparent border border-gray-300 dark:border-gray-600 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                      onClick={() => setFuenteMuestra("archivo")}
+                      className={`px-3 py-1.5 text-sm font-medium rounded-lg border transition-all ${
+                        fuenteMuestra === "archivo"
+                          ? "bg-[#ccff00]/20 text-[#5a7000] dark:text-[#ccff00] border-[#ccff00]/40"
+                          : "text-gray-600 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700"
+                      }`}
                     >
-                      {previsualizando ? "Generando…" : "Vista previa"}
+                      Subir archivo
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFuenteMuestra("ftp")}
+                      className={`px-3 py-1.5 text-sm font-medium rounded-lg border transition-all ${
+                        fuenteMuestra === "ftp"
+                          ? "bg-[#ccff00]/20 text-[#5a7000] dark:text-[#ccff00] border-[#ccff00]/40"
+                          : "text-gray-600 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700"
+                      }`}
+                    >
+                      Elegir uno ya recibido por FTP
                     </button>
                   </div>
+
+                  {fuenteMuestra === "archivo" ? (
+                    <div className="flex flex-wrap items-center gap-3">
+                      <input
+                        type="file"
+                        accept=".dat,.csv,.txt"
+                        onChange={seleccionarArchivo}
+                        className="text-sm text-gray-600 dark:text-gray-300 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-[#ccff00]/10 file:text-[#5a7000] dark:file:text-[#ccff00] hover:file:bg-[#ccff00]/20 file:cursor-pointer"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleVistaPrevia}
+                        disabled={previsualizando || !archivo}
+                        className="px-4 py-2.5 text-sm font-medium text-gray-900 dark:text-white bg-white dark:bg-transparent border border-gray-300 dark:border-gray-600 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                      >
+                        {previsualizando ? "Generando…" : "Vista previa"}
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap items-center gap-3">
+                      <select
+                        value={dispositivoFtp}
+                        onChange={(e) => setDispositivoFtp(e.target.value)}
+                        className={inputClase + " cursor-pointer max-w-xs"}
+                      >
+                        <option value="">— Selecciona un dispositivo —</option>
+                        {dispositivos.map((d) => (
+                          <option key={d.id_dspstv} value={d.id_dspstv}>
+                            {d.nmbr} — {d.mrc}
+                            {d.mdl ? ` (${d.mdl})` : ""}
+                          </option>
+                        ))}
+                      </select>
+
+                      <select
+                        value={archivoFtpElegido}
+                        onChange={(e) => setArchivoFtpElegido(e.target.value)}
+                        disabled={!dispositivoFtp || cargandoArchivosFtp}
+                        className={inputClase + " cursor-pointer max-w-xs disabled:opacity-50"}
+                      >
+                        <option value="">
+                          {cargandoArchivosFtp
+                            ? "Listando archivos…"
+                            : archivosFtp.length === 0
+                              ? "— Sin archivos disponibles —"
+                              : "— Selecciona un archivo —"}
+                        </option>
+                        {archivosFtp.map((a) => (
+                          <option key={a.nombre_archivo} value={a.nombre_archivo}>
+                            {a.nombre_archivo}
+                          </option>
+                        ))}
+                      </select>
+
+                      <button
+                        type="button"
+                        onClick={handleVistaPrevia}
+                        disabled={previsualizando || !dispositivoFtp || !archivoFtpElegido}
+                        className="px-4 py-2.5 text-sm font-medium text-gray-900 dark:text-white bg-white dark:bg-transparent border border-gray-300 dark:border-gray-600 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                      >
+                        {previsualizando ? "Generando…" : "Vista previa"}
+                      </button>
+                    </div>
+                  )}
 
                   {vistaPrevia && (
                     <div className="mt-5">
