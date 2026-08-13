@@ -19,8 +19,7 @@ import { ROLES } from "../config/roles";
 import ConexionesFTP from "../pages/ConexionesFTP";
 import ConfigurarConexionFTP from "../pages/ConfigurarConexionFTP";
 import ConsultaDatos from "../pages/ConsultaDatos";
-import Mapeos from "../pages/Mapeos";
-import ConfigurarMapeo from "../pages/ConfigurarMapeo";
+import DispositivoDetalle from "../pages/DispositivoDetalle";
 import Parametros from "../pages/Parametros";
 import ColaIngesta from "../pages/ColaIngesta";
 
@@ -162,6 +161,19 @@ export default function AppRouter() {
               </ProtectedRoute>
             }
           />
+          {/* DEC-09: ficha del dispositivo. Reemplaza al módulo "Mapeos de
+              Formato": acá viven las pestañas Formato y Datos (el mapeo de
+              ESTE datalogger), además de Carga de datos, Carga manual y
+              Logs (IMP-06). Se declara DESPUÉS de /dispositivos/nueva para
+              que esa ruta literal no la capture el parámetro :id. */}
+          <Route
+            path="/dispositivos/:id"
+            element={
+              <ProtectedRoute>
+                <DispositivoDetalle />
+              </ProtectedRoute>
+            }
+          />
           <Route
             path="/conexiones-ftp"
             element={
@@ -197,31 +209,12 @@ export default function AppRouter() {
             }
           />
 
-          {/* HU06: mapeo de formato por marca de sensor */}
-          <Route
-            path="/mapeos"
-            element={
-              <ProtectedRoute rolesPermitidos={ROLES_MAPEOS}>
-                <Mapeos />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/mapeos/nuevo"
-            element={
-              <ProtectedRoute rolesPermitidos={ROLES_MAPEOS}>
-                <ConfigurarMapeo />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/mapeos/:id/editar"
-            element={
-              <ProtectedRoute rolesPermitidos={ROLES_MAPEOS}>
-                <ConfigurarMapeo />
-              </ProtectedRoute>
-            }
-          />
+          {/* DEC-09: las rutas /mapeos, /mapeos/nuevo y /mapeos/:id/editar
+              se retiraron. El mapeo de formato dejó de ser un módulo
+              propio y vive en la ficha del dispositivo
+              (/dispositivos/:id, pestañas Formato y Datos).
+              Mapeos.tsx y ConfigurarMapeo.tsx siguen en el repo sin ruta
+              que los monte, a propósito, por si hay que revertir. */}
 
           {/* Catálogo de parámetros estándar que consume HU06 */}
           <Route

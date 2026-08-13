@@ -212,6 +212,71 @@ class DispositivoCreado(BaseModel):
     estd: str
 
 
+# DEC-09 / IMP-06 - Ficha del dispositivo (pestañas Formato, Datos,
+# Carga de datos, Carga manual y Logs)
+
+
+class DispositivoDetalle(BaseModel):
+    """Cabecera de la ficha del dispositivo: los datos propios más el
+    contexto (ubicación, sede, conexión) que las pestañas muestran como
+    referencia de solo lectura.
+
+    frcnc_mnts viene de la Conexión FTP (HU05) y se expone SOLO para
+    lectura: el intervalo de polling se edita en la conexión, y
+    duplicarlo acá crearía una segunda fuente de verdad."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id_dspstv: int
+    nmbr: str
+    mrc: str
+    mdl: str | None
+    estd: str
+    id_ubccn: int
+    ubicacion_nombre: str
+    id_sd: int
+    id_cnxn: int
+    conexion_nombre: str
+    conexion_frcnc_mnts: int
+
+
+class CargaManualItem(BaseModel):
+    """Un valor de un parámetro para el punto de carga manual."""
+
+    id_prmtr: int
+    vlr: float
+
+
+class CargaManualRequest(BaseModel):
+    """IMP-06: alta de UN punto de telemetría capturado a mano, sin
+    archivo de por medio.
+
+    Solo aplica a la trama 'H' (datos periódicos): un evento 'E' no es una
+    medición puntual de parámetros, así que la ficha no ofrece carga
+    manual para ese tipo de trama.
+
+    fch_hr la escribe el usuario -es el momento de la MEDICIÓN, no el de
+    la captura-, así que no se puede derivar del reloj del servidor."""
+
+    fch_hr: datetime
+    valores: list[CargaManualItem] = Field(min_length=1)
+
+
+class LogIngestaListItem(BaseModel):
+    """Una fila de archv_ingst (HU09) vista desde la ficha del
+    dispositivo, filtrada por su conexión FTP."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id_archv: int
+    nmbr_archv: str
+    estd: str
+    fch_dtccn: datetime
+    fch_prcsd: datetime | None
+    mnsj_errr: str | None
+    rgstrs_prcsds: int | None
+
+
 class MetricasColaIngesta(BaseModel):
     """HU 09: conteo de archv_ingst agrupado por estado, para el módulo
     de monitoreo de la cola de procesamiento (HT-05, CA3)."""
@@ -385,6 +450,9 @@ class MapeoColumnaDetalle(MapeoColumnaItem):
 class MapeoFormatoBase(BaseModel):
     tp_trm: str = Field(default="H")  # 'H' datos periódicos / 'E' eventos
     dlmtdr: str  # obligatorio: coma, punto y coma, tabulador o espacio
+    # Separador decimal del dato numérico, no de las columnas. Default '.'
+    # = comportamiento previo a DEC-09, para los mapeos ya cargados.
+    dlmtdr_dcml: str = Field(default=".")
     fl_inc_dts: int = Field(default=1, ge=1)  # entero, default 1
     frmt_fch: str = Field(min_length=1, max_length=50)  # "YYYY-MM-DD HH:mm:ss"
 
@@ -409,6 +477,7 @@ class MapeoFormatoActualizar(BaseModel):
 
     tp_trm: str | None = None
     dlmtdr: str | None = None
+    dlmtdr_dcml: str | None = None
     fl_inc_dts: int | None = Field(default=None, ge=1)
     frmt_fch: str | None = Field(default=None, min_length=1, max_length=50)
     estd: str | None = None
@@ -431,6 +500,7 @@ class MapeoFormatoListItem(BaseModel):
     mrc: str
     tp_trm: str
     dlmtdr: str
+    dlmtdr_dcml: str
     fl_inc_dts: int
     frmt_fch: str
     estd: str

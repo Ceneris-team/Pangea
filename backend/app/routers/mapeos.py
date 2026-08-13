@@ -40,6 +40,7 @@ from app.security.permisos import (
     require_permiso, require_alguno_permiso, verificar_sede, LECTURA, EDICION,
 )
 from app.services.ingesta.parser import ConfiguracionParseo, parsear_dat
+from app.tasks.ingesta import normalizar_contenido_dat
 from app.schemas import (
     ArchivoFtpDisponible,
     ColumnaVistaPrevia,
@@ -75,6 +76,10 @@ DELIMITADORES_VALIDOS = {
 }
 
 TIPOS_TRAMA_VALIDOS = {"H", "E"}  # CHECK constraint de mp_frmt (PP-96)
+
+# Separador decimal del dato numérico (DEC-09). Solo punto o coma: son los
+# dos que produce un datalogger real, y el CHECK de mp_frmt exige lo mismo.
+DELIMITADORES_DECIMALES_VALIDOS = {".", ","}
 
 # HU06: "Formato de fecha/hora: acepta cadenas tipo YYYY-MM-DD HH:mm:ss".
 # El motor (parser._parsear_fecha) usa strptime, así que lo que se guarda
@@ -121,6 +126,15 @@ def _validar_delimitador(dlmtdr: str) -> str:
     return DELIMITADORES_VALIDOS[dlmtdr]
 
 
+def _validar_delimitador_decimal(dlmtdr_dcml: str) -> str:
+    if dlmtdr_dcml not in DELIMITADORES_DECIMALES_VALIDOS:
+        raise HTTPException(
+            status_code=422,
+            detail="El delimitador decimal solo admite punto (.) o coma (,)",
+        )
+    return dlmtdr_dcml
+
+
 def _validar_tipo_trama(tp_trm: str) -> str:
     if tp_trm not in TIPOS_TRAMA_VALIDOS:
         raise HTTPException(
@@ -147,6 +161,23 @@ def _resolver_dispositivo(db: Session, id_dspstv: int) -> tuple[Dispositivo, Ubi
             detail=f"El dispositivo {id_dspstv} apunta a una ubicación inexistente",
         )
     return dispositivo, ubicacion
+
+
+def _validar_delimitadores_compatibles(dlmtdr: str, dlmtdr_dcml: str) -> None:
+    """Coma para separar columnas Y coma decimal es indecidible: "23,5"
+    en una línea separada por comas son dos campos, no un número. Se
+    rechaza en el formulario en vez de dejar que produzca lecturas
+    partidas en silencio, que es la clase de fallo mudo que DEC-09 busca
+    eliminar."""
+    if dlmtdr == "," and dlmtdr_dcml == ",":
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "El delimitador de columna y el decimal no pueden ser ambos coma: "
+                "elige punto y coma (;) como delimitador de columna, o punto (.) "
+                "como decimal"
+            ),
+        )
 
 
 def _validar_parametros_existen(db: Session, columnas) -> None:
@@ -200,6 +231,7 @@ def _a_list_item(
         mrc=dispositivo.mrc,
         tp_trm=formato.tp_trm,
         dlmtdr=formato.dlmtdr,
+        dlmtdr_dcml=formato.dlmtdr_dcml,
         fl_inc_dts=formato.fl_inc_dts,
         frmt_fch=a_formato_legible(formato.frmt_fch),
         estd=formato.estd,
@@ -374,6 +406,8 @@ def crear_mapeo(
     """CA3: 'GUARDAR' registra el mapeo, lo asocia al dispositivo y
     devuelve 'Mapeo guardado correctamente'."""
     delimitador = _validar_delimitador(body.dlmtdr)
+    delimitador_decimal = _validar_delimitador_decimal(body.dlmtdr_dcml)
+    _validar_delimitadores_compatibles(delimitador, delimitador_decimal)
     tipo_trama = _validar_tipo_trama(body.tp_trm)
 
     # DEC-09: la sede sale del dispositivo (dspstv -> ubccn), mismo patrón
@@ -411,6 +445,7 @@ def crear_mapeo(
         id_dspstv=dispositivo.id_dspstv,
         tp_trm=tipo_trama,
         dlmtdr=delimitador,
+        dlmtdr_dcml=delimitador_decimal,
         fl_inc_dts=body.fl_inc_dts,
         frmt_fch=a_formato_strptime(body.frmt_fch),
         estd="Activo",
@@ -477,6 +512,12 @@ def actualizar_mapeo(
 
     if body.dlmtdr is not None:
         formato.dlmtdr = _validar_delimitador(body.dlmtdr)
+    if body.dlmtdr_dcml is not None:
+        formato.dlmtdr_dcml = _validar_delimitador_decimal(body.dlmtdr_dcml)
+    # Se comprueba sobre los valores YA aplicados, no sobre el body: el
+    # conflicto puede surgir de cambiar solo uno de los dos contra el que
+    # ya estaba guardado.
+    _validar_delimitadores_compatibles(formato.dlmtdr, formato.dlmtdr_dcml)
     if body.tp_trm is not None:
         formato.tp_trm = _validar_tipo_trama(body.tp_trm)
     if body.fl_inc_dts is not None:
@@ -528,6 +569,7 @@ def actualizar_mapeo(
 async def vista_previa(
     archivo: UploadFile = File(..., description="Archivo .dat de muestra"),
     dlmtdr: str = Form(default=","),
+    dlmtdr_dcml: str = Form(default="."),
     fl_inc_dts: int = Form(default=1),
     frmt_fch: str = Form(default="YYYY-MM-DD HH:mm:ss"),
     columna_fecha: str = Form(default="Fecha"),
@@ -556,6 +598,10 @@ async def vista_previa(
     endpoint solo requiere permiso de LECTURA: no escribe nada.
     """
     delimitador = _validar_delimitador(dlmtdr)
+    # La vista previa muestra el valor CRUDO (sin castear a float), así que
+    # el decimal no cambia lo que se ve; se valida igual para que el
+    # formulario avise del conflicto coma/coma acá y no recién al guardar.
+    _validar_delimitadores_compatibles(delimitador, _validar_delimitador_decimal(dlmtdr_dcml))
 
     contenido_bytes = await archivo.read()
     try:
@@ -564,17 +610,11 @@ async def vista_previa(
         # Los .dat de campo a veces vienen en latin-1 (grados, ñ).
         contenido = contenido_bytes.decode("latin-1")
 
-    # parsear_dat() usa csv.reader sobre un io.StringIO, que NO hace la
-    # traducción universal de saltos de línea que sí hace abrir un archivo
-    # en modo texto. Los .dat reales de datalogger (Campbell Scientific,
-    # entre otros) vienen con CRLF, y a veces con un byte NUL de relleno al
-    # final; sin normalizar esto, el csv del motor revienta con
-    # "new-line character seen in unquoted field" apenas se sube un archivo
-    # real (visto al probar la vista previa con un .dat de campo). Se
-    # normaliza acá, en la frontera de este router -no en parser.py, que
-    # no se toca-, así que la ingesta real (que pasa por el mismo problema,
-    # ver el hallazgo en el README) queda fuera de este cambio.
-    return contenido.replace("\x00", "").replace("\r\n", "\n").replace("\r", "\n")
+    # Los .dat reales traen CRLF y a veces un NUL de relleno, que rompen el
+    # csv.reader del parser. La normalización vive en tasks.ingesta y la
+    # comparten la vista previa y el pipeline real (automático y carga
+    # manual), para que un mismo archivo se lea igual por las tres vías.
+    contenido = normalizar_contenido_dat(contenido)
 
 
 def _decodificar_dat(contenido_bytes: bytes) -> str:

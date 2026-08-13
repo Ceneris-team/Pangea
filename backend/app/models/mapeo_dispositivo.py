@@ -29,6 +29,7 @@ class MapeoFormato(Base):
     __tablename__ = "mp_frmt"
     __table_args__ = (
         CheckConstraint("tp_trm IN ('H','E')", name="mpfrmt_tptrm_check"),
+        CheckConstraint("dlmtdr_dcml IN ('.', ',')", name="mpfrmt_dlmtdrdcml_check"),
         # Un dispositivo puede tener como máximo un mapeo ACTIVO por tipo
         # de trama (uno H y uno E). El parcial sobre estd deja convivir
         # versiones anteriores desactivadas del mismo mapeo; se declara
@@ -48,6 +49,11 @@ class MapeoFormato(Base):
     id_dspstv = Column(Integer, ForeignKey("dspstv.id_dspstv"), nullable=False)
     tp_trm = Column(String(5), nullable=False, server_default="H")
     dlmtdr = Column(String(5), nullable=False, server_default=",")
+    # Separador decimal del propio dato numérico, independiente del
+    # delimitador de columna: un datalogger en locale europeo manda
+    # "23,5" con ';' de separador. El motor lo normaliza antes de float()
+    # (ver services/ingesta/validador.py).
+    dlmtdr_dcml = Column(String(1), nullable=False, server_default=".")
     fl_inc_dts = Column(Integer, nullable=False, server_default="1")
     frmt_fch = Column(String(50), nullable=False)
     estd = Column(String(20), nullable=False, server_default="Activo")
