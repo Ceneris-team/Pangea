@@ -7,23 +7,11 @@ from app.database import Base
 
 
 class MapeoFormato(Base):
-<<<<<<< HEAD
-    """HU 06: mini-ETL por DISPOSITIVO (antes era por marca de sensor,
-    compartido entre todos los dispositivos de esa marca; se corrigió
-    porque dos dispositivos de la misma marca en campo pueden traer sus
-    columnas en distinto orden, y un mapeo por marca no puede representar
-    eso).
-
-    Un mismo dispositivo manda dos formatos distintos de archivo, con
-    distinto número y significado de columnas, y por eso el formato se
-    identifica por dispositivo + tipo de trama:
-=======
     """HU 06: mini-ETL por DISPOSITIVO (DEC-09).
 
     Un datalogger manda dos formatos distintos de archivo, con distinto
     número y significado de columnas, y por eso el formato se identifica
     por dispositivo + tipo de trama (PP-96):
->>>>>>> 9cc2710c1fbe0adfb3cde23c8f9f64de00d99853
 
       tp_trm='H' -> archivos H_*.dat: datos periódicos (lectura real)
       tp_trm='E' -> archivos E_*.dat: estados y eventos del equipo
@@ -41,9 +29,6 @@ class MapeoFormato(Base):
     __tablename__ = "mp_frmt"
     __table_args__ = (
         CheckConstraint("tp_trm IN ('H','E')", name="mpfrmt_tptrm_check"),
-<<<<<<< HEAD
-        UniqueConstraint("id_dspstv", "tp_trm", name="uq_mpfrmt_dspstv_tptrm"),
-=======
         # Un dispositivo puede tener como máximo un mapeo ACTIVO por tipo
         # de trama (uno H y uno E). El parcial sobre estd deja convivir
         # versiones anteriores desactivadas del mismo mapeo; se declara
@@ -57,7 +42,6 @@ class MapeoFormato(Base):
             postgresql_where=text("estd = 'Activo'"),
         ),
         Index("idx_mpfrmt_dspstv", "id_dspstv"),
->>>>>>> 9cc2710c1fbe0adfb3cde23c8f9f64de00d99853
     )
 
     id_mp = Column(Integer, primary_key=True, autoincrement=True)

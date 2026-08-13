@@ -22,18 +22,10 @@ solo (documentado en crear_dispositivo):
   las de Ubicacion (no hay FK), así que un dispositivo con punto propio
   distinto al de su ubicación es una decisión de una HU futura, no de esta.
 
-<<<<<<< HEAD
-El mapeo de formato (HU06) YA NO es un requisito para crear el
-dispositivo: antes el mapeo vivía por marca+sede y tenía que existir de
-antemano; ahora cuelga del dispositivo mismo (mp_frmt.id_dspstv), así que
-el orden real es dispositivo primero, mapeo después, desde su propia
-ficha en Mapeos de Formato.
-=======
 DEC-09: el dispositivo ya NO resuelve un mapeo de formato al crearse. El
 mapeo pasó a colgar del dispositivo (mp_frmt.id_dspstv), así que primero
 existe el dispositivo y después se le configura su mapeo en HU06; crear un
 dispositivo sin mapeo es un estado válido (todavía no ingesta nada).
->>>>>>> 9cc2710c1fbe0adfb3cde23c8f9f64de00d99853
 
 Además valida (no es un CA literal, pero lo exige la arquitectura de
 ingesta ya existente): resolver_dispositivo() en

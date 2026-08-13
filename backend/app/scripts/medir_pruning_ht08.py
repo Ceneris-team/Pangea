@@ -42,16 +42,6 @@ def _limpiar_corrida_anterior(db) -> None:
     if cliente is not None:
         for sede in db.query(Sede).filter(Sede.id_clnt == cliente.id_clnt):
             db.execute(text("DELETE FROM tlmtr WHERE id_sd = :id_sd"), {"id_sd": sede.id_sd})
-<<<<<<< HEAD
-        # MapeoFormato ahora cuelga de Dispositivo (id_dspstv), así que se
-        # borra antes que Dispositivo, no después.
-        db.query(MapeoFormato).filter(
-            MapeoFormato.id_dspstv.in_(
-                db.query(Dispositivo.id_dspstv).join(Ubicacion).join(Sede).filter(
-                    Sede.id_clnt == cliente.id_clnt
-                )
-            )
-=======
         # DEC-09: mp_frmt referencia a dspstv, así que los mapeos se borran
         # ANTES que los dispositivos (antes era al revés: dspstv.id_mp
         # apuntaba a mp_frmt).
@@ -62,7 +52,6 @@ def _limpiar_corrida_anterior(db) -> None:
         )
         db.query(MapeoFormato).filter(
             MapeoFormato.id_dspstv.in_(ids_dispositivos)
->>>>>>> 9cc2710c1fbe0adfb3cde23c8f9f64de00d99853
         ).delete(synchronize_session=False)
         db.query(Dispositivo).filter(
             Dispositivo.id_ubccn.in_(
@@ -112,18 +101,11 @@ def _sembrar(db, meses: int, horas_entre_lecturas: int):
         )
         db.add(dispositivo)
         db.flush()
-<<<<<<< HEAD
-        mapeo = MapeoFormato(
-            id_dspstv=dispositivo.id_dspstv, frmt_fch="%Y-%m-%d %H:%M:%S",
-        )
-        db.add(mapeo)
-=======
         db.add(
             MapeoFormato(
                 id_dspstv=dispositivo.id_dspstv, frmt_fch="%Y-%m-%d %H:%M:%S",
             )
         )
->>>>>>> 9cc2710c1fbe0adfb3cde23c8f9f64de00d99853
         db.flush()
         dispositivos.append((dispositivo, sede))
 

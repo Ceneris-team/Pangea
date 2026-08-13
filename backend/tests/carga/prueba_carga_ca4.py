@@ -249,12 +249,6 @@ COLUMNAS_TRAMA_E = {  # ejemplo_estado_gabinete.dat
 
 
 def crear_ubicacion(db, id_sd: int) -> Ubicacion:
-<<<<<<< HEAD
-    """Crea la ubicación de prueba. El mapeo de formato ya no cuelga de la
-    ubicación/marca: se crea por dispositivo, en
-    crear_mapeos_por_dispositivo(), una vez existen los dispositivos."""
-=======
->>>>>>> 9cc2710c1fbe0adfb3cde23c8f9f64de00d99853
     ubicacion = Ubicacion(
         id_sd=id_sd,
         nmbr=f"{PREFIJO_PRUEBA}ubicacion",
@@ -265,31 +259,6 @@ def crear_ubicacion(db, id_sd: int) -> Ubicacion:
     db.add(ubicacion)
     db.commit()
     return ubicacion
-<<<<<<< HEAD
-
-
-def crear_mapeos_por_dispositivo(db, dispositivos: list) -> None:
-    """Crea los DOS formatos (H y E) con sus mapeos de columna para CADA
-    dispositivo -ya no uno compartido por marca-, que es como PP-96 espera
-    encontrarlos en mp_frmt/mp_clmn."""
-    parametros = {p.nmbr: p.id_prmtr for p in db.query(Parametro).all()}
-    for dispositivo in dispositivos:
-        for tipo, columnas in (("H", COLUMNAS_TRAMA_H), ("E", COLUMNAS_TRAMA_E)):
-            formato = MapeoFormato(
-                id_dspstv=dispositivo.id_dspstv, tp_trm=tipo,
-                dlmtdr=",", fl_inc_dts=1, frmt_fch="%Y-%m-%d %H:%M:%S", estd="Activo",
-            )
-            db.add(formato)
-            db.flush()
-            for indice, nombre_parametro in columnas.items():
-                db.add(MapeoColumna(
-                    id_mp=formato.id_mp,
-                    indc_clmn=indice,
-                    id_prmtr=parametros[nombre_parametro],
-                ))
-    db.commit()
-=======
->>>>>>> 9cc2710c1fbe0adfb3cde23c8f9f64de00d99853
 
 
 def crear_conexiones(db, id_sd: int) -> list:
@@ -315,20 +284,12 @@ def crear_conexiones(db, id_sd: int) -> list:
     return conexiones
 
 
-<<<<<<< HEAD
-def crear_dispositivos(db, conexiones: list, ubicacion) -> list:
-    """resolver_dispositivo (PP-100) exige exactamente 1 dispositivo activo
-    por conexión; sin esto todo terminaría en 'Fallido'. El mapeo (H/E) se
-    crea aparte, en crear_mapeos_por_dispositivo(), una vez existe cada
-    dispositivo."""
-=======
 def crear_dispositivos(db, conexiones: list, ubicacion: Ubicacion) -> list:
     """resolver_dispositivo (PP-100) exige exactamente 1 dispositivo activo
     por conexión; sin esto todo terminaría en 'Fallido'.
 
     DEC-09: ya no recibe un mapeo -el dispositivo se crea primero, sus
     mapeos se cuelgan después con crear_mapeos_por_dispositivo()-."""
->>>>>>> 9cc2710c1fbe0adfb3cde23c8f9f64de00d99853
     dispositivos = []
     for i, cnxn in enumerate(conexiones):
         dispositivo = Dispositivo(
@@ -341,8 +302,6 @@ def crear_dispositivos(db, conexiones: list, ubicacion: Ubicacion) -> list:
         )
         db.add(dispositivo)
         dispositivos.append(dispositivo)
-<<<<<<< HEAD
-=======
     db.commit()
     return dispositivos
 
@@ -367,7 +326,6 @@ def crear_mapeos_por_dispositivo(db, dispositivos: list) -> None:
                     indc_clmn=indice,
                     id_prmtr=parametros[nombre_parametro],
                 ))
->>>>>>> 9cc2710c1fbe0adfb3cde23c8f9f64de00d99853
     db.commit()
     return dispositivos
 
@@ -456,33 +414,18 @@ def limpiar(db) -> None:
             ArchivoIngesta.id_archv.in_(ids_archv)
         ).delete(synchronize_session=False)
 
-<<<<<<< HEAD
-    # mp_frmt ahora cuelga de dspstv (id_dspstv): hay que borrar
-    # mp_clmn -> mp_frmt ANTES de tocar dspstv, no después.
-=======
     # DEC-09: mp_frmt referencia dspstv (antes era al revés), así que ahora
     # se borra en este orden: mp_clmn -> mp_frmt -> dspstv -> cnxn_ftp.
->>>>>>> 9cc2710c1fbe0adfb3cde23c8f9f64de00d99853
     ids_disp = [
         d.id_dspstv for d in db.query(Dispositivo).filter(
             Dispositivo.nmbr.like(f"{PREFIJO_PRUEBA}%")
         ).all()
     ]
-<<<<<<< HEAD
-    ids_mp = []
-    if ids_disp:
-        ids_mp = [
-            m.id_mp for m in db.query(MapeoFormato).filter(
-                MapeoFormato.id_dspstv.in_(ids_disp)
-            ).all()
-        ]
-=======
     ids_mp = [
         m.id_mp for m in db.query(MapeoFormato).filter(
             MapeoFormato.id_dspstv.in_(ids_disp)
         ).all()
     ] if ids_disp else []
->>>>>>> 9cc2710c1fbe0adfb3cde23c8f9f64de00d99853
     if ids_mp:
         db.query(MapeoColumna).filter(
             MapeoColumna.id_mp.in_(ids_mp)
@@ -491,10 +434,6 @@ def limpiar(db) -> None:
             MapeoFormato.id_mp.in_(ids_mp)
         ).delete(synchronize_session=False)
 
-<<<<<<< HEAD
-    # dspstv referencia cnxn_ftp: hay que borrarlo antes que la conexión.
-=======
->>>>>>> 9cc2710c1fbe0adfb3cde23c8f9f64de00d99853
     borrados_disp = db.query(Dispositivo).filter(
         Dispositivo.nmbr.like(f"{PREFIJO_PRUEBA}%")
     ).delete(synchronize_session=False)

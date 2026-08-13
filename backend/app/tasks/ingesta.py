@@ -98,17 +98,6 @@ def procesar_archivo_dat(self, id_archv: int) -> dict:
         except DispositivoNoResueltoError as exc:
             raise ErrorDatosNoRecuperable(str(exc)) from exc
 
-<<<<<<< HEAD
-        # El formato aplicable sale de mp_frmt según el dispositivo (ya
-        # resuelto arriba) y el tipo de trama, que se deduce del prefijo
-        # del nombre del archivo (H_ = datos periódicos, E_ = eventos). Se
-        # resuelve ANTES de descargar: si no hay mapeo cargado, no tiene
-        # sentido bajar el archivo.
-        try:
-            formato = resolver_formato(
-                db, dispositivo.id_dspstv, archivo.nmbr_archv,
-            )
-=======
         # DEC-09 (PP-96): el formato aplicable sale de mp_frmt según el
         # DISPOSITIVO ya resuelto y el tipo de trama, que se deduce del
         # prefijo del nombre del archivo (H_ = datos periódicos,
@@ -118,7 +107,6 @@ def procesar_archivo_dat(self, id_archv: int) -> dict:
         # mapeo cargado, no tiene sentido bajar el archivo.
         try:
             formato = resolver_formato(db, dispositivo.id_dspstv, archivo.nmbr_archv)
->>>>>>> 9cc2710c1fbe0adfb3cde23c8f9f64de00d99853
         except MapeoNoEncontradoError as exc:
             raise ErrorDatosNoRecuperable(str(exc)) from exc
 
