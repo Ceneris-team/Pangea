@@ -21,6 +21,13 @@ env:
   DATABASE_URL: postgresql+psycopg2://postgres:postgres@localhost:5432/pangea_dev
   TEST_DATABASE_URL: postgresql+psycopg2://postgres:postgres@localhost:5432/pangea_test
   JWT_SECRET: ci-clave-de-pruebas-no-usar-en-produccion
+  # Mismos db 2/3 que docker-compose.yml y el fallback de
+  # app/core/celery_app.py: los tests que crean usuarios encolan una
+  # tarea real de Celery (.delay()) para el correo de bienvenida, y
+  # necesitan un broker/backend Redis disponible aunque el worker no
+  # llegue a consumir la tarea dentro del test.
+  CELERY_BROKER_URL: redis://localhost:6379/2
+  CELERY_RESULT_BACKEND: redis://localhost:6379/3
   # FTP_CREDENTIAL_KEY se deja sin declarar a propósito: si se pone como
   # string vacío, os.environ.get(...) en app/security/ftp_crypto.py
   # devuelve "" (no None) y el fallback dev-safe del código no se activa,
@@ -66,6 +73,15 @@ jobs:
           - 5432:5432
         options: >-
           --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
