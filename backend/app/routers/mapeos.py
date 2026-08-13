@@ -35,7 +35,10 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import Dispositivo, MapeoColumna, MapeoFormato, Parametro, Sede, Ubicacion
+from app.ingesta.ftp_receptor import descargar_archivo_dat, listar_archivos_dat
+from app.models import (
+    ConexionFTP, Dispositivo, MapeoColumna, MapeoFormato, Parametro, Sede, Ubicacion,
+)
 from app.security.permisos import (
     require_permiso, require_alguno_permiso, verificar_sede, LECTURA, EDICION,
 )
@@ -565,65 +568,17 @@ def actualizar_mapeo(
     }
 
 
-@router.post("/vista-previa", response_model=VistaPreviaResponse)
-async def vista_previa(
-    archivo: UploadFile = File(..., description="Archivo .dat de muestra"),
-    dlmtdr: str = Form(default=","),
-    dlmtdr_dcml: str = Form(default="."),
-    fl_inc_dts: int = Form(default=1),
-    frmt_fch: str = Form(default="YYYY-MM-DD HH:mm:ss"),
-    columna_fecha: str = Form(default="Fecha"),
-    asignaciones: str = Form(
-        default="",
-        description='Asignación columna->parámetro como "indice:id_prmtr" separadas por coma, p. ej. "0:3,2:7"',
-    ),
-    id_dspstv: int | None = Form(
-        default=None,
-        description=(
-            "Dispositivo al que se le está configurando el mapeo (DEC-09). "
-            "La vista previa no lo necesita -interpreta el archivo con los "
-            "valores del formulario en curso-, se acepta para que el request "
-            "sea consistente con el resto del formulario."
-        ),
-    ),
-    db: Session = Depends(get_db),
-    _usuario: dict = Depends(require_permiso("Ingesta", LECTURA)),
-):
-    """CA2: interpreta el archivo de muestra con la configuración en
-    edición y devuelve las primeras 10 filas, indicando qué parámetro
-    estándar quedó asignado a cada columna.
-
-    El archivo de muestra es TEMPORAL: se lee en memoria y NO se persiste
-    en base de datos ni en disco (regla explícita de la HU). Por eso este
-    endpoint solo requiere permiso de LECTURA: no escribe nada.
-    """
-    delimitador = _validar_delimitador(dlmtdr)
-    # La vista previa muestra el valor CRUDO (sin castear a float), así que
-    # el decimal no cambia lo que se ve; se valida igual para que el
-    # formulario avise del conflicto coma/coma acá y no recién al guardar.
-    _validar_delimitadores_compatibles(delimitador, _validar_delimitador_decimal(dlmtdr_dcml))
-
-    contenido_bytes = await archivo.read()
-    try:
-        contenido = contenido_bytes.decode("utf-8")
-    except UnicodeDecodeError:
-        # Los .dat de campo a veces vienen en latin-1 (grados, ñ).
-        contenido = contenido_bytes.decode("latin-1")
-
-    # Los .dat reales traen CRLF y a veces un NUL de relleno, que rompen el
-    # csv.reader del parser. La normalización vive en tasks.ingesta y la
-    # comparten la vista previa y el pipeline real (automático y carga
-    # manual), para que un mismo archivo se lea igual por las tres vías.
-    contenido = normalizar_contenido_dat(contenido)
-
-
 def _decodificar_dat(contenido_bytes: bytes) -> str:
     try:
         contenido = contenido_bytes.decode("utf-8")
     except UnicodeDecodeError:
         # Los .dat de campo a veces vienen en latin-1 (grados, ñ).
         contenido = contenido_bytes.decode("latin-1")
-    return _normalizar_saltos_de_linea(contenido)
+    # Los .dat reales traen CRLF y a veces un NUL de relleno, que rompen el
+    # csv.reader del parser. La normalización vive en tasks.ingesta y la
+    # comparten la vista previa y el pipeline real (automático y carga
+    # manual), para que un mismo archivo se lea igual por las tres vías.
+    return normalizar_contenido_dat(contenido)
 
 
 def _sugerir_parametros(db: Session, nombres_columnas: list[str]) -> dict[int, int]:
@@ -710,6 +665,7 @@ def _construir_vista_previa(
 async def vista_previa(
     archivo: UploadFile = File(..., description="Archivo .dat de muestra"),
     dlmtdr: str = Form(default=","),
+    dlmtdr_dcml: str = Form(default="."),
     fl_inc_dts: int = Form(default=1),
     frmt_fch: str = Form(default="YYYY-MM-DD HH:mm:ss"),
     columna_fecha: str = Form(default="Fecha"),
@@ -730,6 +686,10 @@ async def vista_previa(
     en base de datos ni en disco (regla explícita de la HU). Por eso este
     endpoint solo requiere permiso de LECTURA: no escribe nada.
     """
+    # La vista previa muestra el valor CRUDO (sin castear a float), así que
+    # el decimal no cambia lo que se ve; se valida igual para que el
+    # formulario avise del conflicto coma/coma acá y no recién al guardar.
+    _validar_delimitadores_compatibles(_validar_delimitador(dlmtdr), _validar_delimitador_decimal(dlmtdr_dcml))
     contenido = _decodificar_dat(await archivo.read())
     return _construir_vista_previa(db, contenido, dlmtdr, fl_inc_dts, frmt_fch, columna_fecha, asignaciones)
 
@@ -794,6 +754,7 @@ def vista_previa_ftp(
     id_dspstv: int = Form(...),
     nombre_archivo: str = Form(...),
     dlmtdr: str = Form(default=","),
+    dlmtdr_dcml: str = Form(default="."),
     fl_inc_dts: int = Form(default=1),
     frmt_fch: str = Form(default="YYYY-MM-DD HH:mm:ss"),
     columna_fecha: str = Form(default="Fecha"),
@@ -805,6 +766,7 @@ def vista_previa_ftp(
     .dat ya recibido por FTP (ver listar_archivos_ftp_dispositivo) en vez
     de subida a mano. Tampoco se persiste: se descarga a memoria, se
     interpreta y se descarta."""
+    _validar_delimitadores_compatibles(_validar_delimitador(dlmtdr), _validar_delimitador_decimal(dlmtdr_dcml))
     cnxn = _conexion_del_dispositivo(db, usuario, id_dspstv)
     try:
         if nombre_archivo not in listar_archivos_dat(cnxn):
@@ -822,7 +784,7 @@ def vista_previa_ftp(
             status_code=502, detail=f"No se pudo descargar el archivo del servidor FTP: {exc}"
         )
 
-    contenido = _normalizar_saltos_de_linea(contenido)
+    contenido = normalizar_contenido_dat(contenido)
     return _construir_vista_previa(db, contenido, dlmtdr, fl_inc_dts, frmt_fch, columna_fecha, asignaciones)
 
 
