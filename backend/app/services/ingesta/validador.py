@@ -4,6 +4,7 @@ PP-99 (HU06): validaciones genéricas sobre la salida de PP-98
 pero nunca detiene el procesamiento del resto del archivo -HU06 pide
 tolerancia por fila, no por archivo completo-.
 """
+
 import dataclasses
 import datetime as dt
 import logging
@@ -71,19 +72,23 @@ def validar_lecturas(
 
     for lectura in lecturas:
         if isinstance(lectura, LecturaEstandar) and lectura.parametro is None:
-            errores.append(ErrorValidacion(
-                numero_fila=lectura.numero_fila,
-                parametro=None,
-                motivo=lectura.error_parseo or "fila con error de parseo",
-            ))
+            errores.append(
+                ErrorValidacion(
+                    numero_fila=lectura.numero_fila,
+                    parametro=None,
+                    motivo=lectura.error_parseo or "fila con error de parseo",
+                )
+            )
             continue
 
         if lectura.fecha_hora is None:
-            errores.append(ErrorValidacion(
-                numero_fila=lectura.numero_fila,
-                parametro=lectura.parametro,
-                motivo="timestamp ausente o no parseable",
-            ))
+            errores.append(
+                ErrorValidacion(
+                    numero_fila=lectura.numero_fila,
+                    parametro=lectura.parametro,
+                    motivo="timestamp ausente o no parseable",
+                )
+            )
             continue
 
         fecha_hora = lectura.fecha_hora
@@ -91,36 +96,44 @@ def validar_lecturas(
             fecha_hora = fecha_hora.replace(tzinfo=dt.timezone.utc)
 
         if fecha_hora > ahora:
-            errores.append(ErrorValidacion(
-                numero_fila=lectura.numero_fila,
-                parametro=lectura.parametro,
-                motivo=f"timestamp futuro: {fecha_hora.isoformat()}",
-            ))
+            errores.append(
+                ErrorValidacion(
+                    numero_fila=lectura.numero_fila,
+                    parametro=lectura.parametro,
+                    motivo=f"timestamp futuro: {fecha_hora.isoformat()}",
+                )
+            )
             continue
 
         valor, error_numero = _parsear_numero(lectura.valor_crudo, delimitador_decimal)
         if error_numero:
-            errores.append(ErrorValidacion(
-                numero_fila=lectura.numero_fila,
-                parametro=lectura.parametro,
-                motivo=error_numero,
-            ))
+            errores.append(
+                ErrorValidacion(
+                    numero_fila=lectura.numero_fila,
+                    parametro=lectura.parametro,
+                    motivo=error_numero,
+                )
+            )
             continue
 
-        validas.append(LecturaValidada(
-            fecha_hora=fecha_hora,
-            id_cnxn=lectura.id_cnxn,
-            parametro=lectura.parametro,
-            valor=valor,
-            numero_fila=lectura.numero_fila,
-        ))
+        validas.append(
+            LecturaValidada(
+                fecha_hora=fecha_hora,
+                id_cnxn=lectura.id_cnxn,
+                parametro=lectura.parametro,
+                valor=valor,
+                numero_fila=lectura.numero_fila,
+            )
+        )
 
     if errores:
         logger.warning("Validación: %s lecturas rechazadas de %s", len(errores), len(lecturas))
         for err in errores:
             logger.warning(
                 "  fila=%s parametro=%s motivo=%s",
-                err.numero_fila, err.parametro, err.motivo,
+                err.numero_fila,
+                err.parametro,
+                err.motivo,
             )
 
     return ResultadoValidacion(validas=validas, errores=errores)

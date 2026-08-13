@@ -22,11 +22,11 @@ Uso:
 Todo lo que crea queda marcado con el prefijo PREFIJO_PRUEBA para poder
 borrarlo después con --limpiar.
 """
+
 import argparse
 import datetime as dt
 import os
 import pathlib
-import shutil
 import socket
 import sys
 import tempfile
@@ -38,13 +38,15 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
 from pyftpdlib.authorizers import DummyAuthorizer
 from pyftpdlib.handlers import FTPHandler
 from pyftpdlib.servers import FTPServer
-
 from sqlalchemy import text
 
 from app.database import SessionLocal
 from app.models.archivo_ingesta import ArchivoIngesta
 from app.models.mapeo_dispositivo import (
-    Dispositivo, MapeoColumna, MapeoFormato, Parametro,
+    Dispositivo,
+    MapeoColumna,
+    MapeoFormato,
+    Parametro,
 )
 from app.models.telemetria import Telemetria
 from app.models.ubicacion_conexion import ConexionFTP, Ubicacion
@@ -131,10 +133,12 @@ def _fecha_en_particion_existente(db) -> dt.datetime:
     partición del mes actual y, si no existe, la más reciente que ya haya
     empezado.
     """
-    filas = db.execute(text(
-        "SELECT tablename FROM pg_tables WHERE tablename ~ '^tlmtr_[0-9]{4}_[0-9]{2}$' "
-        "ORDER BY tablename"
-    )).all()
+    filas = db.execute(
+        text(
+            "SELECT tablename FROM pg_tables WHERE tablename ~ '^tlmtr_[0-9]{4}_[0-9]{2}$' "
+            "ORDER BY tablename"
+        )
+    ).all()
     if not filas:
         raise RuntimeError(
             "tlmtr no tiene particiones mensuales; corre las migraciones "
@@ -190,9 +194,7 @@ def preparar_directorio_ftp(fecha: dt.datetime) -> str:
             # de datos; se reemplaza solo esa marca temporal principal.
             contenido = contenido.replace(
                 '"2026-06-02 14:30:00"', f'"{marca:%Y-%m-%d %H:%M:%S}"'
-            ).replace(
-                '"2026-06-08 13:20:00"', f'"{marca:%Y-%m-%d %H:%M:%S}"'
-            )
+            ).replace('"2026-06-08 13:20:00"', f'"{marca:%Y-%m-%d %H:%M:%S}"')
 
             destino = pathlib.Path(directorio) / f"{prefijo}{PREFIJO_PRUEBA}c{i}_{j}.dat"
             destino.write_text(contenido, encoding="utf-8")
@@ -207,18 +209,23 @@ def asegurar_datos_base(db) -> int:
     id_sd. Idempotente: reutiliza lo que ya exista."""
     fila = db.execute(text("SELECT id_sd FROM sd ORDER BY id_sd LIMIT 1")).first()
     if fila is None:
-        cliente = db.execute(text(
-            "INSERT INTO clnt (rzn_scl, rc, crr_cntct, estd) VALUES "
-            "(:rz, :rc, :crr, 'Activo') RETURNING id_clnt"
-        ), {
-            "rz": f"{PREFIJO_PRUEBA}cliente",
-            "rc": "99999999999",
-            "crr": "carga_ca4@example.test",
-        }).first()
-        fila = db.execute(text(
-            "INSERT INTO sd (id_clnt, nmbr, estd) VALUES "
-            "(:c, :n, 'Activa') RETURNING id_sd"
-        ), {"c": cliente[0], "n": f"{PREFIJO_PRUEBA}sede"}).first()
+        cliente = db.execute(
+            text(
+                "INSERT INTO clnt (rzn_scl, rc, crr_cntct, estd) VALUES "
+                "(:rz, :rc, :crr, 'Activo') RETURNING id_clnt"
+            ),
+            {
+                "rz": f"{PREFIJO_PRUEBA}cliente",
+                "rc": "99999999999",
+                "crr": "carga_ca4@example.test",
+            },
+        ).first()
+        fila = db.execute(
+            text(
+                "INSERT INTO sd (id_clnt, nmbr, estd) VALUES " "(:c, :n, 'Activa') RETURNING id_sd"
+            ),
+            {"c": cliente[0], "n": f"{PREFIJO_PRUEBA}sede"},
+        ).first()
         db.commit()
     id_sd = fila[0]
 
@@ -252,7 +259,8 @@ def crear_ubicacion(db, id_sd: int) -> Ubicacion:
     ubicacion = Ubicacion(
         id_sd=id_sd,
         nmbr=f"{PREFIJO_PRUEBA}ubicacion",
-        lttd=0, lngtd=0,
+        lttd=0,
+        lngtd=0,
         plgn_gjsn={"type": "Polygon", "coordinates": []},
         estd="Activa",
     )
@@ -297,7 +305,8 @@ def crear_dispositivos(db, conexiones: list, ubicacion: Ubicacion) -> list:
             id_cnxn=cnxn.id_cnxn,
             nmbr=f"{PREFIJO_PRUEBA}dispositivo_{i}",
             mrc=f"{PREFIJO_PRUEBA}marca",
-            lttd=0, lngtd=0,
+            lttd=0,
+            lngtd=0,
             estd="Activo",
         )
         db.add(dispositivo)
@@ -315,17 +324,23 @@ def crear_mapeos_por_dispositivo(db, dispositivos: list) -> None:
     for dispositivo in dispositivos:
         for tipo, columnas in (("H", COLUMNAS_TRAMA_H), ("E", COLUMNAS_TRAMA_E)):
             formato = MapeoFormato(
-                id_dspstv=dispositivo.id_dspstv, tp_trm=tipo,
-                dlmtdr=",", fl_inc_dts=1, frmt_fch="%Y-%m-%d %H:%M:%S", estd="Activo",
+                id_dspstv=dispositivo.id_dspstv,
+                tp_trm=tipo,
+                dlmtdr=",",
+                fl_inc_dts=1,
+                frmt_fch="%Y-%m-%d %H:%M:%S",
+                estd="Activo",
             )
             db.add(formato)
             db.flush()
             for indice, nombre_parametro in columnas.items():
-                db.add(MapeoColumna(
-                    id_mp=formato.id_mp,
-                    indc_clmn=indice,
-                    id_prmtr=parametros[nombre_parametro],
-                ))
+                db.add(
+                    MapeoColumna(
+                        id_mp=formato.id_mp,
+                        indc_clmn=indice,
+                        id_prmtr=parametros[nombre_parametro],
+                    )
+                )
     db.commit()
 
 
@@ -394,57 +409,58 @@ def esperar_procesamiento(db, ids: list) -> dict:
 def limpiar(db) -> None:
     """Borra todo lo que creó esta prueba (archv_ingst, tlmtr y cnxn_ftp
     con el prefijo)."""
-    conexiones = db.query(ConexionFTP).filter(
-        ConexionFTP.nmbr.like(f"{PREFIJO_PRUEBA}%")
-    ).all()
+    conexiones = db.query(ConexionFTP).filter(ConexionFTP.nmbr.like(f"{PREFIJO_PRUEBA}%")).all()
     ids_cnxn = [c.id_cnxn for c in conexiones]
 
-    archivos = db.query(ArchivoIngesta).filter(
-        ArchivoIngesta.nmbr_archv.like(f"%{PREFIJO_PRUEBA}%")
-    ).all()
+    archivos = (
+        db.query(ArchivoIngesta).filter(ArchivoIngesta.nmbr_archv.like(f"%{PREFIJO_PRUEBA}%")).all()
+    )
     ids_archv = [a.id_archv for a in archivos]
 
     borradas_tlmtr = 0
     if ids_archv:
-        borradas_tlmtr = db.query(Telemetria).filter(
-            Telemetria.id_archv.in_(ids_archv)
-        ).delete(synchronize_session=False)
-        db.query(ArchivoIngesta).filter(
-            ArchivoIngesta.id_archv.in_(ids_archv)
-        ).delete(synchronize_session=False)
+        borradas_tlmtr = (
+            db.query(Telemetria)
+            .filter(Telemetria.id_archv.in_(ids_archv))
+            .delete(synchronize_session=False)
+        )
+        db.query(ArchivoIngesta).filter(ArchivoIngesta.id_archv.in_(ids_archv)).delete(
+            synchronize_session=False
+        )
 
     # DEC-09: mp_frmt referencia dspstv (antes era al revés), así que ahora
     # se borra en este orden: mp_clmn -> mp_frmt -> dspstv -> cnxn_ftp.
     ids_disp = [
-        d.id_dspstv for d in db.query(Dispositivo).filter(
-            Dispositivo.nmbr.like(f"{PREFIJO_PRUEBA}%")
-        ).all()
+        d.id_dspstv
+        for d in db.query(Dispositivo).filter(Dispositivo.nmbr.like(f"{PREFIJO_PRUEBA}%")).all()
     ]
-    ids_mp = [
-        m.id_mp for m in db.query(MapeoFormato).filter(
-            MapeoFormato.id_dspstv.in_(ids_disp)
-        ).all()
-    ] if ids_disp else []
+    ids_mp = (
+        [m.id_mp for m in db.query(MapeoFormato).filter(MapeoFormato.id_dspstv.in_(ids_disp)).all()]
+        if ids_disp
+        else []
+    )
     if ids_mp:
-        db.query(MapeoColumna).filter(
-            MapeoColumna.id_mp.in_(ids_mp)
-        ).delete(synchronize_session=False)
-        db.query(MapeoFormato).filter(
-            MapeoFormato.id_mp.in_(ids_mp)
-        ).delete(synchronize_session=False)
+        db.query(MapeoColumna).filter(MapeoColumna.id_mp.in_(ids_mp)).delete(
+            synchronize_session=False
+        )
+        db.query(MapeoFormato).filter(MapeoFormato.id_mp.in_(ids_mp)).delete(
+            synchronize_session=False
+        )
 
-    borrados_disp = db.query(Dispositivo).filter(
-        Dispositivo.nmbr.like(f"{PREFIJO_PRUEBA}%")
-    ).delete(synchronize_session=False)
+    borrados_disp = (
+        db.query(Dispositivo)
+        .filter(Dispositivo.nmbr.like(f"{PREFIJO_PRUEBA}%"))
+        .delete(synchronize_session=False)
+    )
 
     if ids_cnxn:
-        db.query(ConexionFTP).filter(
-            ConexionFTP.id_cnxn.in_(ids_cnxn)
-        ).delete(synchronize_session=False)
+        db.query(ConexionFTP).filter(ConexionFTP.id_cnxn.in_(ids_cnxn)).delete(
+            synchronize_session=False
+        )
 
-    db.query(Ubicacion).filter(
-        Ubicacion.nmbr.like(f"{PREFIJO_PRUEBA}%")
-    ).delete(synchronize_session=False)
+    db.query(Ubicacion).filter(Ubicacion.nmbr.like(f"{PREFIJO_PRUEBA}%")).delete(
+        synchronize_session=False
+    )
     db.commit()
     print(
         f"Limpieza: {len(ids_archv)} archv_ingst, {borradas_tlmtr} tlmtr, "
@@ -464,16 +480,22 @@ def main() -> int:
             return 0
 
         total = N_CONEXIONES * N_ARCHIVOS_POR_CONEXION
-        print(f"Escenario: {N_CONEXIONES} dataloggers x {N_ARCHIVOS_POR_CONEXION} "
-              f"archivos = {total} archivos encolados de golpe")
+        print(
+            f"Escenario: {N_CONEXIONES} dataloggers x {N_ARCHIVOS_POR_CONEXION} "
+            f"archivos = {total} archivos encolados de golpe"
+        )
 
         fecha_lecturas = _fecha_en_particion_existente(db)
-        print(f"Fecha base de las lecturas: {fecha_lecturas:%Y-%m-%d %H:%M:%S} "
-              f"(dentro de una partición existente de tlmtr)")
+        print(
+            f"Fecha base de las lecturas: {fecha_lecturas:%Y-%m-%d %H:%M:%S} "
+            f"(dentro de una partición existente de tlmtr)"
+        )
         directorio = preparar_directorio_ftp(fecha_lecturas)
         servidor = levantar_ftp(directorio)
-        print(f"FTP de prueba en {_ip_alcanzable_desde_worker()}:{PUERTO_FTP} "
-              f"(masquerade {_ip_lan_del_host()}) sirviendo {directorio}")
+        print(
+            f"FTP de prueba en {_ip_alcanzable_desde_worker()}:{PUERTO_FTP} "
+            f"(masquerade {_ip_lan_del_host()}) sirviendo {directorio}"
+        )
 
         try:
             limpiar(db)  # arranca de cero por si quedó algo de una corrida previa
@@ -503,8 +525,10 @@ def main() -> int:
             print(f"TIMEOUT tras {segundos:.1f}s - la cola NO drenó completa")
         else:
             print(f"Todos los archivos en estado terminal en {segundos:.1f}s")
-            print(f"Throughput: {len(ids) / segundos:.2f} archivos/segundo "
-                  f"({len(ids) / segundos * 60:.0f} archivos/minuto)")
+            print(
+                f"Throughput: {len(ids) / segundos:.2f} archivos/segundo "
+                f"({len(ids) / segundos * 60:.0f} archivos/minuto)"
+            )
         print(f"Estados finales: {resultado['conteo']}")
 
         # Verificación real de CA4: además de drenar a tiempo, los archivos
@@ -513,9 +537,7 @@ def main() -> int:
         # filas en tlmtr el pipeline no llegó a persistir nada.
         exitosos = resultado["conteo"].get("Exitoso", 0)
         db.expire_all()
-        filas_tlmtr = db.query(Telemetria).filter(
-            Telemetria.id_archv.in_(ids)
-        ).count()
+        filas_tlmtr = db.query(Telemetria).filter(Telemetria.id_archv.in_(ids)).count()
         print(f"Filas escritas en tlmtr: {filas_tlmtr}")
 
         drenó_a_tiempo = (not hubo_timeout) and segundos < minutos_reales * 60
@@ -524,14 +546,19 @@ def main() -> int:
         cumple = drenó_a_tiempo and todos_exitosos and persistió
 
         print()
-        print(f"CA4: {total} archivos = {minutos_reales} min de operación real "
-              f"(1 archivo/min/datalogger).")
-        print(f"     Drenó a tiempo:      {'si' if drenó_a_tiempo else 'NO'} "
-              f"({segundos / 60:.2f} min de {minutos_reales} min)")
-        print(f"     Todos exitosos:      {'si' if todos_exitosos else 'NO'} "
-              f"({exitosos}/{len(ids)})")
-        print(f"     Persistió en tlmtr:  {'si' if persistió else 'NO'} "
-              f"({filas_tlmtr} filas)")
+        print(
+            f"CA4: {total} archivos = {minutos_reales} min de operación real "
+            f"(1 archivo/min/datalogger)."
+        )
+        print(
+            f"     Drenó a tiempo:      {'si' if drenó_a_tiempo else 'NO'} "
+            f"({segundos / 60:.2f} min de {minutos_reales} min)"
+        )
+        print(
+            f"     Todos exitosos:      {'si' if todos_exitosos else 'NO'} "
+            f"({exitosos}/{len(ids)})"
+        )
+        print(f"     Persistió en tlmtr:  {'si' if persistió else 'NO'} " f"({filas_tlmtr} filas)")
         print(f"     -> {'CUMPLE' if cumple else 'NO CUMPLE'}")
         print("=" * 62)
         return 0 if cumple else 1

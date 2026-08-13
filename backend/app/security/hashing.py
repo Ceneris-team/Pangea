@@ -6,6 +6,7 @@ toda contraseña se guarda con hash bcrypt y salt."
 bcrypt genera un salt distinto en cada llamada automáticamente (va incluido
 dentro del propio hash resultante), así que nunca hay que guardarlo aparte.
 """
+
 import secrets
 import string
 
@@ -34,10 +35,7 @@ def generar_password_temporal() -> str:
     rng = secrets.SystemRandom()
     obligatorios = [rng.choice(_MAYUSCULAS), rng.choice(_DIGITOS)]
     pool = _MINUSCULAS + _MAYUSCULAS + _DIGITOS + _SIMBOLOS
-    resto = [
-        rng.choice(pool)
-        for _ in range(_LONGITUD_PASSWORD_TEMPORAL - len(obligatorios))
-    ]
+    resto = [rng.choice(pool) for _ in range(_LONGITUD_PASSWORD_TEMPORAL - len(obligatorios))]
     caracteres = obligatorios + resto
     rng.shuffle(caracteres)
     return "".join(caracteres)

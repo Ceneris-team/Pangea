@@ -1,5 +1,12 @@
 from sqlalchemy import (
-    Column, Integer, String, ForeignKey, TIMESTAMP, Index, UniqueConstraint, text,
+    TIMESTAMP,
+    Column,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    UniqueConstraint,
+    text,
 )
 
 from app.database import Base
@@ -7,6 +14,7 @@ from app.database import Base
 
 class Panel(Base):
     """HU 23-25, HT-13."""
+
     __tablename__ = "pnl"
     __table_args__ = (
         UniqueConstraint("id_usr", "nmbr", name="uq_pnl_usr_nombre"),
@@ -23,10 +31,9 @@ class Panel(Base):
 
 class PanelUbicacion(Base):
     """HU 26."""
+
     __tablename__ = "pnl_ubccn"
-    __table_args__ = (
-        UniqueConstraint("id_pnl", "id_ubccn", name="uq_pnlubccn_pnl_ubccn"),
-    )
+    __table_args__ = (UniqueConstraint("id_pnl", "id_ubccn", name="uq_pnlubccn_pnl_ubccn"),)
 
     id_pnl_ubc = Column(Integer, primary_key=True, autoincrement=True)
     id_pnl = Column(Integer, ForeignKey("pnl.id_pnl"), nullable=False)
@@ -35,6 +42,7 @@ class PanelUbicacion(Base):
 
 class Widget(Base):
     """HU 34."""
+
     __tablename__ = "wdgt"
 
     id_wdgt = Column(Integer, primary_key=True, autoincrement=True)

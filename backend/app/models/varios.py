@@ -1,6 +1,13 @@
 from sqlalchemy import (
-    BigInteger, Column, Integer, String, ForeignKey, TIMESTAMP,
-    Index, UniqueConstraint, text,
+    TIMESTAMP,
+    BigInteger,
+    Column,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 
@@ -9,10 +16,9 @@ from app.database import Base
 
 class ParametroCalculado(Base):
     """HU 38-40."""
+
     __tablename__ = "prmtr_clcld"
-    __table_args__ = (
-        UniqueConstraint("id_sd", "nmbr", name="uq_prmtrclcld_sd_nombre"),
-    )
+    __table_args__ = (UniqueConstraint("id_sd", "nmbr", name="uq_prmtrclcld_sd_nombre"),)
 
     id_prm_clc = Column(Integer, primary_key=True, autoincrement=True)
     id_sd = Column(Integer, ForeignKey("sd.id_sd"), nullable=False)
@@ -25,6 +31,7 @@ class ParametroCalculado(Base):
 
 class LogAuditoria(Base):
     """HT-11: inmutable, sin UPDATE/DELETE a nivel de aplicación."""
+
     __tablename__ = "lg_adtr"
     __table_args__ = (
         Index("idx_lgadtr_sd_fch", "id_sd", "fch_evnt"),
@@ -43,6 +50,7 @@ class LogAuditoria(Base):
 
 class Exportacion(Base):
     """HU 33, HT-17."""
+
     __tablename__ = "exprtcn"
 
     id_exprtcn = Column(BigInteger, primary_key=True, autoincrement=True)

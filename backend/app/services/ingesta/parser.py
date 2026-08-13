@@ -7,6 +7,7 @@ delimitado en filas {columna_original: valor_crudo}, respetando la
 configuración de formato de la marca (delimitador, fila de header, fila de
 inicio de datos, formato de fecha).
 """
+
 import csv
 import dataclasses
 import datetime as dt
@@ -106,19 +107,25 @@ def parsear_dat(contenido: str, config: ConfiguracionParseo = None) -> Resultado
             try:
                 fecha_hora = _parsear_fecha(valor_fecha, config.formato_fecha)
             except ValueError as exc:
-                error = f"fecha '{valor_fecha}' no coincide con formato {config.formato_fecha}: {exc}"
+                error = (
+                    f"fecha '{valor_fecha}' no coincide con formato {config.formato_fecha}: {exc}"
+                )
 
-        filas.append(FilaParseada(
-            numero_fila=numero_fila,
-            fecha_hora=fecha_hora,
-            valores=fila,
-            error=error,
-        ))
+        filas.append(
+            FilaParseada(
+                numero_fila=numero_fila,
+                fecha_hora=fecha_hora,
+                valores=fila,
+                error=error,
+            )
+        )
 
     return ResultadoParseo(columnas=columnas, filas=filas)
 
 
-def parsear_archivo_dat(ruta: str, config: ConfiguracionParseo = None, encoding: str = "utf-8") -> ResultadoParseo:
+def parsear_archivo_dat(
+    ruta: str, config: ConfiguracionParseo = None, encoding: str = "utf-8"
+) -> ResultadoParseo:
     """Igual que parsear_dat pero leyendo el contenido desde disco."""
     with open(ruta, "r", encoding=encoding, newline="") as f:
         contenido = f.read()
