@@ -17,11 +17,11 @@ Es idempotente (CREATE TABLE IF NOT EXISTS vía
 app.services.particiones): re-aplicarla sobre una BD que ya tenga las
 particiones no falla ni duplica.
 """
-from typing import Sequence, Union
+
 import datetime as dt
+from typing import Sequence, Union
 
 from alembic import op
-
 from app.services.particiones import (
     asegurar_particiones,
     nombre_particion,
@@ -29,8 +29,8 @@ from app.services.particiones import (
 )
 
 # revision identifiers, used by Alembic.
-revision: str = 'a7f31c4b9e02'
-down_revision: Union[str, Sequence[str], None] = '9efd66dfaf93'
+revision: str = "a7f31c4b9e02"
+down_revision: Union[str, Sequence[str], None] = "9efd66dfaf93"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
@@ -42,9 +42,7 @@ MESES_DE_COBERTURA = 12
 def upgrade() -> None:
     """Upgrade schema."""
     conexion = op.get_bind()
-    creadas = asegurar_particiones(
-        conexion, dt.date.today(), MESES_DE_COBERTURA
-    )
+    creadas = asegurar_particiones(conexion, dt.date.today(), MESES_DE_COBERTURA)
     print(f"HT-08: particiones creadas: {creadas or 'ninguna (ya existían)'}")
 
 
@@ -62,9 +60,7 @@ def downgrade() -> None:
     mes = primer_dia_del_mes(dt.date.today())
     for _ in range(MESES_DE_COBERTURA):
         nombre = nombre_particion(mes)
-        existe = conexion.execute(text(
-            "SELECT to_regclass(:n)"
-        ), {"n": nombre}).scalar()
+        existe = conexion.execute(text("SELECT to_regclass(:n)"), {"n": nombre}).scalar()
         if existe is not None:
             filas = conexion.execute(text(f"SELECT count(*) FROM {nombre}")).scalar()
             if filas:
@@ -72,5 +68,8 @@ def downgrade() -> None:
             else:
                 op.execute(f"DROP TABLE IF EXISTS {nombre}")
         # avanzar al mes siguiente
-        mes = (mes.replace(year=mes.year + 1, month=1) if mes.month == 12
-               else mes.replace(month=mes.month + 1))
+        mes = (
+            mes.replace(year=mes.year + 1, month=1)
+            if mes.month == 12
+            else mes.replace(month=mes.month + 1)
+        )

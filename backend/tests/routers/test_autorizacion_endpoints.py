@@ -8,13 +8,14 @@ todavía no están implementados en el backend -no hay router de
 dispositivos ni de tableros-, así que no se pueden probar aquí; queda
 documentado como pendiente en el resumen de cierre de HT-09.
 """
+
 import pytest
 from fastapi.testclient import TestClient
 
-from app.main import app
 from app.database import get_db
-from app.security.dependencies import get_current_user
+from app.main import app
 from app.models.suscripcion import PermisoUsuarioSede
+from app.security.dependencies import get_current_user
 
 
 def usuario_jwt(usuario_db, rol_nombre, sede_id=None, scope="por_sede"):
@@ -122,7 +123,11 @@ class TestUsuarios:
 
         resp = client.post(
             "/usuarios",
-            json={"nmbr_cmplt": "Nuevo Usuario", "crr": "nuevo@pangea-dev.com", "rol_nombre": rol_cliente.nmbr},
+            json={
+                "nmbr_cmplt": "Nuevo Usuario",
+                "crr": "nuevo@pangea-dev.com",
+                "rol_nombre": rol_cliente.nmbr,
+            },
         )
         assert resp.status_code == 201
 
@@ -137,6 +142,10 @@ class TestUsuarios:
 
         resp = client.post(
             "/usuarios",
-            json={"nmbr_cmplt": "Nuevo Usuario", "crr": "nuevo@pangea-dev.com", "rol_nombre": rol_cliente.nmbr},
+            json={
+                "nmbr_cmplt": "Nuevo Usuario",
+                "crr": "nuevo@pangea-dev.com",
+                "rol_nombre": rol_cliente.nmbr,
+            },
         )
         assert resp.status_code == 403

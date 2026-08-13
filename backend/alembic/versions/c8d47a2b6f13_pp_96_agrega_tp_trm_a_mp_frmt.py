@@ -18,14 +18,16 @@ de telemetría los define más adelante.
 Se rellenan las filas existentes con 'H' porque el formato cargado hasta
 ahora era el de datos periódicos; no hay datos de producción todavía.
 """
+
 from typing import Sequence, Union
 
-from alembic import op
 import sqlalchemy as sa
 
+from alembic import op
+
 # revision identifiers, used by Alembic.
-revision: str = 'c8d47a2b6f13'
-down_revision: Union[str, Sequence[str], None] = 'f416e1d0ec14'
+revision: str = "c8d47a2b6f13"
+down_revision: Union[str, Sequence[str], None] = "f416e1d0ec14"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
@@ -33,21 +35,25 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     """Upgrade schema."""
     op.add_column(
-        'mp_frmt',
-        sa.Column('tp_trm', sa.String(length=5), nullable=False, server_default='H'),
+        "mp_frmt",
+        sa.Column("tp_trm", sa.String(length=5), nullable=False, server_default="H"),
     )
     op.create_check_constraint(
-        'mpfrmt_tptrm_check', 'mp_frmt', "tp_trm IN ('H','E')",
+        "mpfrmt_tptrm_check",
+        "mp_frmt",
+        "tp_trm IN ('H','E')",
     )
     # Un solo formato activo por sede + marca + tipo de trama: es lo que
     # permite resolver sin ambigüedad qué mapeo aplica a un archivo dado.
     op.create_unique_constraint(
-        'uq_mpfrmt_sd_mrc_tptrm', 'mp_frmt', ['id_sd', 'mrc', 'tp_trm'],
+        "uq_mpfrmt_sd_mrc_tptrm",
+        "mp_frmt",
+        ["id_sd", "mrc", "tp_trm"],
     )
 
 
 def downgrade() -> None:
     """Downgrade schema."""
-    op.drop_constraint('uq_mpfrmt_sd_mrc_tptrm', 'mp_frmt', type_='unique')
-    op.drop_constraint('mpfrmt_tptrm_check', 'mp_frmt', type_='check')
-    op.drop_column('mp_frmt', 'tp_trm')
+    op.drop_constraint("uq_mpfrmt_sd_mrc_tptrm", "mp_frmt", type_="unique")
+    op.drop_constraint("mpfrmt_tptrm_check", "mp_frmt", type_="check")
+    op.drop_column("mp_frmt", "tp_trm")

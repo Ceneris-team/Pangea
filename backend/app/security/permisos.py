@@ -41,6 +41,7 @@ desalineada del modelo real. La matriz de permisos ahora vive solo en la
 base de datos (tabla `prms_usr_sd`), editable sin tocar código, que es lo
 que pedía HT-03 CA4 desde el principio.
 """
+
 import logging
 
 from fastapi import Depends, HTTPException
@@ -48,6 +49,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import PermisoUsuarioSede
+
 from .dependencies import get_current_user
 
 logger = logging.getLogger("auditoria.autorizacion")
@@ -102,7 +104,11 @@ def tiene_permiso(db: Session, id_usr: int, id_sd: int | None, modulo: str, acci
 def _registrar_acceso_denegado(usuario: dict, modulo: str, accion: str) -> None:
     logger.warning(
         "Acceso denegado: usuario=%s sede=%s rol=%s modulo=%s accion=%s",
-        usuario.get("sub"), usuario.get("sede_id"), usuario.get("rol"), modulo, accion,
+        usuario.get("sub"),
+        usuario.get("sede_id"),
+        usuario.get("rol"),
+        modulo,
+        accion,
     )
 
 
@@ -119,7 +125,9 @@ def require_permiso(modulo: str, accion: str):
         id_sd = usuario.get("sede_id")
         if not tiene_permiso(db, id_usr, id_sd, modulo, accion):
             _registrar_acceso_denegado(usuario, modulo, accion)
-            raise HTTPException(status_code=403, detail="No tienes permiso para realizar esta acción")
+            raise HTTPException(
+                status_code=403, detail="No tienes permiso para realizar esta acción"
+            )
         return usuario
 
     return dependencia

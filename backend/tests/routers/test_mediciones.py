@@ -15,14 +15,14 @@ Corre contra la Postgres real de test (ver conftest.py). Las filas de
 de Beat mantienen particiones creadas alrededor de la fecha real, así que
 no hace falta invocar asegurar_particiones() a mano.
 """
+
 import datetime as dt
 
 import pytest
 from fastapi.testclient import TestClient
 
-from app.main import app
 from app.database import get_db
-from app.security.dependencies import get_current_user
+from app.main import app
 from app.models import (
     Dispositivo,
     MapeoColumna,
@@ -33,6 +33,7 @@ from app.models import (
     Ubicacion,
 )
 from app.models.suscripcion import PermisoUsuarioSede
+from app.security.dependencies import get_current_user
 
 POLIGONO_DUMMY = {"type": "Polygon", "coordinates": [[[0, 0], [0, 1], [1, 1], [1, 0], [0, 0]]]}
 
@@ -66,7 +67,11 @@ def client(db_session):
 
 def crear_ubicacion(db_session, sede, nombre="Ubicacion de prueba"):
     ubicacion = Ubicacion(
-        id_sd=sede.id_sd, nmbr=nombre, lttd=0, lngtd=0, plgn_gjsn=POLIGONO_DUMMY,
+        id_sd=sede.id_sd,
+        nmbr=nombre,
+        lttd=0,
+        lngtd=0,
+        plgn_gjsn=POLIGONO_DUMMY,
     )
     db_session.add(ubicacion)
     db_session.flush()
@@ -138,7 +143,10 @@ def mapear_parametro(db_session, dispositivo, parametro, indice=1, tipo_trama="H
     )
     if mapeo is None:
         mapeo = MapeoFormato(
-            id_dspstv=dispositivo.id_dspstv, tp_trm=tipo_trama, dlmtdr=",", fl_inc_dts=1,
+            id_dspstv=dispositivo.id_dspstv,
+            tp_trm=tipo_trama,
+            dlmtdr=",",
+            fl_inc_dts=1,
             frmt_fch="%Y-%m-%d %H:%M:%S",
         )
         db_session.add(mapeo)
@@ -210,7 +218,9 @@ class TestCA1SelectorDeParametros:
         nombres = [p["nmbr"] for p in resp.json()["items"]]
         assert nombres == ["Temperatura HU13"]
 
-    def test_parametro_del_catalogo_sin_mapear_no_aparece(self, client, db_session, escenario_basico):
+    def test_parametro_del_catalogo_sin_mapear_no_aparece(
+        self, client, db_session, escenario_basico
+    ):
         # CA1 explícito: existe en prmtr pero nunca se enlazó vía mp_clmn
         # a ningún dispositivo de las ubicaciones del usuario.
         crear_parametro(db_session, "pH Sin Mapear", unidad="pH")
@@ -220,13 +230,17 @@ class TestCA1SelectorDeParametros:
         assert nombres == ["Temperatura HU13"]
         assert "pH Sin Mapear" not in nombres
 
-    def test_parametro_mapeado_en_ubicacion_ajena_no_aparece(self, client, db_session, escenario_basico, fabrica):
+    def test_parametro_mapeado_en_ubicacion_ajena_no_aparece(
+        self, client, db_session, escenario_basico, fabrica
+    ):
         # Mismo cliente, pero el parámetro está mapeado en un dispositivo
         # de una ubicación que NO le fue asignada.
         sede = escenario_basico["sede"]
         ubicacion_ajena = crear_ubicacion(db_session, sede, nombre="Ubicacion No Asignada")
         conexion = crear_conexion(db_session, sede, nombre="Datalogger Ajeno")
-        dispositivo_ajeno = crear_dispositivo(db_session, ubicacion_ajena, conexion, nombre="CR1000-Ajeno")
+        dispositivo_ajeno = crear_dispositivo(
+            db_session, ubicacion_ajena, conexion, nombre="CR1000-Ajeno"
+        )
         parametro_ajeno = crear_parametro(db_session, "Conductividad Ajena", unidad="uS/cm")
         mapear_parametro(db_session, dispositivo_ajeno, parametro_ajeno)
 
@@ -269,13 +283,17 @@ class TestCA1SelectorDeParametros:
         otra_sede = fabrica.sede()
         otra_ubicacion = crear_ubicacion(db_session, otra_sede, nombre="Ubicacion Otra Sede")
         otra_conexion = crear_conexion(db_session, otra_sede, nombre="Datalogger Otra Sede")
-        otro_dispositivo = crear_dispositivo(db_session, otra_ubicacion, otra_conexion, nombre="CR1000-OtraSede")
+        otro_dispositivo = crear_dispositivo(
+            db_session, otra_ubicacion, otra_conexion, nombre="CR1000-OtraSede"
+        )
         otro_parametro = crear_parametro(db_session, "Turbidez Otra Sede", unidad="NTU")
         mapear_parametro(db_session, otro_dispositivo, otro_parametro)
 
         rol_admin = fabrica.rol("Administrador")
         admin = fabrica.usuario(rol=rol_admin)
-        agregar_permiso(db_session, admin, escenario_basico["sede"], "Tableros", "Lectura", rol_admin)
+        agregar_permiso(
+            db_session, admin, escenario_basico["sede"], "Tableros", "Lectura", rol_admin
+        )
         app.dependency_overrides[get_current_user] = lambda: usuario_jwt(
             admin, rol_admin.nmbr, sede_id=escenario_basico["sede"].id_sd
         )
@@ -289,7 +307,9 @@ class TestCA1SelectorDeParametros:
     ):
         rol_tecnico = fabrica.rol("Técnico CENERIS")
         tecnico = fabrica.usuario(rol=rol_tecnico)
-        agregar_permiso(db_session, tecnico, escenario_basico["sede"], "Tableros", "Lectura", rol_tecnico)
+        agregar_permiso(
+            db_session, tecnico, escenario_basico["sede"], "Tableros", "Lectura", rol_tecnico
+        )
         # El técnico NO tiene fila en PermisoUbicacion para esta ubicación.
         app.dependency_overrides[get_current_user] = lambda: usuario_jwt(
             tecnico, rol_tecnico.nmbr, sede_id=escenario_basico["sede"].id_sd
@@ -307,9 +327,17 @@ class TestCA2FiltroPorParametro:
     def test_filtra_por_un_parametro(self, client, db_session, escenario_basico):
         otro_parametro = crear_parametro(db_session, "Humedad HU13", unidad="%")
         mapear_parametro(db_session, escenario_basico["dispositivo"], otro_parametro, indice=2)
-        crear_medicion(db_session, escenario_basico["dispositivo"], otro_parametro, escenario_basico["sede"], valor=55.0)
+        crear_medicion(
+            db_session,
+            escenario_basico["dispositivo"],
+            otro_parametro,
+            escenario_basico["sede"],
+            valor=55.0,
+        )
 
-        resp = client.get("/mediciones", params={"parametro_ids": [escenario_basico["parametro"].id_prmtr]})
+        resp = client.get(
+            "/mediciones", params={"parametro_ids": [escenario_basico["parametro"].id_prmtr]}
+        )
         body = resp.json()
         assert body["total"] == 1
         assert body["items"][0]["parametro_nombre"] == "Temperatura HU13"
@@ -317,15 +345,29 @@ class TestCA2FiltroPorParametro:
     def test_seleccion_multiple_de_parametros(self, client, db_session, escenario_basico):
         parametro_2 = crear_parametro(db_session, "Humedad HU13", unidad="%")
         mapear_parametro(db_session, escenario_basico["dispositivo"], parametro_2, indice=2)
-        crear_medicion(db_session, escenario_basico["dispositivo"], parametro_2, escenario_basico["sede"], valor=55.0)
+        crear_medicion(
+            db_session,
+            escenario_basico["dispositivo"],
+            parametro_2,
+            escenario_basico["sede"],
+            valor=55.0,
+        )
 
         parametro_3 = crear_parametro(db_session, "Presion HU13", unidad="hPa")
         mapear_parametro(db_session, escenario_basico["dispositivo"], parametro_3, indice=3)
-        crear_medicion(db_session, escenario_basico["dispositivo"], parametro_3, escenario_basico["sede"], valor=1013.0)
+        crear_medicion(
+            db_session,
+            escenario_basico["dispositivo"],
+            parametro_3,
+            escenario_basico["sede"],
+            valor=1013.0,
+        )
 
         resp = client.get(
             "/mediciones",
-            params={"parametro_ids": [escenario_basico["parametro"].id_prmtr, parametro_2.id_prmtr]},
+            params={
+                "parametro_ids": [escenario_basico["parametro"].id_prmtr, parametro_2.id_prmtr]
+            },
         )
         body = resp.json()
         nombres = {i["parametro_nombre"] for i in body["items"]}
@@ -339,15 +381,21 @@ class TestCA3FiltroPorUbicacionYAislamiento:
     y filtro de /mediciones respetan PermisoUbicacion; un id ajeno no se
     puede forzar por query param."""
 
-    def test_selector_de_ubicaciones_solo_devuelve_las_asignadas(self, client, db_session, escenario_basico, fabrica):
+    def test_selector_de_ubicaciones_solo_devuelve_las_asignadas(
+        self, client, db_session, escenario_basico, fabrica
+    ):
         # El selector de ubicaciones de ConsultaDatos.tsx llama a GET
         # /ubicaciones (HU07), que exige permiso sobre el módulo
         # "Ubicaciones" -distinto del "Tableros" que exige /mediciones*-.
         # El seed real (seed_usuarios_prueba.py) le da ambos a Cliente
         # Final; se replica aquí para que el escenario sea representativo.
         agregar_permiso(
-            db_session, escenario_basico["usuario"], escenario_basico["sede"],
-            "Ubicaciones", "Lectura", escenario_basico["rol"],
+            db_session,
+            escenario_basico["usuario"],
+            escenario_basico["sede"],
+            "Ubicaciones",
+            "Lectura",
+            escenario_basico["rol"],
         )
         # Otra ubicación de la MISMA sede, pero no asignada al usuario.
         crear_ubicacion(db_session, escenario_basico["sede"], nombre="Ubicacion No Asignada")
@@ -357,7 +405,9 @@ class TestCA3FiltroPorUbicacionYAislamiento:
         assert nombres == ["Ubicacion Asignada"]
 
     def test_filtra_por_ubicacion_asignada(self, client, db_session, escenario_basico):
-        resp = client.get("/mediciones", params={"ubicacion_ids": [escenario_basico["ubicacion"].id_ubccn]})
+        resp = client.get(
+            "/mediciones", params={"ubicacion_ids": [escenario_basico["ubicacion"].id_ubccn]}
+        )
         body = resp.json()
         assert body["total"] == 1
         assert body["items"][0]["ubicacion_nombre"] == "Ubicacion Asignada"
@@ -395,7 +445,9 @@ class TestCA3FiltroPorUbicacionYAislamiento:
         otra_sede = fabrica.sede()
         ubicacion_ajena = crear_ubicacion(db_session, otra_sede, nombre="Ubicacion Ajena")
         conexion_ajena = crear_conexion(db_session, otra_sede, nombre="Datalogger Ajeno")
-        dispositivo_ajeno = crear_dispositivo(db_session, ubicacion_ajena, conexion_ajena, nombre="CR1000-Ajeno")
+        dispositivo_ajeno = crear_dispositivo(
+            db_session, ubicacion_ajena, conexion_ajena, nombre="CR1000-Ajeno"
+        )
         parametro_ajeno = crear_parametro(db_session, "Nivel Ajeno", unidad="m")
         mapear_parametro(db_session, dispositivo_ajeno, parametro_ajeno)
         crear_medicion(db_session, dispositivo_ajeno, parametro_ajeno, otra_sede, valor=99.0)
@@ -448,7 +500,7 @@ class TestCA3FiltroPorUbicacionYAislamiento:
     ):
         # Mismo patrón que HU07: Administrador no pasa por PermisoUbicacion.
         otra_sede = fabrica.sede()
-        ubicacion_otra_sede = crear_ubicacion(db_session, otra_sede, nombre="Ubicacion Admin")
+        crear_ubicacion(db_session, otra_sede, nombre="Ubicacion Admin")
 
         rol_admin = fabrica.rol("Administrador")
         admin = fabrica.usuario(rol=rol_admin)
@@ -473,7 +525,13 @@ class TestCA4LimpiarFiltros:
     ):
         parametro_2 = crear_parametro(db_session, "Humedad HU13", unidad="%")
         mapear_parametro(db_session, escenario_basico["dispositivo"], parametro_2, indice=2)
-        crear_medicion(db_session, escenario_basico["dispositivo"], parametro_2, escenario_basico["sede"], valor=55.0)
+        crear_medicion(
+            db_session,
+            escenario_basico["dispositivo"],
+            parametro_2,
+            escenario_basico["sede"],
+            valor=55.0,
+        )
 
         resp = client.get("/mediciones")
         body = resp.json()
@@ -481,10 +539,18 @@ class TestCA4LimpiarFiltros:
         nombres = {i["parametro_nombre"] for i in body["items"]}
         assert nombres == {"Temperatura HU13", "Humedad HU13"}
 
-    def test_quitar_los_filtros_equivale_a_no_haber_filtrado(self, client, db_session, escenario_basico):
+    def test_quitar_los_filtros_equivale_a_no_haber_filtrado(
+        self, client, db_session, escenario_basico
+    ):
         parametro_2 = crear_parametro(db_session, "Humedad HU13", unidad="%")
         mapear_parametro(db_session, escenario_basico["dispositivo"], parametro_2, indice=2)
-        crear_medicion(db_session, escenario_basico["dispositivo"], parametro_2, escenario_basico["sede"], valor=55.0)
+        crear_medicion(
+            db_session,
+            escenario_basico["dispositivo"],
+            parametro_2,
+            escenario_basico["sede"],
+            valor=55.0,
+        )
 
         # Simula "APLICAR" con un filtro de parámetro.
         filtrado = client.get(
@@ -495,7 +561,10 @@ class TestCA4LimpiarFiltros:
         # Simula "LIMPIAR FILTROS": la misma consulta sin ningún query param.
         limpio = client.get("/mediciones").json()
         assert limpio["total"] == 2
-        assert {i["parametro_nombre"] for i in limpio["items"]} == {"Temperatura HU13", "Humedad HU13"}
+        assert {i["parametro_nombre"] for i in limpio["items"]} == {
+            "Temperatura HU13",
+            "Humedad HU13",
+        }
 
     def test_cliente_final_sin_ubicaciones_asignadas_no_ve_mediciones(
         self, client, db_session, fabrica

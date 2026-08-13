@@ -1,4 +1,13 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, TIMESTAMP, Boolean, CheckConstraint, text
+from sqlalchemy import (
+    TIMESTAMP,
+    Boolean,
+    CheckConstraint,
+    Column,
+    ForeignKey,
+    Integer,
+    String,
+    text,
+)
 from sqlalchemy.orm import relationship
 
 from app.database import Base
@@ -16,9 +25,7 @@ class Rol(Base):
 
 class Usuario(Base):
     __tablename__ = "usr"
-    __table_args__ = (
-        CheckConstraint("scp IN ('global','por_sede')", name="usr_scp_check"),
-    )
+    __table_args__ = (CheckConstraint("scp IN ('global','por_sede')", name="usr_scp_check"),)
 
     id_usr = Column(Integer, primary_key=True, autoincrement=True)
     id_rl = Column(Integer, ForeignKey("rl.id_rl"), nullable=False)

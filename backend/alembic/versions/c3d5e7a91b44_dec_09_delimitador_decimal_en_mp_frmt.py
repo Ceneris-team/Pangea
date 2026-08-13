@@ -18,14 +18,16 @@ El default '.' preserva el comportamiento actual de los mapeos ya
 cargados: la columna es NOT NULL con server_default, así que las filas
 existentes quedan explícitamente en punto, sin cambio de conducta.
 """
+
 from typing import Sequence, Union
 
-from alembic import op
 import sqlalchemy as sa
 
+from alembic import op
+
 # revision identifiers, used by Alembic.
-revision: str = 'c3d5e7a91b44'
-down_revision: Union[str, Sequence[str], None] = 'b71f4a9c2e05'
+revision: str = "c3d5e7a91b44"
+down_revision: Union[str, Sequence[str], None] = "b71f4a9c2e05"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
@@ -33,19 +35,24 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     """Upgrade schema."""
     op.add_column(
-        'mp_frmt',
+        "mp_frmt",
         sa.Column(
-            'dlmtdr_dcml', sa.String(length=1), nullable=False, server_default='.',
+            "dlmtdr_dcml",
+            sa.String(length=1),
+            nullable=False,
+            server_default=".",
         ),
     )
     # Solo punto o coma: son los dos separadores decimales que produce un
     # datalogger real, y el motor traduce la coma a punto antes de float().
     op.create_check_constraint(
-        'mpfrmt_dlmtdrdcml_check', 'mp_frmt', "dlmtdr_dcml IN ('.', ',')",
+        "mpfrmt_dlmtdrdcml_check",
+        "mp_frmt",
+        "dlmtdr_dcml IN ('.', ',')",
     )
 
 
 def downgrade() -> None:
     """Downgrade schema."""
-    op.drop_constraint('mpfrmt_dlmtdrdcml_check', 'mp_frmt', type_='check')
-    op.drop_column('mp_frmt', 'dlmtdr_dcml')
+    op.drop_constraint("mpfrmt_dlmtdrdcml_check", "mp_frmt", type_="check")
+    op.drop_column("mp_frmt", "dlmtdr_dcml")

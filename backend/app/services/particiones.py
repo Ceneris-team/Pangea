@@ -12,6 +12,7 @@ Convención de nombres: tlmtr_YYYY_MM, con rango [primer día del mes,
 primer día del mes siguiente), que es como las creó la migración
 eadc512979fc.
 """
+
 import datetime as dt
 import logging
 import re
@@ -49,6 +50,7 @@ def es_error_de_particion_faltante(exc: Exception) -> bool:
     if codigo != SQLSTATE_SIN_PARTICION:
         return False
     return _MENSAJE_SIN_PARTICION in str(exc).lower()
+
 
 # Se valida el nombre antes de interpolarlo en el DDL. Los valores vienen
 # de nuestro propio cálculo de fechas -no de entrada de usuario-, pero el
@@ -110,10 +112,9 @@ def particiones_existentes(conexion) -> set:
     sirve tanto desde Alembic (op.get_bind()) como desde el job."""
     from sqlalchemy import text
 
-    filas = conexion.execute(text(
-        "SELECT tablename FROM pg_tables "
-        "WHERE tablename ~ '^tlmtr_[0-9]{4}_[0-9]{2}$'"
-    )).all()
+    filas = conexion.execute(
+        text("SELECT tablename FROM pg_tables " "WHERE tablename ~ '^tlmtr_[0-9]{4}_[0-9]{2}$'")
+    ).all()
     return {fila[0] for fila in filas}
 
 

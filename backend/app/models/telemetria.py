@@ -1,4 +1,4 @@
-from sqlalchemy import BigInteger, Column, Integer, ForeignKey, Index, Numeric, TIMESTAMP
+from sqlalchemy import TIMESTAMP, BigInteger, Column, ForeignKey, Index, Integer, Numeric
 
 from app.database import Base
 
@@ -18,6 +18,7 @@ class Telemetria(Base):
     Postgres: app.services.ingesta.persistencia lo traduce a
     ParticionInexistenteError. Ver "Particionamiento de tlmtr (HT-08)" en
     backend/README.md."""
+
     __tablename__ = "tlmtr"
     __table_args__ = (
         Index("idx_tlmtr_fchhr_brin", "fch_hr", postgresql_using="brin"),

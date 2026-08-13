@@ -4,6 +4,7 @@ HU 02 - Gestionar contraseña
 Detalle de conversación: "La nueva contraseña debe tener mínimo 8
 caracteres, al menos 1 letra mayúscula y 1 número."
 """
+
 import re
 
 MSG_POLITICA_INVALIDA = (

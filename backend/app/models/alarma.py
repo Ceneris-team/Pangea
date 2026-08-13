@@ -1,6 +1,14 @@
 from sqlalchemy import (
-    BigInteger, Column, Integer, String, ForeignKey, Numeric, TIMESTAMP,
-    CheckConstraint, Index, text,
+    TIMESTAMP,
+    BigInteger,
+    CheckConstraint,
+    Column,
+    ForeignKey,
+    Index,
+    Integer,
+    Numeric,
+    String,
+    text,
 )
 
 from app.database import Base
@@ -8,10 +16,9 @@ from app.database import Base
 
 class Alarma(Base):
     """HU 27-28, HT-13."""
+
     __tablename__ = "alrm"
-    __table_args__ = (
-        Index("idx_alrm_sd", "id_sd"),
-    )
+    __table_args__ = (Index("idx_alrm_sd", "id_sd"),)
 
     id_alrm = Column(Integer, primary_key=True, autoincrement=True)
     id_usr = Column(Integer, ForeignKey("usr.id_usr"), nullable=False)
@@ -25,6 +32,7 @@ class Alarma(Base):
 
 class CondicionAlarma(Base):
     """HU 29."""
+
     __tablename__ = "cndcn_alrm"
     __table_args__ = (
         CheckConstraint("oprdr IN ('>','<','>=','<=','=')", name="cndcnalrm_oprdr_check"),
@@ -40,6 +48,7 @@ class DestinatarioAlarma(Base):
     """HU 30, HU 35. Dos índices únicos parciales (uno por canal) reemplazan
     el UNIQUE compuesto original, que no funcionaba porque en SQL dos NULL
     nunca se consideran iguales para un UNIQUE."""
+
     __tablename__ = "dstntr_alrm"
     __table_args__ = (
         CheckConstraint("cnl IN ('email','telegram')", name="dstntralrm_cnl_check"),
@@ -49,12 +58,18 @@ class DestinatarioAlarma(Base):
             name="dstntralrm_canal_destino_check",
         ),
         Index(
-            "uq_dstntr_email", "id_alrm", "crr",
-            unique=True, postgresql_where=text("cnl = 'email'"),
+            "uq_dstntr_email",
+            "id_alrm",
+            "crr",
+            unique=True,
+            postgresql_where=text("cnl = 'email'"),
         ),
         Index(
-            "uq_dstntr_telegram", "id_alrm", "cht_id_tlgrm",
-            unique=True, postgresql_where=text("cnl = 'telegram'"),
+            "uq_dstntr_telegram",
+            "id_alrm",
+            "cht_id_tlgrm",
+            unique=True,
+            postgresql_where=text("cnl = 'telegram'"),
         ),
     )
 
@@ -67,10 +82,9 @@ class DestinatarioAlarma(Base):
 
 class NotificacionEnviada(Base):
     """HT-14, AWS SES + Telegram."""
+
     __tablename__ = "ntfccn_envd"
-    __table_args__ = (
-        CheckConstraint("cnl IN ('email','telegram')", name="ntfccnenvd_cnl_check"),
-    )
+    __table_args__ = (CheckConstraint("cnl IN ('email','telegram')", name="ntfccnenvd_cnl_check"),)
 
     id_ntfccn = Column(BigInteger, primary_key=True, autoincrement=True)
     id_alrm = Column(Integer, ForeignKey("alrm.id_alrm"), nullable=False)

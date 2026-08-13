@@ -11,14 +11,15 @@ Cobertura por CA:
        nombre ya existe en la sede
   Permisos: solo con Edición sobre "Ubicaciones" (HT-09)
 """
+
 import pytest
 from fastapi.testclient import TestClient
 
-from app.main import app
 from app.database import get_db
-from app.security.dependencies import get_current_user
+from app.main import app
 from app.models import Ubicacion
 from app.models.suscripcion import PermisoUsuarioSede
+from app.security.dependencies import get_current_user
 
 # Polígono de 4 vértices, anillo exterior cerrado, en formato GeoJSON
 # ([lng, lat]). Representa el contorno irregular de un terreno, que es lo
@@ -97,9 +98,11 @@ def test_crear_ubicacion_devuelve_201_y_mensaje(client, db_session, tecnico_edit
     cuerpo = respuesta.json()
     assert cuerpo["mensaje"] == "Ubicación registrada correctamente"
 
-    guardada = db_session.query(Ubicacion).filter(
-        Ubicacion.id_ubccn == cuerpo["ubicacion"]["id_ubccn"]
-    ).one()
+    guardada = (
+        db_session.query(Ubicacion)
+        .filter(Ubicacion.id_ubccn == cuerpo["ubicacion"]["id_ubccn"])
+        .one()
+    )
     assert guardada.nmbr == "Estación Río Rímac"
     assert guardada.id_sd == tecnico_editor.id_sd
     assert float(guardada.lttd) == pytest.approx(-12.0464)
@@ -112,9 +115,11 @@ def test_crear_ubicacion_guarda_el_poligono_completo(client, db_session, tecnico
     respuesta = client.post("/ubicaciones", json=cuerpo_valido())
 
     assert respuesta.status_code == 201
-    guardada = db_session.query(Ubicacion).filter(
-        Ubicacion.id_ubccn == respuesta.json()["ubicacion"]["id_ubccn"]
-    ).one()
+    guardada = (
+        db_session.query(Ubicacion)
+        .filter(Ubicacion.id_ubccn == respuesta.json()["ubicacion"]["id_ubccn"])
+        .one()
+    )
     assert guardada.plgn_gjsn == POLIGONO_VALIDO
     assert len(guardada.plgn_gjsn["coordinates"][0]) == 5  # 4 vértices + cierre
 
@@ -125,9 +130,11 @@ def test_crear_ubicacion_queda_activa_por_defecto(client, db_session, tecnico_ed
 
     assert respuesta.status_code == 201
     assert respuesta.json()["ubicacion"]["estd"] == "Activa"
-    guardada = db_session.query(Ubicacion).filter(
-        Ubicacion.id_ubccn == respuesta.json()["ubicacion"]["id_ubccn"]
-    ).one()
+    guardada = (
+        db_session.query(Ubicacion)
+        .filter(Ubicacion.id_ubccn == respuesta.json()["ubicacion"]["id_ubccn"])
+        .one()
+    )
     assert guardada.estd == "Activa"
 
 
@@ -167,7 +174,10 @@ def test_longitud_fuera_de_rango_devuelve_422(client, tecnico_editor, longitud):
         {"type": "Point", "coordinates": [-77.04, -12.04]},  # un punto no delimita una zona
         {"type": "Polygon", "coordinates": []},  # sin anillos
         # Solo 2 vértices: no encierra un área.
-        {"type": "Polygon", "coordinates": [[[-77.04, -12.04], [-77.03, -12.04], [-77.04, -12.04]]]},
+        {
+            "type": "Polygon",
+            "coordinates": [[[-77.04, -12.04], [-77.03, -12.04], [-77.04, -12.04]]],
+        },
         # Anillo abierto: el último vértice no coincide con el primero.
         {
             "type": "Polygon",
@@ -178,9 +188,7 @@ def test_longitud_fuera_de_rango_devuelve_422(client, tecnico_editor, longitud):
         # Vértice con latitud fuera de rango.
         {
             "type": "Polygon",
-            "coordinates": [
-                [[-77.04, -12.04], [-77.03, 95.0], [-77.03, -12.05], [-77.04, -12.04]]
-            ],
+            "coordinates": [[[-77.04, -12.04], [-77.03, 95.0], [-77.03, -12.05], [-77.04, -12.04]]],
         },
     ],
 )

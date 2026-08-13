@@ -8,6 +8,7 @@ contra el servidor FTP real antes de habilitar "GUARDAR". Las
 credenciales se cifran (HT-04, app/security/ftp_crypto.py) y nunca se
 devuelven en texto plano. Solo Técnico CENERIS y Administrador acceden.
 """
+
 import ftplib
 import socket
 
@@ -16,14 +17,14 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import ConexionFTP
-from app.security.dependencies import get_current_user
-from app.security.ftp_crypto import encrypt_credential
 from app.schemas import (
     ConexionFTPCreate,
     ConexionFTPListItem,
     ConexionFTPProbarRequest,
     ConexionFTPUpdate,
 )
+from app.security.dependencies import get_current_user
+from app.security.ftp_crypto import encrypt_credential
 
 router = APIRouter(prefix="/conexiones-ftp", tags=["Conexiones FTP"])
 
@@ -80,10 +81,7 @@ def listar_conexiones(
 
     total = query.count()
     conexiones = (
-        query.order_by(ConexionFTP.nmbr)
-        .offset((pagina - 1) * por_pagina)
-        .limit(por_pagina)
-        .all()
+        query.order_by(ConexionFTP.nmbr).offset((pagina - 1) * por_pagina).limit(por_pagina).all()
     )
 
     items = [ConexionFTPListItem.model_validate(c) for c in conexiones]

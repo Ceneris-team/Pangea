@@ -7,6 +7,7 @@ lee de variables de entorno (ver .env.example); si no está configurada
 vez de fallar, igual que el fallback de desarrollo de JWT_SECRET en
 jwt_auth.py.
 """
+
 import logging
 import os
 import smtplib
