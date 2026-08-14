@@ -1,8 +1,8 @@
 {
-  "containerName": "api",
-  "containerPort": 8000,
+  "containerName": "frontend",
+  "containerPort": 80,
   "healthCheck": {
-    "path": "/health",
+    "path": "/",
     "successCodes": "200",
     "intervalSeconds": 10,
     "timeoutSeconds": 5,
