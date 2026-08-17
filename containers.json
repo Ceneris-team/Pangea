@@ -38,7 +38,7 @@
     }
   },
   "frontend": {
-    "image": ":pangea-app.frontend.7",
+    "image": ":pangea-app.frontend.10",
     "ports": {
       "80": "HTTP"
     }
