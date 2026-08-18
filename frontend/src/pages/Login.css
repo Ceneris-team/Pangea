@@ -76,9 +76,9 @@
   align-items:center;
   justify-content:center;
   position:relative;
-  background:rgba(10,18,14,0.46);
-  backdrop-filter:blur(20px) saturate(120%);
-  -webkit-backdrop-filter:blur(20px) saturate(120%);
+  background:rgba(10,18,14,0.42);
+  backdrop-filter:blur(18px) saturate(115%);
+  -webkit-backdrop-filter:blur(18px) saturate(115%);
   border-left:1px solid rgba(238,242,238,0.08);
   padding:48px 32px;
 }
@@ -86,11 +86,6 @@
 .card{
   width:100%;
   max-width:380px;
-  background:rgba(12,23,18,0.5);
-  border:1px solid rgba(238,242,238,0.1);
-  border-radius:14px;
-  padding:40px 36px;
-  box-shadow:0 24px 60px rgba(0,0,0,0.35);
 }
 
 .eyebrow{
@@ -190,10 +185,12 @@
   color:var(--ink-soft);
   cursor:pointer;
   user-select:none;
+  line-height:1;
 }
 .remember input{
   appearance:none;
   -webkit-appearance:none;
+  margin:0;
   width:16px;
   height:16px;
   border:1px solid var(--line);
@@ -202,6 +199,7 @@
   cursor:pointer;
   position:relative;
   flex:none;
+  vertical-align:middle;
 }
 .remember input:checked{
   background:var(--accent);
@@ -256,11 +254,27 @@
 }
 .form-msg.ok{color:var(--accent);}
 
-.foot-note{
-  margin-top:26px;
+.register-note{
+  margin-top:8px;
   text-align:center;
-  font-size:13px;
+  font-size:13.5px;
   color:var(--ink-faint);
+}
+
+.register-link{
+  background:none;
+  border:none;
+  padding:0;
+  margin:0;
+  font:inherit;
+  font-weight:600;
+  color:var(--ink);
+  cursor:pointer;
+  border-bottom:1px solid var(--line);
+  transition:border-color .2s ease;
+}
+.register-link:hover{
+  border-color:var(--ink);
 }
 
 @media (min-width: 880px){

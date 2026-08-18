@@ -150,10 +150,8 @@ export default function Login() {
               <p className={`form-msg${formOk ? " ok" : ""}`}>{formMsg}</p>
             </form>
 
-            <p className="foot-note">
-              Los accesos son creados por un Administrador.
-              <br />
-              Si no tienes cuenta, solicítala a tu área de TI.
+            <p className="register-note">
+              ¿No tienes cuenta? <button type="button" className="register-link">Regístrate aquí</button>
             </p>
           </div>
         </div>
