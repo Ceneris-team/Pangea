@@ -185,10 +185,12 @@
   color:var(--ink-soft);
   cursor:pointer;
   user-select:none;
+  line-height:1;
 }
 .remember input{
   appearance:none;
   -webkit-appearance:none;
+  margin:0;
   width:16px;
   height:16px;
   border:1px solid var(--line);
@@ -197,6 +199,7 @@
   cursor:pointer;
   position:relative;
   flex:none;
+  vertical-align:middle;
 }
 .remember input:checked{
   background:var(--accent);
@@ -252,7 +255,7 @@
 .form-msg.ok{color:var(--accent);}
 
 .register-note{
-  margin-top:18px;
+  margin-top:8px;
   text-align:center;
   font-size:13.5px;
   color:var(--ink-faint);
