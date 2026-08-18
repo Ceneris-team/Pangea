@@ -251,30 +251,27 @@
 }
 .form-msg.ok{color:var(--accent);}
 
-.foot-note{
-  margin-top:26px;
+.register-note{
+  margin-top:18px;
   text-align:center;
-  font-size:13px;
+  font-size:13.5px;
   color:var(--ink-faint);
 }
 
-.register-btn{
-  display:block;
-  width:100%;
-  margin-top:16px;
-  padding:12px;
-  background:transparent;
-  color:var(--ink-soft);
-  border:1px solid var(--line);
-  border-radius:var(--radius);
-  font-size:13.5px;
-  font-family:inherit;
-  cursor:pointer;
-  transition:border-color .2s ease, color .2s ease;
-}
-.register-btn:hover{
-  border-color:var(--accent);
+.register-link{
+  background:none;
+  border:none;
+  padding:0;
+  margin:0;
+  font:inherit;
+  font-weight:600;
   color:var(--ink);
+  cursor:pointer;
+  border-bottom:1px solid var(--line);
+  transition:border-color .2s ease;
+}
+.register-link:hover{
+  border-color:var(--ink);
 }
 
 @media (min-width: 880px){
