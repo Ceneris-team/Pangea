@@ -22,19 +22,15 @@
   min-height:100vh;
 }
 
-.bg-fallback{
+.bg-photo{
   position:fixed;
   inset:0;
   z-index:0;
-  overflow:hidden;
+  background-size:cover;
+  background-position:center;
+  background-repeat:no-repeat;
 }
-.bg-fallback svg{
-  position:absolute;
-  inset:0;
-  width:100%;
-  height:100%;
-}
-.bg-fallback-tint{
+.bg-photo-tint{
   position:absolute;
   inset:0;
   background:linear-gradient(160deg, rgba(8,14,11,0.55) 0%, rgba(10,18,14,0.3) 45%, rgba(8,14,11,0.62) 100%);
