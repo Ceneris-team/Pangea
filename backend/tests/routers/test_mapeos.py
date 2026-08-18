@@ -13,17 +13,18 @@ reales de campo: el de calidad de agua trae un header con unidades
 pegadas al nombre y comillas en los valores, que es justo el caso que el
 mapeo por índice (mp_clmn.indc_clmn) existe para resolver.
 """
+
 import pathlib
 
 import pytest
 from fastapi.testclient import TestClient
 
-from app.main import app
 from app.database import get_db
-from app.security.dependencies import get_current_user
+from app.main import app
 from app.models import ConexionFTP, Dispositivo, Ubicacion
 from app.models.mapeo_dispositivo import MapeoColumna, MapeoFormato, Parametro
 from app.models.suscripcion import PermisoUsuarioSede
+from app.security.dependencies import get_current_user
 
 FIXTURES = pathlib.Path(__file__).resolve().parents[1] / "fixtures"
 POLIGONO_DUMMY = {"type": "Polygon", "coordinates": [[[0, 0], [0, 1], [1, 1], [1, 0], [0, 0]]]}
@@ -68,7 +69,11 @@ def tecnico_editor(db_session, fabrica):
 @pytest.fixture()
 def parametros(db_session):
     creados = []
-    for nombre, unidad in [("Temperatura HU06", "°C"), ("pH HU06", "pH"), ("Conductividad HU06", "uS/cm")]:
+    for nombre, unidad in [
+        ("Temperatura HU06", "°C"),
+        ("pH HU06", "pH"),
+        ("Conductividad HU06", "uS/cm"),
+    ]:
         parametro = Parametro(nmbr=nombre, undd=unidad, dscrpcn="parámetro creado por los tests")
         db_session.add(parametro)
         creados.append(parametro)
@@ -80,18 +85,30 @@ def crear_dispositivo(db_session, sede, nombre="CR1000 HU06", marca="Campbell HU
     """DEC-09: el mapeo cuelga de un dispositivo. Cadena mínima
     (Ubicacion + ConexionFTP + Dispositivo) para tener uno."""
     ubicacion = Ubicacion(
-        id_sd=sede.id_sd, nmbr=f"Ubicacion de {nombre}", lttd=0, lngtd=0, plgn_gjsn=POLIGONO_DUMMY,
+        id_sd=sede.id_sd,
+        nmbr=f"Ubicacion de {nombre}",
+        lttd=0,
+        lngtd=0,
+        plgn_gjsn=POLIGONO_DUMMY,
     )
     conexion = ConexionFTP(
-        id_sd=sede.id_sd, nmbr=f"Conexion de {nombre}", hst="127.0.0.1", usr_ftp="usr",
-        rt_rmt="/data", crdncl_cfrd="cifrado-de-prueba",
+        id_sd=sede.id_sd,
+        nmbr=f"Conexion de {nombre}",
+        hst="127.0.0.1",
+        usr_ftp="usr",
+        rt_rmt="/data",
+        crdncl_cfrd="cifrado-de-prueba",
     )
     db_session.add_all([ubicacion, conexion])
     db_session.flush()
 
     dispositivo = Dispositivo(
-        id_ubccn=ubicacion.id_ubccn, id_cnxn=conexion.id_cnxn,
-        nmbr=nombre, mrc=marca, lttd=0, lngtd=0,
+        id_ubccn=ubicacion.id_ubccn,
+        id_cnxn=conexion.id_cnxn,
+        nmbr=nombre,
+        mrc=marca,
+        lttd=0,
+        lngtd=0,
     )
     db_session.add(dispositivo)
     db_session.flush()
@@ -136,7 +153,9 @@ class TestListarParametros:
 class TestCrearMapeo:
     """CA3: 'GUARDAR' registra el mapeo y lo asocia al dispositivo."""
 
-    def test_crea_y_devuelve_el_mensaje_de_la_hu(self, client, db_session, tecnico_editor, parametros):
+    def test_crea_y_devuelve_el_mensaje_de_la_hu(
+        self, client, db_session, tecnico_editor, parametros
+    ):
         sede, _ = tecnico_editor
         dispositivo = crear_dispositivo(db_session, sede)
 
@@ -160,7 +179,7 @@ class TestCrearMapeo:
     def test_crear_con_columna_y_decimal_ambos_coma_devuelve_422(
         self, client, db_session, tecnico_editor, parametros
     ):
-        """"23,5" en una línea separada por comas son dos campos, no un
+        """ "23,5" en una línea separada por comas son dos campos, no un
         número: se rechaza al guardar en vez de producir lecturas partidas
         en silencio."""
         sede, _ = tecnico_editor
@@ -169,7 +188,10 @@ class TestCrearMapeo:
         resp = client.post(
             "/mapeos",
             json=cuerpo_mapeo(
-                parametros, dispositivo.id_dspstv, dlmtdr=",", dlmtdr_dcml=",",
+                parametros,
+                dispositivo.id_dspstv,
+                dlmtdr=",",
+                dlmtdr_dcml=",",
             ),
         )
         assert resp.status_code == 422
@@ -187,7 +209,9 @@ class TestCrearMapeo:
         )
         assert resp.status_code == 422
 
-    def test_guarda_el_formato_de_fecha_como_strptime(self, client, db_session, tecnico_editor, parametros):
+    def test_guarda_el_formato_de_fecha_como_strptime(
+        self, client, db_session, tecnico_editor, parametros
+    ):
         # El motor (parser._parsear_fecha) usa strptime: lo que se persiste
         # tiene que ser directamente consumible por resolver_formato().
         sede, _ = tecnico_editor
@@ -215,9 +239,10 @@ class TestCrearMapeo:
         sede, _ = tecnico_editor
         dispositivo = crear_dispositivo(db_session, sede)
 
-        assert client.post(
-            "/mapeos", json=cuerpo_mapeo(parametros, dispositivo.id_dspstv)
-        ).status_code == 201
+        assert (
+            client.post("/mapeos", json=cuerpo_mapeo(parametros, dispositivo.id_dspstv)).status_code
+            == 201
+        )
         resp = client.post("/mapeos", json=cuerpo_mapeo(parametros, dispositivo.id_dspstv))
         assert resp.status_code == 409
         assert "ya tiene un mapeo activo" in resp.json()["detail"].lower()
@@ -230,12 +255,18 @@ class TestCrearMapeo:
         sede, _ = tecnico_editor
         dispositivo = crear_dispositivo(db_session, sede)
 
-        assert client.post(
-            "/mapeos", json=cuerpo_mapeo(parametros, dispositivo.id_dspstv, tp_trm="H")
-        ).status_code == 201
-        assert client.post(
-            "/mapeos", json=cuerpo_mapeo(parametros, dispositivo.id_dspstv, tp_trm="E")
-        ).status_code == 201
+        assert (
+            client.post(
+                "/mapeos", json=cuerpo_mapeo(parametros, dispositivo.id_dspstv, tp_trm="H")
+            ).status_code
+            == 201
+        )
+        assert (
+            client.post(
+                "/mapeos", json=cuerpo_mapeo(parametros, dispositivo.id_dspstv, tp_trm="E")
+            ).status_code
+            == 201
+        )
 
     def test_misma_marca_y_sede_dispositivos_distintos_no_chocan(
         self, client, db_session, tecnico_editor, parametros
@@ -246,18 +277,22 @@ class TestCrearMapeo:
         disp_a = crear_dispositivo(db_session, sede, nombre="CR1000-A", marca="Campbell HU06")
         disp_b = crear_dispositivo(db_session, sede, nombre="CR1000-B", marca="Campbell HU06")
 
-        assert client.post(
-            "/mapeos", json=cuerpo_mapeo(parametros, disp_a.id_dspstv)
-        ).status_code == 201
-        assert client.post(
-            "/mapeos", json=cuerpo_mapeo(parametros, disp_b.id_dspstv)
-        ).status_code == 201
+        assert (
+            client.post("/mapeos", json=cuerpo_mapeo(parametros, disp_a.id_dspstv)).status_code
+            == 201
+        )
+        assert (
+            client.post("/mapeos", json=cuerpo_mapeo(parametros, disp_b.id_dspstv)).status_code
+            == 201
+        )
 
     def test_dispositivo_inexistente_devuelve_422(self, client, tecnico_editor, parametros):
         resp = client.post("/mapeos", json=cuerpo_mapeo(parametros, 999999))
         assert resp.status_code == 422
 
-    def test_delimitador_invalido_devuelve_422(self, client, db_session, tecnico_editor, parametros):
+    def test_delimitador_invalido_devuelve_422(
+        self, client, db_session, tecnico_editor, parametros
+    ):
         # Regla de negocio: solo coma, punto y coma, tabulador o espacio.
         sede, _ = tecnico_editor
         dispositivo = crear_dispositivo(db_session, sede)
@@ -266,7 +301,9 @@ class TestCrearMapeo:
         )
         assert resp.status_code == 422
 
-    def test_tipo_de_trama_invalido_devuelve_422(self, client, db_session, tecnico_editor, parametros):
+    def test_tipo_de_trama_invalido_devuelve_422(
+        self, client, db_session, tecnico_editor, parametros
+    ):
         sede, _ = tecnico_editor
         dispositivo = crear_dispositivo(db_session, sede)
         resp = client.post(
@@ -274,7 +311,9 @@ class TestCrearMapeo:
         )
         assert resp.status_code == 422
 
-    def test_parametro_inexistente_devuelve_422(self, client, db_session, tecnico_editor, parametros):
+    def test_parametro_inexistente_devuelve_422(
+        self, client, db_session, tecnico_editor, parametros
+    ):
         sede, _ = tecnico_editor
         dispositivo = crear_dispositivo(db_session, sede)
         cuerpo = cuerpo_mapeo(
@@ -307,9 +346,7 @@ class TestCrearMapeo:
         otra_sede = fabrica.sede()
         dispositivo_ajeno = crear_dispositivo(db_session, otra_sede)
 
-        resp = client.post(
-            "/mapeos", json=cuerpo_mapeo(parametros, dispositivo_ajeno.id_dspstv)
-        )
+        resp = client.post("/mapeos", json=cuerpo_mapeo(parametros, dispositivo_ajeno.id_dspstv))
         assert resp.status_code == 403
 
     def test_denegado_con_permiso_de_solo_lectura(self, client, db_session, fabrica, parametros):
@@ -341,9 +378,7 @@ class TestBugDEC09ResuelveElMapeoDelDispositivoCorrecto:
     dispositivo, no el del otro.
     """
 
-    def test_cada_dispositivo_resuelve_su_propio_mapeo_no_el_del_otro(
-        self, db_session, fabrica
-    ):
+    def test_cada_dispositivo_resuelve_su_propio_mapeo_no_el_del_otro(self, db_session, fabrica):
         from app.services.ingesta.mapeo import resolver_formato
 
         sede = fabrica.sede()
@@ -358,20 +393,30 @@ class TestBugDEC09ResuelveElMapeoDelDispositivoCorrecto:
         disp_b = crear_dispositivo(db_session, sede, nombre="CR1000-Sensor-pH", marca="Campbell")
 
         mapeo_a = MapeoFormato(
-            id_dspstv=disp_a.id_dspstv, tp_trm="H", dlmtdr=",", fl_inc_dts=1,
+            id_dspstv=disp_a.id_dspstv,
+            tp_trm="H",
+            dlmtdr=",",
+            fl_inc_dts=1,
             frmt_fch="%Y-%m-%d %H:%M:%S",
         )
         mapeo_b = MapeoFormato(
-            id_dspstv=disp_b.id_dspstv, tp_trm="H", dlmtdr=";", fl_inc_dts=2,
+            id_dspstv=disp_b.id_dspstv,
+            tp_trm="H",
+            dlmtdr=";",
+            fl_inc_dts=2,
             frmt_fch="%d/%m/%Y",
         )
         db_session.add_all([mapeo_a, mapeo_b])
         db_session.flush()
 
-        db_session.add_all([
-            MapeoColumna(id_mp=mapeo_a.id_mp, indc_clmn=1, id_prmtr=parametro_temperatura.id_prmtr),
-            MapeoColumna(id_mp=mapeo_b.id_mp, indc_clmn=1, id_prmtr=parametro_ph.id_prmtr),
-        ])
+        db_session.add_all(
+            [
+                MapeoColumna(
+                    id_mp=mapeo_a.id_mp, indc_clmn=1, id_prmtr=parametro_temperatura.id_prmtr
+                ),
+                MapeoColumna(id_mp=mapeo_b.id_mp, indc_clmn=1, id_prmtr=parametro_ph.id_prmtr),
+            ]
+        )
         db_session.flush()
 
         resuelto_a = resolver_formato(db_session, disp_a.id_dspstv, "H_datos.dat")
@@ -387,6 +432,7 @@ class TestBugDEC09ResuelveElMapeoDelDispositivoCorrecto:
         # Y la columna 1 se traduce a un parámetro DISTINTO según el
         # dispositivo: esto es lo que antes se mezclaba en silencio.
         from app.services.ingesta.mapeo import construir_mapeo
+
         columnas_header = ["Fecha", "Valor"]
         mapa_a = construir_mapeo(db_session, resuelto_a.id_mp, columnas_header)
         mapa_b = construir_mapeo(db_session, resuelto_b.id_mp, columnas_header)
@@ -431,12 +477,14 @@ class TestListarYObtenerMapeos:
         assert len(items) == 1
         assert items[0]["id_dspstv"] == disp_a.id_dspstv
 
-    def test_detalle_incluye_la_tabla_de_asignacion(self, client, db_session, tecnico_editor, parametros):
+    def test_detalle_incluye_la_tabla_de_asignacion(
+        self, client, db_session, tecnico_editor, parametros
+    ):
         sede, _ = tecnico_editor
         dispositivo = crear_dispositivo(db_session, sede)
-        id_mp = client.post(
-            "/mapeos", json=cuerpo_mapeo(parametros, dispositivo.id_dspstv)
-        ).json()["mapeo"]["id_mp"]
+        id_mp = client.post("/mapeos", json=cuerpo_mapeo(parametros, dispositivo.id_dspstv)).json()[
+            "mapeo"
+        ]["id_mp"]
 
         resp = client.get(f"/mapeos/{id_mp}")
         assert resp.status_code == 200
@@ -449,12 +497,14 @@ class TestListarYObtenerMapeos:
     def test_mapeo_inexistente_devuelve_404(self, client, tecnico_editor):
         assert client.get("/mapeos/999999").status_code == 404
 
-    def test_usuario_de_otra_sede_no_ve_el_mapeo(self, client, db_session, tecnico_editor, fabrica, parametros):
+    def test_usuario_de_otra_sede_no_ve_el_mapeo(
+        self, client, db_session, tecnico_editor, fabrica, parametros
+    ):
         sede, _ = tecnico_editor
         dispositivo = crear_dispositivo(db_session, sede)
-        id_mp = client.post(
-            "/mapeos", json=cuerpo_mapeo(parametros, dispositivo.id_dspstv)
-        ).json()["mapeo"]["id_mp"]
+        id_mp = client.post("/mapeos", json=cuerpo_mapeo(parametros, dispositivo.id_dspstv)).json()[
+            "mapeo"
+        ]["id_mp"]
 
         # HT-09 CA3: otro usuario, con permiso propio pero en otra sede.
         otro_rol = fabrica.rol("Administrador")
@@ -477,33 +527,37 @@ class TestActualizarMapeo:
     ):
         sede, _ = tecnico_editor
         dispositivo = crear_dispositivo(db_session, sede)
-        id_mp = client.post(
-            "/mapeos", json=cuerpo_mapeo(parametros, dispositivo.id_dspstv)
-        ).json()["mapeo"]["id_mp"]
+        id_mp = client.post("/mapeos", json=cuerpo_mapeo(parametros, dispositivo.id_dspstv)).json()[
+            "mapeo"
+        ]["id_mp"]
 
         resp = client.put(f"/mapeos/{id_mp}", json={"dlmtdr": ";"})
         assert resp.status_code == 200
         assert resp.json()["mensaje"] == "Mapeo actualizado correctamente"
         assert resp.json()["mapeo"]["dlmtdr"] == ";"
 
-    def test_omitir_columnas_conserva_la_asignacion(self, client, db_session, tecnico_editor, parametros):
+    def test_omitir_columnas_conserva_la_asignacion(
+        self, client, db_session, tecnico_editor, parametros
+    ):
         sede, _ = tecnico_editor
         dispositivo = crear_dispositivo(db_session, sede)
-        id_mp = client.post(
-            "/mapeos", json=cuerpo_mapeo(parametros, dispositivo.id_dspstv)
-        ).json()["mapeo"]["id_mp"]
+        id_mp = client.post("/mapeos", json=cuerpo_mapeo(parametros, dispositivo.id_dspstv)).json()[
+            "mapeo"
+        ]["id_mp"]
 
         client.put(f"/mapeos/{id_mp}", json={"fl_inc_dts": 2})
 
         columnas = db_session.query(MapeoColumna).filter(MapeoColumna.id_mp == id_mp).all()
         assert len(columnas) == 2
 
-    def test_enviar_columnas_reemplaza_la_asignacion(self, client, db_session, tecnico_editor, parametros):
+    def test_enviar_columnas_reemplaza_la_asignacion(
+        self, client, db_session, tecnico_editor, parametros
+    ):
         sede, _ = tecnico_editor
         dispositivo = crear_dispositivo(db_session, sede)
-        id_mp = client.post(
-            "/mapeos", json=cuerpo_mapeo(parametros, dispositivo.id_dspstv)
-        ).json()["mapeo"]["id_mp"]
+        id_mp = client.post("/mapeos", json=cuerpo_mapeo(parametros, dispositivo.id_dspstv)).json()[
+            "mapeo"
+        ]["id_mp"]
 
         resp = client.put(
             f"/mapeos/{id_mp}",
@@ -514,12 +568,14 @@ class TestActualizarMapeo:
         columnas = db_session.query(MapeoColumna).filter(MapeoColumna.id_mp == id_mp).all()
         assert [c.indc_clmn for c in columnas] == [4]
 
-    def test_delimitador_invalido_devuelve_422(self, client, db_session, tecnico_editor, parametros):
+    def test_delimitador_invalido_devuelve_422(
+        self, client, db_session, tecnico_editor, parametros
+    ):
         sede, _ = tecnico_editor
         dispositivo = crear_dispositivo(db_session, sede)
-        id_mp = client.post(
-            "/mapeos", json=cuerpo_mapeo(parametros, dispositivo.id_dspstv)
-        ).json()["mapeo"]["id_mp"]
+        id_mp = client.post("/mapeos", json=cuerpo_mapeo(parametros, dispositivo.id_dspstv)).json()[
+            "mapeo"
+        ]["id_mp"]
         assert client.put(f"/mapeos/{id_mp}", json={"dlmtdr": "|"}).status_code == 422
 
     def test_mapeo_inexistente_devuelve_404(self, client, tecnico_editor):
@@ -533,9 +589,9 @@ class TestActualizarMapeo:
         pasar el decimal a ',' lo deja indecidible."""
         sede, _ = tecnico_editor
         dispositivo = crear_dispositivo(db_session, sede)
-        id_mp = client.post(
-            "/mapeos", json=cuerpo_mapeo(parametros, dispositivo.id_dspstv)
-        ).json()["mapeo"]["id_mp"]
+        id_mp = client.post("/mapeos", json=cuerpo_mapeo(parametros, dispositivo.id_dspstv)).json()[
+            "mapeo"
+        ]["id_mp"]
 
         resp = client.put(f"/mapeos/{id_mp}", json={"dlmtdr_dcml": ","})
         assert resp.status_code == 422
@@ -546,20 +602,22 @@ class TestActualizarMapeo:
     ):
         sede, _ = tecnico_editor
         dispositivo = crear_dispositivo(db_session, sede)
-        id_mp = client.post(
-            "/mapeos", json=cuerpo_mapeo(parametros, dispositivo.id_dspstv)
-        ).json()["mapeo"]["id_mp"]
+        id_mp = client.post("/mapeos", json=cuerpo_mapeo(parametros, dispositivo.id_dspstv)).json()[
+            "mapeo"
+        ]["id_mp"]
 
         resp = client.put(f"/mapeos/{id_mp}", json={"dlmtdr": ";", "dlmtdr_dcml": ","})
         assert resp.status_code == 200
         assert resp.json()["mapeo"]["dlmtdr_dcml"] == ","
 
-    def test_denegado_con_permiso_de_solo_lectura(self, client, db_session, tecnico_editor, fabrica, parametros):
+    def test_denegado_con_permiso_de_solo_lectura(
+        self, client, db_session, tecnico_editor, fabrica, parametros
+    ):
         sede, _ = tecnico_editor
         dispositivo = crear_dispositivo(db_session, sede)
-        id_mp = client.post(
-            "/mapeos", json=cuerpo_mapeo(parametros, dispositivo.id_dspstv)
-        ).json()["mapeo"]["id_mp"]
+        id_mp = client.post("/mapeos", json=cuerpo_mapeo(parametros, dispositivo.id_dspstv)).json()[
+            "mapeo"
+        ]["id_mp"]
 
         rol_lector = fabrica.rol("Cliente Final")
         lector = fabrica.usuario(rol=rol_lector)

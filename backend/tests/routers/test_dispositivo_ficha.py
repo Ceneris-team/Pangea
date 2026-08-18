@@ -19,24 +19,22 @@ sede+marca:
 Reusa las factorías de test_dispositivos.py (misma cadena Ubicacion ->
 ConexionFTP -> Dispositivo) para no duplicar el armado del escenario.
 """
+
 import datetime as dt
 
 import pytest
 from fastapi.testclient import TestClient
 
-from app.main import app
 from app.database import get_db
-from app.security.dependencies import get_current_user
-from app.models import Dispositivo, MapeoFormato
+from app.main import app
+from app.models import MapeoFormato
 from app.models.archivo_ingesta import ArchivoIngesta
 from app.models.mapeo_dispositivo import MapeoColumna, Parametro
 from app.models.telemetria import Telemetria
+from app.security.dependencies import get_current_user
 from app.services.ingesta.mapeo import resolver_formato
-
 from tests.routers.test_dispositivos import (
     agregar_permiso,
-    crear_conexion,
-    crear_ubicacion,
     preparar_dispositivo,
     usuario_jwt,
 )
@@ -76,7 +74,12 @@ def crear_parametro(db_session, nombre, unidad="u"):
 
 
 def crear_mapeo_con_columnas(
-    db_session, dispositivo, tp_trm, columnas, dlmtdr=",", dlmtdr_dcml=".",
+    db_session,
+    dispositivo,
+    tp_trm,
+    columnas,
+    dlmtdr=",",
+    dlmtdr_dcml=".",
 ):
     """mp_frmt + sus mp_clmn. `columnas` es {indice: Parametro}."""
     mapeo = MapeoFormato(
@@ -110,10 +113,7 @@ def fecha_en_particion() -> dt.datetime:
 
 
 def contenido_dat(fecha: dt.datetime, valor: str, columna="Temp") -> str:
-    return (
-        f"Fecha,{columna}\n"
-        f"{fecha:%Y-%m-%d %H:%M:%S},{valor}\n"
-    )
+    return f"Fecha,{columna}\n" f"{fecha:%Y-%m-%d %H:%M:%S},{valor}\n"
 
 
 # ---------------------------------------------------------------------------
@@ -122,9 +122,7 @@ def contenido_dat(fecha: dt.datetime, valor: str, columna="Temp") -> str:
 
 
 class TestMapeoAisladoPorDispositivo:
-    def test_dos_dispositivos_misma_marca_y_sede_no_comparten_mapeo(
-        self, db_session, tecnico
-    ):
+    def test_dos_dispositivos_misma_marca_y_sede_no_comparten_mapeo(self, db_session, tecnico):
         """Con el diseño anterior (sede+marca) estos dos dataloggers
         resolvían el MISMO mp_frmt y las lecturas del segundo se guardaban
         bajo el parámetro del primero, sin error visible."""
@@ -145,21 +143,15 @@ class TestMapeoAisladoPorDispositivo:
         assert formato_uno.id_mp != formato_dos.id_mp
 
         columnas_uno = (
-            db_session.query(MapeoColumna)
-            .filter(MapeoColumna.id_mp == formato_uno.id_mp)
-            .all()
+            db_session.query(MapeoColumna).filter(MapeoColumna.id_mp == formato_uno.id_mp).all()
         )
         columnas_dos = (
-            db_session.query(MapeoColumna)
-            .filter(MapeoColumna.id_mp == formato_dos.id_mp)
-            .all()
+            db_session.query(MapeoColumna).filter(MapeoColumna.id_mp == formato_dos.id_mp).all()
         )
         assert [c.id_prmtr for c in columnas_uno] == [temperatura.id_prmtr]
         assert [c.id_prmtr for c in columnas_dos] == [ph.id_prmtr]
 
-    def test_un_dispositivo_con_mapeo_h_y_e_aplica_el_del_prefijo(
-        self, db_session, tecnico
-    ):
+    def test_un_dispositivo_con_mapeo_h_y_e_aplica_el_del_prefijo(self, db_session, tecnico):
         """El prefijo H_/E_ del nombre del archivo sigue decidiendo el tipo
         de trama; lo que cambió es que el mapeo se busca por dispositivo."""
         sede, _ = tecnico
@@ -203,25 +195,23 @@ class TestCargaArchivo:
         assert body["guardadas"] == 1
 
         filas = (
-            db_session.query(Telemetria)
-            .filter(Telemetria.id_dspstv == dispositivo.id_dspstv)
-            .all()
+            db_session.query(Telemetria).filter(Telemetria.id_dspstv == dispositivo.id_dspstv).all()
         )
         assert len(filas) == 1
         assert float(filas[0].vlr) == pytest.approx(23.5)
         assert filas[0].id_prmtr == temperatura.id_prmtr
 
         # Queda registrado en archv_ingst para la pestaña Logs.
-        log = db_session.query(ArchivoIngesta).filter(
-            ArchivoIngesta.id_archv == body["id_archv"]
-        ).first()
+        log = (
+            db_session.query(ArchivoIngesta)
+            .filter(ArchivoIngesta.id_archv == body["id_archv"])
+            .first()
+        )
         assert log is not None
         assert log.estd == "Exitoso"
         assert log.nmbr_archv == "H_manual.dat"
 
-    def test_sin_mapeo_para_ese_tipo_de_trama_devuelve_422(
-        self, client, db_session, tecnico
-    ):
+    def test_sin_mapeo_para_ese_tipo_de_trama_devuelve_422(self, client, db_session, tecnico):
         """Caso de error: el dispositivo tiene mapeo H pero llega un E_."""
         sede, _ = tecnico
         temperatura = crear_parametro(db_session, "temperatura", "C")
@@ -266,7 +256,12 @@ class TestCargaArchivo:
         temperatura = crear_parametro(db_session, "temperatura", "C")
         dispositivo = preparar_dispositivo(db_session, sede, nombre="CR1000-europeo")
         crear_mapeo_con_columnas(
-            db_session, dispositivo, "H", {1: temperatura}, dlmtdr=";", dlmtdr_dcml=",",
+            db_session,
+            dispositivo,
+            "H",
+            {1: temperatura},
+            dlmtdr=";",
+            dlmtdr_dcml=",",
         )
 
         fecha = fecha_en_particion()

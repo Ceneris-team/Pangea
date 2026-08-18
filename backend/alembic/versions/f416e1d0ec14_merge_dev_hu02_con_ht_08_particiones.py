@@ -14,15 +14,12 @@ present".
 Esta migración solo une ambas ramas del historial: no cambia el esquema,
 por eso upgrade/downgrade van vacíos.
 """
+
 from typing import Sequence, Union
 
-from alembic import op
-import sqlalchemy as sa
-
-
 # revision identifiers, used by Alembic.
-revision: str = 'f416e1d0ec14'
-down_revision: Union[str, Sequence[str], None] = ('a7f31c4b9e02', 'ebeb9ec49fd3')
+revision: str = "f416e1d0ec14"
+down_revision: Union[str, Sequence[str], None] = ("a7f31c4b9e02", "ebeb9ec49fd3")
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

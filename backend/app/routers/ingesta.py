@@ -12,14 +12,15 @@ CA1-CA3 (listado, filtro y detalle de la cola) se agregan más abajo en
 este mismo router: comparten módulo de permisos ('Ingesta') y tabla base
 (archv_ingst) con /metricas, que no se toca.
 """
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import ArchivoIngesta, ConexionFTP, Dispositivo
-from app.security.permisos import require_permiso, verificar_sede, LECTURA
 from app.schemas import ArchivoIngestaDetalle, ArchivoIngestaListItem, MetricasColaIngesta
+from app.security.permisos import LECTURA, require_permiso, verificar_sede
 
 router = APIRouter(prefix="/ingesta", tags=["Ingesta"])
 
@@ -52,7 +53,7 @@ def _validar_estado_negocio(estado: str) -> str:
 
 
 def _mapa_dataloggers(db: Session, ids_cnxn: set[int]) -> dict[int, str]:
-    """"Datalogger de origen" de cada archivo. cnxn_ftp.nmbr (HU05: "Nombre
+    """ "Datalogger de origen" de cada archivo. cnxn_ftp.nmbr (HU05: "Nombre
     del datalogger") ya es un nombre de negocio válido y sirve de fallback,
     pero el dueño real del nombre del datalogger es dspstv.nmbr (HU10-11):
     se prefiere ese cuando existe exactamente un dispositivo activo
@@ -119,7 +120,9 @@ def listar_cola_ingesta(
 ):
     """CA1: listado paginado de la cola, orden fch_dtccn descendente.
     CA2: filtro opcional por estado (lenguaje de negocio de la HU)."""
-    query = db.query(ArchivoIngesta).join(ConexionFTP, ConexionFTP.id_cnxn == ArchivoIngesta.id_cnxn)
+    query = db.query(ArchivoIngesta).join(
+        ConexionFTP, ConexionFTP.id_cnxn == ArchivoIngesta.id_cnxn
+    )
 
     # Aislamiento por sede (mismo criterio que el resto del módulo Ingesta,
     # ver routers/mapeos.py y HT-09 CA3): un usuario 'por_sede' solo ve los

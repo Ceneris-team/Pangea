@@ -14,7 +14,11 @@ from app.services.ingesta.mapeo import (
     resolver_formato,
 )
 from app.services.ingesta.parser import parsear_dat
-from app.services.ingesta.persistencia import DispositivoNoResueltoError, guardar_lecturas, resolver_dispositivo
+from app.services.ingesta.persistencia import (
+    DispositivoNoResueltoError,
+    guardar_lecturas,
+    resolver_dispositivo,
+)
 from app.services.ingesta.validador import validar_lecturas
 from app.services.particiones import ParticionInexistenteError
 
@@ -88,13 +92,19 @@ def interpretar_y_guardar(
         )
 
     lecturas_estandar = estandarizar_filas(
-        resultado_parseo, id_cnxn=id_cnxn, mapeo=mapeo,
+        resultado_parseo,
+        id_cnxn=id_cnxn,
+        mapeo=mapeo,
     )
     resultado_validacion = validar_lecturas(
-        lecturas_estandar, delimitador_decimal=formato.delimitador_decimal,
+        lecturas_estandar,
+        delimitador_decimal=formato.delimitador_decimal,
     )
     resultado_persistencia = guardar_lecturas(
-        db, resultado_validacion.validas, dispositivo, id_archv,
+        db,
+        resultado_validacion.validas,
+        dispositivo,
+        id_archv,
     )
     return resultado_validacion, resultado_persistencia
 
@@ -144,7 +154,9 @@ def procesar_archivo_dat(self, id_archv: int) -> dict:
 
         logger.info(
             "Procesando archivo .dat: id_archv=%s cnxn=%s archivo=%s",
-            id_archv, archivo.id_cnxn, archivo.nmbr_archv,
+            id_archv,
+            archivo.id_cnxn,
+            archivo.nmbr_archv,
         )
 
         cnxn = db.get(ConexionFTP, archivo.id_cnxn)
@@ -199,8 +211,10 @@ def procesar_archivo_dat(self, id_archv: int) -> dict:
 
         logger.info(
             "archv_ingst id=%s procesado: %s guardadas, %s sin valor, %s con error de validación",
-            id_archv, resultado_persistencia.guardadas,
-            resultado_persistencia.omitidas_sin_valor, len(resultado_validacion.errores),
+            id_archv,
+            resultado_persistencia.guardadas,
+            resultado_persistencia.omitidas_sin_valor,
+            len(resultado_validacion.errores),
         )
         return {
             "id_archv": id_archv,
@@ -287,12 +301,15 @@ def sondear_conexiones_ftp() -> dict:
             except Exception as exc:
                 logger.error(
                     "No se pudo sondear cnxn_ftp id=%s (%s): %s",
-                    cnxn.id_cnxn, cnxn.hst, exc,
+                    cnxn.id_cnxn,
+                    cnxn.hst,
+                    exc,
                 )
                 continue
 
             existentes = {
-                nombre for (nombre,) in db.query(ArchivoIngesta.nmbr_archv)
+                nombre
+                for (nombre,) in db.query(ArchivoIngesta.nmbr_archv)
                 .filter(ArchivoIngesta.id_cnxn == cnxn.id_cnxn)
                 .filter(ArchivoIngesta.nmbr_archv.in_(nombres))
                 .all()
@@ -312,7 +329,8 @@ def sondear_conexiones_ftp() -> dict:
 
         logger.info(
             "Sondeo FTP: %s conexiones revisadas, %s archivos nuevos encolados",
-            len(conexiones), total_encolados,
+            len(conexiones),
+            total_encolados,
         )
         return {"conexiones_revisadas": len(conexiones), "encolados": total_encolados}
     finally:

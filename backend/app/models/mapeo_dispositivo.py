@@ -1,6 +1,14 @@
 from sqlalchemy import (
-    Column, Integer, String, ForeignKey, Numeric, TIMESTAMP,
-    CheckConstraint, Index, UniqueConstraint, text,
+    TIMESTAMP,
+    CheckConstraint,
+    Column,
+    ForeignKey,
+    Index,
+    Integer,
+    Numeric,
+    String,
+    UniqueConstraint,
+    text,
 )
 
 from app.database import Base
@@ -26,6 +34,7 @@ class MapeoFormato(Base):
     derivan del dispositivo (Dispositivo.mrc, Ubicacion.id_sd) en vez de
     duplicarse acá.
     """
+
     __tablename__ = "mp_frmt"
     __table_args__ = (
         CheckConstraint("tp_trm IN ('H','E')", name="mpfrmt_tptrm_check"),
@@ -70,10 +79,9 @@ class Parametro(Base):
 
 class MapeoColumna(Base):
     """Columna del archivo -> parámetro (HU 06)."""
+
     __tablename__ = "mp_clmn"
-    __table_args__ = (
-        UniqueConstraint("id_mp", "indc_clmn", name="uq_mpclmn_mp_indccolmn"),
-    )
+    __table_args__ = (UniqueConstraint("id_mp", "indc_clmn", name="uq_mpclmn_mp_indccolmn"),)
 
     id_mp_cl = Column(Integer, primary_key=True, autoincrement=True)
     id_mp = Column(Integer, ForeignKey("mp_frmt.id_mp"), nullable=False)
@@ -88,6 +96,7 @@ class Dispositivo(Base):
     de formato (uno por tipo de trama), así que la relación no cabe en una
     sola FK; vive del lado de MapeoFormato.id_dspstv.
     """
+
     __tablename__ = "dspstv"
     __table_args__ = (
         CheckConstraint("lttd BETWEEN -90 AND 90", name="dspstv_lttd_check"),

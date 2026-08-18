@@ -28,6 +28,8 @@ def enviar_correo_bienvenida(correo: str, nombre_completo: str, password_tempora
     logger.info(
         "[STUB envio correo] Para: %s | Asunto: Bienvenido a Pangea 4.0 | "
         "Nombre: %s | Password temporal: %s | Debe cambiarla en su primer login.",
-        correo, nombre_completo, password_temporal,
+        correo,
+        nombre_completo,
+        password_temporal,
     )
     return {"correo": correo, "estado": "simulado"}

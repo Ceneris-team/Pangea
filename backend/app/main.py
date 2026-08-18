@@ -3,17 +3,29 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
 from app.routers import (
-    usuarios, ubicaciones, auth, ingesta, conexiones_ftp, mediciones, mapeos, dispositivos,
+    auth,
+    conexiones_ftp,
+    dispositivos,
+    ingesta,
+    mapeos,
+    mediciones,
+    ubicaciones,
+    usuarios,
 )
 
-RATELIMIT_STORAGE_URL = os.environ.get(
-    "RATELIMIT_STORAGE_URL", "redis://localhost:6379/1"
-)
+RATELIMIT_STORAGE_URL = os.environ.get("RATELIMIT_STORAGE_URL", "redis://localhost:6379/1")
 limiter = Limiter(key_func=get_remote_address, storage_uri=RATELIMIT_STORAGE_URL)
+
+# Lista separada por comas (ej. "https://a.com,https://b.com"). Si no está
+# seteada, cae en los orígenes de dev local con Vite para no romper el
+# flujo de nadie del equipo que no tenga esta variable configurada.
+CORS_ALLOWED_ORIGINS = os.environ.get(
+    "CORS_ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173"
+).split(",")
 
 app = FastAPI()
 app.state.limiter = limiter
@@ -21,10 +33,7 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-    ],
+    allow_origins=CORS_ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -13,15 +13,16 @@ Cobertura por CA:
 También cubre HU03 (listado): búsqueda insensible a mayúsculas por nombre y
 por fragmento de correo, filtros por rol/estado y paginado de 10.
 """
+
 import pytest
 from fastapi.testclient import TestClient
 
-from app.main import app
 from app.database import get_db
-from app.security.dependencies import get_current_user
-from app.security.password_policy import es_password_valido
+from app.main import app
 from app.models import Usuario
 from app.models.suscripcion import PermisoUsuarioSede
+from app.security.dependencies import get_current_user
+from app.security.password_policy import es_password_valido
 
 
 def usuario_jwt(usuario_db, rol_nombre, sede_id=None, scope="por_sede"):
@@ -95,7 +96,9 @@ def cuerpo_valido(**overrides):
 
 
 class TestCrearUsuario:
-    def test_crear_devuelve_201_y_mensaje_de_exito(self, client, db_session, fabrica, admin_editor, correos_encolados):
+    def test_crear_devuelve_201_y_mensaje_de_exito(
+        self, client, db_session, fabrica, admin_editor, correos_encolados
+    ):
         fabrica.rol("Cliente Final")
 
         resp = client.post("/usuarios", json=cuerpo_valido())
@@ -107,30 +110,32 @@ class TestCrearUsuario:
         assert cuerpo["crr"] == "nuevo.usuario@pangea-test.com"
         assert cuerpo["rol_nombre"] == "Cliente Final"
 
-    def test_el_usuario_queda_activo(self, client, db_session, fabrica, admin_editor, correos_encolados):
+    def test_el_usuario_queda_activo(
+        self, client, db_session, fabrica, admin_editor, correos_encolados
+    ):
         """CA3: el nuevo usuario aparece en estado 'Activo'."""
         fabrica.rol("Cliente Final")
 
         resp = client.post("/usuarios", json=cuerpo_valido())
 
         assert resp.json()["estd"] == "Activo"
-        guardado = db_session.query(Usuario).filter(
-            Usuario.id_usr == resp.json()["id_usr"]
-        ).one()
+        guardado = db_session.query(Usuario).filter(Usuario.id_usr == resp.json()["id_usr"]).one()
         assert guardado.estd == "Activo"
 
-    def test_marca_debe_cambiar_contrasena(self, client, db_session, fabrica, admin_editor, correos_encolados):
+    def test_marca_debe_cambiar_contrasena(
+        self, client, db_session, fabrica, admin_editor, correos_encolados
+    ):
         """La credencial es temporal: debe cambiarse en el primer login."""
         fabrica.rol("Cliente Final")
 
         resp = client.post("/usuarios", json=cuerpo_valido())
 
-        guardado = db_session.query(Usuario).filter(
-            Usuario.id_usr == resp.json()["id_usr"]
-        ).one()
+        guardado = db_session.query(Usuario).filter(Usuario.id_usr == resp.json()["id_usr"]).one()
         assert guardado.dbe_cmbr_pswrd is True
 
-    def test_el_correo_se_guarda_en_minusculas(self, client, db_session, fabrica, admin_editor, correos_encolados):
+    def test_el_correo_se_guarda_en_minusculas(
+        self, client, db_session, fabrica, admin_editor, correos_encolados
+    ):
         fabrica.rol("Cliente Final")
 
         resp = client.post("/usuarios", json=cuerpo_valido(crr="MAYUSCULAS@Pangea-Test.com"))
@@ -143,28 +148,34 @@ class TestCrearUsuario:
 
         assert client.post("/usuarios", json=cuerpo_valido()).status_code == 201
 
-    def test_guarda_el_telefono_cuando_se_envia(self, client, db_session, fabrica, admin_editor, correos_encolados):
+    def test_guarda_el_telefono_cuando_se_envia(
+        self, client, db_session, fabrica, admin_editor, correos_encolados
+    ):
         fabrica.rol("Cliente Final")
 
         resp = client.post("/usuarios", json=cuerpo_valido(tlfn="+51987654321"))
 
-        guardado = db_session.query(Usuario).filter(
-            Usuario.id_usr == resp.json()["id_usr"]
-        ).one()
+        guardado = db_session.query(Usuario).filter(Usuario.id_usr == resp.json()["id_usr"]).one()
         assert guardado.tlfn == "+51987654321"
 
     @pytest.mark.parametrize("campo", ["nmbr_cmplt", "crr", "rol_nombre"])
-    def test_campos_obligatorios_faltantes_devuelven_422(self, client, fabrica, admin_editor, correos_encolados, campo):
+    def test_campos_obligatorios_faltantes_devuelven_422(
+        self, client, fabrica, admin_editor, correos_encolados, campo
+    ):
         fabrica.rol("Cliente Final")
         cuerpo = cuerpo_valido()
         del cuerpo[campo]
 
         assert client.post("/usuarios", json=cuerpo).status_code == 422
 
-    def test_correo_con_formato_invalido_devuelve_422(self, client, fabrica, admin_editor, correos_encolados):
+    def test_correo_con_formato_invalido_devuelve_422(
+        self, client, fabrica, admin_editor, correos_encolados
+    ):
         fabrica.rol("Cliente Final")
 
-        assert client.post("/usuarios", json=cuerpo_valido(crr="no-es-un-correo")).status_code == 422
+        assert (
+            client.post("/usuarios", json=cuerpo_valido(crr="no-es-un-correo")).status_code == 422
+        )
 
     def test_rol_inexistente_devuelve_400(self, client, admin_editor, correos_encolados):
         resp = client.post("/usuarios", json=cuerpo_valido(rol_nombre="Rol Que No Existe"))
@@ -199,7 +210,9 @@ class TestCredencialTemporalYCorreo:
         assert encolado["correo"] == "nuevo.usuario@pangea-test.com"
         assert encolado["nombre_completo"] == "Nuevo Usuario de Prueba"
 
-    def test_la_password_temporal_cumple_la_politica(self, client, fabrica, admin_editor, correos_encolados):
+    def test_la_password_temporal_cumple_la_politica(
+        self, client, fabrica, admin_editor, correos_encolados
+    ):
         """CA2: '8+ caracteres, 1 mayúscula, 1 número'. Se lee la que viajó
         a la task, que es la única vez que existe en claro."""
         fabrica.rol("Cliente Final")
@@ -212,27 +225,33 @@ class TestCredencialTemporalYCorreo:
         assert any(c.isdigit() for c in temporal)
         assert es_password_valido(temporal)
 
-    def test_la_password_temporal_no_se_guarda_en_claro(self, client, db_session, fabrica, admin_editor, correos_encolados):
+    def test_la_password_temporal_no_se_guarda_en_claro(
+        self, client, db_session, fabrica, admin_editor, correos_encolados
+    ):
         fabrica.rol("Cliente Final")
 
         resp = client.post("/usuarios", json=cuerpo_valido())
 
         temporal = correos_encolados[0]["password_temporal"]
-        guardado = db_session.query(Usuario).filter(
-            Usuario.id_usr == resp.json()["id_usr"]
-        ).one()
+        guardado = db_session.query(Usuario).filter(Usuario.id_usr == resp.json()["id_usr"]).one()
         assert guardado.cntrsn_hsh != temporal
         assert guardado.cntrsn_hsh.startswith("$2")  # hash bcrypt
 
-    def test_cada_usuario_recibe_una_password_distinta(self, client, fabrica, admin_editor, correos_encolados):
+    def test_cada_usuario_recibe_una_password_distinta(
+        self, client, fabrica, admin_editor, correos_encolados
+    ):
         fabrica.rol("Cliente Final")
 
         client.post("/usuarios", json=cuerpo_valido(crr="uno@pangea-test.com"))
         client.post("/usuarios", json=cuerpo_valido(crr="dos@pangea-test.com"))
 
-        assert correos_encolados[0]["password_temporal"] != correos_encolados[1]["password_temporal"]
+        assert (
+            correos_encolados[0]["password_temporal"] != correos_encolados[1]["password_temporal"]
+        )
 
-    def test_no_se_encola_correo_si_la_creacion_falla(self, client, fabrica, admin_editor, correos_encolados):
+    def test_no_se_encola_correo_si_la_creacion_falla(
+        self, client, fabrica, admin_editor, correos_encolados
+    ):
         """Un rol inexistente corta antes de crear: no debe salir correo."""
         client.post("/usuarios", json=cuerpo_valido(rol_nombre="Rol Que No Existe"))
 
@@ -245,7 +264,9 @@ class TestCredencialTemporalYCorreo:
 
 
 class TestUsuarioNuevoEnElListado:
-    def test_el_usuario_creado_aparece_en_el_listado(self, client, fabrica, admin_editor, correos_encolados):
+    def test_el_usuario_creado_aparece_en_el_listado(
+        self, client, fabrica, admin_editor, correos_encolados
+    ):
         fabrica.rol("Cliente Final")
         creado = client.post("/usuarios", json=cuerpo_valido(nmbr_cmplt="Usuario Del CA3"))
         assert creado.status_code == 201
@@ -264,19 +285,29 @@ class TestUsuarioNuevoEnElListado:
 
 
 class TestListarUsuarios:
-    def test_busqueda_por_nombre_insensible_a_mayusculas(self, client, fabrica, admin_editor, correos_encolados):
+    def test_busqueda_por_nombre_insensible_a_mayusculas(
+        self, client, fabrica, admin_editor, correos_encolados
+    ):
         fabrica.rol("Cliente Final")
-        client.post("/usuarios", json=cuerpo_valido(nmbr_cmplt="Zoraida Buscable", crr="zoraida@pangea-test.com"))
+        client.post(
+            "/usuarios",
+            json=cuerpo_valido(nmbr_cmplt="Zoraida Buscable", crr="zoraida@pangea-test.com"),
+        )
 
         resp = client.get("/usuarios", params={"busqueda": "zoraida buscable"})
 
         nombres = [i["nmbr_cmplt"] for i in resp.json()["items"]]
         assert "Zoraida Buscable" in nombres
 
-    def test_busqueda_por_fragmento_de_correo(self, client, fabrica, admin_editor, correos_encolados):
+    def test_busqueda_por_fragmento_de_correo(
+        self, client, fabrica, admin_editor, correos_encolados
+    ):
         """CA2: 'busco por nombre o fragmento de correo'."""
         fabrica.rol("Cliente Final")
-        client.post("/usuarios", json=cuerpo_valido(nmbr_cmplt="Correo Buscable", crr="fragmento.unico@pangea-test.com"))
+        client.post(
+            "/usuarios",
+            json=cuerpo_valido(nmbr_cmplt="Correo Buscable", crr="fragmento.unico@pangea-test.com"),
+        )
 
         resp = client.get("/usuarios", params={"busqueda": "fragmento.unico"})
 
@@ -295,9 +326,7 @@ class TestListarUsuarios:
     def test_filtro_por_estado(self, client, db_session, fabrica, admin_editor, correos_encolados):
         fabrica.rol("Cliente Final")
         creado = client.post("/usuarios", json=cuerpo_valido(crr="inactivo@pangea-test.com"))
-        usuario = db_session.query(Usuario).filter(
-            Usuario.id_usr == creado.json()["id_usr"]
-        ).one()
+        usuario = db_session.query(Usuario).filter(Usuario.id_usr == creado.json()["id_usr"]).one()
         usuario.estd = "Inactivo"
         db_session.flush()
 
@@ -317,7 +346,9 @@ class TestListarUsuarios:
         assert cuerpo["por_pagina"] == 10
         assert len(cuerpo["items"]) == 10
 
-    def test_el_administrador_aparece_en_su_propio_listado(self, client, admin_editor, correos_encolados):
+    def test_el_administrador_aparece_en_su_propio_listado(
+        self, client, admin_editor, correos_encolados
+    ):
         """Conversación HU03: 'el propio Administrador con sesión activa
         también aparece en el listado'."""
         usuario_admin, _, _ = admin_editor

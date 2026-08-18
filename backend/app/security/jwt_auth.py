@@ -11,8 +11,9 @@ log de auditoría formal (lg_adtr, HT-11) recién se construye en Sprint 3 -
 así el middleware de HT-09 y el propio log no necesitan tocar este módulo
 más adelante.
 """
-import os
+
 import datetime as dt
+import os
 
 import jwt
 

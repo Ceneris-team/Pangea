@@ -8,6 +8,7 @@ protocolo 'TCP' de cnxn_ftp es un mecanismo distinto (el datalogger empuja
 datos por socket) que no se puede sondear de la misma forma; queda fuera
 de esta pieza.
 """
+
 import ftplib
 import io
 import logging

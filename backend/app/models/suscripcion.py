@@ -1,6 +1,15 @@
 from sqlalchemy import (
-    Column, Integer, String, ForeignKey, Numeric, Date, TIMESTAMP,
-    CheckConstraint, Index, UniqueConstraint, text,
+    TIMESTAMP,
+    CheckConstraint,
+    Column,
+    Date,
+    ForeignKey,
+    Index,
+    Integer,
+    Numeric,
+    String,
+    UniqueConstraint,
+    text,
 )
 
 from app.database import Base
@@ -35,9 +44,7 @@ class LimitePlan(Base):
 
 class Suscripcion(Base):
     __tablename__ = "sscrpcn"
-    __table_args__ = (
-        Index("idx_sscrpcn_vncmnt", "fch_vncmnt", "estd"),
-    )
+    __table_args__ = (Index("idx_sscrpcn_vncmnt", "fch_vncmnt", "estd"),)
 
     id_sscrpcn = Column(Integer, primary_key=True, autoincrement=True)
     id_clnt = Column(Integer, ForeignKey("clnt.id_clnt"), nullable=False)
@@ -49,9 +56,7 @@ class Suscripcion(Base):
 
 class Cobro(Base):
     __tablename__ = "cbr"
-    __table_args__ = (
-        CheckConstraint("fch_cbr <= CURRENT_DATE", name="cbr_fchcbr_check"),
-    )
+    __table_args__ = (CheckConstraint("fch_cbr <= CURRENT_DATE", name="cbr_fchcbr_check"),)
 
     id_cbr = Column(Integer, primary_key=True, autoincrement=True)
     id_sscrpcn = Column(Integer, ForeignKey("sscrpcn.id_sscrpcn"), nullable=False)
@@ -63,6 +68,7 @@ class Cobro(Base):
 
 class PermisoUsuarioSede(Base):
     """HT-03: permisos granulares por módulo y sede."""
+
     __tablename__ = "prms_usr_sd"
     __table_args__ = (
         UniqueConstraint("id_usr", "id_sd", "mdl", name="uq_prmsusrsd_usr_sd_mdl"),

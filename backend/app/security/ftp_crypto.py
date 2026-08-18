@@ -13,6 +13,7 @@ comparar), aquí sí necesitas descifrar la credencial real para poder
 conectarte al servidor FTP/TCP del datalogger (HU 05, T18 "Probar
 conexión datalogger"). Por eso NO se usa bcrypt aquí.
 """
+
 import os
 
 from cryptography.fernet import Fernet, InvalidToken

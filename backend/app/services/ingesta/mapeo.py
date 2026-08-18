@@ -15,6 +15,7 @@ decisiones de negocio la definen:
    archivos de campo traen headers con nombres inconsistentes o
    repetidos, y el índice es estable frente a eso.
 """
+
 import dataclasses
 import logging
 import os
@@ -48,6 +49,7 @@ class FormatoResuelto:
     El mapeo columna->parámetro no va aquí: mp_clmn referencia columnas
     por índice, así que hace falta el header ya leído para traducirlo a
     nombres. Se obtiene después con construir_mapeo()."""
+
     id_mp: int
     tipo_trama: str
     config: ConfiguracionParseo
@@ -155,7 +157,9 @@ def construir_mapeo(db: Session, id_mp: int, columnas: list) -> dict:
         logger.warning(
             "mp_frmt id=%s: los índices %s de mp_clmn quedan fuera del header "
             "del archivo (%s columnas); esas columnas se ignoran.",
-            id_mp, sorted(fuera_de_rango), len(columnas),
+            id_mp,
+            sorted(fuera_de_rango),
+            len(columnas),
         )
 
     return mapeo

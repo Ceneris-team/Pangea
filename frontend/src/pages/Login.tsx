@@ -137,7 +137,7 @@ export default function Login() {
                     checked={remember}
                     onChange={(e) => setRemember(e.target.checked)}
                   />
-                  Recordarme
+                      Recordarme
                 </label>
                 <Link to="/olvide-contrasena" className="link">
                   ¿Olvidaste tu contraseña?
@@ -147,12 +147,11 @@ export default function Login() {
               <button type="submit" className="submit" disabled={loading}>
                 {loading ? "Ingresando…" : "Iniciar sesión"}
               </button>
+              <p className="register-note">
+                ¿No tienes cuenta? <button type="button" className="register-link">Regístrate aquí</button>
+              </p>
               <p className={`form-msg${formOk ? " ok" : ""}`}>{formMsg}</p>
             </form>
-
-            <p className="register-note">
-              ¿No tienes cuenta? <button type="button" className="register-link">Regístrate aquí</button>
-            </p>
           </div>
         </div>
       </div>

@@ -6,6 +6,7 @@ seguridad de HT-04).
 Ejemplo de valor para desarrollo local:
     DATABASE_URL=postgresql+psycopg2://usuario:clave@localhost:5432/pangea_dev
 """
+
 import os
 
 from dotenv import load_dotenv

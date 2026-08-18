@@ -8,16 +8,17 @@ correo (insensible a mayúsculas). Filtro por rol y por estado. Paginado de
 tiene una fila con permiso en ese módulo, pero el control ya no depende del
 nombre del rol sino del permiso otorgado.
 """
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import Usuario, Rol
-from app.security.permisos import require_permiso, LECTURA, EDICION
+from app.models import Rol, Usuario
+from app.schemas import UsuarioCreado, UsuarioCrear, UsuarioListItem
 from app.security.hashing import generar_password_temporal, hash_password
-from app.schemas import UsuarioListItem, UsuarioCrear, UsuarioCreado
+from app.security.permisos import EDICION, LECTURA, require_permiso
 from app.tasks.notificaciones import enviar_correo_bienvenida
 
 router = APIRouter(prefix="/usuarios", tags=["Usuarios"])
@@ -50,10 +51,7 @@ def listar_usuarios(
 
     total = query.count()
     usuarios = (
-        query.order_by(Usuario.nmbr_cmplt)
-        .offset((pagina - 1) * por_pagina)
-        .limit(por_pagina)
-        .all()
+        query.order_by(Usuario.nmbr_cmplt).offset((pagina - 1) * por_pagina).limit(por_pagina).all()
     )
 
     items = [

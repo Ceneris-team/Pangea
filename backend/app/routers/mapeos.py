@@ -27,6 +27,7 @@ módulo 'Ingesta' (es el módulo del CHECK constraint de prms_usr_sd que
 corresponde a la configuración de la ingesta; no existe un módulo
 'Mapeos'). Lectura para consultar, Edición para crear/actualizar.
 """
+
 import csv
 import ftplib
 
@@ -59,6 +60,15 @@ from app.schemas import (
     SedeListItem,
     VistaPreviaResponse,
 )
+from app.security.permisos import (
+    EDICION,
+    LECTURA,
+    require_alguno_permiso,
+    require_permiso,
+    verificar_sede,
+)
+from app.services.ingesta.parser import ConfiguracionParseo, parsear_dat
+from app.tasks.ingesta import normalizar_contenido_dat
 
 router = APIRouter(prefix="/mapeos", tags=["Mapeos de formato"])
 router_parametros = APIRouter(prefix="/parametros", tags=["Mapeos de formato"])
@@ -89,16 +99,20 @@ DELIMITADORES_DECIMALES_VALIDOS = {".", ","}
 # en mp_frmt.frmt_fch es el formato de strptime. Se traduce en la frontera
 # para que la UI hable en el lenguaje de la HU y el motor no cambie.
 _TOKENS_FECHA = [
-    ("YYYY", "%Y"), ("YY", "%y"),
-    ("MM", "%m"), ("DD", "%d"),
-    ("HH", "%H"), ("mm", "%M"), ("ss", "%S"),
+    ("YYYY", "%Y"),
+    ("YY", "%y"),
+    ("MM", "%m"),
+    ("DD", "%d"),
+    ("HH", "%H"),
+    ("mm", "%M"),
+    ("ss", "%S"),
 ]
 
 FILAS_VISTA_PREVIA = 10  # CA2: "muestra las primeras 10 filas"
 
 
 def a_formato_strptime(formato: str) -> str:
-    """"YYYY-MM-DD HH:mm:ss" -> "%Y-%m-%d %H:%M:%S".
+    """ "YYYY-MM-DD HH:mm:ss" -> "%Y-%m-%d %H:%M:%S".
 
     Si ya viene en formato strptime (contiene '%') se deja pasar tal cual:
     los mapeos sembrados a mano antes de HU06 ya están guardados así.
@@ -245,9 +259,7 @@ def _a_list_item(
 def _cargar_contexto(db: Session, formato: MapeoFormato) -> tuple[Dispositivo, Ubicacion]:
     """Dispositivo + Ubicación de un mapeo ya cargado, para poder armar su
     list item (marca, sede) y verificar la sede."""
-    dispositivo = (
-        db.query(Dispositivo).filter(Dispositivo.id_dspstv == formato.id_dspstv).first()
-    )
+    dispositivo = db.query(Dispositivo).filter(Dispositivo.id_dspstv == formato.id_dspstv).first()
     ubicacion = (
         db.query(Ubicacion).filter(Ubicacion.id_ubccn == dispositivo.id_ubccn).first()
         if dispositivo is not None
@@ -340,7 +352,9 @@ def listar_sedes(
 
 @router.get("", response_model=dict)
 def listar_mapeos(
-    marca: str | None = Query(default=None, description="Filtrar por marca del dispositivo, exacto"),
+    marca: str | None = Query(
+        default=None, description="Filtrar por marca del dispositivo, exacto"
+    ),
     id_sd: int | None = Query(default=None, description="Filtrar por sede"),
     id_dspstv: int | None = Query(default=None, description="Filtrar por dispositivo"),
     db: Session = Depends(get_db),
@@ -491,9 +505,7 @@ def crear_mapeo(
 
     return {
         "mensaje": "Mapeo guardado correctamente",
-        "mapeo": _a_list_item(
-            formato, dispositivo, ubicacion, _contar_columnas(db, formato.id_mp)
-        ),
+        "mapeo": _a_list_item(formato, dispositivo, ubicacion, _contar_columnas(db, formato.id_mp)),
     }
 
 
@@ -562,9 +574,7 @@ def actualizar_mapeo(
 
     return {
         "mensaje": "Mapeo actualizado correctamente",
-        "mapeo": _a_list_item(
-            formato, dispositivo, ubicacion, _contar_columnas(db, formato.id_mp)
-        ),
+        "mapeo": _a_list_item(formato, dispositivo, ubicacion, _contar_columnas(db, formato.id_mp)),
     }
 
 
@@ -789,7 +799,7 @@ def vista_previa_ftp(
 
 
 def _parsear_asignaciones(db: Session, asignaciones: str, total_columnas: int) -> dict:
-    """"0:3,2:7" -> {0: ("Temperatura", "°C"), 2: ("pH", "pH")}.
+    """ "0:3,2:7" -> {0: ("Temperatura", "°C"), 2: ("pH", "pH")}.
 
     Se manda como string y no como JSON porque el resto del request es
     multipart/form-data (lleva el archivo de muestra), donde un campo

@@ -17,6 +17,7 @@ frontend. Solo Administrador y Técnico CENERIS registran ubicaciones:
 se exige Edición sobre el módulo "Ubicaciones" (HT-09), mismo mecanismo
 que el GET de arriba usa con LECTURA.
 """
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
@@ -62,10 +63,7 @@ def listar_ubicaciones(
 
     total = query.count()
     ubicaciones = (
-        query.order_by(Ubicacion.nmbr)
-        .offset((pagina - 1) * por_pagina)
-        .limit(por_pagina)
-        .all()
+        query.order_by(Ubicacion.nmbr).offset((pagina - 1) * por_pagina).limit(por_pagina).all()
     )
 
     items = [UbicacionListItem.model_validate(u) for u in ubicaciones]

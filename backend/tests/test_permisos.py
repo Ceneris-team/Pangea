@@ -13,6 +13,7 @@ IDs de usuario/sede son los que devuelve la fábrica, no valores fijos como
 en la primera versión de este archivo (esa versión no necesitaba FKs
 reales porque tiene_permiso() todavía no tocaba la base de datos).
 """
+
 import logging
 
 import pytest
@@ -97,7 +98,9 @@ class TestTienePermiso:
         # La fila existe, pero en la sede ajena; se consulta con la propia.
         agregar_permiso(db_session, usuario, sede_ajena, "Dispositivos", "Edición", rol)
 
-        assert not tiene_permiso(db_session, usuario.id_usr, sede_propia.id_sd, "Dispositivos", LECTURA)
+        assert not tiene_permiso(
+            db_session, usuario.id_usr, sede_propia.id_sd, "Dispositivos", LECTURA
+        )
 
     def test_scope_global_con_registro_en_cualquier_sede_alcanza(self, db_session, fabrica):
         # CA4: id_sd=None (scope global) -> no se filtra por sede, alcanza
