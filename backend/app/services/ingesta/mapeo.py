@@ -88,7 +88,7 @@ def resolver_formato(
     entrante, que es exclusiva de un solo datalogger físico.
 
     Levanta MapeoNoEncontradoError si el archivo no tiene un prefijo
-    reconocible o si no hay un mp_frmt activo para esa combinación: sin
+    reconocible o si no hay un mp_frmt activo para ese dispositivo: sin
     mapeo no se puede interpretar el archivo, y adivinar produciría
     lecturas incorrectas en silencio.
     """

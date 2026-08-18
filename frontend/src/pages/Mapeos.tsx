@@ -51,7 +51,7 @@ export default function Mapeos() {
   const navigate = useNavigate();
   const [isDarkMode, setIsDarkMode] = useState(false);
 
-  const [marca, setMarca] = useState("");
+  const [busqueda, setBusqueda] = useState("");
   const [data, setData] = useState<ListadoMapeos | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -61,7 +61,7 @@ export default function Mapeos() {
     setLoading(true);
     setError(null);
 
-    apiFetch<ListadoMapeos>("/mapeos", { params: { marca: marca || undefined } })
+    apiFetch<ListadoMapeos>("/mapeos")
       .then((res) => {
         if (!cancelado) setData(res);
       })
@@ -76,7 +76,18 @@ export default function Mapeos() {
     return () => {
       cancelado = true;
     };
-  }, [marca]);
+  }, []);
+
+  // Filtro local por nombre o marca del dispositivo: el listado ya no es
+  // tan grande como para justificar un filtro server-side por marca.
+  const itemsFiltrados = (data?.items ?? []).filter((m) => {
+    const patron = busqueda.trim().toLowerCase();
+    if (!patron) return true;
+    return (
+      m.dispositivo_nombre.toLowerCase().includes(patron) ||
+      m.dispositivo_marca.toLowerCase().includes(patron)
+    );
+  });
 
   return (
     <div className={`${isDarkMode ? "dark" : ""} font-sans`}>
@@ -96,7 +107,7 @@ export default function Mapeos() {
               <div>
                 <h1 className="text-2xl font-extrabold text-gray-900 dark:text-white">Mapeos de Formato</h1>
                 <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 font-light">
-                  Define cómo se interpretan los archivos .dat de cada marca de sensor.
+                  Define cómo se interpretan los archivos .dat de cada dispositivo.
                 </p>
               </div>
               <button
@@ -123,9 +134,9 @@ export default function Mapeos() {
                   </div>
                   <input
                     type="search"
-                    placeholder="Filtrar por marca (exacto)..."
-                    value={marca}
-                    onChange={(e) => setMarca(e.target.value)}
+                    placeholder="Filtrar por dispositivo o marca..."
+                    value={busqueda}
+                    onChange={(e) => setBusqueda(e.target.value)}
                     className="bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block w-full pl-10 p-2.5 transition-all outline-none placeholder-gray-400 dark:placeholder-gray-500"
                   />
                 </div>
@@ -163,7 +174,7 @@ export default function Mapeos() {
                       </tr>
                     )}
 
-                    {!loading && data?.items.length === 0 && (
+                    {!loading && itemsFiltrados.length === 0 && (
                       <tr>
                         <td colSpan={8} className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
                           Todavía no hay mapeos registrados. Crea el primero con "Nuevo mapeo".
@@ -172,7 +183,7 @@ export default function Mapeos() {
                     )}
 
                     {!loading &&
-                      data?.items.map((m) => (
+                      itemsFiltrados.map((m) => (
                         <tr
                           key={m.id_mp}
                           className="bg-white dark:bg-[#2d3748] border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
@@ -227,8 +238,11 @@ export default function Mapeos() {
               {data && (
                 <div className="p-5 border-t border-gray-100 dark:border-gray-700">
                   <span className="text-sm text-gray-500 dark:text-gray-400">
-                    <span className="font-semibold text-gray-900 dark:text-white">{data.total}</span> mapeo(s)
-                    registrado(s)
+                    <span className="font-semibold text-gray-900 dark:text-white">
+                      {itemsFiltrados.length}
+                    </span>{" "}
+                    de <span className="font-semibold text-gray-900 dark:text-white">{data.total}</span>{" "}
+                    mapeo(s)
                   </span>
                 </div>
               )}

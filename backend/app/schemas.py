@@ -56,6 +56,14 @@ class UbicacionListItem(BaseModel):
     estd: str
 
 
+class UbicacionDetalle(UbicacionListItem):
+    """Ficha de una ubicación: lo mismo que el listado (HU07) más el
+    polígono, para poder mostrar el contorno en un mapa de detalle."""
+
+    id_sd: int
+    plgn_gjsn: dict
+
+
 class UbicacionCrear(BaseModel):
     """HU08 CA1/CA2: campos del formulario de alta de ubicación.
 
@@ -406,9 +414,9 @@ class ParametroCrear(BaseModel):
 
 
 class SedeListItem(BaseModel):
-    """Pobla el selector de sede del formulario de mapeos (HU06) para
-    usuarios con scope 'global', que deben indicar id_sd explícitamente
-    (ver _resolver_sede en routers/mapeos.py)."""
+    """Pobla el selector de sede de formularios donde un usuario con scope
+    'global' debe indicar id_sd explícitamente (Agregar Ubicación,
+    Conexiones FTP)."""
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -515,12 +523,39 @@ class FilaVistaPrevia(BaseModel):
 
 class ColumnaVistaPrevia(BaseModel):
     """Una columna del header del archivo de muestra, con el parámetro
-    estándar que el mapeo en edición le asigna (o None si no tiene)."""
+    estándar que el mapeo en edición le asigna (o None si no tiene).
+
+    parametro_nombre/parametro_unidad reflejan una asignación YA
+    CONFIRMADA (viene en `asignaciones`, ver _parsear_asignaciones).
+    id_prmtr_sugerido es distinto: una sugerencia automática por
+    coincidencia de nombre de columna, para prellenar el selector en el
+    frontend -nunca se guarda sola, el usuario debe confirmarla al
+    guardar el mapeo (ver diseño en la conversación de HU06)."""
 
     indc_clmn: int
     nombre_columna: str
     parametro_nombre: str | None
     parametro_unidad: str | None
+    id_prmtr_sugerido: int | None = None
+
+
+class DispositivoParaMapeo(BaseModel):
+    """Selector de dispositivo para traer un .dat ya recibido por FTP en
+    vez de subirlo a mano (ver GET /mapeos/dispositivos)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id_dspstv: int
+    nmbr: str
+    mrc: str
+    mdl: str | None
+
+
+class ArchivoFtpDisponible(BaseModel):
+    """Un .dat listado en la carpeta remota de la conexión FTP de un
+    dispositivo (ver GET /mapeos/dispositivos/{id}/archivos-ftp)."""
+
+    nombre_archivo: str
 
 
 class VistaPreviaResponse(BaseModel):

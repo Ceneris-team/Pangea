@@ -48,6 +48,7 @@ app.include_router(mediciones.router)
 app.include_router(mapeos.router)
 app.include_router(mapeos.router_parametros)
 app.include_router(mapeos.router_sedes)
+app.include_router(mapeos.router_dispositivos_mapeo)
 app.include_router(dispositivos.router)
 
 

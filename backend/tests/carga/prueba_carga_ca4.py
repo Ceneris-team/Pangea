@@ -342,6 +342,7 @@ def crear_mapeos_por_dispositivo(db, dispositivos: list) -> None:
                     )
                 )
     db.commit()
+    return dispositivos
 
 
 def encolar_archivos(db, conexiones: list) -> list:

@@ -14,6 +14,7 @@ import Ubicaciones from "../pages/Ubicaciones";
 import Dispositivos from "../pages/Dispositivos";
 import AgregarDispositivo from "../pages/AgregarDispositivo";
 import AgregarUbicacion from "../pages/AgregarUbicacion";
+import DetalleUbicacion from "../pages/DetalleUbicacion";
 import { ROLES } from "../config/roles";
 import ConexionesFTP from "../pages/ConexionesFTP";
 import ConfigurarConexionFTP from "../pages/ConfigurarConexionFTP";
@@ -125,6 +126,18 @@ export default function AppRouter() {
             element={
               <ProtectedRoute rolesPermitidos={ROLES_AGREGAR_UBICACION}>
                 <AgregarUbicacion />
+              </ProtectedRoute>
+            }
+          />
+          {/* Ficha de ubicación: datos + parámetros en uso (derivado de
+              los mapeos de sus dispositivos). Sin restricción de rol
+              adicional: el backend ya filtra qué ubicación puede ver
+              cada uno (Cliente Final incluido, vía PermisoUbicacion). */}
+          <Route
+            path="/ubicaciones/:id"
+            element={
+              <ProtectedRoute>
+                <DetalleUbicacion />
               </ProtectedRoute>
             }
           />

@@ -4,6 +4,7 @@ import "./Login.css";
 import { useAuth } from "../context/AuthContext";
 import { rutaPorRol } from "../config/roles";
 import { ApiError } from "../services/api";
+import loginBg from "../assets/login-bg.jpg";
 
 function isValidEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
@@ -22,16 +23,6 @@ export default function Login() {
   const [formMsg, setFormMsg] = useState("");
   const [formOk, setFormOk] = useState(false);
   const [loading, setLoading] = useState(false);
-
-  const [bgImage, setBgImage] = useState<string | null>(null);
-
-  function handleBgUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => setBgImage(ev.target?.result as string);
-    reader.readAsDataURL(file);
-  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -75,28 +66,11 @@ export default function Login() {
     <div className="login-page">
       <div
         className="bg-photo"
-        style={bgImage ? { backgroundImage: `url(${bgImage})` } : undefined}
-      />
-      {!bgImage && (
-        <div className="bg-fallback">
-          <svg viewBox="0 0 800 1000" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
-            <defs>
-              <linearGradient id="leafFill" x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0%" stopColor="#2b4a37" />
-                <stop offset="100%" stopColor="#152720" />
-              </linearGradient>
-            </defs>
-            <g fill="url(#leafFill)" opacity={0.9}>
-              <ellipse cx={90} cy={80} rx={70} ry={24} transform="rotate(35 90 80)" />
-              <ellipse cx={220} cy={40} rx={80} ry={26} transform="rotate(-20 220 40)" />
-              <ellipse cx={340} cy={120} rx={75} ry={24} transform="rotate(50 340 120)" />
-              <ellipse cx={470} cy={60} rx={85} ry={27} transform="rotate(-40 470 60)" />
-              <ellipse cx={610} cy={110} rx={78} ry={25} transform="rotate(20 610 110)" />
-              <ellipse cx={740} cy={60} rx={70} ry={23} transform="rotate(-55 740 60)" />
-            </g>
-          </svg>
-        </div>
-      )}
+        style={{ backgroundImage: `url(${loginBg})` }}
+        aria-hidden="true"
+      >
+        <div className="bg-photo-tint" />
+      </div>
 
       <div className="stage">
         <div className="canopy">
@@ -181,8 +155,6 @@ export default function Login() {
               <br />
               Si no tienes cuenta, solicítala a tu área de TI.
             </p>
-
-            <input type="file" accept="image/*" onChange={handleBgUpload} style={{ marginTop: 24 }} />
           </div>
         </div>
       </div>
