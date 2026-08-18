@@ -29,25 +29,11 @@
   background-size:cover;
   background-position:center;
   background-repeat:no-repeat;
-  transition:opacity .3s ease;
 }
-.bg-fallback{
-  position:fixed;
-  inset:0;
-  z-index:0;
-}
-.bg-fallback svg{
-  position:absolute;
-  inset:-6% -6%;
-  width:112%;
-  height:112%;
-}
-.bg-fallback::after{
-  content:"";
+.bg-photo-tint{
   position:absolute;
   inset:0;
-  background:linear-gradient(160deg, #0a140f 0%, #10201a 45%, #0a1712 100%);
-  opacity:0.55;
+  background:linear-gradient(160deg, rgba(8,14,11,0.55) 0%, rgba(10,18,14,0.3) 45%, rgba(8,14,11,0.62) 100%);
 }
 
 .stage{
@@ -270,6 +256,25 @@
   text-align:center;
   font-size:13px;
   color:var(--ink-faint);
+}
+
+.register-btn{
+  display:block;
+  width:100%;
+  margin-top:16px;
+  padding:12px;
+  background:transparent;
+  color:var(--ink-soft);
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  font-size:13.5px;
+  font-family:inherit;
+  cursor:pointer;
+  transition:border-color .2s ease, color .2s ease;
+}
+.register-btn:hover{
+  border-color:var(--accent);
+  color:var(--ink);
 }
 
 @media (min-width: 880px){
