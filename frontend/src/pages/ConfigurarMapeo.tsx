@@ -382,8 +382,8 @@ export default function ConfigurarMapeo() {
   }
 
   const inputClase =
-    "bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block w-full p-2.5 outline-none";
-  const labelClase = "block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1";
+    "bg-white/5 border border-white/20 text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block w-full p-2.5 outline-none";
+  const labelClase = "block text-sm font-medium text-gray-200 mb-1";
 
   // La columna de fecha NO se asigna acá: se configura arriba ("Columna de
   // fecha") y el motor la usa directo, sin pasar por mp_clmn/prmtr. Si se
@@ -409,7 +409,7 @@ export default function ConfigurarMapeo() {
 
   return (
     <div className={`${isDarkMode ? "dark" : ""} font-sans`}>
-      <div className="flex h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-300 overflow-hidden">
+      <div className="flex h-screen bg-transparent transition-colors duration-300 overflow-hidden">
         <Sidebar onLogout={logout} activo="mapeos" rol={rol} />
 
         <div className="flex-1 flex flex-col overflow-hidden">
@@ -422,21 +422,21 @@ export default function ConfigurarMapeo() {
 
           <main className="flex-1 overflow-y-auto p-6 md:p-8">
             <header className="mb-6">
-              <h1 className="text-2xl font-extrabold text-gray-900 dark:text-white">
+              <h1 className="text-2xl font-extrabold text-white">
                 {esEdicion ? "Editar mapeo de formato" : "Nuevo mapeo de formato"}
               </h1>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 font-light">
+              <p className="text-sm text-gray-300 mt-1 font-light">
                 Define cómo se interpretan los archivos .dat de un dispositivo.
               </p>
             </header>
 
             {cargando ? (
-              <div className="text-sm text-gray-500 dark:text-gray-400">Cargando mapeo…</div>
+              <div className="text-sm text-gray-300">Cargando mapeo…</div>
             ) : (
               <form onSubmit={handleSubmit} className="space-y-6">
                 {/* CA1: datos del formato */}
-                <section className="bg-white dark:bg-[#2d3748] rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-                  <h2 className="text-base font-bold text-gray-900 dark:text-white mb-4">Datos del formato</h2>
+                <section className="bg-white/5 backdrop-blur-xl rounded-2xl shadow-sm border border-white/10 p-6">
+                  <h2 className="text-base font-bold text-white mb-4">Datos del formato</h2>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {/* DEC-09: el mapeo se cuelga de un dispositivo concreto.
@@ -445,7 +445,7 @@ export default function ConfigurarMapeo() {
                     <div className="md:col-span-2">
                       <label className={labelClase}>Dispositivo *</label>
                       {esEdicion ? (
-                        <p className="text-sm text-gray-900 dark:text-white py-2.5">
+                        <p className="text-sm text-white py-2.5">
                           {dispositivoSeleccionado
                             ? `${dispositivoSeleccionado.nmbr} · ${dispositivoSeleccionado.mrc}`
                             : "—"}
@@ -469,16 +469,16 @@ export default function ConfigurarMapeo() {
                       {/* Marca y ubicación del dispositivo elegido, en modo
                           solo lectura: ya no se tipean ni se eligen aparte. */}
                       {dispositivoSeleccionado && (
-                        <div className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
+                        <div className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-xs text-gray-300">
                           <span>
                             Marca:{" "}
-                            <span className="font-medium text-gray-700 dark:text-gray-200">
+                            <span className="font-medium text-gray-200">
                               {dispositivoSeleccionado.mrc}
                             </span>
                           </span>
                           <span>
                             Ubicación:{" "}
-                            <span className="font-medium text-gray-700 dark:text-gray-200">
+                            <span className="font-medium text-gray-200">
                               {dispositivoSeleccionado.ubicacion_nombre}
                             </span>
                           </span>
@@ -496,7 +496,7 @@ export default function ConfigurarMapeo() {
                         <option value="H">H · Datos periódicos (H_*.dat)</option>
                         <option value="E">E · Estados y eventos (E_*.dat)</option>
                       </select>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      <p className="text-xs text-gray-300 mt-1">
                         Determina la extensión/prefijo del archivo que aplica a este mapeo.
                       </p>
                     </div>
@@ -547,7 +547,7 @@ export default function ConfigurarMapeo() {
                         onChange={(e) => actualizarCampo("columna_fecha", e.target.value)}
                         className={inputClase}
                       />
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      <p className="text-xs text-gray-300 mt-1">
                         Solo afecta la vista previa: el motor de ingesta usa "Fecha" (ver README).
                       </p>
                     </div>
@@ -555,9 +555,9 @@ export default function ConfigurarMapeo() {
                 </section>
 
                 {/* CA2: vista previa con archivo de muestra */}
-                <section className="bg-white dark:bg-[#2d3748] rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-                  <h2 className="text-base font-bold text-gray-900 dark:text-white mb-1">Vista previa</h2>
-                  <p className="text-sm text-gray-500 dark:text-gray-400 mb-4 font-light">
+                <section className="bg-white/5 backdrop-blur-xl rounded-2xl shadow-sm border border-white/10 p-6">
+                  <h2 className="text-base font-bold text-white mb-1">Vista previa</h2>
+                  <p className="text-sm text-gray-300 mb-4 font-light">
                     Usa un .dat de muestra para ver las primeras 10 filas interpretadas. El archivo no se
                     guarda.
                   </p>
@@ -568,8 +568,8 @@ export default function ConfigurarMapeo() {
                       onClick={() => setFuenteMuestra("archivo")}
                       className={`px-3 py-1.5 text-sm font-medium rounded-lg border transition-all ${
                         fuenteMuestra === "archivo"
-                          ? "bg-[#ccff00]/20 text-[#5a7000] dark:text-[#ccff00] border-[#ccff00]/40"
-                          : "text-gray-600 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700"
+                          ? "bg-[#ccff00]/20 text-[#ccff00] border-[#ccff00]/40"
+                          : "text-gray-200 border-white/20 hover:bg-white/10"
                       }`}
                     >
                       Subir archivo
@@ -579,8 +579,8 @@ export default function ConfigurarMapeo() {
                       onClick={() => setFuenteMuestra("ftp")}
                       className={`px-3 py-1.5 text-sm font-medium rounded-lg border transition-all ${
                         fuenteMuestra === "ftp"
-                          ? "bg-[#ccff00]/20 text-[#5a7000] dark:text-[#ccff00] border-[#ccff00]/40"
-                          : "text-gray-600 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700"
+                          ? "bg-[#ccff00]/20 text-[#ccff00] border-[#ccff00]/40"
+                          : "text-gray-200 border-white/20 hover:bg-white/10"
                       }`}
                     >
                       Elegir uno ya recibido por FTP
@@ -593,13 +593,13 @@ export default function ConfigurarMapeo() {
                         type="file"
                         accept=".dat,.csv,.txt"
                         onChange={seleccionarArchivo}
-                        className="text-sm text-gray-600 dark:text-gray-300 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-[#ccff00]/10 file:text-[#5a7000] dark:file:text-[#ccff00] hover:file:bg-[#ccff00]/20 file:cursor-pointer"
+                        className="text-sm text-gray-200 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-[#ccff00]/10 file:text-[#ccff00] hover:file:bg-[#ccff00]/20 file:cursor-pointer"
                       />
                       <button
                         type="button"
                         onClick={handleVistaPrevia}
                         disabled={previsualizando || !archivo}
-                        className="px-4 py-2.5 text-sm font-medium text-gray-900 dark:text-white bg-white dark:bg-transparent border border-gray-300 dark:border-gray-600 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                        className="px-4 py-2.5 text-sm font-medium text-white bg-transparent border border-white/20 rounded-xl hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                       >
                         {previsualizando ? "Generando…" : "Vista previa"}
                       </button>
@@ -644,7 +644,7 @@ export default function ConfigurarMapeo() {
                         type="button"
                         onClick={handleVistaPrevia}
                         disabled={previsualizando || !dispositivoFtp || !archivoFtpElegido}
-                        className="px-4 py-2.5 text-sm font-medium text-gray-900 dark:text-white bg-white dark:bg-transparent border border-gray-300 dark:border-gray-600 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                        className="px-4 py-2.5 text-sm font-medium text-white bg-transparent border border-white/20 rounded-xl hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                       >
                         {previsualizando ? "Generando…" : "Vista previa"}
                       </button>
@@ -653,19 +653,19 @@ export default function ConfigurarMapeo() {
 
                   {vistaPrevia && (
                     <div className="mt-5">
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                      <p className="text-xs text-gray-300 mb-2">
                         Mostrando {vistaPrevia.filas_mostradas} de {vistaPrevia.total_filas_archivo} filas del
                         archivo.
                       </p>
-                      <div className="overflow-x-auto border border-gray-200 dark:border-gray-700 rounded-xl">
-                        <table className="w-full text-sm text-left text-gray-500 dark:text-gray-400">
-                          <thead className="text-xs uppercase bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700">
+                      <div className="overflow-x-auto border border-white/10 rounded-xl">
+                        <table className="w-full text-sm text-left text-gray-300">
+                          <thead className="text-xs uppercase bg-white/5 border-b border-white/10">
                             <tr>
                               <th className="px-4 py-3 font-bold">Fila</th>
                               {vistaPrevia.columnas.map((c) => (
                                 <th key={c.indc_clmn} className="px-4 py-3 font-bold whitespace-nowrap">
-                                  <div className="text-gray-700 dark:text-gray-200">{c.nombre_columna}</div>
-                                  <div className="normal-case font-normal text-[11px] text-[#5a7000] dark:text-[#ccff00]">
+                                  <div className="text-gray-200">{c.nombre_columna}</div>
+                                  <div className="normal-case font-normal text-[11px] text-[#ccff00]">
                                     {c.parametro_nombre
                                       ? `→ ${c.parametro_nombre} (${c.parametro_unidad})`
                                       : "sin asignar"}
@@ -678,12 +678,12 @@ export default function ConfigurarMapeo() {
                             {vistaPrevia.filas.map((fila) => (
                               <tr
                                 key={fila.numero_fila}
-                                className="border-b border-gray-100 dark:border-gray-700 last:border-0"
+                                className="border-b border-white/10 last:border-0"
                               >
                                 <td className="px-4 py-2 font-mono text-xs">
                                   {fila.numero_fila}
                                   {fila.error && (
-                                    <span className="ml-2 text-red-600 dark:text-red-400" title={fila.error}>
+                                    <span className="ml-2 text-red-400" title={fila.error}>
                                       ⚠
                                     </span>
                                   )}
@@ -703,26 +703,26 @@ export default function ConfigurarMapeo() {
                 </section>
 
                 {/* CA1: tabla de asignación columna -> parámetro estándar */}
-                <section className="bg-white dark:bg-[#2d3748] rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-                  <h2 className="text-base font-bold text-gray-900 dark:text-white mb-1">
+                <section className="bg-white/5 backdrop-blur-xl rounded-2xl shadow-sm border border-white/10 p-6">
+                  <h2 className="text-base font-bold text-white mb-1">
                     Asignación de columnas
                   </h2>
-                  <p className="text-sm text-gray-500 dark:text-gray-400 mb-1 font-light">
+                  <p className="text-sm text-gray-300 mb-1 font-light">
                     Indica qué parámetro estándar corresponde a cada columna del archivo.
                   </p>
-                  <p className="text-xs text-gray-400 dark:text-gray-500 mb-4 font-light">
+                  <p className="text-xs text-gray-400 mb-4 font-light">
                     La columna de fecha ("{form.columna_fecha}") no aparece aquí: se configura arriba, en
                     "Columna de fecha".
                   </p>
 
                   {filasAsignacion.length === 0 ? (
-                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                    <p className="text-sm text-gray-300">
                       Genera primero una vista previa para ver las columnas del archivo.
                     </p>
                   ) : (
                     <div className="overflow-x-auto">
-                      <table className="w-full text-sm text-left text-gray-500 dark:text-gray-400">
-                        <thead className="text-xs uppercase bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700">
+                      <table className="w-full text-sm text-left text-gray-300">
+                        <thead className="text-xs uppercase bg-white/5 border-b border-white/10">
                           <tr>
                             <th className="px-4 py-3 font-bold w-20">Índice</th>
                             <th className="px-4 py-3 font-bold">Columna del archivo</th>
@@ -731,9 +731,9 @@ export default function ConfigurarMapeo() {
                         </thead>
                         <tbody>
                           {filasAsignacion.map((c) => (
-                            <tr key={c.indc_clmn} className="border-b border-gray-100 dark:border-gray-700 last:border-0">
+                            <tr key={c.indc_clmn} className="border-b border-white/10 last:border-0">
                               <td className="px-4 py-2 font-mono text-xs">{c.indc_clmn}</td>
-                              <td className="px-4 py-2 text-gray-900 dark:text-white">{c.nombre_columna}</td>
+                              <td className="px-4 py-2 text-white">{c.nombre_columna}</td>
                               <td className="px-4 py-2">
                                 <select
                                   value={asignaciones[c.indc_clmn] ?? ""}
@@ -768,8 +768,8 @@ export default function ConfigurarMapeo() {
                   <div
                     className={`p-3 rounded-xl text-sm ${
                       mensajeOk
-                        ? "bg-[#ccff00]/20 text-[#5a7000] dark:text-[#ccff00]"
-                        : "bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400"
+                        ? "bg-[#ccff00]/20 text-[#ccff00]"
+                        : "bg-red-900/20 text-red-400"
                     }`}
                   >
                     {mensaje}
@@ -787,7 +787,7 @@ export default function ConfigurarMapeo() {
                   <button
                     type="button"
                     onClick={() => navigate("/mapeos")}
-                    className="px-4 py-2.5 text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-all"
+                    className="px-4 py-2.5 text-sm font-medium text-gray-300 hover:text-white transition-all"
                   >
                     Ver mapeos
                   </button>

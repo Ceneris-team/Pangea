@@ -7,14 +7,14 @@ interface TopbarProps {
 
 export default function Topbar({ isDarkMode, onToggleDarkMode, nombreCompleto, rol }: TopbarProps) {
   return (
-    <header className="h-16 bg-white dark:bg-[#2d3748] border-b border-gray-200 dark:border-gray-700 flex items-center justify-between px-6 transition-colors duration-300">
-      <div className="md:hidden font-bold text-gray-900 dark:text-white">NEXUS FLOW</div>
+    <header className="h-16 bg-white/5 backdrop-blur-xl border-b border-white/10 flex items-center justify-between px-6 transition-colors duration-300">
+      <div className="md:hidden font-bold text-white">NEXUS FLOW</div>
       <div className="hidden md:block"></div>
 
       <div className="flex items-center gap-6">
         <button
           onClick={onToggleDarkMode}
-          className="text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 p-2 rounded-full transition-colors"
+          className="text-gray-300 hover:bg-white/10 p-2 rounded-full transition-colors"
           aria-label="Alternar modo oscuro"
         >
           {isDarkMode ? (
@@ -28,10 +28,10 @@ export default function Topbar({ isDarkMode, onToggleDarkMode, nombreCompleto, r
           )}
         </button>
 
-        <div className="flex items-center gap-3 pl-6 border-l border-gray-200 dark:border-gray-700">
+        <div className="flex items-center gap-3 pl-6 border-l border-white/10">
           <div className="text-right hidden sm:block">
-            <div className="text-sm font-semibold text-gray-900 dark:text-white">{nombreCompleto ?? "Usuario"}</div>
-            <div className="text-xs text-gray-500 dark:text-gray-400">{rol ?? ""}</div>
+            <div className="text-sm font-semibold text-white">{nombreCompleto ?? "Usuario"}</div>
+            <div className="text-xs text-gray-300">{rol ?? ""}</div>
           </div>
           <img
             className="w-10 h-10 rounded-full border-2 border-[#ccff00] object-cover"

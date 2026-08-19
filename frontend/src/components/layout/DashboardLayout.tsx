@@ -23,7 +23,7 @@ export default function DashboardLayout({ children, activo = "panel" }: Dashboar
 
   return (
     <div className={isDarkMode ? "dark" : ""}>
-      <div className="flex h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-300 overflow-hidden font-sans">
+      <div className="flex h-screen bg-transparent transition-colors duration-300 overflow-hidden font-sans">
         <Sidebar onLogout={handleLogout} activo={activo} rol={rol} />
 
         <div className="flex-1 flex flex-col overflow-hidden">
