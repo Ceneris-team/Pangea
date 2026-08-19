@@ -1,4 +1,5 @@
 {
+  "_comentario": "Plantilla de deployment Lightsail Container Service (api+redis+worker+beat, y frontend si va en el mismo servicio). AWS no soporta comentarios reales en JSON: borra esta clave antes de usar el archivo con --containers. Con worker (--concurrency=2) + beat sumados a api+redis, usar plan 'small' (0.5 vCPU/1GB) como minimo -en 'nano' (512MB) los deployments con worker fallaron por timeout/OOM, ver docs/incidentes.",
   "api": {
     "image": ":pangea-app.api.LATEST",
     "environment": {
@@ -16,7 +17,7 @@
   },
   "worker": {
     "image": ":pangea-app.worker.LATEST",
-    "command": ["celery", "-A", "app.core.celery_app", "worker", "--loglevel=info", "--concurrency=4"],
+    "command": ["celery", "-A", "app.core.celery_app", "worker", "--loglevel=info", "--concurrency=2"],
     "environment": {
       "DATABASE_URL": "postgresql+psycopg2://<usuario>:<password>@<host-rds>:5432/pangea",
       "CELERY_BROKER_URL": "redis://localhost:6379/2",

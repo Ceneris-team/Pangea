@@ -38,7 +38,9 @@ docker-compose.override.aws-test.yml
 # file). Nunca debe subirse al repo. Ver containers.example.json para la
 # plantilla sin secretos.
 containers.json
+containers-*.json
 endpoint.json
+endpoint-*.json
 
 # Archivos de telemetria (.dat): un .dat real de cliente en la maquina de
 # alguien del equipo no debe subirse por accidente. Los fixtures de prueba
