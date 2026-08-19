@@ -256,7 +256,7 @@
 .form-msg.ok{color:var(--accent);}
 
 .register-note{
-  margin:18px 0 20px;
+  margin-top:8px;
   text-align:center;
   font-size:13.5px;
   color:var(--ink-faint);
