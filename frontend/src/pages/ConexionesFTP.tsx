@@ -66,7 +66,7 @@ export default function ConexionesFTP() {
 
   return (
     <div className={`${isDarkMode ? "dark" : ""} font-sans`}>
-      <div className="flex h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-300 overflow-hidden">
+      <div className="flex h-screen bg-transparent transition-colors duration-300 overflow-hidden">
         <Sidebar onLogout={logout} activo="conexiones-ftp" rol={rol} />
 
         <div className="flex-1 flex flex-col overflow-hidden">
@@ -80,29 +80,29 @@ export default function ConexionesFTP() {
           <main className="flex-1 overflow-y-auto p-6 md:p-8">
             <header className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div>
-                <h1 className="text-2xl font-extrabold text-gray-900 dark:text-white">Conexiones FTP</h1>
-                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 font-light">
+                <h1 className="text-2xl font-extrabold text-white">Conexiones FTP</h1>
+                <p className="text-sm text-gray-300 mt-1 font-light">
                   Dataloggers configurados para la ingesta automática de telemetría.
                 </p>
               </div>
               <Link
                 to="/conexiones-ftp/nueva"
-                className="px-4 py-2.5 text-sm font-semibold text-[#5a7000] dark:text-[#ccff00] bg-[#ccff00]/10 hover:bg-[#ccff00]/20 border border-[#ccff00]/30 rounded-xl transition-colors"
+                className="px-4 py-2.5 text-sm font-semibold text-[#ccff00] bg-[#ccff00]/10 hover:bg-[#ccff00]/20 border border-[#ccff00]/30 rounded-xl transition-colors"
               >
                 + Nueva conexión FTP
               </Link>
             </header>
 
-            <div className="bg-white dark:bg-[#2d3748] rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden transition-colors duration-300">
+            <div className="bg-white/5 backdrop-blur-xl rounded-2xl shadow-sm border border-white/10 overflow-hidden transition-colors duration-300">
               {error && (
-                <div className="p-4 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm border-b border-red-100 dark:border-red-800/30">
+                <div className="p-4 bg-red-900/20 text-red-400 text-sm border-b border-red-800/30">
                   {error}
                 </div>
               )}
 
               <div className="overflow-x-auto">
-                <table className="w-full text-sm text-left text-gray-500 dark:text-gray-400">
-                  <thead className="text-xs text-gray-500 dark:text-gray-400 uppercase bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700">
+                <table className="w-full text-sm text-left text-gray-300">
+                  <thead className="text-xs text-gray-300 uppercase bg-white/5 border-b border-white/10">
                     <tr>
                       <th className="px-6 py-4 font-bold tracking-wider">Datalogger</th>
                       <th className="px-6 py-4 font-bold tracking-wider">Host/IP</th>
@@ -115,7 +115,7 @@ export default function ConexionesFTP() {
                   <tbody>
                     {loading && (
                       <tr>
-                        <td colSpan={6} className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
+                        <td colSpan={6} className="px-6 py-8 text-center text-gray-300">
                           <div className="flex justify-center items-center gap-2">
                             <div className="w-4 h-4 rounded-full bg-[#ccff00] animate-bounce"></div>
                             <span>Cargando conexiones...</span>
@@ -126,7 +126,7 @@ export default function ConexionesFTP() {
 
                     {!loading && data?.items.length === 0 && (
                       <tr>
-                        <td colSpan={6} className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
+                        <td colSpan={6} className="px-6 py-8 text-center text-gray-300">
                           Todavía no hay conexiones FTP registradas.
                         </td>
                       </tr>
@@ -136,9 +136,9 @@ export default function ConexionesFTP() {
                       data?.items.map((c) => (
                         <tr
                           key={c.id_cnxn}
-                          className="bg-white dark:bg-[#2d3748] border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+                          className="bg-white/5 backdrop-blur-xl border-b border-white/10 hover:bg-white/5 transition-colors"
                         >
-                          <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">{c.nmbr}</td>
+                          <td className="px-6 py-4 font-medium text-white">{c.nmbr}</td>
                           <td className="px-6 py-4">
                             {c.hst}:{c.prt}
                           </td>
@@ -148,12 +148,12 @@ export default function ConexionesFTP() {
                             <span
                               className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold border ${
                                 c.estd === "Activa"
-                                  ? "bg-[#ccff00]/20 text-[#5a7000] dark:text-[#ccff00] border-[#ccff00]/30"
-                                  : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-600"
+                                  ? "bg-[#ccff00]/20 text-[#ccff00] border-[#ccff00]/30"
+                                  : "bg-white/10 text-gray-300 border-white/20"
                               }`}
                             >
                               {c.estd === "Activa" && (
-                                <span className="w-1.5 h-1.5 mr-1.5 rounded-full bg-[#8fb300] dark:bg-[#ccff00]"></span>
+                                <span className="w-1.5 h-1.5 mr-1.5 rounded-full bg-[#ccff00]"></span>
                               )}
                               {c.estd}
                             </span>
@@ -161,10 +161,10 @@ export default function ConexionesFTP() {
                           <td className="px-6 py-4 text-right">
                             <Link
                               to={`/conexiones-ftp/${c.id_cnxn}/editar`}
-                              className="inline-flex items-center justify-center px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-transparent border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white transition-all"
+                              className="inline-flex items-center justify-center px-3 py-1.5 text-sm font-medium text-gray-200 bg-transparent border border-white/20 rounded-lg hover:bg-white/10 hover:text-white transition-all"
                             >
                               <svg
-                                className="w-4 h-4 mr-2 text-gray-500 dark:text-gray-400"
+                                className="w-4 h-4 mr-2 text-gray-300"
                                 fill="none"
                                 viewBox="0 0 24 24"
                                 strokeWidth="2"
@@ -186,22 +186,22 @@ export default function ConexionesFTP() {
               </div>
 
               {data && (
-                <div className="p-5 border-t border-gray-100 dark:border-gray-700 flex items-center justify-between">
-                  <span className="text-sm text-gray-500 dark:text-gray-400">
+                <div className="p-5 border-t border-white/10 flex items-center justify-between">
+                  <span className="text-sm text-gray-300">
                     Página {data.pagina} de {totalPaginas}
                   </span>
                   <div className="flex gap-2">
                     <button
                       disabled={pagina <= 1}
                       onClick={() => setPagina((p) => p - 1)}
-                      className="px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-transparent border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="px-3 py-1.5 text-sm font-medium text-gray-200 bg-transparent border border-white/20 rounded-lg hover:bg-white/10 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Anterior
                     </button>
                     <button
                       disabled={pagina >= totalPaginas}
                       onClick={() => setPagina((p) => p + 1)}
-                      className="px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-transparent border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="px-3 py-1.5 text-sm font-medium text-gray-200 bg-transparent border border-white/20 rounded-lg hover:bg-white/10 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Siguiente
                     </button>

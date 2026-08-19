@@ -91,7 +91,7 @@ export default function Mapeos() {
 
   return (
     <div className={`${isDarkMode ? "dark" : ""} font-sans`}>
-      <div className="flex h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-300 overflow-hidden">
+      <div className="flex h-screen bg-transparent transition-colors duration-300 overflow-hidden">
         <Sidebar onLogout={logout} activo="mapeos" rol={rol} />
 
         <div className="flex-1 flex flex-col overflow-hidden">
@@ -105,24 +105,24 @@ export default function Mapeos() {
           <main className="flex-1 overflow-y-auto p-6 md:p-8">
             <header className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div>
-                <h1 className="text-2xl font-extrabold text-gray-900 dark:text-white">Mapeos de Formato</h1>
-                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 font-light">
+                <h1 className="text-2xl font-extrabold text-white">Mapeos de Formato</h1>
+                <p className="text-sm text-gray-300 mt-1 font-light">
                   Define cómo se interpretan los archivos .dat de cada dispositivo.
                 </p>
               </div>
               <button
                 onClick={() => navigate("/mapeos/nuevo")}
-                className="px-4 py-2.5 text-sm font-semibold text-[#5a7000] dark:text-[#ccff00] bg-[#ccff00]/10 hover:bg-[#ccff00]/20 border border-[#ccff00]/30 rounded-xl transition-colors"
+                className="px-4 py-2.5 text-sm font-semibold text-[#ccff00] bg-[#ccff00]/10 hover:bg-[#ccff00]/20 border border-[#ccff00]/30 rounded-xl transition-colors"
               >
                 + Nuevo mapeo
               </button>
             </header>
 
-            <div className="bg-white dark:bg-[#2d3748] rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden transition-colors duration-300">
-              <div className="p-5 border-b border-gray-100 dark:border-gray-700">
+            <div className="bg-white/5 backdrop-blur-xl rounded-2xl shadow-sm border border-white/10 overflow-hidden transition-colors duration-300">
+              <div className="p-5 border-b border-white/10">
                 <div className="relative w-full lg:max-w-md">
                   <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-                    <svg className="w-5 h-5 text-gray-400 dark:text-gray-500" fill="none" viewBox="0 0 20 20">
+                    <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 20 20">
                       <path
                         stroke="currentColor"
                         strokeLinecap="round"
@@ -137,20 +137,20 @@ export default function Mapeos() {
                     placeholder="Filtrar por dispositivo o marca..."
                     value={busqueda}
                     onChange={(e) => setBusqueda(e.target.value)}
-                    className="bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block w-full pl-10 p-2.5 transition-all outline-none placeholder-gray-400 dark:placeholder-gray-500"
+                    className="bg-white/5 border border-white/20 text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block w-full pl-10 p-2.5 transition-all outline-none placeholder-gray-400"
                   />
                 </div>
               </div>
 
               {error && (
-                <div className="p-4 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm border-b border-red-100 dark:border-red-800/30">
+                <div className="p-4 bg-red-900/20 text-red-400 text-sm border-b border-red-800/30">
                   {error}
                 </div>
               )}
 
               <div className="overflow-x-auto">
-                <table className="w-full text-sm text-left text-gray-500 dark:text-gray-400">
-                  <thead className="text-xs text-gray-500 dark:text-gray-400 uppercase bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700">
+                <table className="w-full text-sm text-left text-gray-300">
+                  <thead className="text-xs text-gray-300 uppercase bg-white/5 border-b border-white/10">
                     <tr>
                       <th className="px-6 py-4 font-bold tracking-wider">Dispositivo</th>
                       <th className="px-6 py-4 font-bold tracking-wider">Marca</th>
@@ -165,7 +165,7 @@ export default function Mapeos() {
                   <tbody>
                     {loading && (
                       <tr>
-                        <td colSpan={8} className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
+                        <td colSpan={8} className="px-6 py-8 text-center text-gray-300">
                           <div className="flex justify-center items-center gap-2">
                             <div className="w-4 h-4 rounded-full bg-[#ccff00] animate-bounce"></div>
                             <span>Cargando mapeos...</span>
@@ -176,7 +176,7 @@ export default function Mapeos() {
 
                     {!loading && itemsFiltrados.length === 0 && (
                       <tr>
-                        <td colSpan={8} className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
+                        <td colSpan={8} className="px-6 py-8 text-center text-gray-300">
                           Todavía no hay mapeos registrados. Crea el primero con "Nuevo mapeo".
                         </td>
                       </tr>
@@ -186,9 +186,9 @@ export default function Mapeos() {
                       itemsFiltrados.map((m) => (
                         <tr
                           key={m.id_mp}
-                          className="bg-white dark:bg-[#2d3748] border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+                          className="bg-white/5 backdrop-blur-xl border-b border-white/10 hover:bg-white/5 transition-colors"
                         >
-                          <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">{m.dispositivo_nombre}</td>
+                          <td className="px-6 py-4 font-medium text-white">{m.dispositivo_nombre}</td>
                           <td className="px-6 py-4">{m.mrc}</td>
                           <td className="px-6 py-4">{ETIQUETA_TRAMA[m.tp_trm] ?? m.tp_trm}</td>
                           <td className="px-6 py-4">{ETIQUETA_DELIMITADOR[m.dlmtdr] ?? m.dlmtdr}</td>
@@ -198,12 +198,12 @@ export default function Mapeos() {
                             <span
                               className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold border ${
                                 m.estd === "Activo"
-                                  ? "bg-[#ccff00]/20 text-[#5a7000] dark:text-[#ccff00] border-[#ccff00]/30"
-                                  : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-600"
+                                  ? "bg-[#ccff00]/20 text-[#ccff00] border-[#ccff00]/30"
+                                  : "bg-white/10 text-gray-300 border-white/20"
                               }`}
                             >
                               {m.estd === "Activo" && (
-                                <span className="w-1.5 h-1.5 mr-1.5 rounded-full bg-[#8fb300] dark:bg-[#ccff00]"></span>
+                                <span className="w-1.5 h-1.5 mr-1.5 rounded-full bg-[#ccff00]"></span>
                               )}
                               {m.estd}
                             </span>
@@ -211,10 +211,10 @@ export default function Mapeos() {
                           <td className="px-6 py-4 text-right">
                             <Link
                               to={`/mapeos/${m.id_mp}/editar`}
-                              className="inline-flex items-center justify-center px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-transparent border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white transition-all"
+                              className="inline-flex items-center justify-center px-3 py-1.5 text-sm font-medium text-gray-200 bg-transparent border border-white/20 rounded-lg hover:bg-white/10 hover:text-white transition-all"
                             >
                               <svg
-                                className="w-4 h-4 mr-2 text-gray-500 dark:text-gray-400"
+                                className="w-4 h-4 mr-2 text-gray-300"
                                 fill="none"
                                 viewBox="0 0 24 24"
                                 strokeWidth="2"
@@ -236,12 +236,12 @@ export default function Mapeos() {
               </div>
 
               {data && (
-                <div className="p-5 border-t border-gray-100 dark:border-gray-700">
-                  <span className="text-sm text-gray-500 dark:text-gray-400">
-                    <span className="font-semibold text-gray-900 dark:text-white">
+                <div className="p-5 border-t border-white/10">
+                  <span className="text-sm text-gray-300">
+                    <span className="font-semibold text-white">
                       {itemsFiltrados.length}
                     </span>{" "}
-                    de <span className="font-semibold text-gray-900 dark:text-white">{data.total}</span>{" "}
+                    de <span className="font-semibold text-white">{data.total}</span>{" "}
                     mapeo(s)
                   </span>
                 </div>

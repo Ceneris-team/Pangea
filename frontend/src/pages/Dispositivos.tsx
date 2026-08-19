@@ -140,7 +140,7 @@ export default function Dispositivos() {
 
   return (
     <div className={`${isDarkMode ? "dark" : ""} font-sans`}>
-      <div className="flex h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-300 overflow-hidden">
+      <div className="flex h-screen bg-transparent transition-colors duration-300 overflow-hidden">
 
         {/* SIDEBAR */}
         <Sidebar onLogout={logout} activo="dispositivos" rol={rol} />
@@ -160,8 +160,8 @@ export default function Dispositivos() {
           <main className="flex-1 overflow-y-auto p-6 md:p-8">
             <header className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div>
-                <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Gestión de Dispositivos</h1>
-                <p className="text-sm text-gray-500 dark:text-gray-400">
+                <h1 className="text-2xl font-bold text-white">Gestión de Dispositivos</h1>
+                <p className="text-sm text-gray-300">
                   Listado centralizado de dispositivos de monitoreo registrados.
                 </p>
               </div>
@@ -189,7 +189,7 @@ export default function Dispositivos() {
             </header>
 
             {mensajeExito && (
-              <div className="mb-4 p-4 rounded-xl bg-[#ccff00]/20 border border-[#ccff00]/40 text-[#5a7000] dark:text-[#ccff00] text-sm flex items-center justify-between">
+              <div className="mb-4 p-4 rounded-xl bg-[#ccff00]/20 border border-[#ccff00]/40 text-[#ccff00] text-sm flex items-center justify-between">
                 <span>{mensajeExito}</span>
                 <button
                   onClick={() => setMensajeExito(null)}
@@ -200,9 +200,9 @@ export default function Dispositivos() {
               </div>
             )}
 
-            <div className="bg-white dark:bg-[#2d3748] rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
+            <div className="bg-white/5 backdrop-blur-xl rounded-2xl shadow-sm border border-white/10">
               {/* Barra de filtros */}
-              <div className="p-5 flex flex-col lg:flex-row gap-3 items-center justify-between border-b border-gray-100 dark:border-gray-700">
+              <div className="p-5 flex flex-col lg:flex-row gap-3 items-center justify-between border-b border-white/10">
                 <div className="relative w-full lg:w-80">
                   <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
                     <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
@@ -214,7 +214,7 @@ export default function Dispositivos() {
                     value={busquedaInput}
                     onChange={(e) => setBusquedaInput(e.target.value)}
                     placeholder="Buscar por nombre o marca..."
-                    className="bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block w-full pl-10 p-2.5 transition-all outline-none placeholder-gray-400 dark:placeholder-gray-500"
+                    className="bg-white/5 border border-white/20 text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block w-full pl-10 p-2.5 transition-all outline-none placeholder-gray-400"
                   />
                 </div>
 
@@ -222,7 +222,7 @@ export default function Dispositivos() {
                   <select
                     value={idUbccn}
                     onChange={(e) => setIdUbccn(e.target.value)}
-                    className="bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block p-2.5 outline-none cursor-pointer"
+                    className="bg-white/5 border border-white/20 text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block p-2.5 outline-none cursor-pointer"
                   >
                     <option value="">Todas las ubicaciones</option>
                     {ubicaciones.map((u) => (
@@ -235,7 +235,7 @@ export default function Dispositivos() {
                   <select
                     value={estado}
                     onChange={(e) => setEstado(e.target.value)}
-                    className="bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block p-2.5 outline-none cursor-pointer"
+                    className="bg-white/5 border border-white/20 text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block p-2.5 outline-none cursor-pointer"
                   >
                     <option value="">Todos los estados</option>
                     <option value="Activo">Activo</option>
@@ -245,7 +245,7 @@ export default function Dispositivos() {
                   {hayFiltrosActivos && (
                     <button
                       onClick={limpiarFiltros}
-                      className="px-3 py-2.5 text-sm font-medium rounded-xl border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors whitespace-nowrap"
+                      className="px-3 py-2.5 text-sm font-medium rounded-xl border border-white/20 text-gray-200 hover:bg-white/10 transition-colors whitespace-nowrap"
                     >
                       Limpiar filtros
                     </button>
@@ -254,15 +254,15 @@ export default function Dispositivos() {
               </div>
 
               {error && (
-                <div className="p-4 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm border-b border-red-100 dark:border-red-800/30">
+                <div className="p-4 bg-red-900/20 text-red-400 text-sm border-b border-red-800/30">
                   {error}
                 </div>
               )}
 
               {/* Tabla */}
               <div className="overflow-x-auto">
-                <table className="w-full text-sm text-left text-gray-500 dark:text-gray-400">
-                  <thead className="text-xs text-gray-500 dark:text-gray-400 uppercase bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700">
+                <table className="w-full text-sm text-left text-gray-300">
+                  <thead className="text-xs text-gray-300 uppercase bg-white/5 border-b border-white/10">
                     <tr>
                       <th className="px-6 py-4 font-bold tracking-wider">Nombre</th>
                       <th className="px-6 py-4 font-bold tracking-wider">Marca</th>
@@ -274,7 +274,7 @@ export default function Dispositivos() {
                   <tbody>
                     {loading && (
                       <tr>
-                        <td colSpan={5} className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
+                        <td colSpan={5} className="px-6 py-8 text-center text-gray-300">
                           <div className="flex justify-center items-center gap-2">
                             <div className="w-4 h-4 rounded-full bg-[#ccff00] animate-bounce"></div>
                             <span>Cargando datos...</span>
@@ -285,7 +285,7 @@ export default function Dispositivos() {
 
                     {!loading && data?.items.length === 0 && (
                       <tr>
-                        <td colSpan={5} className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
+                        <td colSpan={5} className="px-6 py-8 text-center text-gray-300">
                           No se encontraron dispositivos con ese criterio.
                         </td>
                       </tr>
@@ -296,21 +296,21 @@ export default function Dispositivos() {
                         <tr
                           key={d.id_dspstv}
                           onClick={() => navigate(`/dispositivos/${d.id_dspstv}`)}
-                          className="bg-white dark:bg-[#2d3748] border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors group cursor-pointer"
+                          className="bg-white/5 backdrop-blur-xl border-b border-white/10 hover:bg-white/5 transition-colors group cursor-pointer"
                         >
-                          <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">{d.nmbr}</td>
+                          <td className="px-6 py-4 font-medium text-white">{d.nmbr}</td>
                           <td className="px-6 py-4">{d.mrc}</td>
                           <td className="px-6 py-4">{d.ubicacion_nombre}</td>
                           <td className="px-6 py-4">
                             <span
                               className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold border ${
                                 d.estd === "Activo"
-                                  ? "bg-[#ccff00]/20 text-[#5a7000] dark:text-[#ccff00] border-[#ccff00]/30"
-                                  : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-600"
+                                  ? "bg-[#ccff00]/20 text-[#ccff00] border-[#ccff00]/30"
+                                  : "bg-white/10 text-gray-300 border-white/20"
                               }`}
                             >
                               {d.estd === "Activo" && (
-                                <span className="w-1.5 h-1.5 mr-1.5 rounded-full bg-[#8fb300] dark:bg-[#ccff00]"></span>
+                                <span className="w-1.5 h-1.5 mr-1.5 rounded-full bg-[#ccff00]"></span>
                               )}
                               {d.estd}
                             </span>
@@ -323,9 +323,9 @@ export default function Dispositivos() {
                                 e.stopPropagation();
                                 navigate(`/dispositivos/${d.id_dspstv}`);
                               }}
-                              className="inline-flex items-center justify-center px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-transparent border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white focus:ring-4 focus:outline-none focus:ring-gray-200 dark:focus:ring-gray-800 transition-all"
+                              className="inline-flex items-center justify-center px-3 py-1.5 text-sm font-medium text-gray-200 bg-transparent border border-white/20 rounded-lg hover:bg-white/10 hover:text-white focus:ring-4 focus:outline-none focus:ring-white/10 transition-all"
                             >
-                              <svg className="w-4 h-4 mr-2 text-gray-500 dark:text-gray-400" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor">
+                              <svg className="w-4 h-4 mr-2 text-gray-300" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                               </svg>
                               Configurar
@@ -339,24 +339,24 @@ export default function Dispositivos() {
 
               {/* Paginación */}
               {data && (
-                <div className="p-5 border-t border-gray-100 dark:border-gray-700 flex items-center justify-between">
-                  <span className="text-sm text-gray-500 dark:text-gray-400">
-                    Mostrando <span className="font-semibold text-gray-900 dark:text-white">{inicioRango}</span> a{" "}
-                    <span className="font-semibold text-gray-900 dark:text-white">{finRango}</span> de{" "}
-                    <span className="font-semibold text-gray-900 dark:text-white">{data.total}</span> registros
+                <div className="p-5 border-t border-white/10 flex items-center justify-between">
+                  <span className="text-sm text-gray-300">
+                    Mostrando <span className="font-semibold text-white">{inicioRango}</span> a{" "}
+                    <span className="font-semibold text-white">{finRango}</span> de{" "}
+                    <span className="font-semibold text-white">{data.total}</span> registros
                   </span>
                   <div className="flex gap-2">
                     <button
                       onClick={() => setPagina((p) => Math.max(1, p - 1))}
                       disabled={pagina <= 1}
-                      className="px-3 py-1.5 text-sm rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 disabled:opacity-40 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                      className="px-3 py-1.5 text-sm rounded-lg border border-white/20 text-gray-200 disabled:opacity-40 hover:bg-white/10 transition-colors"
                     >
                       Anterior
                     </button>
                     <button
                       onClick={() => setPagina((p) => Math.min(totalPaginas, p + 1))}
                       disabled={pagina >= totalPaginas}
-                      className="px-3 py-1.5 text-sm rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 disabled:opacity-40 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                      className="px-3 py-1.5 text-sm rounded-lg border border-white/20 text-gray-200 disabled:opacity-40 hover:bg-white/10 transition-colors"
                     >
                       Siguiente
                     </button>

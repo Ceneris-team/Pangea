@@ -11,15 +11,15 @@ interface SidebarProps {
 }
 
 const linkBase = "flex items-center gap-3 px-3 py-2 rounded-lg transition-colors";
-const linkInactivo = "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800";
-const linkActivo = "bg-[#ccff00]/10 text-[#5a7000] dark:text-[#ccff00] font-medium";
+const linkInactivo = "text-gray-300 hover:bg-white/5";
+const linkActivo = "bg-[#ccff00]/10 text-[#ccff00] font-medium";
 const linkDeshabilitado = linkInactivo + " opacity-60 cursor-not-allowed";
 
 export default function Sidebar({ onLogout, activo, rol }: SidebarProps) {
   return (
-    <aside className="w-64 bg-white dark:bg-[#2d3748] border-r border-gray-200 dark:border-gray-700 hidden md:flex flex-col transition-colors duration-300">
-      <div className="h-16 flex items-center px-6 border-b border-gray-200 dark:border-gray-700">
-        <img src={pangeaLogo} alt="Pangea" className="h-8 w-auto dark:brightness-0 dark:invert" />
+    <aside className="w-64 bg-white/5 backdrop-blur-xl border-r border-white/10 hidden md:flex flex-col transition-colors duration-300">
+      <div className="h-16 flex items-center px-6 border-b border-white/10">
+        <img src={pangeaLogo} alt="Pangea" className="h-8 w-auto rounded-md bg-white px-2 py-1" />
       </div>
 
       <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
@@ -29,7 +29,7 @@ export default function Sidebar({ onLogout, activo, rol }: SidebarProps) {
           className={linkBase + " " + (activo === "panel" ? linkActivo : linkInactivo)}
         >
           <svg
-            className={"w-5 h-5 " + (activo === "panel" ? "text-[#8fb300] dark:text-[#ccff00]" : "")}
+            className={"w-5 h-5 " + (activo === "panel" ? "text-[#ccff00]" : "")}
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -69,7 +69,7 @@ export default function Sidebar({ onLogout, activo, rol }: SidebarProps) {
             className={linkBase + " " + (activo === "usuarios" ? linkActivo : linkInactivo)}
           >
             <svg
-              className={"w-5 h-5 " + (activo === "usuarios" ? "text-[#8fb300] dark:text-[#ccff00]" : "")}
+              className={"w-5 h-5 " + (activo === "usuarios" ? "text-[#ccff00]" : "")}
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -92,7 +92,7 @@ export default function Sidebar({ onLogout, activo, rol }: SidebarProps) {
             className={linkBase + " " + (activo === "conexiones-ftp" ? linkActivo : linkInactivo)}
           >
             <svg
-              className={"w-5 h-5 " + (activo === "conexiones-ftp" ? "text-[#8fb300] dark:text-[#ccff00]" : "")}
+              className={"w-5 h-5 " + (activo === "conexiones-ftp" ? "text-[#ccff00]" : "")}
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -123,7 +123,7 @@ export default function Sidebar({ onLogout, activo, rol }: SidebarProps) {
             className={linkBase + " " + (activo === "parametros" ? linkActivo : linkInactivo)}
           >
             <svg
-              className={"w-5 h-5 " + (activo === "parametros" ? "text-[#8fb300] dark:text-[#ccff00]" : "")}
+              className={"w-5 h-5 " + (activo === "parametros" ? "text-[#ccff00]" : "")}
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -147,7 +147,7 @@ export default function Sidebar({ onLogout, activo, rol }: SidebarProps) {
             className={linkBase + " " + (activo === "cola-ingesta" ? linkActivo : linkInactivo)}
           >
             <svg
-              className={"w-5 h-5 " + (activo === "cola-ingesta" ? "text-[#8fb300] dark:text-[#ccff00]" : "")}
+              className={"w-5 h-5 " + (activo === "cola-ingesta" ? "text-[#ccff00]" : "")}
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -168,7 +168,7 @@ export default function Sidebar({ onLogout, activo, rol }: SidebarProps) {
           className={linkBase + " " + (activo === "ubicaciones" ? linkActivo : linkInactivo)}
         >
           <svg
-            className={"w-5 h-5 " + (activo === "ubicaciones" ? "text-[#8fb300] dark:text-[#ccff00]" : "")}
+            className={"w-5 h-5 " + (activo === "ubicaciones" ? "text-[#ccff00]" : "")}
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -191,7 +191,7 @@ export default function Sidebar({ onLogout, activo, rol }: SidebarProps) {
           className={linkBase + " " + (activo === "dispositivos" ? linkActivo : linkInactivo)}
         >
           <svg
-            className={"w-5 h-5 " + (activo === "dispositivos" ? "text-[#8fb300] dark:text-[#ccff00]" : "")}
+            className={"w-5 h-5 " + (activo === "dispositivos" ? "text-[#ccff00]" : "")}
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -212,7 +212,7 @@ export default function Sidebar({ onLogout, activo, rol }: SidebarProps) {
           className={linkBase + " " + (activo === "consulta-datos" ? linkActivo : linkInactivo)}
         >
           <svg
-            className={"w-5 h-5 " + (activo === "consulta-datos" ? "text-[#8fb300] dark:text-[#ccff00]" : "")}
+            className={"w-5 h-5 " + (activo === "consulta-datos" ? "text-[#ccff00]" : "")}
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -247,10 +247,10 @@ export default function Sidebar({ onLogout, activo, rol }: SidebarProps) {
         </a>
       </nav>
 
-      <div className="p-4 border-t border-gray-200 dark:border-gray-700">
+      <div className="p-4 border-t border-white/10">
         <button
           onClick={onLogout}
-          className="flex items-center gap-3 px-3 py-2 w-full text-left text-gray-600 dark:text-gray-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10 dark:hover:text-red-400 rounded-lg transition-colors"
+          className="flex items-center gap-3 px-3 py-2 w-full text-left text-gray-300 hover:bg-red-500/10 hover:text-red-400 rounded-lg transition-colors"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path
