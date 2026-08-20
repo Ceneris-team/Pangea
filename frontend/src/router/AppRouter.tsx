@@ -19,6 +19,7 @@ import { ROLES } from "../config/roles";
 import ConexionesFTP from "../pages/ConexionesFTP";
 import ConfigurarConexionFTP from "../pages/ConfigurarConexionFTP";
 import ConsultaDatos from "../pages/ConsultaDatos";
+import Graficos from "../pages/Graficos";
 import DispositivoDetalle from "../pages/DispositivoDetalle";
 import Parametros from "../pages/Parametros";
 import ColaIngesta from "../pages/ColaIngesta";
@@ -205,6 +206,16 @@ export default function AppRouter() {
             element={
               <ProtectedRoute>
                 <ConsultaDatos />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Vista rápida de telemetría en gráficos, misma fuente que HU13 */}
+          <Route
+            path="/graficos"
+            element={
+              <ProtectedRoute>
+                <Graficos />
               </ProtectedRoute>
             }
           />
