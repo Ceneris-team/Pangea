@@ -95,12 +95,14 @@ export default function Mapeos() {
         <Sidebar onLogout={logout} activo="mapeos" rol={rol} />
 
         <div className="flex-1 flex flex-col overflow-hidden">
-          <Topbar
+          <div className="flex justify-end p-4 md:p-6 pb-0">
+            <Topbar
             isDarkMode={isDarkMode}
             onToggleDarkMode={() => setIsDarkMode(!isDarkMode)}
             nombreCompleto={nombreCompleto}
             rol={rol}
-          />
+            />
+          </div>
 
           <main className="flex-1 overflow-y-auto p-6 md:p-8">
             <header className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -118,7 +120,7 @@ export default function Mapeos() {
               </button>
             </header>
 
-            <div className="bg-white/5 backdrop-blur-xl rounded-2xl shadow-sm border border-white/10 overflow-hidden transition-colors duration-300">
+            <div className="bg-white/[0.04] backdrop-blur-md rounded-2xl shadow-sm border border-white/10 overflow-hidden transition-colors duration-300">
               <div className="p-5 border-b border-white/10">
                 <div className="relative w-full lg:max-w-md">
                   <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
@@ -186,7 +188,7 @@ export default function Mapeos() {
                       itemsFiltrados.map((m) => (
                         <tr
                           key={m.id_mp}
-                          className="bg-white/5 backdrop-blur-xl border-b border-white/10 hover:bg-white/5 transition-colors"
+                          className="bg-white/[0.04] backdrop-blur-md border-b border-white/10 hover:bg-white/5 transition-colors"
                         >
                           <td className="px-6 py-4 font-medium text-white">{m.dispositivo_nombre}</td>
                           <td className="px-6 py-4">{m.mrc}</td>

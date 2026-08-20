@@ -154,12 +154,14 @@ export default function AgregarUbicacion() {
         <Sidebar onLogout={logout} activo="ubicaciones" rol={rol} />
 
         <div className="flex-1 flex flex-col overflow-hidden">
-          <Topbar
+          <div className="flex justify-end p-4 md:p-6 pb-0">
+            <Topbar
             isDarkMode={isDarkMode}
             onToggleDarkMode={() => setIsDarkMode(!isDarkMode)}
             nombreCompleto={nombreCompleto}
             rol={rol}
-          />
+            />
+          </div>
 
           <main className="flex-1 overflow-y-auto p-6 md:p-8">
             <header className="mb-6">
@@ -171,7 +173,7 @@ export default function AgregarUbicacion() {
 
             <form
               onSubmit={handleSubmit}
-              className="bg-white/5 backdrop-blur-xl rounded-2xl shadow-sm border border-white/10"
+              className="bg-white/[0.04] backdrop-blur-md rounded-2xl shadow-sm border border-white/10"
             >
               {error && (
                 <div className="p-4 bg-red-900/20 text-red-400 text-sm border-b border-red-800/30 rounded-t-2xl">

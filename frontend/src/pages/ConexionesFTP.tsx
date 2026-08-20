@@ -70,12 +70,14 @@ export default function ConexionesFTP() {
         <Sidebar onLogout={logout} activo="conexiones-ftp" rol={rol} />
 
         <div className="flex-1 flex flex-col overflow-hidden">
-          <Topbar
+          <div className="flex justify-end p-4 md:p-6 pb-0">
+            <Topbar
             isDarkMode={isDarkMode}
             onToggleDarkMode={() => setIsDarkMode(!isDarkMode)}
             nombreCompleto={nombreCompleto}
             rol={rol}
-          />
+            />
+          </div>
 
           <main className="flex-1 overflow-y-auto p-6 md:p-8">
             <header className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -93,7 +95,7 @@ export default function ConexionesFTP() {
               </Link>
             </header>
 
-            <div className="bg-white/5 backdrop-blur-xl rounded-2xl shadow-sm border border-white/10 overflow-hidden transition-colors duration-300">
+            <div className="bg-white/[0.04] backdrop-blur-md rounded-2xl shadow-sm border border-white/10 overflow-hidden transition-colors duration-300">
               {error && (
                 <div className="p-4 bg-red-900/20 text-red-400 text-sm border-b border-red-800/30">
                   {error}
@@ -136,7 +138,7 @@ export default function ConexionesFTP() {
                       data?.items.map((c) => (
                         <tr
                           key={c.id_cnxn}
-                          className="bg-white/5 backdrop-blur-xl border-b border-white/10 hover:bg-white/5 transition-colors"
+                          className="bg-white/[0.04] backdrop-blur-md border-b border-white/10 hover:bg-white/5 transition-colors"
                         >
                           <td className="px-6 py-4 font-medium text-white">{c.nmbr}</td>
                           <td className="px-6 py-4">

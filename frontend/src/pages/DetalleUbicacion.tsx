@@ -78,12 +78,14 @@ export default function DetalleUbicacion() {
         <Sidebar onLogout={logout} activo="ubicaciones" rol={rol} />
 
         <div className="flex-1 flex flex-col overflow-hidden">
-          <Topbar
+          <div className="flex justify-end p-4 md:p-6 pb-0">
+            <Topbar
             isDarkMode={isDarkMode}
             onToggleDarkMode={() => setIsDarkMode(!isDarkMode)}
             nombreCompleto={nombreCompleto}
             rol={rol}
-          />
+            />
+          </div>
 
           <main className="flex-1 overflow-y-auto p-6 md:p-8">
             <div className="mb-6">
@@ -129,7 +131,7 @@ export default function DetalleUbicacion() {
                   </header>
 
                   <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    <section className="bg-white/5 backdrop-blur-xl rounded-2xl shadow-sm border border-white/10 p-6">
+                    <section className="bg-white/[0.04] backdrop-blur-md rounded-2xl shadow-sm border border-white/10 p-6">
                       <h2 className="text-base font-bold text-white mb-4">Ubicación</h2>
                       <dl className="space-y-3 text-sm">
                         <div>
@@ -149,7 +151,7 @@ export default function DetalleUbicacion() {
                       </dl>
                     </section>
 
-                    <section className="lg:col-span-2 bg-white/5 backdrop-blur-xl rounded-2xl shadow-sm border border-white/10 p-6">
+                    <section className="lg:col-span-2 bg-white/[0.04] backdrop-blur-md rounded-2xl shadow-sm border border-white/10 p-6">
                       <h2 className="text-base font-bold text-white mb-1">
                         Parámetros en uso
                       </h2>

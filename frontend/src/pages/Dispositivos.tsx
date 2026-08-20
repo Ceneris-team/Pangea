@@ -149,12 +149,14 @@ export default function Dispositivos() {
         <div className="flex-1 flex flex-col overflow-hidden">
 
           {/* TOP NAVBAR */}
-          <Topbar
-            isDarkMode={isDarkMode}
-            onToggleDarkMode={() => setIsDarkMode(!isDarkMode)}
-            nombreCompleto={nombreCompleto}
-            rol={rol}
+          <div className="flex justify-end p-4 md:p-6 pb-0">
+            <Topbar
+              isDarkMode={isDarkMode}
+              onToggleDarkMode={() => setIsDarkMode(!isDarkMode)}
+              nombreCompleto={nombreCompleto}
+              rol={rol}
             />
+          </div>
 
           {/* CONTENIDO DE LA PÁGINA (Dispositivos) */}
           <main className="flex-1 overflow-y-auto p-6 md:p-8">
@@ -200,7 +202,7 @@ export default function Dispositivos() {
               </div>
             )}
 
-            <div className="bg-white/5 backdrop-blur-xl rounded-2xl shadow-sm border border-white/10">
+            <div className="bg-white/[0.04] backdrop-blur-md rounded-2xl shadow-sm border border-white/10">
               {/* Barra de filtros */}
               <div className="p-5 flex flex-col lg:flex-row gap-3 items-center justify-between border-b border-white/10">
                 <div className="relative w-full lg:w-80">
@@ -296,7 +298,7 @@ export default function Dispositivos() {
                         <tr
                           key={d.id_dspstv}
                           onClick={() => navigate(`/dispositivos/${d.id_dspstv}`)}
-                          className="bg-white/5 backdrop-blur-xl border-b border-white/10 hover:bg-white/5 transition-colors group cursor-pointer"
+                          className="bg-white/[0.04] backdrop-blur-md border-b border-white/10 hover:bg-white/5 transition-colors group cursor-pointer"
                         >
                           <td className="px-6 py-4 font-medium text-white">{d.nmbr}</td>
                           <td className="px-6 py-4">{d.mrc}</td>

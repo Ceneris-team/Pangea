@@ -413,12 +413,14 @@ export default function ConfigurarMapeo() {
         <Sidebar onLogout={logout} activo="mapeos" rol={rol} />
 
         <div className="flex-1 flex flex-col overflow-hidden">
-          <Topbar
+          <div className="flex justify-end p-4 md:p-6 pb-0">
+            <Topbar
             isDarkMode={isDarkMode}
             onToggleDarkMode={() => setIsDarkMode(!isDarkMode)}
             nombreCompleto={nombreCompleto}
             rol={rol}
-          />
+            />
+          </div>
 
           <main className="flex-1 overflow-y-auto p-6 md:p-8">
             <header className="mb-6">
@@ -435,7 +437,7 @@ export default function ConfigurarMapeo() {
             ) : (
               <form onSubmit={handleSubmit} className="space-y-6">
                 {/* CA1: datos del formato */}
-                <section className="bg-white/5 backdrop-blur-xl rounded-2xl shadow-sm border border-white/10 p-6">
+                <section className="bg-white/[0.04] backdrop-blur-md rounded-2xl shadow-sm border border-white/10 p-6">
                   <h2 className="text-base font-bold text-white mb-4">Datos del formato</h2>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -555,7 +557,7 @@ export default function ConfigurarMapeo() {
                 </section>
 
                 {/* CA2: vista previa con archivo de muestra */}
-                <section className="bg-white/5 backdrop-blur-xl rounded-2xl shadow-sm border border-white/10 p-6">
+                <section className="bg-white/[0.04] backdrop-blur-md rounded-2xl shadow-sm border border-white/10 p-6">
                   <h2 className="text-base font-bold text-white mb-1">Vista previa</h2>
                   <p className="text-sm text-gray-300 mb-4 font-light">
                     Usa un .dat de muestra para ver las primeras 10 filas interpretadas. El archivo no se
@@ -703,7 +705,7 @@ export default function ConfigurarMapeo() {
                 </section>
 
                 {/* CA1: tabla de asignación columna -> parámetro estándar */}
-                <section className="bg-white/5 backdrop-blur-xl rounded-2xl shadow-sm border border-white/10 p-6">
+                <section className="bg-white/[0.04] backdrop-blur-md rounded-2xl shadow-sm border border-white/10 p-6">
                   <h2 className="text-base font-bold text-white mb-1">
                     Asignación de columnas
                   </h2>
