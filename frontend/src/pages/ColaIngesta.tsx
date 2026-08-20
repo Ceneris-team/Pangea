@@ -126,12 +126,14 @@ export default function ColaIngesta() {
         <Sidebar onLogout={logout} activo="cola-ingesta" rol={rol} />
 
         <div className="flex-1 flex flex-col overflow-hidden">
-          <Topbar
+          <div className="flex justify-end p-4 md:p-6 pb-0">
+            <Topbar
             isDarkMode={isDarkMode}
             onToggleDarkMode={() => setIsDarkMode(!isDarkMode)}
             nombreCompleto={nombreCompleto}
             rol={rol}
-          />
+            />
+          </div>
 
           <main className="flex-1 overflow-y-auto p-6 md:p-8">
             <header className="mb-6">
@@ -142,7 +144,7 @@ export default function ColaIngesta() {
               </p>
             </header>
 
-            <div className="bg-white/5 backdrop-blur-xl rounded-2xl shadow-sm border border-white/10 overflow-hidden transition-colors duration-300">
+            <div className="bg-white/[0.04] backdrop-blur-md rounded-2xl shadow-sm border border-white/10 overflow-hidden transition-colors duration-300">
               <div className="p-5 border-b border-white/10 flex flex-wrap items-center gap-3">
                 <label className="text-sm font-medium text-gray-200" htmlFor="filtro-estado">
                   Estado:
@@ -203,7 +205,7 @@ export default function ColaIngesta() {
                       <tr
                         key={item.id_archv}
                         onClick={() => setIdSeleccionado(item.id_archv)}
-                        className="bg-white/5 backdrop-blur-xl border-b border-white/10 hover:bg-white/5 transition-colors cursor-pointer"
+                        className="bg-white/[0.04] backdrop-blur-md border-b border-white/10 hover:bg-white/5 transition-colors cursor-pointer"
                       >
                         <td className="px-6 py-4 font-medium text-white">{item.nmbr_archv}</td>
                         <td className="px-6 py-4">{item.datalogger_nombre}</td>
@@ -274,7 +276,7 @@ export default function ColaIngesta() {
           onClick={() => setIdSeleccionado(null)}
         >
           <div
-            className="bg-white/5 backdrop-blur-xl rounded-2xl shadow-xl border border-white/10 max-w-lg w-full p-6"
+            className="bg-white/[0.04] backdrop-blur-md rounded-2xl shadow-xl border border-white/10 max-w-lg w-full p-6"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-4">

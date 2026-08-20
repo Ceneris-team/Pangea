@@ -27,12 +27,14 @@ export default function DashboardLayout({ children, activo = "panel" }: Dashboar
         <Sidebar onLogout={handleLogout} activo={activo} rol={rol} />
 
         <div className="flex-1 flex flex-col overflow-hidden">
-          <Topbar
+          <div className="flex justify-end p-4 md:p-6 pb-0">
+            <Topbar
             isDarkMode={isDarkMode}
             onToggleDarkMode={() => setIsDarkMode((v) => !v)}
             nombreCompleto={nombreCompleto}
             rol={rol}
-          />
+            />
+          </div>
 
           <main className="flex-1 overflow-y-auto p-6 md:p-8">{children}</main>
         </div>

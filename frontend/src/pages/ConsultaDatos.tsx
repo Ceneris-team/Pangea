@@ -111,12 +111,14 @@ export default function ConsultaDatos() {
         <Sidebar onLogout={logout} activo="consulta-datos" rol={rol} />
 
         <div className="flex-1 flex flex-col overflow-hidden">
-          <Topbar
+          <div className="flex justify-end p-4 md:p-6 pb-0">
+            <Topbar
             isDarkMode={isDarkMode}
             onToggleDarkMode={() => setIsDarkMode(!isDarkMode)}
             nombreCompleto={nombreCompleto}
             rol={rol}
-          />
+            />
+          </div>
 
           <main className="flex-1 overflow-y-auto p-6 md:p-8">
             <header className="mb-6">
@@ -126,7 +128,7 @@ export default function ConsultaDatos() {
               </p>
             </header>
 
-            <div className="bg-white/5 backdrop-blur-xl rounded-2xl shadow-sm border border-white/10 p-5 mb-6">
+            <div className="bg-white/[0.04] backdrop-blur-md rounded-2xl shadow-sm border border-white/10 p-5 mb-6">
               <div className="flex flex-col lg:flex-row gap-6">
                 <fieldset className="flex-1">
                   <legend className="text-sm font-bold text-gray-200 mb-2">Parámetros</legend>
@@ -187,7 +189,7 @@ export default function ConsultaDatos() {
               </div>
             </div>
 
-            <div className="bg-white/5 backdrop-blur-xl rounded-2xl shadow-sm border border-white/10">
+            <div className="bg-white/[0.04] backdrop-blur-md rounded-2xl shadow-sm border border-white/10">
               {error && (
                 <div className="p-4 bg-red-900/20 text-red-400 text-sm border-b border-red-800/30">
                   {error}
@@ -222,7 +224,7 @@ export default function ConsultaDatos() {
                       mediciones?.items.map((m) => (
                         <tr
                           key={m.id_lctr}
-                          className="bg-white/5 backdrop-blur-xl border-b border-white/10 hover:bg-white/5 transition-colors"
+                          className="bg-white/[0.04] backdrop-blur-md border-b border-white/10 hover:bg-white/5 transition-colors"
                         >
                           <td className="px-6 py-4 font-medium text-white">{m.parametro_nombre}</td>
                           <td className="px-6 py-4">{m.ubicacion_nombre}</td>
