@@ -68,6 +68,12 @@ class MapeoFormato(Base):
     id_mp = Column(Integer, primary_key=True, autoincrement=True)
     id_dspstv = Column(Integer, ForeignKey("dspstv.id_dspstv"), nullable=False)
     tp_trm = Column(String(5), nullable=False, server_default="H")
+    # Descripción corta y libre de qué es esta trama (p. ej. "Nivel de
+    # napa" para una letra que el técnico de telemetría definió). Antes
+    # de que tp_trm fuera libre no hacía falta -H/E/P se explicaban solos
+    # en la UI-; con letras arbitrarias, sin esto nadie sabe qué es "X"
+    # sin abrir el mapeo.
+    dscrpcn = Column(String(200))
     dlmtdr = Column(String(5), nullable=False, server_default=",")
     # Separador decimal del propio dato numérico, independiente del
     # delimitador de columna: un datalogger en locale europeo manda

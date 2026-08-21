@@ -21,6 +21,7 @@ interface MapeoListItem {
   id_sd: number;
   mrc: string;
   tp_trm: string;
+  dscrpcn: string | null;
   dlmtdr: string;
   fl_inc_dts: number;
   frmt_fch: string;
@@ -56,28 +57,42 @@ export default function Mapeos() {
   const [data, setData] = useState<ListadoMapeos | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [eliminandoId, setEliminandoId] = useState<number | null>(null);
 
-  useEffect(() => {
-    let cancelado = false;
+  function cargar() {
     setLoading(true);
     setError(null);
-
     apiFetch<ListadoMapeos>("/mapeos")
-      .then((res) => {
-        if (!cancelado) setData(res);
-      })
+      .then(setData)
       .catch((err) => {
-        if (cancelado) return;
         setError(err instanceof ApiError ? err.message : "No se pudo cargar el listado de mapeos");
       })
-      .finally(() => {
-        if (!cancelado) setLoading(false);
-      });
+      .finally(() => setLoading(false));
+  }
 
-    return () => {
-      cancelado = true;
-    };
+  useEffect(() => {
+    cargar();
   }, []);
+
+  async function eliminarMapeo(m: MapeoListItem) {
+    const confirmado = window.confirm(
+      `¿Eliminar el mapeo de la trama '${m.tp_trm}' de "${m.dispositivo_nombre}"? ` +
+        `Los archivos ya procesados con este mapeo no se ven afectados, pero los ` +
+        `archivos nuevos con este prefijo dejarán de poder interpretarse hasta que ` +
+        `se cree un mapeo nuevo para esa trama.`
+    );
+    if (!confirmado) return;
+
+    setEliminandoId(m.id_mp);
+    try {
+      await apiFetch<{ mensaje: string }>(`/mapeos/${m.id_mp}`, { method: "DELETE" });
+      cargar();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "No se pudo eliminar el mapeo");
+    } finally {
+      setEliminandoId(null);
+    }
+  }
 
   // Filtro local por nombre o marca del dispositivo: el listado ya no es
   // tan grande como para justificar un filtro server-side por marca.
@@ -191,7 +206,14 @@ export default function Mapeos() {
                         >
                           <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">{m.dispositivo_nombre}</td>
                           <td className="px-6 py-4">{m.mrc}</td>
-                          <td className="px-6 py-4">{ETIQUETA_TRAMA[m.tp_trm] ?? m.tp_trm}</td>
+                          <td className="px-6 py-4">
+                            <div>{ETIQUETA_TRAMA[m.tp_trm] ?? m.tp_trm}</div>
+                            {m.dscrpcn && (
+                              <div className="text-xs text-gray-400 dark:text-gray-500 font-light">
+                                {m.dscrpcn}
+                              </div>
+                            )}
+                          </td>
                           <td className="px-6 py-4">{ETIQUETA_DELIMITADOR[m.dlmtdr] ?? m.dlmtdr}</td>
                           <td className="px-6 py-4 font-mono text-xs">{m.frmt_fch}</td>
                           <td className="px-6 py-4">{m.total_columnas}</td>
@@ -210,25 +232,36 @@ export default function Mapeos() {
                             </span>
                           </td>
                           <td className="px-6 py-4 text-right">
-                            <Link
-                              to={`/mapeos/${m.id_mp}/editar`}
-                              className="inline-flex items-center justify-center px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-transparent border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white transition-all"
-                            >
-                              <svg
-                                className="w-4 h-4 mr-2 text-gray-500 dark:text-gray-400"
-                                fill="none"
-                                viewBox="0 0 24 24"
-                                strokeWidth="2"
-                                stroke="currentColor"
+                            <div className="inline-flex gap-2">
+                              <Link
+                                to={`/mapeos/${m.id_mp}/editar`}
+                                className="inline-flex items-center justify-center px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-transparent border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white transition-all"
                               >
-                                <path
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
-                                />
-                              </svg>
-                              Editar
-                            </Link>
+                                <svg
+                                  className="w-4 h-4 mr-2 text-gray-500 dark:text-gray-400"
+                                  fill="none"
+                                  viewBox="0 0 24 24"
+                                  strokeWidth="2"
+                                  stroke="currentColor"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+                                  />
+                                </svg>
+                                Editar
+                              </Link>
+                              {m.estd === "Activo" && (
+                                <button
+                                  onClick={() => eliminarMapeo(m)}
+                                  disabled={eliminandoId === m.id_mp}
+                                  className="inline-flex items-center justify-center px-3 py-1.5 text-sm font-medium text-red-600 dark:text-red-400 bg-white dark:bg-transparent border border-red-200 dark:border-red-800/40 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-all disabled:opacity-50"
+                                >
+                                  {eliminandoId === m.id_mp ? "Eliminando..." : "Eliminar"}
+                                </button>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       ))}

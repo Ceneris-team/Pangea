@@ -460,7 +460,11 @@ class MapeoColumnaDetalle(MapeoColumnaItem):
 
 
 class MapeoFormatoBase(BaseModel):
-    tp_trm: str = Field(default="H")  # 'H' datos periódicos / 'E' eventos
+    tp_trm: str = Field(default="H")  # letra libre A-Z; 'H'/'E'/'P' son solo las frecuentes
+    # Descripción corta y libre de qué es esta trama (p. ej. "Nivel de
+    # napa"). Sin catálogo cerrado de tp_trm, es lo único que explica qué
+    # significa una letra que no es H/E/P.
+    dscrpcn: str | None = Field(default=None, max_length=200)
     dlmtdr: str  # obligatorio: coma, punto y coma, tabulador o espacio
     # Separador decimal del dato numérico, no de las columnas. Default '.'
     # = comportamiento previo a DEC-09, para los mapeos ya cargados.
@@ -488,6 +492,7 @@ class MapeoFormatoActualizar(BaseModel):
     dispositivo correcto."""
 
     tp_trm: str | None = None
+    dscrpcn: str | None = Field(default=None, max_length=200)
     dlmtdr: str | None = None
     dlmtdr_dcml: str | None = None
     fl_inc_dts: int | None = Field(default=None, ge=1)
@@ -511,6 +516,7 @@ class MapeoFormatoListItem(BaseModel):
     id_sd: int
     mrc: str
     tp_trm: str
+    dscrpcn: str | None
     dlmtdr: str
     dlmtdr_dcml: str
     fl_inc_dts: int

@@ -356,6 +356,27 @@ class TestCrearMapeo:
         )
         assert resp.status_code == 422
 
+    def test_guarda_la_descripcion_de_la_trama(
+        self, client, db_session, tecnico_editor, parametros
+    ):
+        sede, _ = tecnico_editor
+        dispositivo = crear_dispositivo(db_session, sede)
+        resp = client.post(
+            "/mapeos",
+            json=cuerpo_mapeo(
+                parametros, dispositivo.id_dspstv, tp_trm="X", dscrpcn="Nivel de napa"
+            ),
+        )
+        assert resp.status_code == 201
+        assert resp.json()["mapeo"]["dscrpcn"] == "Nivel de napa"
+
+    def test_descripcion_es_opcional(self, client, db_session, tecnico_editor, parametros):
+        sede, _ = tecnico_editor
+        dispositivo = crear_dispositivo(db_session, sede)
+        resp = client.post("/mapeos", json=cuerpo_mapeo(parametros, dispositivo.id_dspstv))
+        assert resp.status_code == 201
+        assert resp.json()["mapeo"]["dscrpcn"] is None
+
     def test_parametro_inexistente_devuelve_422(
         self, client, db_session, tecnico_editor, parametros
     ):
@@ -672,6 +693,113 @@ class TestActualizarMapeo:
         )
 
         assert client.put(f"/mapeos/{id_mp}", json={"dlmtdr": ";"}).status_code == 403
+
+
+class TestEliminarMapeo:
+    """DELETE /mapeos/{id_mp}: borrado lógico (estd='Inactivo'), no
+    borrado físico -los archivos ya procesados no deben perder su
+    trazabilidad (mp_clmn sigue existiendo aunque el mapeo se desactive)."""
+
+    def test_marca_el_mapeo_como_inactivo(self, client, db_session, tecnico_editor, parametros):
+        sede, _ = tecnico_editor
+        dispositivo = crear_dispositivo(db_session, sede)
+        id_mp = client.post("/mapeos", json=cuerpo_mapeo(parametros, dispositivo.id_dspstv)).json()[
+            "mapeo"
+        ]["id_mp"]
+
+        resp = client.delete(f"/mapeos/{id_mp}")
+        assert resp.status_code == 200
+        assert resp.json()["mensaje"] == "Mapeo eliminado correctamente"
+
+        formato = db_session.query(MapeoFormato).filter(MapeoFormato.id_mp == id_mp).first()
+        assert formato.estd == "Inactivo"
+
+    def test_no_borra_la_fila_ni_las_columnas(
+        self, client, db_session, tecnico_editor, parametros
+    ):
+        sede, _ = tecnico_editor
+        dispositivo = crear_dispositivo(db_session, sede)
+        id_mp = client.post("/mapeos", json=cuerpo_mapeo(parametros, dispositivo.id_dspstv)).json()[
+            "mapeo"
+        ]["id_mp"]
+
+        client.delete(f"/mapeos/{id_mp}")
+
+        assert db_session.query(MapeoFormato).filter(MapeoFormato.id_mp == id_mp).first() is not None
+        columnas = db_session.query(MapeoColumna).filter(MapeoColumna.id_mp == id_mp).all()
+        assert len(columnas) == 2
+
+    def test_libera_la_letra_para_un_mapeo_nuevo(
+        self, client, db_session, tecnico_editor, parametros
+    ):
+        """El índice único parcial (id_dspstv, tp_trm) WHERE estd='Activo'
+        no debe bloquear crear un mapeo nuevo con la misma letra una vez
+        que el anterior está Inactivo -es el caso de uso real: el técnico
+        se equivocó de configuración y quiere reemplazar la trama."""
+        sede, _ = tecnico_editor
+        dispositivo = crear_dispositivo(db_session, sede)
+        id_mp = client.post(
+            "/mapeos", json=cuerpo_mapeo(parametros, dispositivo.id_dspstv, tp_trm="X")
+        ).json()["mapeo"]["id_mp"]
+
+        client.delete(f"/mapeos/{id_mp}")
+
+        resp = client.post(
+            "/mapeos", json=cuerpo_mapeo(parametros, dispositivo.id_dspstv, tp_trm="X")
+        )
+        assert resp.status_code == 201
+
+    def test_eliminar_un_mapeo_ya_inactivo_devuelve_409(
+        self, client, db_session, tecnico_editor, parametros
+    ):
+        sede, _ = tecnico_editor
+        dispositivo = crear_dispositivo(db_session, sede)
+        id_mp = client.post("/mapeos", json=cuerpo_mapeo(parametros, dispositivo.id_dspstv)).json()[
+            "mapeo"
+        ]["id_mp"]
+        client.delete(f"/mapeos/{id_mp}")
+
+        assert client.delete(f"/mapeos/{id_mp}").status_code == 409
+
+    def test_mapeo_inexistente_devuelve_404(self, client, tecnico_editor):
+        assert client.delete("/mapeos/999999").status_code == 404
+
+    def test_usuario_de_otra_sede_no_puede_eliminar(
+        self, client, db_session, tecnico_editor, fabrica, parametros
+    ):
+        sede, _ = tecnico_editor
+        dispositivo = crear_dispositivo(db_session, sede)
+        id_mp = client.post("/mapeos", json=cuerpo_mapeo(parametros, dispositivo.id_dspstv)).json()[
+            "mapeo"
+        ]["id_mp"]
+
+        otro_rol = fabrica.rol("Administrador")
+        otra_sede = fabrica.sede()
+        otro_usuario = fabrica.usuario(rol=otro_rol)
+        agregar_permiso(db_session, otro_usuario, otra_sede, "Ingesta", "Edición", otro_rol)
+        app.dependency_overrides[get_current_user] = lambda: usuario_jwt(
+            otro_usuario, otro_rol.nmbr, sede_id=otra_sede.id_sd
+        )
+
+        assert client.delete(f"/mapeos/{id_mp}").status_code == 403
+
+    def test_denegado_con_permiso_de_solo_lectura(
+        self, client, db_session, tecnico_editor, fabrica, parametros
+    ):
+        sede, _ = tecnico_editor
+        dispositivo = crear_dispositivo(db_session, sede)
+        id_mp = client.post("/mapeos", json=cuerpo_mapeo(parametros, dispositivo.id_dspstv)).json()[
+            "mapeo"
+        ]["id_mp"]
+
+        rol_lector = fabrica.rol("Cliente Final")
+        lector = fabrica.usuario(rol=rol_lector)
+        agregar_permiso(db_session, lector, sede, "Ingesta", "Lectura", rol_lector)
+        app.dependency_overrides[get_current_user] = lambda: usuario_jwt(
+            lector, rol_lector.nmbr, sede_id=sede.id_sd
+        )
+
+        assert client.delete(f"/mapeos/{id_mp}").status_code == 403
 
 
 class TestVistaPrevia:

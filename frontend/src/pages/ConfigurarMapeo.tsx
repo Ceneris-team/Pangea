@@ -88,6 +88,7 @@ interface MapeoDetalle {
   id_sd: number;
   mrc: string;
   tp_trm: string;
+  dscrpcn: string | null;
   dlmtdr: string;
   fl_inc_dts: number;
   frmt_fch: string;
@@ -102,6 +103,10 @@ interface MapeoForm {
   // _validar_tipo_trama). H/E/P quedan como atajos frecuentes, no como
   // únicos valores posibles.
   tp_trm: string;
+  // Explica qué es esta trama cuando la letra no es H/E/P (o incluso
+  // cuando sí lo es, si el técnico quiere aclarar algo específico del
+  // dispositivo).
+  dscrpcn: string;
   dlmtdr: string;
   fl_inc_dts: string;
   frmt_fch: string;
@@ -127,6 +132,7 @@ const TIPOS_TRAMA_FRECUENTES = [
 const FORM_VACIO: MapeoForm = {
   id_dspstv: "",
   tp_trm: "H",
+  dscrpcn: "",
   dlmtdr: ",",
   fl_inc_dts: "1", // regla de negocio: entero, por defecto 1
   frmt_fch: "YYYY-MM-DD HH:mm:ss",
@@ -171,6 +177,7 @@ export default function ConfigurarMapeo() {
   const [cargando, setCargando] = useState(false);
   const [previsualizando, setPrevisualizando] = useState(false);
   const [guardando, setGuardando] = useState(false);
+  const [eliminando, setEliminando] = useState(false);
   const [mensaje, setMensaje] = useState("");
   const [mensajeOk, setMensajeOk] = useState(false);
 
@@ -253,6 +260,7 @@ export default function ConfigurarMapeo() {
         setForm({
           id_dspstv: String(detalle.id_dspstv),
           tp_trm: detalle.tp_trm,
+          dscrpcn: detalle.dscrpcn ?? "",
           dlmtdr: detalle.dlmtdr,
           fl_inc_dts: String(detalle.fl_inc_dts),
           frmt_fch: detalle.frmt_fch,
@@ -389,6 +397,7 @@ export default function ConfigurarMapeo() {
       const payload = {
         ...(esEdicion ? {} : { id_dspstv: Number(form.id_dspstv) }),
         tp_trm: form.tp_trm,
+        dscrpcn: form.dscrpcn.trim() || null,
         dlmtdr: form.dlmtdr,
         fl_inc_dts: Number(form.fl_inc_dts),
         frmt_fch: form.frmt_fch.trim(),
@@ -406,6 +415,30 @@ export default function ConfigurarMapeo() {
       setMensaje(err instanceof ApiError ? err.message : "No se pudo guardar el mapeo");
     } finally {
       setGuardando(false);
+    }
+  }
+
+  async function handleEliminar() {
+    if (!id) return;
+    const confirmado = window.confirm(
+      `¿Eliminar este mapeo (trama '${form.tp_trm}')? Los archivos ya procesados no se ven ` +
+        `afectados, pero los archivos nuevos con este prefijo dejarán de poder interpretarse ` +
+        `hasta que se cree un mapeo nuevo para esa trama.`
+    );
+    if (!confirmado) return;
+
+    setEliminando(true);
+    setMensaje("");
+    try {
+      const res = await apiFetch<{ mensaje: string }>(`/mapeos/${id}`, { method: "DELETE" });
+      setMensajeOk(true);
+      setMensaje(res.mensaje);
+      setTimeout(() => navigate("/mapeos"), 1000);
+    } catch (err) {
+      setMensajeOk(false);
+      setMensaje(err instanceof ApiError ? err.message : "No se pudo eliminar el mapeo");
+    } finally {
+      setEliminando(false);
     }
   }
 
@@ -545,6 +578,23 @@ export default function ConfigurarMapeo() {
                         Una letra (A-Z): determina el prefijo del archivo que aplica a este mapeo
                         (p. ej. "{form.tp_trm || "X"}" → {form.tp_trm || "X"}_*.dat). Debe coincidir
                         exactamente con el prefijo que usa el datalogger.
+                      </p>
+                    </div>
+
+                    <div className="md:col-span-2">
+                      <label className={labelClase}>Descripción de la trama</label>
+                      <input
+                        type="text"
+                        maxLength={200}
+                        placeholder='Ej. "Nivel de napa" o "Eventos de bomba"'
+                        value={form.dscrpcn}
+                        onChange={(e) => actualizarCampo("dscrpcn", e.target.value)}
+                        className={inputClase}
+                      />
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        Opcional. Explica qué es esta trama, sobre todo si la letra no es una de
+                        las frecuentes -sin esto, nadie más sabe qué significa "{form.tp_trm || "X"}"
+                        para este dispositivo.
                       </p>
                     </div>
 
@@ -838,6 +888,16 @@ export default function ConfigurarMapeo() {
                   >
                     Ver mapeos
                   </button>
+                  {esEdicion && (
+                    <button
+                      type="button"
+                      onClick={handleEliminar}
+                      disabled={eliminando}
+                      className="ml-auto px-4 py-2.5 text-sm font-medium text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800/40 rounded-xl hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50 transition-all"
+                    >
+                      {eliminando ? "Eliminando…" : "Eliminar mapeo"}
+                    </button>
+                  )}
                 </div>
               </form>
             )}

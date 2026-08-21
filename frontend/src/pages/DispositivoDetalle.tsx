@@ -89,6 +89,7 @@ interface MapeoDetalle {
   id_sd: number;
   mrc: string;
   tp_trm: string;
+  dscrpcn: string | null;
   dlmtdr: string;
   dlmtdr_dcml: string;
   fl_inc_dts: number;
@@ -111,6 +112,7 @@ interface LogIngesta {
 /** Estado editable de la pestaña Formato, en las unidades del formulario
  *  (todo string, como lo entrega un <input>). */
 interface FormatoForm {
+  dscrpcn: string;
   dlmtdr: string;
   dlmtdr_dcml: string;
   fl_inc_dts: string;
@@ -136,6 +138,7 @@ const DELIMITADORES_DECIMALES = [
 ];
 
 const FORMATO_VACIO: FormatoForm = {
+  dscrpcn: "",
   dlmtdr: ",",
   dlmtdr_dcml: ".",
   fl_inc_dts: "1",
@@ -174,6 +177,20 @@ export default function DispositivoDetalle() {
   const [agregandoTrama, setAgregandoTrama] = useState(false);
   const [nuevaTrama, setNuevaTrama] = useState("");
 
+  // Pills del selector: las existentes van primero y las frecuentes
+  // después, así que al fusionar por letra (Map conserva el ÚLTIMO valor
+  // por key) una letra frecuente con mapeo ya cargado (p. ej. "H") se
+  // queda con su etiqueta completa ("Datos periódicos (H)") en vez de la
+  // etiqueta pelada que le daría tratarla solo como "existente".
+  const opcionesTrama = Array.from(
+    new Map(
+      [
+        ...tramasExistentes.map((t) => ({ valor: t, etiqueta: t })),
+        ...TIPOS_TRAMA_FRECUENTES,
+      ].map((o) => [o.valor, o])
+    ).values()
+  );
+
   const [dispositivo, setDispositivo] = useState<DispositivoDetalleResponse | null>(null);
   const [parametros, setParametros] = useState<Parametro[]>([]);
 
@@ -185,6 +202,7 @@ export default function DispositivoDetalle() {
 
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
+  const [eliminandoMapeo, setEliminandoMapeo] = useState(false);
   const [mensaje, setMensaje] = useState("");
   const [mensajeOk, setMensajeOk] = useState(false);
 
@@ -284,6 +302,7 @@ export default function DispositivoDetalle() {
         const detalle = await apiFetch<MapeoDetalle>(`/mapeos/${enLista.id_mp}`);
         setMapeo(detalle);
         setFormato({
+          dscrpcn: detalle.dscrpcn ?? "",
           dlmtdr: detalle.dlmtdr,
           dlmtdr_dcml: detalle.dlmtdr_dcml,
           fl_inc_dts: String(detalle.fl_inc_dts),
@@ -332,6 +351,7 @@ export default function DispositivoDetalle() {
 
       const comun = {
         tp_trm: tipoTrama,
+        dscrpcn: formato.dscrpcn.trim() || null,
         dlmtdr: formato.dlmtdr,
         dlmtdr_dcml: formato.dlmtdr_dcml,
         fl_inc_dts: Number(formato.fl_inc_dts),
@@ -355,6 +375,29 @@ export default function DispositivoDetalle() {
       avisar(err instanceof ApiError ? err.message : "No se pudo guardar el mapeo", false);
     } finally {
       setGuardando(false);
+    }
+  }
+
+  async function eliminarMapeoActual() {
+    if (!mapeo) return;
+    const confirmado = window.confirm(
+      `¿Eliminar el mapeo de la trama '${tipoTrama}'? Los archivos ya procesados no se ven ` +
+        `afectados, pero los archivos nuevos con este prefijo dejarán de poder interpretarse ` +
+        `hasta que se cree un mapeo nuevo para esa trama.`
+    );
+    if (!confirmado) return;
+
+    setEliminandoMapeo(true);
+    try {
+      const res = await apiFetch<{ mensaje: string }>(`/mapeos/${mapeo.id_mp}`, {
+        method: "DELETE",
+      });
+      avisar(res.mensaje, true);
+      cargarMapeo();
+    } catch (err) {
+      avisar(err instanceof ApiError ? err.message : "No se pudo eliminar el mapeo", false);
+    } finally {
+      setEliminandoMapeo(false);
     }
   }
 
@@ -505,13 +548,7 @@ export default function DispositivoDetalle() {
                 <span className={labelClase}>Tipo de trama</span>
                 <div className="flex flex-wrap items-center gap-2">
                   <div className="inline-flex rounded-xl border border-gray-300 dark:border-gray-600 overflow-hidden">
-                    {Array.from(
-                      new Map(
-                        [...TIPOS_TRAMA_FRECUENTES, ...tramasExistentes.map((t) => ({ valor: t, etiqueta: t }))].map(
-                          (o) => [o.valor, o]
-                        )
-                      ).values()
-                    ).map((opcion) => (
+                    {opcionesTrama.map((opcion) => (
                       <button
                         key={opcion.valor}
                         type="button"
@@ -599,6 +636,9 @@ export default function DispositivoDetalle() {
                   puedeEditar={puedeEditar}
                   guardando={guardando}
                   onGuardar={guardarMapeo}
+                  mapeoExiste={mapeo !== null}
+                  eliminando={eliminandoMapeo}
+                  onEliminar={eliminarMapeoActual}
                   inputClase={inputClase}
                   labelClase={labelClase}
                   botonPrimario={botonPrimario}
@@ -664,6 +704,9 @@ function PestanaFormato({
   puedeEditar,
   guardando,
   onGuardar,
+  mapeoExiste,
+  eliminando,
+  onEliminar,
   inputClase,
   labelClase,
   botonPrimario,
@@ -674,6 +717,9 @@ function PestanaFormato({
   puedeEditar: boolean;
   guardando: boolean;
   onGuardar: (e: FormEvent) => void;
+  mapeoExiste: boolean;
+  eliminando: boolean;
+  onEliminar: () => void;
   inputClase: string;
   labelClase: string;
   botonPrimario: string;
@@ -684,6 +730,22 @@ function PestanaFormato({
 
   return (
     <form onSubmit={onGuardar}>
+      <div className="mb-5">
+        <label className={labelClase}>Descripción de la trama</label>
+        <input
+          type="text"
+          maxLength={200}
+          placeholder='Ej. "Nivel de napa" o "Eventos de bomba"'
+          value={formato.dscrpcn}
+          onChange={(e) => campo("dscrpcn", e.target.value)}
+          disabled={!puedeEditar}
+          className={inputClase}
+        />
+        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+          Opcional. Explica qué es esta trama para quien la vea después.
+        </p>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         <div>
           <label className={labelClase}>Delimitador de columna CSV</label>
@@ -784,6 +846,16 @@ function PestanaFormato({
         <button type="submit" disabled={!puedeEditar || guardando} className={botonPrimario}>
           {guardando ? "Guardando..." : "Guardar"}
         </button>
+        {puedeEditar && mapeoExiste && (
+          <button
+            type="button"
+            onClick={onEliminar}
+            disabled={eliminando}
+            className="px-4 py-2 text-sm font-medium text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800/40 rounded-xl hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50 transition-all"
+          >
+            {eliminando ? "Eliminando..." : "Eliminar mapeo"}
+          </button>
+        )}
         {!puedeEditar && (
           <span className="text-xs text-gray-500 dark:text-gray-400">
             Tu rol no permite modificar la configuración de formato.

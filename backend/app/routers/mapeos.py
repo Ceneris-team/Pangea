@@ -161,6 +161,18 @@ def _validar_delimitador_decimal(dlmtdr_dcml: str) -> str:
     return dlmtdr_dcml
 
 
+ESTADOS_MAPEO_VALIDOS = {"Activo", "Inactivo"}
+
+
+def _validar_estado_mapeo(estd: str) -> str:
+    if estd not in ESTADOS_MAPEO_VALIDOS:
+        raise HTTPException(
+            status_code=422,
+            detail="El estado del mapeo solo admite 'Activo' o 'Inactivo'",
+        )
+    return estd
+
+
 def _validar_tipo_trama(tp_trm: str) -> str:
     """Letra libre (A-Z): define el prefijo de archivo que este mapeo
     interpreta (p. ej. 'X' -> X_*.dat). Se normaliza a mayúscula porque
@@ -261,6 +273,7 @@ def _a_list_item(
         id_sd=ubicacion.id_sd,
         mrc=dispositivo.mrc,
         tp_trm=formato.tp_trm,
+        dscrpcn=formato.dscrpcn,
         dlmtdr=formato.dlmtdr,
         dlmtdr_dcml=formato.dlmtdr_dcml,
         fl_inc_dts=formato.fl_inc_dts,
@@ -475,6 +488,7 @@ def crear_mapeo(
     formato = MapeoFormato(
         id_dspstv=dispositivo.id_dspstv,
         tp_trm=tipo_trama,
+        dscrpcn=body.dscrpcn.strip() if body.dscrpcn else None,
         dlmtdr=delimitador,
         dlmtdr_dcml=delimitador_decimal,
         fl_inc_dts=body.fl_inc_dts,
@@ -549,12 +563,14 @@ def actualizar_mapeo(
     _validar_delimitadores_compatibles(formato.dlmtdr, formato.dlmtdr_dcml)
     if body.tp_trm is not None:
         formato.tp_trm = _validar_tipo_trama(body.tp_trm)
+    if body.dscrpcn is not None:
+        formato.dscrpcn = body.dscrpcn.strip() or None
     if body.fl_inc_dts is not None:
         formato.fl_inc_dts = body.fl_inc_dts
     if body.frmt_fch is not None:
         formato.frmt_fch = a_formato_strptime(body.frmt_fch)
     if body.estd is not None:
-        formato.estd = body.estd
+        formato.estd = _validar_estado_mapeo(body.estd)
 
     # `columnas` omitido = no se toca la tabla de asignación; `columnas`
     # presente = reemplaza la asignación completa. Se distingue con None,
@@ -590,6 +606,39 @@ def actualizar_mapeo(
         "mensaje": "Mapeo actualizado correctamente",
         "mapeo": _a_list_item(formato, dispositivo, ubicacion, _contar_columnas(db, formato.id_mp)),
     }
+
+
+@router.delete("/{id_mp}")
+def eliminar_mapeo(
+    id_mp: int,
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(require_permiso("Ingesta", EDICION)),
+):
+    """Elimina (lógicamente) un mapeo: lo marca 'Inactivo' en vez de
+    borrar la fila.
+
+    Un borrado físico rompería la trazabilidad: archv_ingst no guarda
+    id_mp, pero los archivos ya interpretados con este mapeo dependen de
+    que mp_clmn siga existiendo si alguna vez hay que auditar por qué una
+    lectura vieja se guardó bajo tal parámetro. Desactivar además libera
+    el índice único parcial (id_dspstv, tp_trm) WHERE estd='Activo', así
+    que la misma letra se puede volver a usar con un mapeo nuevo -que es
+    justo el caso de uso: el técnico se equivocó de configuración y quiere
+    "borrar y volver a crear" esa trama."""
+    formato = db.query(MapeoFormato).filter(MapeoFormato.id_mp == id_mp).first()
+    if formato is None:
+        raise HTTPException(status_code=404, detail="Mapeo no encontrado")
+
+    dispositivo, ubicacion = _cargar_contexto(db, formato)
+    verificar_sede(usuario, ubicacion.id_sd, modulo="Ingesta", accion=EDICION)
+
+    if formato.estd == "Inactivo":
+        raise HTTPException(status_code=409, detail="Este mapeo ya está inactivo")
+
+    formato.estd = "Inactivo"
+    db.commit()
+
+    return {"mensaje": "Mapeo eliminado correctamente"}
 
 
 def _decodificar_dat(contenido_bytes: bytes) -> str:
