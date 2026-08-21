@@ -1,9 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiFetch, ApiError } from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import Sidebar from "../components/layout/Sidebar";
 import Topbar from "../components/layout/Topbar";
+
+const SEGUNDOS_CONFIRMACION = 5;
 
 interface ConexionFTPListItem {
   id_cnxn: number;
@@ -37,6 +39,55 @@ export default function ConexionesFTP() {
   const [data, setData] = useState<ListadoPaginado | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Confirmación de borrado: id de la fila en confirmación + segundos
+  // restantes antes de que el botón "Eliminar definitivamente" se habilite.
+  const [confirmandoId, setConfirmandoId] = useState<number | null>(null);
+  const [segundosRestantes, setSegundosRestantes] = useState(SEGUNDOS_CONFIRMACION);
+  const [eliminandoId, setEliminandoId] = useState<number | null>(null);
+  const intervaloRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  function iniciarConfirmacion(id: number) {
+    setConfirmandoId(id);
+    setSegundosRestantes(SEGUNDOS_CONFIRMACION);
+    if (intervaloRef.current) clearInterval(intervaloRef.current);
+    intervaloRef.current = setInterval(() => {
+      setSegundosRestantes((prev) => {
+        if (prev <= 1) {
+          if (intervaloRef.current) clearInterval(intervaloRef.current);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  }
+
+  function cancelarConfirmacion() {
+    if (intervaloRef.current) clearInterval(intervaloRef.current);
+    setConfirmandoId(null);
+  }
+
+  useEffect(() => {
+    return () => {
+      if (intervaloRef.current) clearInterval(intervaloRef.current);
+    };
+  }, []);
+
+  async function handleEliminar(id: number) {
+    setEliminandoId(id);
+    setError(null);
+    try {
+      await apiFetch<{ mensaje: string }>(`/conexiones-ftp/${id}`, { method: "DELETE" });
+      cancelarConfirmacion();
+      setData((prev) =>
+        prev ? { ...prev, items: prev.items.filter((c) => c.id_cnxn !== id) } : prev
+      );
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "No se pudo eliminar la conexión");
+    } finally {
+      setEliminandoId(null);
+    }
+  }
 
   useEffect(() => {
     let cancelado = false;
@@ -159,25 +210,72 @@ export default function ConexionesFTP() {
                             </span>
                           </td>
                           <td className="px-6 py-4 text-right">
-                            <Link
-                              to={`/conexiones-ftp/${c.id_cnxn}/editar`}
-                              className="inline-flex items-center justify-center px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-transparent border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white transition-all"
-                            >
-                              <svg
-                                className="w-4 h-4 mr-2 text-gray-500 dark:text-gray-400"
-                                fill="none"
-                                viewBox="0 0 24 24"
-                                strokeWidth="2"
-                                stroke="currentColor"
-                              >
-                                <path
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
-                                />
-                              </svg>
-                              Editar
-                            </Link>
+                            {confirmandoId === c.id_cnxn ? (
+                              <div className="inline-flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => handleEliminar(c.id_cnxn)}
+                                  disabled={segundosRestantes > 0 || eliminandoId === c.id_cnxn}
+                                  className="px-3 py-1.5 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                                >
+                                  {eliminandoId === c.id_cnxn
+                                    ? "Eliminando..."
+                                    : segundosRestantes > 0
+                                      ? `Confirmar (${segundosRestantes})`
+                                      : "Confirmar eliminación"}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={cancelarConfirmacion}
+                                  disabled={eliminandoId === c.id_cnxn}
+                                  className="px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-transparent border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-all"
+                                >
+                                  Cancelar
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="inline-flex items-center gap-2">
+                                <Link
+                                  to={`/conexiones-ftp/${c.id_cnxn}/editar`}
+                                  className="inline-flex items-center justify-center px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-transparent border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white transition-all"
+                                >
+                                  <svg
+                                    className="w-4 h-4 mr-2 text-gray-500 dark:text-gray-400"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    strokeWidth="2"
+                                    stroke="currentColor"
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+                                    />
+                                  </svg>
+                                  Editar
+                                </Link>
+                                <button
+                                  type="button"
+                                  onClick={() => iniciarConfirmacion(c.id_cnxn)}
+                                  className="inline-flex items-center justify-center px-3 py-1.5 text-sm font-medium text-red-600 dark:text-red-400 bg-white dark:bg-transparent border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-all"
+                                >
+                                  <svg
+                                    className="w-4 h-4 mr-2"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    strokeWidth="2"
+                                    stroke="currentColor"
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      d="M6 18L18 6M6 6l12 12"
+                                    />
+                                  </svg>
+                                  Eliminar
+                                </button>
+                              </div>
+                            )}
                           </td>
                         </tr>
                       ))}

@@ -53,6 +53,7 @@ from app.schemas import (
     DispositivoCrear,
     DispositivoDetalle,
     DispositivoListItem,
+    DispositivoUpdate,
     LogIngestaListItem,
 )
 from app.security.permisos import EDICION, LECTURA, require_permiso, verificar_sede
@@ -245,6 +246,75 @@ def obtener_dispositivo(
         # FTP (HU05). Ver la nota de DispositivoDetalle.
         conexion_frcnc_mnts=conexion.frcnc_mnts,
     )
+
+
+@router.put("/{id_dspstv}")
+def actualizar_dispositivo(
+    id_dspstv: int,
+    body: DispositivoUpdate,
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(require_permiso("Dispositivos", EDICION)),
+):
+    """Edición de nombre/marca/modelo y reasignación de Conexión FTP.
+
+    Caso real que motiva esto: un dispositivo quedó creado apuntando a
+    la ConexionFTP equivocada (los archivos entrantes nunca calzan con
+    ese id_cnxn) y hace falta corregirlo sin recrear el dispositivo -eso
+    perdería su historial de mapeos (mp_frmt) y de ArchivoIngesta ya
+    asociados a este id_dspstv.
+    """
+    dispositivo, ubicacion, _conexion_actual = _cargar_ficha(db, id_dspstv, usuario, EDICION)
+
+    if body.id_cnxn is not None and body.id_cnxn != dispositivo.id_cnxn:
+        conexion_nueva = db.query(ConexionFTP).filter(ConexionFTP.id_cnxn == body.id_cnxn).first()
+        if conexion_nueva is None:
+            raise HTTPException(
+                status_code=422, detail=f"La conexión FTP {body.id_cnxn} no existe"
+            )
+
+        # Mismo criterio que crear_dispositivo (línea 151-163): un solo
+        # dispositivo Activo por conexión. Se excluye el propio
+        # dispositivo de la búsqueda -si ya era el dueño de otra
+        # conexión, reasignarlo no debe chocar consigo mismo-.
+        ya_tiene_activo = (
+            db.query(Dispositivo)
+            .filter(
+                Dispositivo.id_cnxn == body.id_cnxn,
+                Dispositivo.estd == "Activo",
+                Dispositivo.id_dspstv != id_dspstv,
+            )
+            .first()
+        )
+        if ya_tiene_activo is not None:
+            raise HTTPException(
+                status_code=409,
+                detail="Esta conexión FTP ya tiene un dispositivo activo asociado",
+            )
+
+    datos = body.model_dump(exclude_unset=True)
+    for campo, valor in datos.items():
+        setattr(dispositivo, campo, valor)
+
+    db.commit()
+    db.refresh(dispositivo)
+
+    conexion = db.query(ConexionFTP).filter(ConexionFTP.id_cnxn == dispositivo.id_cnxn).first()
+    return {
+        "mensaje": "Dispositivo actualizado correctamente",
+        "dispositivo": DispositivoDetalle(
+            id_dspstv=dispositivo.id_dspstv,
+            nmbr=dispositivo.nmbr,
+            mrc=dispositivo.mrc,
+            mdl=dispositivo.mdl,
+            estd=dispositivo.estd,
+            id_ubccn=ubicacion.id_ubccn,
+            ubicacion_nombre=ubicacion.nmbr,
+            id_sd=ubicacion.id_sd,
+            id_cnxn=conexion.id_cnxn,
+            conexion_nombre=conexion.nmbr,
+            conexion_frcnc_mnts=conexion.frcnc_mnts,
+        ),
+    }
 
 
 @router.get("/{id_dspstv}/logs", response_model=list[LogIngestaListItem])

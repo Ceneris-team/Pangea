@@ -210,6 +210,19 @@ class DispositivoCreado(BaseModel):
     estd: str
 
 
+class DispositivoUpdate(BaseModel):
+    """Edición desde la ficha del dispositivo: nombre, marca, modelo y
+    reasignación de Conexión FTP. Todos opcionales (solo se actualiza lo
+    que venga, mismo patrón que ConexionFTPUpdate). id_ubccn no es
+    editable acá: cambiar de ubicación implicaría revalidar lttd/lngtd,
+    fuera de este alcance."""
+
+    nmbr: str | None = Field(default=None, min_length=1, max_length=150)
+    mrc: str | None = Field(default=None, min_length=1, max_length=100)
+    mdl: str | None = None
+    id_cnxn: int | None = None
+
+
 # DEC-09 / IMP-06 - Ficha del dispositivo (pestañas Formato, Datos,
 # Carga de datos, Carga manual y Logs)
 

@@ -18,6 +18,17 @@ interface ConexionFTPForm {
   frcnc_mnts: "1" | "60";
 }
 
+interface ConexionFTPDetalle {
+  id_cnxn: number;
+  nmbr: string;
+  hst: string;
+  prt: number;
+  usr_ftp: string | null;
+  rt_rmt: string | null;
+  frcnc_mnts: number;
+  estd: string;
+}
+
 const FORM_VACIO: ConexionFTPForm = {
   id_sd: "",
   nmbr: "",
@@ -36,6 +47,7 @@ export default function ConfigurarConexionFTP() {
 
   const [form, setForm] = useState<ConexionFTPForm>(FORM_VACIO);
   const [sedes, setSedes] = useState<Sede[]>([]);
+  const [cargando, setCargando] = useState(false);
   const [probando, setProbando] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [conexionValidada, setConexionValidada] = useState(false); // habilita GUARDAR
@@ -54,6 +66,37 @@ export default function ConfigurarConexionFTP() {
       });
   }, []);
 
+  // Modo edición: precarga los datos ya guardados. La contraseña NUNCA
+  // se devuelve en texto plano (CA de HU05), así que queda vacía -si el
+  // usuario no la toca, el PUT la conserva tal cual (ver handleSubmit).
+  useEffect(() => {
+    if (!id) return;
+    setCargando(true);
+    apiFetch<ConexionFTPDetalle>(`/conexiones-ftp/${id}`)
+      .then((detalle) => {
+        setForm({
+          id_sd: "",
+          nmbr: detalle.nmbr,
+          hst: detalle.hst,
+          prt: String(detalle.prt),
+          usr_ftp: detalle.usr_ftp ?? "",
+          contrasena_ftp: "",
+          rt_rmt: detalle.rt_rmt ?? "",
+          frcnc_mnts: detalle.frcnc_mnts === 60 ? "60" : "1",
+        });
+        // Sin cambiar la contraseña no hay nada nuevo que probar contra
+        // el FTP real: se deja habilitado GUARDAR desde el inicio.
+        // Cualquier edición de campo lo vuelve a invalidar (ver
+        // actualizarCampo) y exige "Probar conexión" de nuevo.
+        setConexionValidada(true);
+      })
+      .catch((err) => {
+        setMensajeOk(false);
+        setMensaje(err instanceof ApiError ? err.message : "No se pudo cargar la conexión");
+      })
+      .finally(() => setCargando(false));
+  }, [id]);
+
   function actualizarCampo<K extends keyof ConexionFTPForm>(campo: K, valor: ConexionFTPForm[K]) {
     setForm((prev) => ({ ...prev, [campo]: valor }));
     // CA: cualquier cambio invalida una prueba de conexión previa
@@ -61,12 +104,14 @@ export default function ConfigurarConexionFTP() {
   }
 
   function camposObligatoriosCompletos(): boolean {
+    // La contraseña solo es obligatoria para "Probar conexión" al crear:
+    // en edición, dejarla vacía significa "no cambiarla" (ver handleSubmit).
     return Boolean(
       form.nmbr.trim() &&
         form.hst.trim() &&
         form.prt.trim() &&
         form.usr_ftp.trim() &&
-        form.contrasena_ftp.trim() &&
+        (esEdicion || form.contrasena_ftp.trim()) &&
         form.rt_rmt.trim()
     );
   }
@@ -78,9 +123,13 @@ export default function ConfigurarConexionFTP() {
 
   async function handleProbarConexion() {
     setMensaje("");
-    if (!camposObligatoriosCompletos()) {
+    if (!camposObligatoriosCompletos() || !form.contrasena_ftp.trim()) {
       setMensajeOk(false);
-      setMensaje("Completa todos los campos obligatorios antes de probar la conexión");
+      setMensaje(
+        esEdicion
+          ? "Escribe la contraseña FTP para probar la conexión (queda vacía por seguridad; si no la cambias, se conserva la actual al guardar)"
+          : "Completa todos los campos obligatorios antes de probar la conexión"
+      );
       return;
     }
     if (!rutaRemotaValida()) {
@@ -134,7 +183,9 @@ export default function ConfigurarConexionFTP() {
         hst: form.hst.trim(),
         prt: Number(form.prt),
         usr_ftp: form.usr_ftp.trim(),
-        contrasena_ftp: form.contrasena_ftp,
+        // Vacía en edición = "no cambiar la contraseña" (el backend
+        // conserva la actual cuando el campo llega vacío/ausente).
+        ...(form.contrasena_ftp.trim() ? { contrasena_ftp: form.contrasena_ftp } : {}),
         rt_rmt: form.rt_rmt.trim(),
         frcnc_mnts: Number(form.frcnc_mnts),
       };
@@ -165,6 +216,9 @@ export default function ConfigurarConexionFTP() {
           </p>
         </header>
 
+        {cargando ? (
+          <div className="text-sm text-gray-500 dark:text-gray-400">Cargando conexión…</div>
+        ) : (
         <form onSubmit={handleSubmit} className="space-y-5">
           {!esEdicion && (
             <div>
@@ -238,7 +292,8 @@ export default function ConfigurarConexionFTP() {
               </label>
               <input
                 type="password"
-                required
+                required={!esEdicion}
+                placeholder={esEdicion ? "Dejar en blanco para no cambiarla" : undefined}
                 value={form.contrasena_ftp}
                 onChange={(e) => actualizarCampo("contrasena_ftp", e.target.value)}
                 className="bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block w-full p-2.5 outline-none"
@@ -313,6 +368,7 @@ export default function ConfigurarConexionFTP() {
             </button>
           </div>
         </form>
+        )}
       </div>
     </div>
   );

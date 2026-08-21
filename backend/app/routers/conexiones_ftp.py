@@ -115,6 +115,25 @@ def probar_conexion(
     return {"exitosa": True, "mensaje": "Conexión exitosa"}
 
 
+@router.get("/{id_cnxn}", response_model=ConexionFTPListItem)
+def obtener_conexion(
+    id_cnxn: int,
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(_requerir_tecnico_o_admin),
+):
+    """Detalle de una conexión para prellenar el formulario de edición.
+    No incluye la contraseña: igual que en la creación, las credenciales
+    cifradas nunca se devuelven en texto plano (CA de HU05)."""
+    conexion = db.query(ConexionFTP).filter(ConexionFTP.id_cnxn == id_cnxn).first()
+    if conexion is None:
+        raise HTTPException(status_code=404, detail="Conexión FTP no encontrada")
+
+    if usuario.get("scope") == "por_sede" and conexion.id_sd != usuario["sede_id"]:
+        raise HTTPException(status_code=403, detail="No tiene acceso a esta conexión")
+
+    return ConexionFTPListItem.model_validate(conexion)
+
+
 @router.post("", status_code=201)
 def crear_conexion(
     body: ConexionFTPCreate,
@@ -181,3 +200,31 @@ def actualizar_conexion(
         "mensaje": "Configuración actualizada correctamente",
         "conexion": ConexionFTPListItem.model_validate(conexion),
     }
+
+
+@router.delete("/{id_cnxn}")
+def eliminar_conexion(
+    id_cnxn: int,
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(_requerir_tecnico_o_admin),
+):
+    """Desactiva la conexión (estd='Inactiva') en vez de borrar la fila.
+
+    Un borrado físico rompería la FK NOT NULL de Dispositivo.id_cnxn si
+    algún dispositivo la sigue referenciando, y perdería el historial de
+    archv_ingst asociado a esta conexión. Desactivarla la saca del
+    sondeo automático (sondear_conexiones_ftp filtra por estd='Activa')
+    sin romper nada: si hay un dispositivo apuntándole, sigue existiendo
+    pero deja de sondearse hasta que se reasigne a otra conexión activa.
+    """
+    conexion = db.query(ConexionFTP).filter(ConexionFTP.id_cnxn == id_cnxn).first()
+    if conexion is None:
+        raise HTTPException(status_code=404, detail="Conexión FTP no encontrada")
+
+    if usuario.get("scope") == "por_sede" and conexion.id_sd != usuario["sede_id"]:
+        raise HTTPException(status_code=403, detail="No tiene acceso a esta conexión")
+
+    conexion.estd = "Inactiva"
+    db.commit()
+
+    return {"mensaje": "Conexión FTP eliminada correctamente"}

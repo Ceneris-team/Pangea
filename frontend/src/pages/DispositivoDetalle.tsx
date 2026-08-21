@@ -46,6 +46,19 @@ interface DispositivoDetalleResponse {
   conexion_frcnc_mnts: number;
 }
 
+interface ConexionFTPOption {
+  id_cnxn: number;
+  nmbr: string;
+  estd: string;
+}
+
+/** Estado editable del bloque "Editar dispositivo" del header: nombre y
+ *  conexión FTP, mismo patrón de formulario que AgregarDispositivo.tsx. */
+interface DispositivoEditForm {
+  nmbr: string;
+  id_cnxn: string;
+}
+
 interface Parametro {
   id_prmtr: number;
   nmbr: string;
@@ -160,6 +173,13 @@ export default function DispositivoDetalle() {
   const [mensaje, setMensaje] = useState("");
   const [mensajeOk, setMensajeOk] = useState(false);
 
+  // Edición de nombre/conexión FTP desde el header (mismo caso que crear
+  // el dispositivo, HU11): reasignar la conexión correcta sin recrearlo.
+  const [editando, setEditando] = useState(false);
+  const [conexiones, setConexiones] = useState<ConexionFTPOption[]>([]);
+  const [formEdicion, setFormEdicion] = useState<DispositivoEditForm>({ nmbr: "", id_cnxn: "" });
+  const [guardandoEdicion, setGuardandoEdicion] = useState(false);
+
   function avisar(texto: string, ok: boolean) {
     setMensajeOk(ok);
     setMensaje(texto);
@@ -182,6 +202,46 @@ export default function DispositivoDetalle() {
         )
       );
   }, [id]);
+
+  // Selector de Conexión FTP del formulario de edición: mismo patrón que
+  // AgregarDispositivo.tsx (GET /conexiones-ftp, hasta 100 por página).
+  useEffect(() => {
+    apiFetch<{ items: ConexionFTPOption[] }>("/conexiones-ftp", { params: { por_pagina: 100 } })
+      .then((res) => setConexiones(res.items))
+      .catch(() => setConexiones([]));
+  }, []);
+
+  function abrirEdicion() {
+    if (!dispositivo) return;
+    setFormEdicion({ nmbr: dispositivo.nmbr, id_cnxn: String(dispositivo.id_cnxn) });
+    setEditando(true);
+  }
+
+  async function guardarEdicionDispositivo(e: FormEvent) {
+    e.preventDefault();
+    if (!id || !dispositivo) return;
+
+    setGuardandoEdicion(true);
+    try {
+      const res = await apiFetch<{ mensaje: string; dispositivo: DispositivoDetalleResponse }>(
+        `/dispositivos/${id}`,
+        {
+          method: "PUT",
+          body: {
+            nmbr: formEdicion.nmbr.trim(),
+            id_cnxn: Number(formEdicion.id_cnxn),
+          },
+        }
+      );
+      setDispositivo(res.dispositivo);
+      setEditando(false);
+      avisar(res.mensaje, true);
+    } catch (err) {
+      avisar(err instanceof ApiError ? err.message : "No se pudo actualizar el dispositivo", false);
+    } finally {
+      setGuardandoEdicion(false);
+    }
+  }
 
   /** Carga el mapeo de (este dispositivo, tipo de trama actual). Que no
    *  exista es un estado válido -el dispositivo todavía no se configuró
@@ -308,14 +368,77 @@ export default function DispositivoDetalle() {
             </button>
 
             <header className="mb-6">
-              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-                {dispositivo?.nmbr ?? "Dispositivo"}
-              </h1>
-              <p className="text-sm text-gray-500 dark:text-gray-400">
-                {dispositivo
-                  ? `${dispositivo.mrc}${dispositivo.mdl ? ` · ${dispositivo.mdl}` : ""} · ${dispositivo.ubicacion_nombre}`
-                  : "Cargando..."}
-              </p>
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+                    {dispositivo?.nmbr ?? "Dispositivo"}
+                  </h1>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    {dispositivo
+                      ? `${dispositivo.mrc}${dispositivo.mdl ? ` · ${dispositivo.mdl}` : ""} · ${dispositivo.ubicacion_nombre} · Conexión: ${dispositivo.conexion_nombre}`
+                      : "Cargando..."}
+                  </p>
+                </div>
+                {puedeEditar && dispositivo && !editando && (
+                  <button
+                    type="button"
+                    onClick={abrirEdicion}
+                    className="px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-transparent border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-all shrink-0"
+                  >
+                    Editar dispositivo
+                  </button>
+                )}
+              </div>
+
+              {editando && (
+                <form
+                  onSubmit={guardarEdicionDispositivo}
+                  className="mt-4 p-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/40 grid grid-cols-1 md:grid-cols-2 gap-4"
+                >
+                  <div>
+                    <label className={labelClase}>Nombre del dispositivo</label>
+                    <input
+                      type="text"
+                      required
+                      value={formEdicion.nmbr}
+                      onChange={(e) =>
+                        setFormEdicion((prev) => ({ ...prev, nmbr: e.target.value }))
+                      }
+                      className={inputClase}
+                    />
+                  </div>
+                  <div>
+                    <label className={labelClase}>Conexión FTP</label>
+                    <select
+                      required
+                      value={formEdicion.id_cnxn}
+                      onChange={(e) =>
+                        setFormEdicion((prev) => ({ ...prev, id_cnxn: e.target.value }))
+                      }
+                      className={inputClase + " cursor-pointer"}
+                    >
+                      {conexiones.map((c) => (
+                        <option key={c.id_cnxn} value={c.id_cnxn}>
+                          {c.nmbr} {c.estd !== "Activa" ? `(${c.estd})` : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="md:col-span-2 flex gap-3">
+                    <button type="submit" disabled={guardandoEdicion} className={botonPrimario}>
+                      {guardandoEdicion ? "Guardando..." : "Guardar cambios"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditando(false)}
+                      disabled={guardandoEdicion}
+                      className="px-4 py-2 text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-all"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </form>
+              )}
             </header>
 
             {mensaje && (
