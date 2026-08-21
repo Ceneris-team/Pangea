@@ -29,7 +29,7 @@ import Topbar from "../components/layout/Topbar";
  * pestaña.
  */
 
-type TipoTrama = "H" | "E";
+type TipoTrama = "H" | "E" | "P";
 type Pestana = "formato" | "datos" | "carga" | "manual" | "logs";
 
 interface DispositivoDetalleResponse {
@@ -477,7 +477,7 @@ export default function DispositivoDetalle() {
 
             {/* Selector de tipo de trama: compartido por Formato y Datos.
                 No aplica a Carga de datos (el tipo lo decide el prefijo
-                H_/E_ del archivo) ni a Logs. */}
+                H_/E_/P_ del archivo) ni a Logs. */}
             {(pestana === "formato" || pestana === "datos") && (
               <div className="mb-6">
                 <span className={labelClase}>Tipo de trama</span>
@@ -486,6 +486,7 @@ export default function DispositivoDetalle() {
                     [
                       { valor: "H" as TipoTrama, etiqueta: "Datos periódicos (H)" },
                       { valor: "E" as TipoTrama, etiqueta: "Estados y eventos (E)" },
+                      { valor: "P" as TipoTrama, etiqueta: "Eventos de puerta (P)" },
                     ]
                   ).map((opcion) => (
                     <button
@@ -1081,7 +1082,7 @@ function PestanaCargaManual({
 
   return (
     <div>
-      {tipoTrama === "E" && (
+      {tipoTrama !== "H" && (
         <div className="mb-4 p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 text-sm">
           La carga manual aplica solo a datos periódicos (H). El formulario usa
           los parámetros mapeados para la trama H de este dispositivo.

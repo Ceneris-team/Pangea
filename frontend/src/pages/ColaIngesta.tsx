@@ -66,6 +66,7 @@ export default function ColaIngesta() {
   const [idSeleccionado, setIdSeleccionado] = useState<number | null>(null);
   const [detalle, setDetalle] = useState<ArchivoIngestaDetalle | null>(null);
   const [detalleError, setDetalleError] = useState<string | null>(null);
+  const [reintentando, setReintentando] = useState(false);
 
   useEffect(() => {
     let cancelado = false;
@@ -119,6 +120,29 @@ export default function ColaIngesta() {
   }, [idSeleccionado]);
 
   const totalPaginas = data ? Math.max(1, Math.ceil(data.total / data.por_pagina)) : 1;
+
+  const reintentar = () => {
+    if (idSeleccionado === null) return;
+    setReintentando(true);
+    setDetalleError(null);
+    apiFetch<ArchivoIngestaDetalle>(`/ingesta/cola/${idSeleccionado}/reintentar`, { method: "POST" })
+      .then((res) => {
+        setDetalle(res);
+        // Refleja el nuevo estado ("En espera") también en la fila de la tabla.
+        setData((prev) =>
+          prev
+            ? {
+                ...prev,
+                items: prev.items.map((item) =>
+                  item.id_archv === res.id_archv ? { ...item, estado: res.estado } : item
+                ),
+              }
+            : prev
+        );
+      })
+      .catch((err) => setDetalleError(err instanceof ApiError ? err.message : "No se pudo reintentar el archivo"))
+      .finally(() => setReintentando(false));
+  };
 
   return (
     <div className={`${isDarkMode ? "dark" : ""} font-sans`}>
@@ -348,6 +372,18 @@ export default function ColaIngesta() {
                     <dd className="text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 rounded-lg p-3">
                       {detalle.mnsj_errr}
                     </dd>
+                  </div>
+                )}
+
+                {detalle.estado === "Fallido" && (
+                  <div className="pt-3 border-t border-gray-100 dark:border-gray-700">
+                    <button
+                      onClick={reintentar}
+                      disabled={reintentando}
+                      className="inline-flex items-center justify-center w-full px-4 py-2.5 text-sm font-semibold text-gray-900 bg-[#ccff00] rounded-xl hover:bg-[#b8e600] transition-all disabled:opacity-50"
+                    >
+                      {reintentando ? "Reencolando..." : "Reintentar"}
+                    </button>
                   </div>
                 )}
 

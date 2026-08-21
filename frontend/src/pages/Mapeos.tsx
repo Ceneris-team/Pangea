@@ -44,6 +44,7 @@ const ETIQUETA_DELIMITADOR: Record<string, string> = {
 const ETIQUETA_TRAMA: Record<string, string> = {
   H: "H · Datos periódicos",
   E: "E · Estados y eventos",
+  P: "P · Eventos de puerta",
 };
 
 export default function Mapeos() {
@@ -85,7 +86,7 @@ export default function Mapeos() {
     if (!patron) return true;
     return (
       m.dispositivo_nombre.toLowerCase().includes(patron) ||
-      m.dispositivo_marca.toLowerCase().includes(patron)
+      m.mrc.toLowerCase().includes(patron)
     );
   });
 

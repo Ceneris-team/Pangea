@@ -97,7 +97,7 @@ interface MapeoDetalle {
 
 interface MapeoForm {
   id_dspstv: string;
-  tp_trm: "H" | "E";
+  tp_trm: "H" | "E" | "P";
   dlmtdr: string;
   fl_inc_dts: string;
   frmt_fch: string;
@@ -143,15 +143,14 @@ export default function ConfigurarMapeo() {
   // indice de columna -> id_prmtr asignado. Es la tabla de asignación de CA1.
   const [asignaciones, setAsignaciones] = useState<Record<number, number>>({});
 
-  // Solo para mostrar en modo edición (id_dspstv no es editable).
-  const [dispositivoInfo, setDispositivoInfo] = useState<{ nombre: string; marca: string } | null>(
-    null
-  );
   // Fuente de la muestra para la vista previa: subir un .dat a mano, o
   // elegir uno ya recibido por FTP para un dispositivo (evita el paso
-  // manual de bajarlo del servidor y volverlo a subir).
+  // manual de bajarlo del servidor y volverlo a subir). Selector propio
+  // (no reusa `dispositivos`/DispositivoOption de arriba): ese trae
+  // ubicacion_nombre/estd para el selector "dueño del mapeo", este trae
+  // mdl para mostrarlo junto al datalogger en el selector de muestra FTP.
   const [fuenteMuestra, setFuenteMuestra] = useState<"archivo" | "ftp">("archivo");
-  const [dispositivos, setDispositivos] = useState<DispositivoParaMapeo[]>([]);
+  const [dispositivosFtp, setDispositivosFtp] = useState<DispositivoParaMapeo[]>([]);
   const [dispositivoFtp, setDispositivoFtp] = useState("");
   const [archivosFtp, setArchivosFtp] = useState<ArchivoFtpDisponible[]>([]);
   const [archivoFtpElegido, setArchivoFtpElegido] = useState("");
@@ -186,6 +185,19 @@ export default function ConfigurarMapeo() {
         setMensajeOk(false);
         setMensaje(
           err instanceof ApiError ? err.message : "No se pudieron cargar los dispositivos"
+        );
+      });
+  }, []);
+
+  // Selector "Elegir uno ya recibido por FTP": solo dispositivos con
+  // conexión FTP configurada (ver GET /mapeos/dispositivos en el backend).
+  useEffect(() => {
+    apiFetch<DispositivoParaMapeo[]>("/mapeos/dispositivos")
+      .then(setDispositivosFtp)
+      .catch((err) => {
+        setMensajeOk(false);
+        setMensaje(
+          err instanceof ApiError ? err.message : "No se pudieron cargar los dispositivos con FTP"
         );
       });
   }, []);
@@ -228,13 +240,12 @@ export default function ConfigurarMapeo() {
       .then((detalle) => {
         setForm({
           id_dspstv: String(detalle.id_dspstv),
-          tp_trm: detalle.tp_trm === "E" ? "E" : "H",
+          tp_trm: detalle.tp_trm === "E" ? "E" : detalle.tp_trm === "P" ? "P" : "H",
           dlmtdr: detalle.dlmtdr,
           fl_inc_dts: String(detalle.fl_inc_dts),
           frmt_fch: detalle.frmt_fch,
           columna_fecha: FORM_VACIO.columna_fecha,
         });
-        setDispositivoInfo({ nombre: detalle.dispositivo_nombre, marca: detalle.dispositivo_marca });
         setAsignaciones(
           Object.fromEntries(detalle.columnas.map((c) => [c.indc_clmn, c.id_prmtr]))
         );
@@ -490,11 +501,12 @@ export default function ConfigurarMapeo() {
                       <label className={labelClase}>Tipo de trama *</label>
                       <select
                         value={form.tp_trm}
-                        onChange={(e) => actualizarCampo("tp_trm", e.target.value as "H" | "E")}
+                        onChange={(e) => actualizarCampo("tp_trm", e.target.value as "H" | "E" | "P")}
                         className={inputClase + " cursor-pointer"}
                       >
                         <option value="H">H · Datos periódicos (H_*.dat)</option>
                         <option value="E">E · Estados y eventos (E_*.dat)</option>
+                        <option value="P">P · Eventos de puerta (P_*.dat)</option>
                       </select>
                       <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                         Determina la extensión/prefijo del archivo que aplica a este mapeo.
@@ -612,7 +624,7 @@ export default function ConfigurarMapeo() {
                         className={inputClase + " cursor-pointer max-w-xs"}
                       >
                         <option value="">— Selecciona un dispositivo —</option>
-                        {dispositivos.map((d) => (
+                        {dispositivosFtp.map((d) => (
                           <option key={d.id_dspstv} value={d.id_dspstv}>
                             {d.nmbr} — {d.mrc}
                             {d.mdl ? ` (${d.mdl})` : ""}

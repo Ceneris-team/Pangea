@@ -88,7 +88,7 @@ DELIMITADORES_VALIDOS = {
     " ": "espacio",
 }
 
-TIPOS_TRAMA_VALIDOS = {"H", "E"}  # CHECK constraint de mp_frmt (PP-96)
+TIPOS_TRAMA_VALIDOS = {"H", "E", "P"}  # CHECK constraint de mp_frmt (PP-96)
 
 # Separador decimal del dato numérico (DEC-09). Solo punto o coma: son los
 # dos que produce un datalogger real, y el CHECK de mp_frmt exige lo mismo.
@@ -156,7 +156,10 @@ def _validar_tipo_trama(tp_trm: str) -> str:
     if tp_trm not in TIPOS_TRAMA_VALIDOS:
         raise HTTPException(
             status_code=422,
-            detail="El tipo de trama solo admite 'H' (datos periódicos) o 'E' (estados y eventos)",
+            detail=(
+                "El tipo de trama solo admite 'H' (datos periódicos), "
+                "'E' (estados y eventos) o 'P' (eventos de puerta)"
+            ),
         )
     return tp_trm
 
