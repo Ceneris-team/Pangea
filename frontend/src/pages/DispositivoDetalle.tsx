@@ -29,8 +29,17 @@ import Topbar from "../components/layout/Topbar";
  * pestaña.
  */
 
-type TipoTrama = "H" | "E" | "P";
+// Letra libre (A-Z), no un catálogo cerrado: el técnico de telemetría
+// define el prefijo de archivo de cada dataloger (ver backend
+// _validar_tipo_trama). H/E/P son solo los valores más frecuentes.
+type TipoTrama = string;
 type Pestana = "formato" | "datos" | "carga" | "manual" | "logs";
+
+const TIPOS_TRAMA_FRECUENTES: { valor: TipoTrama; etiqueta: string }[] = [
+  { valor: "H", etiqueta: "Datos periódicos (H)" },
+  { valor: "E", etiqueta: "Estados y eventos (E)" },
+  { valor: "P", etiqueta: "Eventos de puerta (P)" },
+];
 
 interface DispositivoDetalleResponse {
   id_dspstv: number;
@@ -158,6 +167,12 @@ export default function DispositivoDetalle() {
   // Compartido por Formato y Datos: son dos vistas del MISMO registro de
   // mp_frmt, elegido por (este dispositivo, este tipo de trama).
   const [tipoTrama, setTipoTrama] = useState<TipoTrama>("H");
+  // Letras con mapeo ya configurado para este dispositivo (además de las
+  // frecuentes H/E/P), para que el selector muestre lo que el técnico ya
+  // armó y no solo el catálogo sugerido.
+  const [tramasExistentes, setTramasExistentes] = useState<string[]>([]);
+  const [agregandoTrama, setAgregandoTrama] = useState(false);
+  const [nuevaTrama, setNuevaTrama] = useState("");
 
   const [dispositivo, setDispositivo] = useState<DispositivoDetalleResponse | null>(null);
   const [parametros, setParametros] = useState<Parametro[]>([]);
@@ -253,6 +268,9 @@ export default function DispositivoDetalle() {
       params: { id_dspstv: id },
     })
       .then(async (res) => {
+        setTramasExistentes(
+          Array.from(new Set(res.items.filter((m) => m.estd === "Activo").map((m) => m.tp_trm)))
+        );
         const enLista = res.items.find(
           (m) => m.tp_trm === tipoTrama && m.estd === "Activo"
         );
@@ -477,32 +495,90 @@ export default function DispositivoDetalle() {
 
             {/* Selector de tipo de trama: compartido por Formato y Datos.
                 No aplica a Carga de datos (el tipo lo decide el prefijo
-                H_/E_/P_ del archivo) ni a Logs. */}
+                del archivo, resuelto contra las tramas configuradas) ni a
+                Logs. Letra libre (A-Z): combina las frecuentes (H/E/P) con
+                las que este dispositivo ya tiene configuradas, más un
+                botón para agregar una letra nueva -el técnico de
+                telemetría ya no depende de que se programe cada letra. */}
             {(pestana === "formato" || pestana === "datos") && (
               <div className="mb-6">
                 <span className={labelClase}>Tipo de trama</span>
-                <div className="inline-flex rounded-xl border border-gray-300 dark:border-gray-600 overflow-hidden">
-                  {(
-                    [
-                      { valor: "H" as TipoTrama, etiqueta: "Datos periódicos (H)" },
-                      { valor: "E" as TipoTrama, etiqueta: "Estados y eventos (E)" },
-                      { valor: "P" as TipoTrama, etiqueta: "Eventos de puerta (P)" },
-                    ]
-                  ).map((opcion) => (
-                    <button
-                      key={opcion.valor}
-                      type="button"
-                      onClick={() => setTipoTrama(opcion.valor)}
-                      className={
-                        "px-4 py-2 text-sm font-medium transition-colors " +
-                        (tipoTrama === opcion.valor
-                          ? "bg-[#ccff00] text-[#1a202c]"
-                          : "bg-white dark:bg-[#2d3748] text-gray-700 dark:text-gray-300")
-                      }
-                    >
-                      {opcion.etiqueta}
-                    </button>
-                  ))}
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="inline-flex rounded-xl border border-gray-300 dark:border-gray-600 overflow-hidden">
+                    {Array.from(
+                      new Map(
+                        [...TIPOS_TRAMA_FRECUENTES, ...tramasExistentes.map((t) => ({ valor: t, etiqueta: t }))].map(
+                          (o) => [o.valor, o]
+                        )
+                      ).values()
+                    ).map((opcion) => (
+                      <button
+                        key={opcion.valor}
+                        type="button"
+                        onClick={() => {
+                          setTipoTrama(opcion.valor);
+                          setAgregandoTrama(false);
+                        }}
+                        className={
+                          "px-4 py-2 text-sm font-medium transition-colors " +
+                          (tipoTrama === opcion.valor
+                            ? "bg-[#ccff00] text-[#1a202c]"
+                            : "bg-white dark:bg-[#2d3748] text-gray-700 dark:text-gray-300")
+                        }
+                      >
+                        {opcion.etiqueta}
+                      </button>
+                    ))}
+                  </div>
+
+                  {puedeEditar &&
+                    (agregandoTrama ? (
+                      <form
+                        className="inline-flex items-center gap-1.5"
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          const letra = nuevaTrama.trim().toUpperCase();
+                          if (!/^[A-Z]$/.test(letra)) {
+                            avisar("El tipo de trama debe ser una sola letra (A-Z)", false);
+                            return;
+                          }
+                          setTipoTrama(letra);
+                          setAgregandoTrama(false);
+                          setNuevaTrama("");
+                        }}
+                      >
+                        <input
+                          autoFocus
+                          type="text"
+                          maxLength={1}
+                          placeholder="X"
+                          value={nuevaTrama}
+                          onChange={(e) => setNuevaTrama(e.target.value.toUpperCase())}
+                          className={inputClase + " w-14 uppercase text-center"}
+                        />
+                        <button type="submit" className="px-3 py-2 text-sm font-medium text-[#5a7000] dark:text-[#ccff00]">
+                          Usar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAgregandoTrama(false);
+                            setNuevaTrama("");
+                          }}
+                          className="px-2 py-2 text-sm text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                        >
+                          Cancelar
+                        </button>
+                      </form>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setAgregandoTrama(true)}
+                        className="px-3 py-2 text-sm font-medium text-gray-600 dark:text-gray-300 border border-dashed border-gray-300 dark:border-gray-600 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700"
+                      >
+                        + Otra trama
+                      </button>
+                    ))}
                 </div>
                 <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
                   {cargando

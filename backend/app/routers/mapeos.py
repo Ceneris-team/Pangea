@@ -30,6 +30,7 @@ corresponde a la configuración de la ingesta; no existe un módulo
 
 import csv
 import ftplib
+import re
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from sqlalchemy.exc import IntegrityError
@@ -88,7 +89,15 @@ DELIMITADORES_VALIDOS = {
     " ": "espacio",
 }
 
-TIPOS_TRAMA_VALIDOS = {"H", "E", "P"}  # CHECK constraint de mp_frmt (PP-96)
+# HU06/PP-96: el tipo de trama ya no es un catálogo cerrado (antes era un
+# CHECK constraint de mp_frmt con {"H", "E", "P"}) -el equipo de
+# telemetría define el prefijo de archivo de cada dataloger según el
+# proyecto, y exigir una migración por cada letra nueva no escala. Se
+# valida solo el FORMATO acá: una letra A-Z, que es lo que puede preceder
+# a un "_" en un nombre de archivo (H_, E_, P_, X_...). Ver
+# services/ingesta/mapeo.py: detectar_tipo_trama ya no usa un diccionario
+# fijo, resuelve el prefijo contra los mp_frmt activos del dispositivo.
+TIPO_TRAMA_PATRON = re.compile(r"^[A-Z]$")
 
 # Separador decimal del dato numérico (DEC-09). Solo punto o coma: son los
 # dos que produce un datalogger real, y el CHECK de mp_frmt exige lo mismo.
@@ -153,13 +162,15 @@ def _validar_delimitador_decimal(dlmtdr_dcml: str) -> str:
 
 
 def _validar_tipo_trama(tp_trm: str) -> str:
-    if tp_trm not in TIPOS_TRAMA_VALIDOS:
+    """Letra libre (A-Z): define el prefijo de archivo que este mapeo
+    interpreta (p. ej. 'X' -> X_*.dat). Se normaliza a mayúscula porque
+    detectar_tipo_trama compara sobre el nombre de archivo en mayúsculas
+    (los dataloggers no son consistentes con el case)."""
+    tp_trm = tp_trm.strip().upper()
+    if not TIPO_TRAMA_PATRON.match(tp_trm):
         raise HTTPException(
             status_code=422,
-            detail=(
-                "El tipo de trama solo admite 'H' (datos periódicos), "
-                "'E' (estados y eventos) o 'P' (eventos de puerta)"
-            ),
+            detail="El tipo de trama debe ser una sola letra (A-Z), p. ej. 'H', 'E' o 'P'",
         )
     return tp_trm
 

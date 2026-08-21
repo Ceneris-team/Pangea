@@ -355,10 +355,11 @@ async def cargar_archivo_dat(
     """Pestaña CARGA DE DATOS (IMP-06): sube un .dat de este dispositivo y
     lo procesa por el MISMO pipeline que la ingesta automática.
 
-    El tipo de trama se sigue deduciendo del prefijo H_/E_ del nombre del
-    archivo (detectar_tipo_trama, vía resolver_formato), igual que para un
-    archivo que llega por FTP: lo único que cambia es el origen del
-    contenido. El parseo/estandarización/validación/persistencia son
+    El tipo de trama se sigue deduciendo del prefijo del nombre del
+    archivo (detectar_tipo_trama, vía resolver_formato) contra los mp_frmt
+    activos de ESTE dispositivo -letra libre, no un catálogo fijo H_/E_-,
+    igual que para un archivo que llega por FTP: lo único que cambia es el
+    origen del contenido. El parseo/estandarización/validación/persistencia son
     literalmente la misma función que usa la tarea Celery
     (tasks.ingesta.interpretar_y_guardar), para que un archivo dé el mismo
     resultado por las dos vías.

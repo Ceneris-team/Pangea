@@ -97,7 +97,11 @@ interface MapeoDetalle {
 
 interface MapeoForm {
   id_dspstv: string;
-  tp_trm: "H" | "E" | "P";
+  // Letra libre (A-Z), no un catálogo cerrado: el técnico de telemetría
+  // define el prefijo de archivo de cada dataloger (ver backend
+  // _validar_tipo_trama). H/E/P quedan como atajos frecuentes, no como
+  // únicos valores posibles.
+  tp_trm: string;
   dlmtdr: string;
   fl_inc_dts: string;
   frmt_fch: string;
@@ -110,6 +114,14 @@ const DELIMITADORES = [
   { valor: ";", etiqueta: "Punto y coma (;)" },
   { valor: "tab", etiqueta: "Tabulador" },
   { valor: "espacio", etiqueta: "Espacio" },
+];
+
+// Atajos frecuentes para no tipear siempre lo mismo; el campo real acepta
+// cualquier letra A-Z (ver TIPO_TRAMA_PATRON en el backend).
+const TIPOS_TRAMA_FRECUENTES = [
+  { valor: "H", etiqueta: "H · Datos periódicos" },
+  { valor: "E", etiqueta: "E · Estados y eventos" },
+  { valor: "P", etiqueta: "P · Eventos de puerta" },
 ];
 
 const FORM_VACIO: MapeoForm = {
@@ -240,7 +252,7 @@ export default function ConfigurarMapeo() {
       .then((detalle) => {
         setForm({
           id_dspstv: String(detalle.id_dspstv),
-          tp_trm: detalle.tp_trm === "E" ? "E" : detalle.tp_trm === "P" ? "P" : "H",
+          tp_trm: detalle.tp_trm,
           dlmtdr: detalle.dlmtdr,
           fl_inc_dts: String(detalle.fl_inc_dts),
           frmt_fch: detalle.frmt_fch,
@@ -351,6 +363,11 @@ export default function ConfigurarMapeo() {
     if (!form.dlmtdr) {
       setMensajeOk(false);
       setMensaje("El delimitador es obligatorio");
+      return;
+    }
+    if (!/^[A-Z]$/.test(form.tp_trm)) {
+      setMensajeOk(false);
+      setMensaje("El tipo de trama debe ser una sola letra (A-Z)");
       return;
     }
     if (!esEdicion && !form.id_dspstv) {
@@ -499,17 +516,35 @@ export default function ConfigurarMapeo() {
 
                     <div>
                       <label className={labelClase}>Tipo de trama *</label>
-                      <select
+                      <input
+                        type="text"
+                        required
+                        maxLength={1}
+                        placeholder="H"
                         value={form.tp_trm}
-                        onChange={(e) => actualizarCampo("tp_trm", e.target.value as "H" | "E" | "P")}
-                        className={inputClase + " cursor-pointer"}
-                      >
-                        <option value="H">H · Datos periódicos (H_*.dat)</option>
-                        <option value="E">E · Estados y eventos (E_*.dat)</option>
-                        <option value="P">P · Eventos de puerta (P_*.dat)</option>
-                      </select>
+                        onChange={(e) => actualizarCampo("tp_trm", e.target.value.toUpperCase())}
+                        className={inputClase + " uppercase"}
+                      />
+                      <div className="flex flex-wrap gap-1.5 mt-2">
+                        {TIPOS_TRAMA_FRECUENTES.map((t) => (
+                          <button
+                            key={t.valor}
+                            type="button"
+                            onClick={() => actualizarCampo("tp_trm", t.valor)}
+                            className={`px-2.5 py-1 text-xs font-medium rounded-lg border transition-all ${
+                              form.tp_trm === t.valor
+                                ? "bg-[#ccff00]/20 text-[#5a7000] dark:text-[#ccff00] border-[#ccff00]/40"
+                                : "text-gray-600 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700"
+                            }`}
+                          >
+                            {t.etiqueta}
+                          </button>
+                        ))}
+                      </div>
                       <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                        Determina la extensión/prefijo del archivo que aplica a este mapeo.
+                        Una letra (A-Z): determina el prefijo del archivo que aplica a este mapeo
+                        (p. ej. "{form.tp_trm || "X"}" → {form.tp_trm || "X"}_*.dat). Debe coincidir
+                        exactamente con el prefijo que usa el datalogger.
                       </p>
                     </div>
 

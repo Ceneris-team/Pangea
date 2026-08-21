@@ -8,7 +8,13 @@ decisiones de negocio la definen:
 1. El TIPO DE TRAMA sale del prefijo del nombre del archivo:
      H_*.dat -> datos periódicos (la lectura en tiempo real)
      E_*.dat -> estados y eventos que genera el equipo
-   Un mismo datalogger manda ambos, con distinto número de columnas.
+     P_*.dat -> eventos de puerta/acceso
+   Un mismo datalogger puede mandar varios, con distinto número de
+   columnas cada uno. El prefijo YA NO es un catálogo fijo en código: el
+   técnico de telemetría define la letra al crear el mapeo (ver
+   _validar_tipo_trama en routers/mapeos.py), así que detectar_tipo_trama
+   resuelve contra los tp_trm que el DISPOSITIVO tiene realmente
+   configurados en mp_frmt, no contra un diccionario hardcodeado.
 
 2. El MAPEO columna->parámetro sale de mp_clmn, que referencia la columna
    por su ÍNDICE (indc_clmn), no por su nombre. Es a propósito: los
@@ -26,13 +32,6 @@ from app.models.mapeo_dispositivo import MapeoColumna, MapeoFormato, Parametro
 from app.services.ingesta.parser import ConfiguracionParseo
 
 logger = logging.getLogger(__name__)
-
-# Prefijo del nombre de archivo -> tipo de trama (mp_frmt.tp_trm).
-PREFIJOS_TIPO_TRAMA = {
-    "H_": "H",
-    "E_": "E",
-    "P_": "P",  # eventos de puerta/acceso (Fecha,R,MensajeP,MensajeA)
-}
 
 
 class MapeoNoEncontradoError(Exception):
@@ -60,16 +59,30 @@ class FormatoResuelto:
     delimitador_decimal: str = "."
 
 
-def detectar_tipo_trama(nombre_archivo: str) -> str | None:
-    """Devuelve 'H', 'E' o None si el nombre no lleva prefijo conocido.
+def detectar_tipo_trama(db: Session, id_dspstv: int, nombre_archivo: str) -> str | None:
+    """Devuelve la letra de tipo de trama que matchea el prefijo del
+    archivo (p. ej. 'H' para "H_datos.dat"), o None si ninguna calza.
+
+    Ya no compara contra un diccionario fijo (H/E/P hardcodeados): el
+    tipo de trama es una letra libre que el técnico de telemetría define
+    al crear el mp_frmt (ver _validar_tipo_trama en routers/mapeos.py),
+    así que acá se resuelve contra los tp_trm que ESTE dispositivo tiene
+    realmente configurados -no contra los de otros dispositivos, que
+    podrían usar la misma letra con otro significado-.
 
     Se compara sobre el nombre base y en mayúsculas: los dataloggers no
     son consistentes con el case ni con la ruta que antecede al archivo.
     """
     base = os.path.basename(nombre_archivo).upper()
-    for prefijo, tipo in PREFIJOS_TIPO_TRAMA.items():
-        if base.startswith(prefijo):
-            return tipo
+    letras = (
+        db.query(MapeoFormato.tp_trm)
+        .filter(MapeoFormato.id_dspstv == id_dspstv, MapeoFormato.estd == "Activo")
+        .distinct()
+        .all()
+    )
+    for (letra,) in letras:
+        if base.startswith(f"{letra}_"):
+            return letra
     return None
 
 
@@ -89,16 +102,18 @@ def resolver_formato(
     entrante, que es exclusiva de un solo datalogger físico.
 
     Levanta MapeoNoEncontradoError si el archivo no tiene un prefijo
-    reconocible o si no hay un mp_frmt activo para ese dispositivo: sin
-    mapeo no se puede interpretar el archivo, y adivinar produciría
-    lecturas incorrectas en silencio.
+    reconocible (contra los mp_frmt activos de ESTE dispositivo) o si no
+    hay un mp_frmt activo para ese dispositivo: sin mapeo no se puede
+    interpretar el archivo, y adivinar produciría lecturas incorrectas en
+    silencio.
     """
-    tipo_trama = detectar_tipo_trama(nombre_archivo)
+    tipo_trama = detectar_tipo_trama(db, id_dspstv, nombre_archivo)
     if tipo_trama is None:
         raise MapeoNoEncontradoError(
-            f"El archivo '{nombre_archivo}' no empieza por un prefijo de tipo de "
-            f"trama conocido ({', '.join(sorted(PREFIJOS_TIPO_TRAMA))}); no se "
-            f"puede determinar qué formato aplica."
+            f"El archivo '{nombre_archivo}' no coincide con el prefijo de "
+            f"ningún tipo de trama configurado (mp_frmt activo) para el "
+            f"dispositivo id={id_dspstv}; no se puede determinar qué formato "
+            f"aplica. Verifica que exista un mapeo para esa letra."
         )
 
     formato = (

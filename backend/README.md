@@ -346,27 +346,39 @@ minuto, cada conexión solo se sondea de verdad si ya pasó su `frcnc_mnts`
 desde el último sondeo.
 
 ---
-## Mapeo de formato por marca (HU06 / PP-96)
+## Mapeo de formato por dispositivo (HU06 / PP-96 / DEC-09)
 
-Un datalogger manda **dos formatos de archivo distintos**, con distinto número
-y significado de columnas. El tipo se deduce del prefijo del nombre:
+Un datalogger puede mandar **varios formatos de archivo distintos**, con
+distinto número y significado de columnas. El tipo se deduce del prefijo del
+nombre, y es una **letra libre que el técnico de telemetría define al crear
+el mapeo** (`_validar_tipo_trama` en `routers/mapeos.py` solo exige A-Z, ya
+no hay un catálogo cerrado en la base de datos): agregar un prefijo nuevo no
+requiere tocar código ni desplegar. H/E/P son simplemente los primeros
+valores cargados:
 
 | Prefijo | `mp_frmt.tp_trm` | Contenido |
 |---|---|---|
 | `H_*.dat` | `H` | Datos periódicos (la lectura en tiempo real) |
 | `E_*.dat` | `E` | Estados y eventos que genera el equipo |
+| `P_*.dat` | `P` | Eventos de puerta/acceso |
+| `X_*.dat` | cualquier letra | Lo que el técnico configure para ese dispositivo |
 
-Por eso un formato se identifica por **sede + marca + tipo de trama**
-(`uq_mpfrmt_sd_mrc_tptrm`), no solo por marca: sin `tp_trm` no habría forma de
-guardar ambos sin inventar marcas falsas tipo `"Campbell_H"`.
+Un formato se identifica por **dispositivo + tipo de trama** (índice único
+parcial `uq_mpfrmt_dspstv_tptrm_activo`, solo un mapeo `Activo` por
+dispositivo+letra): dos dataloggers de la misma marca pueden tener sensores
+distintos conectados, así que el mapeo cuelga del dispositivo concreto, no
+de la marca ni de la sede.
 
 ### Cómo se resuelve un archivo
 
 `app/services/ingesta/mapeo.py`, antes de descargar nada:
 
-1. `detectar_tipo_trama()` saca `H`/`E` del prefijo del nombre (tolera
-   minúsculas y rutas).
-2. `resolver_formato()` busca el `mp_frmt` activo de esa sede + marca + trama, y
+1. `detectar_tipo_trama(db, id_dspstv, nombre_archivo)` compara el prefijo
+   del nombre (tolera minúsculas y rutas) contra los `tp_trm` que ESE
+   dispositivo tiene con un `mp_frmt` activo -no contra un diccionario fijo
+   en código, y no contra los de otros dispositivos, que podrían usar la
+   misma letra con otro significado-.
+2. `resolver_formato()` busca el `mp_frmt` activo de ese dispositivo + trama, y
    de ahí salen delimitador, fila de inicio de datos y formato de fecha.
 3. Tras parsear el header, `construir_mapeo()` traduce `mp_clmn` a
    `columna → parámetro`.

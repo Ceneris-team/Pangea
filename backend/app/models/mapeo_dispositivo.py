@@ -25,6 +25,15 @@ class MapeoFormato(Base):
       tp_trm='E' -> archivos E_*.dat: estados y eventos del equipo
       tp_trm='P' -> archivos P_*.dat: eventos de puerta/acceso
 
+    tp_trm YA NO es un catálogo cerrado: el equipo de telemetría configura
+    dataloggers con prefijos de archivo distintos según el proyecto, y
+    exigir una migración + deploy por cada letra nueva no escala. H/E/P de
+    arriba son simplemente los primeros valores cargados -no reciben trato
+    especial en el modelo ni en el motor de ingesta-; el único chequeo de
+    formato (una letra A-Z) vive en _validar_tipo_trama (routers/mapeos.py),
+    y services/ingesta/mapeo.py resuelve el prefijo del archivo consultando
+    los mp_frmt activos del dispositivo en vez de un diccionario fijo.
+
     DEC-09: antes el formato colgaba de (id_sd, mrc). Dos dataloggers de
     la misma marca en la misma sede, pero con sensores distintos
     conectados, compartían mapeo y las lecturas del segundo se guardaban
@@ -38,7 +47,8 @@ class MapeoFormato(Base):
 
     __tablename__ = "mp_frmt"
     __table_args__ = (
-        CheckConstraint("tp_trm IN ('H','E','P')", name="mpfrmt_tptrm_check"),
+        # Sin CHECK de valores fijos: tp_trm es una letra libre validada en
+        # el router (_validar_tipo_trama), no un catálogo cerrado en la BD.
         CheckConstraint("dlmtdr_dcml IN ('.', ',')", name="mpfrmt_dlmtdrdcml_check"),
         # Un dispositivo puede tener como máximo un mapeo ACTIVO por tipo
         # de trama (uno H y uno E). El parcial sobre estd deja convivir

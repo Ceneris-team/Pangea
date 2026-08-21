@@ -301,13 +301,58 @@ class TestCrearMapeo:
         )
         assert resp.status_code == 422
 
-    def test_tipo_de_trama_invalido_devuelve_422(
+    def test_tipo_de_trama_ya_no_es_un_catalogo_cerrado(
+        self, client, db_session, tecnico_editor, parametros
+    ):
+        """El tipo de trama es una letra libre (A-Z) que el técnico de
+        telemetría define al crear el mapeo, no un catálogo fijo H/E/P:
+        una letra fuera de ese catálogo histórico debe aceptarse igual."""
+        sede, _ = tecnico_editor
+        dispositivo = crear_dispositivo(db_session, sede)
+        resp = client.post(
+            "/mapeos", json=cuerpo_mapeo(parametros, dispositivo.id_dspstv, tp_trm="X")
+        )
+        assert resp.status_code == 201
+        assert resp.json()["mapeo"]["tp_trm"] == "X"
+
+    def test_tipo_de_trama_se_normaliza_a_mayuscula(
         self, client, db_session, tecnico_editor, parametros
     ):
         sede, _ = tecnico_editor
         dispositivo = crear_dispositivo(db_session, sede)
         resp = client.post(
-            "/mapeos", json=cuerpo_mapeo(parametros, dispositivo.id_dspstv, tp_trm="X")
+            "/mapeos", json=cuerpo_mapeo(parametros, dispositivo.id_dspstv, tp_trm="x")
+        )
+        assert resp.status_code == 201
+        assert resp.json()["mapeo"]["tp_trm"] == "X"
+
+    def test_tipo_de_trama_vacio_devuelve_422(
+        self, client, db_session, tecnico_editor, parametros
+    ):
+        sede, _ = tecnico_editor
+        dispositivo = crear_dispositivo(db_session, sede)
+        resp = client.post(
+            "/mapeos", json=cuerpo_mapeo(parametros, dispositivo.id_dspstv, tp_trm="")
+        )
+        assert resp.status_code == 422
+
+    def test_tipo_de_trama_de_mas_de_una_letra_devuelve_422(
+        self, client, db_session, tecnico_editor, parametros
+    ):
+        sede, _ = tecnico_editor
+        dispositivo = crear_dispositivo(db_session, sede)
+        resp = client.post(
+            "/mapeos", json=cuerpo_mapeo(parametros, dispositivo.id_dspstv, tp_trm="HE")
+        )
+        assert resp.status_code == 422
+
+    def test_tipo_de_trama_no_alfabetico_devuelve_422(
+        self, client, db_session, tecnico_editor, parametros
+    ):
+        sede, _ = tecnico_editor
+        dispositivo = crear_dispositivo(db_session, sede)
+        resp = client.post(
+            "/mapeos", json=cuerpo_mapeo(parametros, dispositivo.id_dspstv, tp_trm="1")
         )
         assert resp.status_code == 422
 
