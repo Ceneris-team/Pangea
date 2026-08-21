@@ -85,7 +85,7 @@ export default function Mapeos() {
     if (!patron) return true;
     return (
       m.dispositivo_nombre.toLowerCase().includes(patron) ||
-      m.dispositivo_marca.toLowerCase().includes(patron)
+      m.mrc.toLowerCase().includes(patron)
     );
   });
 
