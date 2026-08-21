@@ -305,3 +305,95 @@ class TestDetalleArchivoIngesta:
             usuario, rol.nmbr, sede_id=sede.id_sd
         )
         assert client.get("/ingesta/cola/1").status_code == 403
+
+
+@pytest.fixture()
+def tecnico_editor(db_session, fabrica):
+    """Técnico CENERIS con permiso de Edición sobre Ingesta en su sede -
+    nivel que exige POST /ingesta/cola/{id}/reintentar, a diferencia de los
+    GET de este módulo que solo piden Lectura."""
+    rol = fabrica.rol("Técnico CENERIS")
+    sede = fabrica.sede()
+    usuario = fabrica.usuario(rol=rol)
+    agregar_permiso(db_session, usuario, sede, "Ingesta", "Edición", rol)
+    app.dependency_overrides[get_current_user] = lambda: usuario_jwt(
+        usuario, rol.nmbr, sede_id=sede.id_sd
+    )
+    return sede, rol
+
+
+@pytest.fixture()
+def reintentos_encolados(monkeypatch):
+    """Spy sobre procesar_archivo_dat: lo que corresponde verificar acá es
+    que el endpoint reencola la task con el id correcto, no que el
+    pipeline corra de nuevo de punta a punta (eso ya lo cubren los tests
+    de app/tasks/ingesta.py)."""
+    llamadas = []
+
+    class TaskFalsa:
+        @staticmethod
+        def delay(**kwargs):
+            llamadas.append(kwargs)
+
+    monkeypatch.setattr("app.routers.ingesta.procesar_archivo_dat", TaskFalsa)
+    return llamadas
+
+
+class TestReintentarArchivoIngesta:
+    """HU31: reprocesamiento manual de un archivo Fallido."""
+
+    def test_reencola_un_archivo_fallido(
+        self, client, db_session, tecnico_editor, reintentos_encolados
+    ):
+        sede, _ = tecnico_editor
+        conexion = crear_conexion(db_session, sede)
+        archivo = crear_archivo(
+            db_session,
+            conexion,
+            estd="Fallido",
+            mnsj_errr="dispositivo no resoluble",
+            rgstrs_prcsds=0,
+        )
+
+        resp = client.post(f"/ingesta/cola/{archivo.id_archv}/reintentar")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["estado"] == "En espera"
+        assert body["mnsj_errr"] is None
+        assert body["rgstrs_prcsds"] is None
+        assert reintentos_encolados == [{"id_archv": archivo.id_archv}]
+
+    def test_archivo_no_fallido_devuelve_409(self, client, db_session, tecnico_editor):
+        sede, _ = tecnico_editor
+        conexion = crear_conexion(db_session, sede)
+        archivo = crear_archivo(db_session, conexion, estd="Exitoso")
+
+        resp = client.post(f"/ingesta/cola/{archivo.id_archv}/reintentar")
+        assert resp.status_code == 409
+
+    def test_archivo_inexistente_devuelve_404(self, client, tecnico_editor):
+        assert client.post("/ingesta/cola/999999/reintentar").status_code == 404
+
+    def test_usuario_de_otra_sede_no_puede_reintentar(
+        self, client, db_session, tecnico_editor, fabrica
+    ):
+        sede, _ = tecnico_editor
+        conexion = crear_conexion(db_session, sede)
+        archivo = crear_archivo(db_session, conexion, estd="Fallido")
+
+        otro_rol = fabrica.rol("Administrador")
+        otra_sede = fabrica.sede()
+        otro_usuario = fabrica.usuario(rol=otro_rol)
+        agregar_permiso(db_session, otro_usuario, otra_sede, "Ingesta", "Edición", otro_rol)
+        app.dependency_overrides[get_current_user] = lambda: usuario_jwt(
+            otro_usuario, otro_rol.nmbr, sede_id=otra_sede.id_sd
+        )
+
+        assert client.post(f"/ingesta/cola/{archivo.id_archv}/reintentar").status_code == 403
+
+    def test_denegado_con_solo_permiso_de_lectura(self, client, db_session, tecnico_lector):
+        sede, _ = tecnico_lector
+        conexion = crear_conexion(db_session, sede)
+        archivo = crear_archivo(db_session, conexion, estd="Fallido")
+
+        assert client.post(f"/ingesta/cola/{archivo.id_archv}/reintentar").status_code == 403

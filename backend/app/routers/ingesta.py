@@ -20,7 +20,8 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import ArchivoIngesta, ConexionFTP, Dispositivo
 from app.schemas import ArchivoIngestaDetalle, ArchivoIngestaListItem, MetricasColaIngesta
-from app.security.permisos import LECTURA, require_permiso, verificar_sede
+from app.security.permisos import EDICION, LECTURA, require_permiso, verificar_sede
+from app.tasks.ingesta import procesar_archivo_dat
 
 router = APIRouter(prefix="/ingesta", tags=["Ingesta"])
 
@@ -173,6 +174,57 @@ def detalle_archivo_ingesta(
 
     datalogger_nombre = _mapa_dataloggers(db, {archivo.id_cnxn}).get(archivo.id_cnxn, "Desconocido")
 
+    return ArchivoIngestaDetalle(
+        id_archv=archivo.id_archv,
+        nmbr_archv=archivo.nmbr_archv,
+        datalogger_nombre=datalogger_nombre,
+        estado=ESTADO_BD_A_NEGOCIO.get(archivo.estd, archivo.estd),
+        fch_dtccn=archivo.fch_dtccn,
+        fch_prcsd=archivo.fch_prcsd,
+        rgstrs_prcsds=archivo.rgstrs_prcsds,
+        mnsj_errr=archivo.mnsj_errr,
+    )
+
+
+@router.post("/cola/{id_archv}/reintentar", response_model=ArchivoIngestaDetalle)
+def reintentar_archivo_ingesta(
+    id_archv: int,
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(require_permiso("Ingesta", EDICION)),
+):
+    """HU31: reprocesamiento manual de un archivo Fallido.
+
+    Cubre el caso que autoretry_for de procesar_archivo_dat deja afuera a
+    propósito (ver app/tasks/ingesta.py): errores de datos/configuración
+    (ErrorDatosNoRecuperable) no se reintentan solos porque reintentar no
+    los arregla -alguien tiene que corregir la causa primero (ej. cargar
+    el mapeo que faltaba, resolver el dispositivo)-. Este endpoint es esa
+    acción manual: solo tiene sentido sobre un archivo en estado Fallido,
+    y vuelve a dejarlo Pendiente para que un worker lo tome de nuevo desde
+    cero.
+    """
+    archivo = db.query(ArchivoIngesta).filter(ArchivoIngesta.id_archv == id_archv).first()
+    if archivo is None:
+        raise HTTPException(status_code=404, detail="Archivo no encontrado")
+
+    conexion = db.get(ConexionFTP, archivo.id_cnxn)
+    verificar_sede(usuario, conexion.id_sd, modulo="Ingesta", accion=EDICION)
+
+    if archivo.estd != "Fallido":
+        raise HTTPException(
+            status_code=409,
+            detail="Solo se pueden reintentar archivos en estado Fallido",
+        )
+
+    archivo.estd = "Pendiente"
+    archivo.mnsj_errr = None
+    archivo.fch_prcsd = None
+    archivo.rgstrs_prcsds = None
+    db.commit()
+
+    procesar_archivo_dat.delay(id_archv=archivo.id_archv)
+
+    datalogger_nombre = _mapa_dataloggers(db, {archivo.id_cnxn}).get(archivo.id_cnxn, "Desconocido")
     return ArchivoIngestaDetalle(
         id_archv=archivo.id_archv,
         nmbr_archv=archivo.nmbr_archv,
