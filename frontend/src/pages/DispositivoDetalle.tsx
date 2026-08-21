@@ -903,6 +903,12 @@ function PestanaDatos({
   botonPrimario: string;
 }) {
   const [nuevoIndice, setNuevoIndice] = useState("");
+  // Genera varias filas de una vez (desde un índice inicial) en vez de
+  // tener que escribir número + click "Añadir" columna por columna: con
+  // datalogers de 20+ columnas ese ciclo era el cuello de botella que
+  // reportó el usuario.
+  const [indiceInicial, setIndiceInicial] = useState("0");
+  const [cantidadGenerar, setCantidadGenerar] = useState("");
 
   const indices = Object.keys(asignaciones)
     .map(Number)
@@ -927,6 +933,23 @@ function PestanaDatos({
     // 0 = "sin asignar todavía": el guardado filtra los que sigan en 0.
     setAsignaciones((prev) => ({ ...prev, [indice]: 0 }));
     setNuevoIndice("");
+  }
+
+  function generarFilas() {
+    const inicio = Number(indiceInicial);
+    const cantidad = Number(cantidadGenerar);
+    if (!cantidadGenerar || Number.isNaN(inicio) || inicio < 0) return;
+    if (Number.isNaN(cantidad) || cantidad < 1) return;
+    setAsignaciones((prev) => {
+      const siguiente = { ...prev };
+      for (let i = inicio; i < inicio + cantidad; i++) {
+        // No pisa una fila que ya tiene parámetro asignado -generar de
+        // nuevo no debe perder trabajo ya hecho, solo completar lo que falta.
+        if (!(i in siguiente)) siguiente[i] = 0;
+      }
+      return siguiente;
+    });
+    setCantidadGenerar("");
   }
 
   return (
@@ -964,6 +987,58 @@ function PestanaDatos({
       <h3 className="text-sm font-bold text-gray-900 dark:text-white mb-3">
         Asignación de columnas
       </h3>
+
+      {/* Genera de una vez varias filas consecutivas: para un datalogger
+          con muchas columnas, escribir número + click "Añadir" una por una
+          es el paso lento. Acá se define el rango y la tabla de abajo
+          aparece con todas esas filas listas para elegir el parámetro de
+          cada una sin volver a tocar este control. */}
+      <div className="mb-4 p-4 rounded-xl border border-dashed border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800/40">
+        <p className="text-sm font-medium text-gray-700 dark:text-gray-200 mb-3">
+          Generar varias columnas de una vez
+        </p>
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="w-32">
+            <label className={labelClase}>Desde columna N°</label>
+            <input
+              type="number"
+              min={0}
+              value={indiceInicial}
+              onChange={(e) => setIndiceInicial(e.target.value)}
+              disabled={!puedeEditar}
+              className={inputClase}
+            />
+          </div>
+          <div className="w-32">
+            <label className={labelClase}>Cantidad</label>
+            <input
+              type="number"
+              min={1}
+              placeholder="Ej. 20"
+              value={cantidadGenerar}
+              onChange={(e) => setCantidadGenerar(e.target.value)}
+              disabled={!puedeEditar}
+              className={inputClase}
+            />
+          </div>
+          <button
+            type="button"
+            onClick={generarFilas}
+            disabled={!puedeEditar || !cantidadGenerar}
+            className="px-4 py-2.5 text-sm font-semibold text-gray-900 bg-[#ccff00] rounded-xl hover:bg-[#b8e600] disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+          >
+            Generar filas
+          </button>
+        </div>
+        <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+          Crea las filas {indiceInicial || "0"} a{" "}
+          {cantidadGenerar
+            ? Number(indiceInicial || 0) + Number(cantidadGenerar) - 1
+            : "…"}{" "}
+          en la tabla de abajo, sin parámetro asignado todavía. Las que ya tengan un parámetro
+          elegido no se tocan.
+        </p>
+      </div>
 
       <div className="overflow-x-auto">
         <table className="w-full text-sm text-left text-gray-500 dark:text-gray-400">
