@@ -12,6 +12,7 @@ from app.services.ingesta.mapeo import (
     MapeoNoEncontradoError,
     construir_mapeo,
     resolver_formato,
+    tipos_de_parametro,
 )
 from app.services.ingesta.parser import parsear_dat
 from app.services.ingesta.persistencia import (
@@ -99,6 +100,7 @@ def interpretar_y_guardar(
     resultado_validacion = validar_lecturas(
         lecturas_estandar,
         delimitador_decimal=formato.delimitador_decimal,
+        tipos_parametro=tipos_de_parametro(db, formato.id_mp),
     )
     resultado_persistencia = guardar_lecturas(
         db,

@@ -371,7 +371,9 @@ def crear_parametro(
     if ya_existe is not None:
         raise HTTPException(status_code=409, detail=f"Ya existe un parámetro llamado '{body.nmbr}'")
 
-    parametro = Parametro(nmbr=body.nmbr, undd=body.undd, dscrpcn=body.dscrpcn)
+    parametro = Parametro(
+        nmbr=body.nmbr, undd=body.undd, dscrpcn=body.dscrpcn, tipo_dato=body.tipo_dato
+    )
     db.add(parametro)
     try:
         db.commit()

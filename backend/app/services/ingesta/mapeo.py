@@ -179,3 +179,20 @@ def construir_mapeo(db: Session, id_mp: int, columnas: list) -> dict:
         )
 
     return mapeo
+
+
+def tipos_de_parametro(db: Session, id_mp: int) -> dict:
+    """nombre_parametro -> prmtr.tipo_dato, para los parámetros usados por
+    este mapeo. Lo consume validar_lecturas (tipos_parametro) para saber
+    qué columnas exigen float() y cuáles se aceptan como texto tal cual
+    (ej. "MensajeP"/"MensajeA" de la trama de puerta). Separada de
+    construir_mapeo -que ya hace el mismo join- para no romper su
+    contrato de retorno (columna_original -> nombre_parametro) donde ya
+    se usa."""
+    filas = (
+        db.query(Parametro.nmbr, Parametro.tipo_dato)
+        .join(MapeoColumna, MapeoColumna.id_prmtr == Parametro.id_prmtr)
+        .filter(MapeoColumna.id_mp == id_mp)
+        .all()
+    )
+    return {nmbr: tipo_dato for nmbr, tipo_dato in filas}

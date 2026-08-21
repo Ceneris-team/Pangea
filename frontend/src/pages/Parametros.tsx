@@ -26,6 +26,7 @@ interface Parametro {
   nmbr: string;
   undd: string;
   dscrpcn: string | null;
+  tipo_dato: "numerico" | "texto";
 }
 
 interface ListadoParametros {
@@ -52,6 +53,10 @@ export default function Parametros() {
   const [nmbr, setNmbr] = useState("");
   const [undd, setUndd] = useState("");
   const [dscrpcn, setDscrpcn] = useState("");
+  // Solo se define al crear: cambiarlo después de que el parámetro ya
+  // tenga lecturas mezclaría datos entre tlmtr (numérico) y evnt_txt
+  // (texto) bajo el mismo id_prmtr, así que PUT no lo acepta.
+  const [tipoDato, setTipoDato] = useState<"numerico" | "texto">("numerico");
   const [guardando, setGuardando] = useState(false);
   const [errorFormulario, setErrorFormulario] = useState<string | null>(null);
 
@@ -92,6 +97,7 @@ export default function Parametros() {
     setNmbr("");
     setUndd("");
     setDscrpcn("");
+    setTipoDato("numerico");
     setErrorFormulario(null);
     setMostrarFormulario(true);
   }
@@ -101,6 +107,7 @@ export default function Parametros() {
     setNmbr(p.nmbr);
     setUndd(p.undd);
     setDscrpcn(p.dscrpcn ?? "");
+    setTipoDato(p.tipo_dato);
     setErrorFormulario(null);
     setMostrarFormulario(true);
   }
@@ -116,7 +123,18 @@ export default function Parametros() {
 
     setGuardando(true);
     try {
-      const body = { nmbr: nmbr.trim(), undd: undd.trim(), dscrpcn: dscrpcn.trim() || null };
+      // tipo_dato solo se manda al crear: el PUT no lo acepta (ver
+      // backend ParametroActualizar), así que incluirlo en la edición
+      // no tendría efecto -se omite para que quede claro en el payload.
+      const body =
+        editandoId !== null
+          ? { nmbr: nmbr.trim(), undd: undd.trim(), dscrpcn: dscrpcn.trim() || null }
+          : {
+              nmbr: nmbr.trim(),
+              undd: undd.trim(),
+              dscrpcn: dscrpcn.trim() || null,
+              tipo_dato: tipoDato,
+            };
       if (editandoId !== null) {
         await apiFetch<Parametro>(`/parametros/${editandoId}`, { method: "PUT", body });
       } else {
@@ -222,6 +240,7 @@ export default function Parametros() {
                   <thead className="text-xs text-gray-500 dark:text-gray-400 uppercase bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700">
                     <tr>
                       <th className="px-6 py-4 font-bold tracking-wider">Nombre</th>
+                      <th className="px-6 py-4 font-bold tracking-wider">Tipo</th>
                       <th className="px-6 py-4 font-bold tracking-wider">Unidad</th>
                       <th className="px-6 py-4 font-bold tracking-wider">Descripción</th>
                       <th className="px-6 py-4 font-bold tracking-wider text-right">Acciones</th>
@@ -230,7 +249,7 @@ export default function Parametros() {
                   <tbody>
                     {loading && (
                       <tr>
-                        <td colSpan={4} className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
+                        <td colSpan={5} className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
                           <div className="flex justify-center items-center gap-2">
                             <div className="w-4 h-4 rounded-full bg-[#ccff00] animate-bounce"></div>
                             <span>Cargando parámetros...</span>
@@ -241,7 +260,7 @@ export default function Parametros() {
 
                     {!loading && data?.items.length === 0 && (
                       <tr>
-                        <td colSpan={4} className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
+                        <td colSpan={5} className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
                           {busqueda
                             ? "Ningún parámetro coincide con la búsqueda."
                             : 'Todavía no hay parámetros registrados. Crea el primero con "Nuevo parámetro".'}
@@ -256,6 +275,17 @@ export default function Parametros() {
                           className="bg-white dark:bg-[#2d3748] border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
                         >
                           <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">{p.nmbr}</td>
+                          <td className="px-6 py-4">
+                            <span
+                              className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold border ${
+                                p.tipo_dato === "texto"
+                                  ? "bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800/30"
+                                  : "bg-[#ccff00]/20 text-[#5a7000] dark:text-[#ccff00] border-[#ccff00]/30"
+                              }`}
+                            >
+                              {p.tipo_dato === "texto" ? "Texto" : "Numérico"}
+                            </span>
+                          </td>
                           <td className="px-6 py-4">{p.undd}</td>
                           <td className="px-6 py-4">{p.dscrpcn ?? "—"}</td>
                           <td className="px-6 py-4 text-right">
@@ -345,6 +375,50 @@ export default function Parametros() {
                     placeholder="Ej. Caudal"
                     className="bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block w-full p-2.5 outline-none"
                   />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Tipo de dato *
+                  </label>
+                  {editandoId !== null ? (
+                    <p className="text-sm text-gray-500 dark:text-gray-400 py-2.5">
+                      {tipoDato === "texto" ? "Texto" : "Numérico"} (no se puede cambiar después
+                      de creado)
+                    </p>
+                  ) : (
+                    <div className="inline-flex rounded-xl border border-gray-300 dark:border-gray-600 overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => setTipoDato("numerico")}
+                        className={
+                          "px-4 py-2 text-sm font-medium transition-colors " +
+                          (tipoDato === "numerico"
+                            ? "bg-[#ccff00] text-[#1a202c]"
+                            : "bg-white dark:bg-[#2d3748] text-gray-700 dark:text-gray-300")
+                        }
+                      >
+                        Numérico
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setTipoDato("texto")}
+                        className={
+                          "px-4 py-2 text-sm font-medium transition-colors " +
+                          (tipoDato === "texto"
+                            ? "bg-[#ccff00] text-[#1a202c]"
+                            : "bg-white dark:bg-[#2d3748] text-gray-700 dark:text-gray-300")
+                        }
+                      >
+                        Texto
+                      </button>
+                    </div>
+                  )}
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    {tipoDato === "texto"
+                      ? 'Para eventos como mensajes de alarma (ej. "Puerta Abierta"). No admite unidad numérica.'
+                      : "Para mediciones (temperatura, caudal, etc.)."}
+                  </p>
                 </div>
 
                 <div>

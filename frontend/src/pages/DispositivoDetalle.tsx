@@ -74,6 +74,7 @@ interface Parametro {
   nmbr: string;
   undd: string;
   dscrpcn: string | null;
+  tipo_dato: "numerico" | "texto";
 }
 
 interface MapeoColumnaDetalle {
@@ -1075,7 +1076,7 @@ function PestanaDatos({
                     <option value="">Sin asignar</option>
                     {parametros.map((p) => (
                       <option key={p.id_prmtr} value={p.id_prmtr}>
-                        {p.nmbr} ({p.undd})
+                        {p.nmbr} ({p.undd}){p.tipo_dato === "texto" ? " · texto" : ""}
                       </option>
                     ))}
                   </select>

@@ -194,6 +194,37 @@ class TestListarParametros:
         assert client.get("/parametros").status_code == 403
 
 
+class TestCrearParametro:
+    """tipo_dato distingue una medición numérica (va a tlmtr) de un
+    evento de texto (va a evnt_txt, ver services/ingesta/persistencia.py)
+    -antes de esto todo parámetro se validaba como número y un parámetro
+    de texto perdía cada fila en silencio."""
+
+    def test_crear_sin_tipo_dato_usa_numerico_por_defecto(
+        self, client, db_session, tecnico_editor
+    ):
+        resp = client.post(
+            "/parametros", json={"nmbr": "Parametro numerico default", "undd": "N/A"}
+        )
+        assert resp.status_code == 201
+        assert resp.json()["tipo_dato"] == "numerico"
+
+    def test_crear_parametro_de_texto(self, client, db_session, tecnico_editor):
+        resp = client.post(
+            "/parametros",
+            json={"nmbr": "Mensaje puerta", "undd": "N/A", "tipo_dato": "texto"},
+        )
+        assert resp.status_code == 201
+        assert resp.json()["tipo_dato"] == "texto"
+
+    def test_tipo_dato_invalido_devuelve_422(self, client, db_session, tecnico_editor):
+        resp = client.post(
+            "/parametros",
+            json={"nmbr": "Parametro invalido", "undd": "N/A", "tipo_dato": "booleano"},
+        )
+        assert resp.status_code == 422
+
+
 class TestActualizarParametro:
     def test_edita_nombre_unidad_y_descripcion(self, client, db_session, tecnico_editor, parametros):
         id_prmtr = parametros[0].id_prmtr
@@ -217,6 +248,18 @@ class TestActualizarParametro:
 
     def test_parametro_inexistente_devuelve_404(self, client, tecnico_editor):
         assert client.put("/parametros/999999", json={"nmbr": "x"}).status_code == 404
+
+    def test_tipo_dato_no_se_puede_editar(self, client, db_session, tecnico_editor, parametros):
+        """Cambiar tipo_dato de un parámetro con lecturas ya guardadas
+        dejaría datos mezclados entre tlmtr y evnt_txt bajo el mismo
+        id_prmtr -por eso el schema ni siquiera acepta el campo (ver
+        ParametroActualizar). Un PUT que lo manda igual lo ignora en vez
+        de fallar: es un campo desconocido para ese schema, Pydantic lo
+        descarta."""
+        id_prmtr = parametros[0].id_prmtr
+        resp = client.put(f"/parametros/{id_prmtr}", json={"tipo_dato": "texto"})
+        assert resp.status_code == 200
+        assert resp.json()["tipo_dato"] == "numerico"
 
     def test_denegado_con_permiso_de_solo_lectura(
         self, client, db_session, tecnico_editor, fabrica, parametros

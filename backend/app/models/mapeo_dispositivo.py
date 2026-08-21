@@ -86,12 +86,29 @@ class MapeoFormato(Base):
 
 
 class Parametro(Base):
+    """tipo_dato distingue una MEDICIÓN numérica (tlmtr.vlr es
+    Numeric(14,4) NOT NULL, no admite texto) de un EVENTO de texto (ej.
+    "MensajeP"/"MensajeA" de una trama de puerta: "Puerta Abierta", "Llave
+    No Encontrada"). Antes de esto todo parámetro se validaba como
+    número (validador._parsear_numero); un parámetro de texto perdía cada
+    fila en silencio porque float("Puerta Abierta") siempre falla.
+
+    Un parámetro de tipo 'texto' se persiste en evnt_txt (ver
+    EventoTexto), no en tlmtr -no se puede simplemente volver tlmtr.vlr
+    texto/nullable: es una tabla particionada con datos reales, y
+    mezclar mediciones numéricas con mensajes de texto en la misma
+    columna rompería las consultas/alarmas que asumen vlr numérico."""
+
     __tablename__ = "prmtr"
+    __table_args__ = (
+        CheckConstraint("tipo_dato IN ('numerico','texto')", name="prmtr_tipodato_check"),
+    )
 
     id_prmtr = Column(Integer, primary_key=True, autoincrement=True)
     nmbr = Column(String(100), nullable=False, unique=True)
     undd = Column(String(30), nullable=False)
     dscrpcn = Column(String(200))
+    tipo_dato = Column(String(10), nullable=False, server_default="numerico")
 
 
 class MapeoColumna(Base):

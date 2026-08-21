@@ -406,16 +406,22 @@ class ParametroListItem(BaseModel):
     nmbr: str
     undd: str
     dscrpcn: str | None
+    tipo_dato: str
 
 
 class ParametroCrear(BaseModel):
     """Alta de un parámetro estándar nuevo en el catálogo (prmtr), para que
     el Técnico CENERIS no dependa de un INSERT manual cuando un mapeo
-    necesita un parámetro que todavía no existe."""
+    necesita un parámetro que todavía no existe.
+
+    tipo_dato: 'numerico' (default, va a tlmtr) o 'texto' (va a evnt_txt,
+    ver app.models.evento_texto) -para eventos como "Puerta Abierta" que
+    no son una medición y no admiten float()."""
 
     nmbr: str = Field(..., min_length=1, max_length=100)
     undd: str = Field(..., min_length=1, max_length=30)
     dscrpcn: str | None = Field(default=None, max_length=200)
+    tipo_dato: str = Field(default="numerico")
 
     @field_validator("nmbr", "undd")
     @classmethod
@@ -425,10 +431,23 @@ class ParametroCrear(BaseModel):
             raise ValueError("No puede estar vacío")
         return valor
 
+    @field_validator("tipo_dato")
+    @classmethod
+    def _tipo_dato_valido(cls, valor: str) -> str:
+        if valor not in ("numerico", "texto"):
+            raise ValueError("tipo_dato debe ser 'numerico' o 'texto'")
+        return valor
+
 
 class ParametroActualizar(BaseModel):
     """Todos los campos opcionales: se edita solo lo que cambia, mismo
-    criterio que MapeoFormatoActualizar."""
+    criterio que MapeoFormatoActualizar.
+
+    tipo_dato NO se puede editar acá a propósito: si el parámetro ya
+    tiene lecturas guardadas, cambiarlo dejaría datos mezclados entre
+    tlmtr y evnt_txt bajo el mismo id_prmtr. Se define una sola vez al
+    crear (ParametroCrear); si se necesita el otro tipo, se crea un
+    parámetro nuevo."""
 
     nmbr: str | None = Field(default=None, min_length=1, max_length=100)
     undd: str | None = Field(default=None, min_length=1, max_length=30)

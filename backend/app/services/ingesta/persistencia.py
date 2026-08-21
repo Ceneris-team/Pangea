@@ -1,7 +1,8 @@
 """
 PP-100 (HU06): persiste las lecturas ya validadas (PP-99) en tlmtr, la
 tabla de telemetría que ya existe en el esquema (HT-08, ver
-app.models.telemetria.Telemetria) - no se crea tabla nueva.
+app.models.telemetria.Telemetria) - no se crea tabla nueva para mediciones
+numéricas.
 
 tlmtr.vlr es NOT NULL, así que las lecturas con valor vacío en origen
 (LecturaValidada.valor is None) se consideran válidas semánticamente pero
@@ -9,6 +10,11 @@ no persistibles como medición numérica: se cuentan aparte y no generan
 fila en tlmtr. Si en el futuro se necesita conservar "vacíos" como
 lecturas reales, requiere volver nullable tlmtr.vlr (decisión de negocio,
 fuera de alcance de PP-97..100).
+
+Una LecturaValidada con valor de tipo str (prmtr.tipo_dato='texto', ver
+validador.py) es un EVENTO, no una medición: va a evnt_txt en vez de
+tlmtr -no se puede mezclar "23.5" con "Puerta Abierta" en la misma
+columna Numeric-.
 """
 
 import dataclasses
@@ -17,6 +23,7 @@ import logging
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.models.evento_texto import EventoTexto
 from app.models.mapeo_dispositivo import Dispositivo, Parametro
 from app.models.telemetria import Telemetria
 from app.models.ubicacion_conexion import Ubicacion
@@ -69,14 +76,16 @@ def guardar_lecturas(
     dispositivo: Dispositivo,
     id_archv: int,
 ) -> ResultadoPersistencia:
-    """Inserta en tlmtr una fila por LecturaValidada con valor numérico.
-    No hace commit -el llamador controla la transacción, igual que el
-    resto de app.tasks.ingesta-."""
+    """Inserta una fila por LecturaValidada: en tlmtr si el valor es
+    numérico (medición), en evnt_txt si es texto (evento, prmtr.tipo_dato
+    ='texto' -ver validador.py-). No hace commit -el llamador controla la
+    transacción, igual que el resto de app.tasks.ingesta-."""
     parametros = _mapa_parametros(db)
     ubicacion = db.get(Ubicacion, dispositivo.id_ubccn)
     guardadas = 0
     omitidas_sin_valor = 0
     parametros_desconocidos = set()
+    fechas_numericas = []
 
     for lectura in lecturas:
         if lectura.valor is None:
@@ -88,35 +97,45 @@ def guardar_lecturas(
             parametros_desconocidos.add(lectura.parametro)
             continue
 
-        db.add(
-            Telemetria(
-                fch_hr=lectura.fecha_hora,
-                id_dspstv=dispositivo.id_dspstv,
-                id_prmtr=id_prmtr,
-                id_sd=ubicacion.id_sd,
-                vlr=lectura.valor,
-                id_archv=id_archv,
+        if isinstance(lectura.valor, str):
+            db.add(
+                EventoTexto(
+                    fch_hr=lectura.fecha_hora,
+                    id_dspstv=dispositivo.id_dspstv,
+                    id_prmtr=id_prmtr,
+                    id_sd=ubicacion.id_sd,
+                    vlr=lectura.valor,
+                    id_archv=id_archv,
+                )
             )
-        )
+        else:
+            db.add(
+                Telemetria(
+                    fch_hr=lectura.fecha_hora,
+                    id_dspstv=dispositivo.id_dspstv,
+                    id_prmtr=id_prmtr,
+                    id_sd=ubicacion.id_sd,
+                    vlr=lectura.valor,
+                    id_archv=id_archv,
+                )
+            )
+            fechas_numericas.append(lectura.fecha_hora)
         guardadas += 1
 
     # flush explícito para que el INSERT viaje a Postgres AQUÍ y no en el
     # commit del llamador: es la única forma de traducir el fallo por
     # partición faltante (HT-08 CA4) a un error de dominio con contexto
     # útil. Sin esto, el llamador recibiría un IntegrityError crudo desde
-    # dentro de db.commit(), sin saber qué fecha lo causó.
+    # dentro de db.commit(), sin saber qué fecha lo causó. evnt_txt no
+    # está particionada, así que solo tlmtr puede fallar por esta causa.
     if guardadas:
         try:
             db.flush()
         except IntegrityError as exc:
             db.rollback()
-            if es_error_de_particion_faltante(exc):
-                fechas = sorted(
-                    {lectura.fecha_hora for lectura in lecturas if lectura.valor is not None}
-                )
-                rango = (
-                    f"{fechas[0]:%Y-%m-%d} .. {fechas[-1]:%Y-%m-%d}" if fechas else "desconocido"
-                )
+            if fechas_numericas and es_error_de_particion_faltante(exc):
+                fechas = sorted(fechas_numericas)
+                rango = f"{fechas[0]:%Y-%m-%d} .. {fechas[-1]:%Y-%m-%d}"
                 raise ParticionInexistenteError(
                     f"No existe partición de tlmtr para las lecturas del archivo "
                     f"id_archv={id_archv} (rango {rango}). El job "

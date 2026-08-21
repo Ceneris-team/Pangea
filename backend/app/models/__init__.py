@@ -6,6 +6,7 @@ from app.models.alarma import (
 )
 from app.models.archivo_ingesta import ArchivoIngesta
 from app.models.cliente_sede import Cliente, Sede
+from app.models.evento_texto import EventoTexto
 from app.models.intento_procesamiento import IntentoProcesamiento
 from app.models.mapeo_dispositivo import (
     Dispositivo,

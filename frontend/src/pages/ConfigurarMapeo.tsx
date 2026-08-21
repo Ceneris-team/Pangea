@@ -29,6 +29,7 @@ interface Parametro {
   nmbr: string;
   undd: string;
   dscrpcn: string | null;
+  tipo_dato: "numerico" | "texto";
 }
 
 /** DEC-09: el mapeo se cuelga de un dispositivo concreto. La marca y la
@@ -845,7 +846,7 @@ export default function ConfigurarMapeo() {
                                   <option value="">— Sin asignar —</option>
                                   {parametros.map((p) => (
                                     <option key={p.id_prmtr} value={p.id_prmtr}>
-                                      {p.nmbr} ({p.undd})
+                                      {p.nmbr} ({p.undd}){p.tipo_dato === "texto" ? " · texto" : ""}
                                     </option>
                                   ))}
                                 </select>
