@@ -44,6 +44,7 @@ const ETIQUETA_DELIMITADOR: Record<string, string> = {
 const ETIQUETA_TRAMA: Record<string, string> = {
   H: "H · Datos periódicos",
   E: "E · Estados y eventos",
+  P: "P · Eventos de puerta",
 };
 
 export default function Mapeos() {

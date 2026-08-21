@@ -31,6 +31,7 @@ logger = logging.getLogger(__name__)
 PREFIJOS_TIPO_TRAMA = {
     "H_": "H",
     "E_": "E",
+    "P_": "P",  # eventos de puerta/acceso (Fecha,R,MensajeP,MensajeA)
 }
 
 

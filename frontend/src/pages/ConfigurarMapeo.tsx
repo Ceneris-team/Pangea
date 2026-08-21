@@ -97,7 +97,7 @@ interface MapeoDetalle {
 
 interface MapeoForm {
   id_dspstv: string;
-  tp_trm: "H" | "E";
+  tp_trm: "H" | "E" | "P";
   dlmtdr: string;
   fl_inc_dts: string;
   frmt_fch: string;
@@ -240,7 +240,7 @@ export default function ConfigurarMapeo() {
       .then((detalle) => {
         setForm({
           id_dspstv: String(detalle.id_dspstv),
-          tp_trm: detalle.tp_trm === "E" ? "E" : "H",
+          tp_trm: detalle.tp_trm === "E" ? "E" : detalle.tp_trm === "P" ? "P" : "H",
           dlmtdr: detalle.dlmtdr,
           fl_inc_dts: String(detalle.fl_inc_dts),
           frmt_fch: detalle.frmt_fch,
@@ -501,11 +501,12 @@ export default function ConfigurarMapeo() {
                       <label className={labelClase}>Tipo de trama *</label>
                       <select
                         value={form.tp_trm}
-                        onChange={(e) => actualizarCampo("tp_trm", e.target.value as "H" | "E")}
+                        onChange={(e) => actualizarCampo("tp_trm", e.target.value as "H" | "E" | "P")}
                         className={inputClase + " cursor-pointer"}
                       >
                         <option value="H">H · Datos periódicos (H_*.dat)</option>
                         <option value="E">E · Estados y eventos (E_*.dat)</option>
+                        <option value="P">P · Eventos de puerta (P_*.dat)</option>
                       </select>
                       <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                         Determina la extensión/prefijo del archivo que aplica a este mapeo.

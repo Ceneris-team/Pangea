@@ -17,12 +17,13 @@ from app.database import Base
 class MapeoFormato(Base):
     """HU 06: mini-ETL por DISPOSITIVO (DEC-09).
 
-    Un datalogger manda dos formatos distintos de archivo, con distinto
+    Un datalogger manda varios formatos distintos de archivo, con distinto
     número y significado de columnas, y por eso el formato se identifica
     por dispositivo + tipo de trama (PP-96):
 
       tp_trm='H' -> archivos H_*.dat: datos periódicos (lectura real)
       tp_trm='E' -> archivos E_*.dat: estados y eventos del equipo
+      tp_trm='P' -> archivos P_*.dat: eventos de puerta/acceso
 
     DEC-09: antes el formato colgaba de (id_sd, mrc). Dos dataloggers de
     la misma marca en la misma sede, pero con sensores distintos
@@ -37,7 +38,7 @@ class MapeoFormato(Base):
 
     __tablename__ = "mp_frmt"
     __table_args__ = (
-        CheckConstraint("tp_trm IN ('H','E')", name="mpfrmt_tptrm_check"),
+        CheckConstraint("tp_trm IN ('H','E','P')", name="mpfrmt_tptrm_check"),
         CheckConstraint("dlmtdr_dcml IN ('.', ',')", name="mpfrmt_dlmtdrdcml_check"),
         # Un dispositivo puede tener como máximo un mapeo ACTIVO por tipo
         # de trama (uno H y uno E). El parcial sobre estd deja convivir
