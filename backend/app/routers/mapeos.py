@@ -51,11 +51,13 @@ from app.schemas import (
     ColumnaVistaPrevia,
     DispositivoParaMapeo,
     FilaVistaPrevia,
+    ListadoParametros,
     MapeoColumnaDetalle,
     MapeoFormatoActualizar,
     MapeoFormatoCrear,
     MapeoFormatoDetalle,
     MapeoFormatoListItem,
+    ParametroActualizar,
     ParametroCrear,
     ParametroListItem,
     SedeListItem,
@@ -319,14 +321,40 @@ def _columnas_detalle(db: Session, id_mp: int) -> list[MapeoColumnaDetalle]:
     ]
 
 
-@router_parametros.get("", response_model=list[ParametroListItem])
+@router_parametros.get("", response_model=list[ParametroListItem] | ListadoParametros)
 def listar_parametros(
+    pagina: int | None = Query(default=None, ge=1),
+    por_pagina: int | None = Query(default=None, ge=1, le=100),
+    q: str | None = Query(default=None, description="Filtro por nombre, insensible a mayúsculas"),
     db: Session = Depends(get_db),
     _usuario: dict = Depends(require_permiso("Ingesta", LECTURA)),
 ):
-    """CA1: pobla el selector de parámetro estándar del formulario."""
-    parametros = db.query(Parametro).order_by(Parametro.nmbr).all()
-    return [ParametroListItem.model_validate(p) for p in parametros]
+    """CA1: pobla el selector de parámetro estándar del formulario.
+
+    Sin pagina/por_pagina devuelve la lista COMPLETA (comportamiento
+    original): los selectores de "parámetro estándar" en ConfigurarMapeo y
+    en la ficha de Dispositivo necesitan ver todo el catálogo para poder
+    elegir cualquiera, no solo una página. Con esos params, pagina -lo usa
+    la pantalla de catálogo (Parámetros), que sí puede crecer bastante. `q`
+    filtra por nombre en el SERVIDOR (no solo en la página cargada): así
+    una búsqueda encuentra un parámetro aunque esté en otra página."""
+    query = db.query(Parametro).order_by(Parametro.nmbr)
+    if q:
+        query = query.filter(Parametro.nmbr.ilike(f"%{q}%"))
+
+    if pagina is None and por_pagina is None:
+        return [ParametroListItem.model_validate(p) for p in query.all()]
+
+    pagina = pagina or 1
+    por_pagina = por_pagina or 25
+    total = query.count()
+    parametros = query.offset((pagina - 1) * por_pagina).limit(por_pagina).all()
+    return ListadoParametros(
+        total=total,
+        pagina=pagina,
+        por_pagina=por_pagina,
+        items=[ParametroListItem.model_validate(p) for p in parametros],
+    )
 
 
 @router_parametros.post("", response_model=ParametroListItem, status_code=201)
@@ -352,6 +380,79 @@ def crear_parametro(
         raise HTTPException(status_code=409, detail=f"Ya existe un parámetro llamado '{body.nmbr}'")
     db.refresh(parametro)
     return ParametroListItem.model_validate(parametro)
+
+
+@router_parametros.put("/{id_prmtr}", response_model=ParametroListItem)
+def actualizar_parametro(
+    id_prmtr: int,
+    body: ParametroActualizar,
+    db: Session = Depends(get_db),
+    _usuario: dict = Depends(require_permiso("Ingesta", EDICION)),
+):
+    """Edita un parámetro del catálogo. No afecta los mapeos que ya lo
+    usan (mp_clmn referencia id_prmtr, no el nombre): renombrar o cambiar
+    la unidad de un parámetro se ve reflejado en todos los mapeos que lo
+    tienen asignado, que es el comportamiento esperado de un catálogo
+    compartido."""
+    parametro = db.query(Parametro).filter(Parametro.id_prmtr == id_prmtr).first()
+    if parametro is None:
+        raise HTTPException(status_code=404, detail="Parámetro no encontrado")
+
+    if body.nmbr is not None and body.nmbr != parametro.nmbr:
+        ya_existe = db.query(Parametro).filter(Parametro.nmbr == body.nmbr).first()
+        if ya_existe is not None:
+            raise HTTPException(
+                status_code=409, detail=f"Ya existe un parámetro llamado '{body.nmbr}'"
+            )
+        parametro.nmbr = body.nmbr
+    if body.undd is not None:
+        parametro.undd = body.undd
+    if body.dscrpcn is not None:
+        parametro.dscrpcn = body.dscrpcn.strip() or None
+
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=409, detail=f"Ya existe un parámetro llamado '{body.nmbr}'"
+        )
+    db.refresh(parametro)
+    return ParametroListItem.model_validate(parametro)
+
+
+@router_parametros.delete("/{id_prmtr}")
+def eliminar_parametro(
+    id_prmtr: int,
+    db: Session = Depends(get_db),
+    _usuario: dict = Depends(require_permiso("Ingesta", EDICION)),
+):
+    """Borra un parámetro del catálogo -a diferencia del borrado de mapeo
+    (ver eliminar_mapeo más abajo), acá SÍ es un borrado físico: un
+    parámetro sin ningún mapeo que lo use no tiene historial que proteger,
+    a diferencia de mp_frmt (los archivos ya procesados dependen de que su
+    mp_clmn siga existiendo).
+
+    Si algún mp_clmn ya lo usa, se bloquea con 409 en vez de dejar que la
+    FK reviente con un IntegrityError crudo: borrarlo rompería la
+    asignación de columnas de esos mapeos en silencio."""
+    parametro = db.query(Parametro).filter(Parametro.id_prmtr == id_prmtr).first()
+    if parametro is None:
+        raise HTTPException(status_code=404, detail="Parámetro no encontrado")
+
+    en_uso = db.query(MapeoColumna).filter(MapeoColumna.id_prmtr == id_prmtr).first()
+    if en_uso is not None:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"El parámetro '{parametro.nmbr}' está en uso por al menos un mapeo "
+                f"y no se puede eliminar. Quita la asignación de esa columna primero."
+            ),
+        )
+
+    db.delete(parametro)
+    db.commit()
+    return {"mensaje": "Parámetro eliminado correctamente"}
 
 
 @router_sedes.get("", response_model=list[SedeListItem])

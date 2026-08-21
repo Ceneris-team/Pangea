@@ -3,6 +3,7 @@ import { apiFetch, ApiError } from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import Sidebar from "../components/layout/Sidebar";
 import Topbar from "../components/layout/Topbar";
+import ConfirmarEliminacionModal from "../components/ConfirmarEliminacionModal";
 
 /**
  * Catálogo de parámetros estándar (prmtr).
@@ -12,6 +13,12 @@ import Topbar from "../components/layout/Topbar";
  * el complemento que faltaba: antes de esto, un parámetro nuevo (ej. una
  * marca de sensor que mide algo que todavía no existe en `prmtr`) solo se
  * podía dar de alta con un INSERT manual en la base de datos.
+ *
+ * Paginado server-side (25 por página) con búsqueda por nombre también
+ * en el servidor: el catálogo crece con cada sensor nuevo, y GET
+ * /parametros sin pagina/por_pagina sigue devolviendo la lista completa
+ * (lo usan los selectores de ConfigurarMapeo/DispositivoDetalle), así que
+ * esta pantalla es la única que pasa esos parámetros.
  */
 
 interface Parametro {
@@ -21,27 +28,44 @@ interface Parametro {
   dscrpcn: string | null;
 }
 
+interface ListadoParametros {
+  total: number;
+  pagina: number;
+  por_pagina: number;
+  items: Parametro[];
+}
+
+const POR_PAGINA = 25;
+
 export default function Parametros() {
   const { nombreCompleto, rol, logout } = useAuth();
   const [isDarkMode, setIsDarkMode] = useState(false);
 
-  const [parametros, setParametros] = useState<Parametro[]>([]);
+  const [data, setData] = useState<ListadoParametros | null>(null);
+  const [pagina, setPagina] = useState(1);
   const [busqueda, setBusqueda] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [mostrarFormulario, setMostrarFormulario] = useState(false);
+  const [editandoId, setEditandoId] = useState<number | null>(null);
   const [nmbr, setNmbr] = useState("");
   const [undd, setUndd] = useState("");
   const [dscrpcn, setDscrpcn] = useState("");
   const [guardando, setGuardando] = useState(false);
   const [errorFormulario, setErrorFormulario] = useState<string | null>(null);
 
+  const [parametroAEliminar, setParametroAEliminar] = useState<Parametro | null>(null);
+  const [eliminandoId, setEliminandoId] = useState<number | null>(null);
+  const [errorEliminar, setErrorEliminar] = useState<string | null>(null);
+
   function cargarParametros() {
     setLoading(true);
     setError(null);
-    apiFetch<Parametro[]>("/parametros")
-      .then(setParametros)
+    apiFetch<ListadoParametros>("/parametros", {
+      params: { pagina, por_pagina: POR_PAGINA, q: busqueda.trim() || undefined },
+    })
+      .then(setData)
       .catch((err) => {
         setError(err instanceof ApiError ? err.message : "No se pudo cargar el catálogo de parámetros");
       })
@@ -50,16 +74,33 @@ export default function Parametros() {
 
   useEffect(() => {
     cargarParametros();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pagina, busqueda]);
 
-  const parametrosFiltrados = parametros.filter((p) =>
-    p.nmbr.toLowerCase().includes(busqueda.toLowerCase())
-  );
+  // Cambiar el término de búsqueda vuelve a la primera página: quedarse
+  // en la página 3 de un resultado que ahora tiene 1 sola dejaría la
+  // tabla vacía sin que quede claro por qué.
+  function actualizarBusqueda(valor: string) {
+    setBusqueda(valor);
+    setPagina(1);
+  }
 
-  function abrirFormulario() {
+  const totalPaginas = data ? Math.max(1, Math.ceil(data.total / data.por_pagina)) : 1;
+
+  function abrirFormularioCrear() {
+    setEditandoId(null);
     setNmbr("");
     setUndd("");
     setDscrpcn("");
+    setErrorFormulario(null);
+    setMostrarFormulario(true);
+  }
+
+  function abrirFormularioEditar(p: Parametro) {
+    setEditandoId(p.id_prmtr);
+    setNmbr(p.nmbr);
+    setUndd(p.undd);
+    setDscrpcn(p.dscrpcn ?? "");
     setErrorFormulario(null);
     setMostrarFormulario(true);
   }
@@ -75,16 +116,39 @@ export default function Parametros() {
 
     setGuardando(true);
     try {
-      await apiFetch<Parametro>("/parametros", {
-        method: "POST",
-        body: { nmbr: nmbr.trim(), undd: undd.trim(), dscrpcn: dscrpcn.trim() || null },
-      });
+      const body = { nmbr: nmbr.trim(), undd: undd.trim(), dscrpcn: dscrpcn.trim() || null };
+      if (editandoId !== null) {
+        await apiFetch<Parametro>(`/parametros/${editandoId}`, { method: "PUT", body });
+      } else {
+        await apiFetch<Parametro>("/parametros", { method: "POST", body });
+      }
       setMostrarFormulario(false);
       cargarParametros();
     } catch (err) {
-      setErrorFormulario(err instanceof ApiError ? err.message : "No se pudo crear el parámetro");
+      setErrorFormulario(
+        err instanceof ApiError
+          ? err.message
+          : `No se pudo ${editandoId !== null ? "actualizar" : "crear"} el parámetro`
+      );
     } finally {
       setGuardando(false);
+    }
+  }
+
+  async function confirmarEliminarParametro() {
+    if (!parametroAEliminar) return;
+    setEliminandoId(parametroAEliminar.id_prmtr);
+    setErrorEliminar(null);
+    try {
+      await apiFetch<{ mensaje: string }>(`/parametros/${parametroAEliminar.id_prmtr}`, {
+        method: "DELETE",
+      });
+      setParametroAEliminar(null);
+      cargarParametros();
+    } catch (err) {
+      setErrorEliminar(err instanceof ApiError ? err.message : "No se pudo eliminar el parámetro");
+    } finally {
+      setEliminandoId(null);
     }
   }
 
@@ -110,7 +174,7 @@ export default function Parametros() {
                 </p>
               </div>
               <button
-                onClick={abrirFormulario}
+                onClick={abrirFormularioCrear}
                 className="px-4 py-2.5 text-sm font-semibold text-[#5a7000] dark:text-[#ccff00] bg-[#ccff00]/10 hover:bg-[#ccff00]/20 border border-[#ccff00]/30 rounded-xl transition-colors"
               >
                 + Nuevo parámetro
@@ -135,7 +199,7 @@ export default function Parametros() {
                     type="search"
                     placeholder="Buscar por nombre..."
                     value={busqueda}
-                    onChange={(e) => setBusqueda(e.target.value)}
+                    onChange={(e) => actualizarBusqueda(e.target.value)}
                     className="bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block w-full pl-10 p-2.5 transition-all outline-none placeholder-gray-400 dark:placeholder-gray-500"
                   />
                 </div>
@@ -147,6 +211,12 @@ export default function Parametros() {
                 </div>
               )}
 
+              {errorEliminar && (
+                <div className="p-4 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm border-b border-red-100 dark:border-red-800/30">
+                  {errorEliminar}
+                </div>
+              )}
+
               <div className="overflow-x-auto">
                 <table className="w-full text-sm text-left text-gray-500 dark:text-gray-400">
                   <thead className="text-xs text-gray-500 dark:text-gray-400 uppercase bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700">
@@ -154,12 +224,13 @@ export default function Parametros() {
                       <th className="px-6 py-4 font-bold tracking-wider">Nombre</th>
                       <th className="px-6 py-4 font-bold tracking-wider">Unidad</th>
                       <th className="px-6 py-4 font-bold tracking-wider">Descripción</th>
+                      <th className="px-6 py-4 font-bold tracking-wider text-right">Acciones</th>
                     </tr>
                   </thead>
                   <tbody>
                     {loading && (
                       <tr>
-                        <td colSpan={3} className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
+                        <td colSpan={4} className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
                           <div className="flex justify-center items-center gap-2">
                             <div className="w-4 h-4 rounded-full bg-[#ccff00] animate-bounce"></div>
                             <span>Cargando parámetros...</span>
@@ -168,18 +239,18 @@ export default function Parametros() {
                       </tr>
                     )}
 
-                    {!loading && parametrosFiltrados.length === 0 && (
+                    {!loading && data?.items.length === 0 && (
                       <tr>
-                        <td colSpan={3} className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
-                          {parametros.length === 0
-                            ? 'Todavía no hay parámetros registrados. Crea el primero con "Nuevo parámetro".'
-                            : "Ningún parámetro coincide con la búsqueda."}
+                        <td colSpan={4} className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
+                          {busqueda
+                            ? "Ningún parámetro coincide con la búsqueda."
+                            : 'Todavía no hay parámetros registrados. Crea el primero con "Nuevo parámetro".'}
                         </td>
                       </tr>
                     )}
 
                     {!loading &&
-                      parametrosFiltrados.map((p) => (
+                      data?.items.map((p) => (
                         <tr
                           key={p.id_prmtr}
                           className="bg-white dark:bg-[#2d3748] border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
@@ -187,18 +258,58 @@ export default function Parametros() {
                           <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">{p.nmbr}</td>
                           <td className="px-6 py-4">{p.undd}</td>
                           <td className="px-6 py-4">{p.dscrpcn ?? "—"}</td>
+                          <td className="px-6 py-4 text-right">
+                            <div className="inline-flex gap-2">
+                              <button
+                                onClick={() => abrirFormularioEditar(p)}
+                                className="inline-flex items-center justify-center px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-transparent border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white transition-all"
+                              >
+                                Editar
+                              </button>
+                              <button
+                                onClick={() => setParametroAEliminar(p)}
+                                disabled={eliminandoId === p.id_prmtr}
+                                className="inline-flex items-center justify-center px-3 py-1.5 text-sm font-medium text-red-600 dark:text-red-400 bg-white dark:bg-transparent border border-red-200 dark:border-red-800/40 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-all disabled:opacity-50"
+                              >
+                                {eliminandoId === p.id_prmtr ? "Eliminando..." : "Eliminar"}
+                              </button>
+                            </div>
+                          </td>
                         </tr>
                       ))}
                   </tbody>
                 </table>
               </div>
 
-              {!loading && (
-                <div className="p-5 border-t border-gray-100 dark:border-gray-700">
+              {data && (
+                <div className="p-5 border-t border-gray-100 dark:border-gray-700 flex items-center justify-between flex-wrap gap-3">
                   <span className="text-sm text-gray-500 dark:text-gray-400">
-                    <span className="font-semibold text-gray-900 dark:text-white">{parametrosFiltrados.length}</span>{" "}
+                    <span className="font-semibold text-gray-900 dark:text-white">{data.total}</span>{" "}
                     parámetro(s) registrado(s)
                   </span>
+                  {totalPaginas > 1 && (
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm text-gray-500 dark:text-gray-400">
+                        Página {data.pagina} de {totalPaginas}
+                      </span>
+                      <div className="flex gap-2">
+                        <button
+                          disabled={pagina <= 1}
+                          onClick={() => setPagina((p) => p - 1)}
+                          className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg disabled:opacity-50"
+                        >
+                          Anterior
+                        </button>
+                        <button
+                          disabled={pagina >= totalPaginas}
+                          onClick={() => setPagina((p) => p + 1)}
+                          className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg disabled:opacity-50"
+                        >
+                          Siguiente
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -211,7 +322,9 @@ export default function Parametros() {
           <div className="w-full max-w-md bg-white dark:bg-[#2d3748] rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700">
             <form onSubmit={guardarParametro}>
               <div className="p-6 border-b border-gray-100 dark:border-gray-700">
-                <h2 className="text-lg font-bold text-gray-900 dark:text-white">Nuevo parámetro</h2>
+                <h2 className="text-lg font-bold text-gray-900 dark:text-white">
+                  {editandoId !== null ? "Editar parámetro" : "Nuevo parámetro"}
+                </h2>
               </div>
 
               <div className="p-6 space-y-4">
@@ -280,6 +393,16 @@ export default function Parametros() {
             </form>
           </div>
         </div>
+      )}
+
+      {parametroAEliminar && (
+        <ConfirmarEliminacionModal
+          titulo={`Eliminar parámetro '${parametroAEliminar.nmbr}'`}
+          mensaje="Si algún mapeo ya usa este parámetro, no se va a poder eliminar hasta quitarlo de esa asignación de columnas."
+          confirmando={eliminandoId === parametroAEliminar.id_prmtr}
+          onConfirmar={confirmarEliminarParametro}
+          onCancelar={() => setParametroAEliminar(null)}
+        />
       )}
     </div>
   );

@@ -140,6 +140,50 @@ class TestListarParametros:
         nombres = [p["nmbr"] for p in resp.json()]
         assert "Temperatura HU06" in nombres
 
+    def test_sin_parametros_de_paginacion_devuelve_lista_plana(
+        self, client, tecnico_editor, parametros
+    ):
+        """Los selectores de ConfigurarMapeo/DispositivoDetalle necesitan
+        ver TODO el catálogo, no una página: sin pagina/por_pagina la
+        respuesta debe seguir siendo una lista, no el objeto paginado."""
+        resp = client.get("/parametros")
+        assert isinstance(resp.json(), list)
+
+    def test_con_paginacion_devuelve_el_objeto_paginado(
+        self, client, tecnico_editor, parametros
+    ):
+        resp = client.get("/parametros", params={"pagina": 1, "por_pagina": 2})
+        assert resp.status_code == 200
+        body = resp.json()
+        assert isinstance(body, dict)
+        assert body["pagina"] == 1
+        assert body["por_pagina"] == 2
+        assert len(body["items"]) == 2
+        assert body["total"] == len(parametros)
+
+    def test_paginacion_segunda_pagina(self, client, tecnico_editor, parametros):
+        resp = client.get("/parametros", params={"pagina": 2, "por_pagina": 2})
+        body = resp.json()
+        assert len(body["items"]) == 1  # 3 parámetros de la fixture, 2 en pág 1
+
+    def test_filtro_q_busca_en_todo_el_catalogo_no_solo_la_pagina(
+        self, client, tecnico_editor, parametros
+    ):
+        """3 parámetros: 'Temperatura HU06', 'pH HU06', 'Conductividad
+        HU06'. Con por_pagina=1 'Temperatura' cae en otra página que
+        'Conductividad' si no se filtra en el servidor."""
+        resp = client.get(
+            "/parametros", params={"pagina": 1, "por_pagina": 1, "q": "conductividad"}
+        )
+        body = resp.json()
+        assert body["total"] == 1
+        assert body["items"][0]["nmbr"] == "Conductividad HU06"
+
+    def test_filtro_q_insensible_a_mayusculas(self, client, tecnico_editor, parametros):
+        resp = client.get("/parametros", params={"q": "TEMPERATURA"})
+        nombres = [p["nmbr"] for p in resp.json()]
+        assert "Temperatura HU06" in nombres
+
     def test_denegado_sin_permiso(self, client, db_session, fabrica):
         rol = fabrica.rol("Cliente Final")
         sede = fabrica.sede()
@@ -148,6 +192,80 @@ class TestListarParametros:
             usuario, rol.nmbr, sede_id=sede.id_sd
         )
         assert client.get("/parametros").status_code == 403
+
+
+class TestActualizarParametro:
+    def test_edita_nombre_unidad_y_descripcion(self, client, db_session, tecnico_editor, parametros):
+        id_prmtr = parametros[0].id_prmtr
+        resp = client.put(
+            f"/parametros/{id_prmtr}",
+            json={"nmbr": "Temperatura editada", "undd": "K", "dscrpcn": "nueva descripcion"},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["nmbr"] == "Temperatura editada"
+        assert body["undd"] == "K"
+        assert body["dscrpcn"] == "nueva descripcion"
+
+    def test_editar_a_un_nombre_ya_usado_devuelve_409(
+        self, client, db_session, tecnico_editor, parametros
+    ):
+        resp = client.put(
+            f"/parametros/{parametros[0].id_prmtr}", json={"nmbr": parametros[1].nmbr}
+        )
+        assert resp.status_code == 409
+
+    def test_parametro_inexistente_devuelve_404(self, client, tecnico_editor):
+        assert client.put("/parametros/999999", json={"nmbr": "x"}).status_code == 404
+
+    def test_denegado_con_permiso_de_solo_lectura(
+        self, client, db_session, tecnico_editor, fabrica, parametros
+    ):
+        sede, _ = tecnico_editor
+        rol_lector = fabrica.rol("Cliente Final")
+        lector = fabrica.usuario(rol=rol_lector)
+        agregar_permiso(db_session, lector, sede, "Ingesta", "Lectura", rol_lector)
+        app.dependency_overrides[get_current_user] = lambda: usuario_jwt(
+            lector, rol_lector.nmbr, sede_id=sede.id_sd
+        )
+        resp = client.put(f"/parametros/{parametros[0].id_prmtr}", json={"nmbr": "x"})
+        assert resp.status_code == 403
+
+
+class TestEliminarParametro:
+    def test_elimina_un_parametro_sin_uso(self, client, db_session, tecnico_editor, parametros):
+        id_prmtr = parametros[0].id_prmtr
+        resp = client.delete(f"/parametros/{id_prmtr}")
+        assert resp.status_code == 200
+        assert db_session.query(Parametro).filter(Parametro.id_prmtr == id_prmtr).first() is None
+
+    def test_no_elimina_un_parametro_en_uso_por_un_mapeo(
+        self, client, db_session, tecnico_editor, parametros
+    ):
+        sede, _ = tecnico_editor
+        dispositivo = crear_dispositivo(db_session, sede)
+        client.post("/mapeos", json=cuerpo_mapeo(parametros, dispositivo.id_dspstv))
+
+        resp = client.delete(f"/parametros/{parametros[0].id_prmtr}")
+        assert resp.status_code == 409
+        assert db_session.query(Parametro).filter(
+            Parametro.id_prmtr == parametros[0].id_prmtr
+        ).first() is not None
+
+    def test_parametro_inexistente_devuelve_404(self, client, tecnico_editor):
+        assert client.delete("/parametros/999999").status_code == 404
+
+    def test_denegado_con_permiso_de_solo_lectura(
+        self, client, db_session, tecnico_editor, fabrica, parametros
+    ):
+        sede, _ = tecnico_editor
+        rol_lector = fabrica.rol("Cliente Final")
+        lector = fabrica.usuario(rol=rol_lector)
+        agregar_permiso(db_session, lector, sede, "Ingesta", "Lectura", rol_lector)
+        app.dependency_overrides[get_current_user] = lambda: usuario_jwt(
+            lector, rol_lector.nmbr, sede_id=sede.id_sd
+        )
+        assert client.delete(f"/parametros/{parametros[0].id_prmtr}").status_code == 403
 
 
 class TestCrearMapeo:

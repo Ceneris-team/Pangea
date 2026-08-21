@@ -426,6 +426,36 @@ class ParametroCrear(BaseModel):
         return valor
 
 
+class ParametroActualizar(BaseModel):
+    """Todos los campos opcionales: se edita solo lo que cambia, mismo
+    criterio que MapeoFormatoActualizar."""
+
+    nmbr: str | None = Field(default=None, min_length=1, max_length=100)
+    undd: str | None = Field(default=None, min_length=1, max_length=30)
+    dscrpcn: str | None = Field(default=None, max_length=200)
+
+    @field_validator("nmbr", "undd")
+    @classmethod
+    def _no_vacio(cls, valor: str | None) -> str | None:
+        if valor is None:
+            return valor
+        valor = valor.strip()
+        if not valor:
+            raise ValueError("No puede estar vacío")
+        return valor
+
+
+class ListadoParametros(BaseModel):
+    """Paginado: el catálogo puede crecer bastante (un parámetro por cada
+    variable física que mide algún dataloger), y listarlo entero en cada
+    carga de la pantalla no escala."""
+
+    total: int
+    pagina: int
+    por_pagina: int
+    items: list[ParametroListItem]
+
+
 class SedeListItem(BaseModel):
     """Pobla el selector de sede de formularios donde un usuario con scope
     'global' debe indicar id_sd explícitamente (Agregar Ubicación,
