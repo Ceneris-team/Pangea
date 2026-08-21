@@ -4,6 +4,7 @@ import { apiFetch, ApiError } from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import Sidebar from "../components/layout/Sidebar";
 import Topbar from "../components/layout/Topbar";
+import ConfirmarEliminacionModal from "../components/ConfirmarEliminacionModal";
 
 /**
  * HU06 CA5 - "VER MAPEOS": listado donde el mapeo recién creado aparece
@@ -58,6 +59,7 @@ export default function Mapeos() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [eliminandoId, setEliminandoId] = useState<number | null>(null);
+  const [mapeoAEliminar, setMapeoAEliminar] = useState<MapeoListItem | null>(null);
 
   function cargar() {
     setLoading(true);
@@ -74,20 +76,15 @@ export default function Mapeos() {
     cargar();
   }, []);
 
-  async function eliminarMapeo(m: MapeoListItem) {
-    const confirmado = window.confirm(
-      `¿Eliminar el mapeo de la trama '${m.tp_trm}' de "${m.dispositivo_nombre}"? ` +
-        `Los archivos ya procesados con este mapeo no se ven afectados, pero los ` +
-        `archivos nuevos con este prefijo dejarán de poder interpretarse hasta que ` +
-        `se cree un mapeo nuevo para esa trama.`
-    );
-    if (!confirmado) return;
-
-    setEliminandoId(m.id_mp);
+  async function confirmarEliminarMapeo() {
+    if (!mapeoAEliminar) return;
+    setEliminandoId(mapeoAEliminar.id_mp);
     try {
-      await apiFetch<{ mensaje: string }>(`/mapeos/${m.id_mp}`, { method: "DELETE" });
+      await apiFetch<{ mensaje: string }>(`/mapeos/${mapeoAEliminar.id_mp}`, { method: "DELETE" });
+      setMapeoAEliminar(null);
       cargar();
     } catch (err) {
+      setMapeoAEliminar(null);
       setError(err instanceof ApiError ? err.message : "No se pudo eliminar el mapeo");
     } finally {
       setEliminandoId(null);
@@ -254,7 +251,7 @@ export default function Mapeos() {
                               </Link>
                               {m.estd === "Activo" && (
                                 <button
-                                  onClick={() => eliminarMapeo(m)}
+                                  onClick={() => setMapeoAEliminar(m)}
                                   disabled={eliminandoId === m.id_mp}
                                   className="inline-flex items-center justify-center px-3 py-1.5 text-sm font-medium text-red-600 dark:text-red-400 bg-white dark:bg-transparent border border-red-200 dark:border-red-800/40 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-all disabled:opacity-50"
                                 >
@@ -284,6 +281,16 @@ export default function Mapeos() {
           </main>
         </div>
       </div>
+
+      {mapeoAEliminar && (
+        <ConfirmarEliminacionModal
+          titulo={`Eliminar mapeo de la trama '${mapeoAEliminar.tp_trm}'`}
+          mensaje={`De "${mapeoAEliminar.dispositivo_nombre}". Los archivos ya procesados no se ven afectados, pero los archivos nuevos con el prefijo "${mapeoAEliminar.tp_trm}_" dejarán de poder interpretarse hasta que se cree un mapeo nuevo para esa trama.`}
+          confirmando={eliminandoId === mapeoAEliminar.id_mp}
+          onConfirmar={confirmarEliminarMapeo}
+          onCancelar={() => setMapeoAEliminar(null)}
+        />
+      )}
     </div>
   );
 }

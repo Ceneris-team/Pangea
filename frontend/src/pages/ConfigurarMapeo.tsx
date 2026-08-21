@@ -4,6 +4,7 @@ import { apiFetch, apiUpload, ApiError } from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import Sidebar from "../components/layout/Sidebar";
 import Topbar from "../components/layout/Topbar";
+import ConfirmarEliminacionModal from "../components/ConfirmarEliminacionModal";
 
 /**
  * HU06 - Mapear formato de dispositivo.
@@ -178,6 +179,7 @@ export default function ConfigurarMapeo() {
   const [previsualizando, setPrevisualizando] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [eliminando, setEliminando] = useState(false);
+  const [mostrandoConfirmacionEliminar, setMostrandoConfirmacionEliminar] = useState(false);
   const [mensaje, setMensaje] = useState("");
   const [mensajeOk, setMensajeOk] = useState(false);
 
@@ -418,23 +420,18 @@ export default function ConfigurarMapeo() {
     }
   }
 
-  async function handleEliminar() {
+  async function confirmarEliminar() {
     if (!id) return;
-    const confirmado = window.confirm(
-      `¿Eliminar este mapeo (trama '${form.tp_trm}')? Los archivos ya procesados no se ven ` +
-        `afectados, pero los archivos nuevos con este prefijo dejarán de poder interpretarse ` +
-        `hasta que se cree un mapeo nuevo para esa trama.`
-    );
-    if (!confirmado) return;
-
     setEliminando(true);
     setMensaje("");
     try {
       const res = await apiFetch<{ mensaje: string }>(`/mapeos/${id}`, { method: "DELETE" });
+      setMostrandoConfirmacionEliminar(false);
       setMensajeOk(true);
       setMensaje(res.mensaje);
       setTimeout(() => navigate("/mapeos"), 1000);
     } catch (err) {
+      setMostrandoConfirmacionEliminar(false);
       setMensajeOk(false);
       setMensaje(err instanceof ApiError ? err.message : "No se pudo eliminar el mapeo");
     } finally {
@@ -891,7 +888,7 @@ export default function ConfigurarMapeo() {
                   {esEdicion && (
                     <button
                       type="button"
-                      onClick={handleEliminar}
+                      onClick={() => setMostrandoConfirmacionEliminar(true)}
                       disabled={eliminando}
                       className="ml-auto px-4 py-2.5 text-sm font-medium text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800/40 rounded-xl hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50 transition-all"
                     >
@@ -904,6 +901,16 @@ export default function ConfigurarMapeo() {
           </main>
         </div>
       </div>
+
+      {mostrandoConfirmacionEliminar && (
+        <ConfirmarEliminacionModal
+          titulo={`Eliminar mapeo de la trama '${form.tp_trm}'`}
+          mensaje={`Los archivos ya procesados no se ven afectados, pero los archivos nuevos con el prefijo "${form.tp_trm}_" dejarán de poder interpretarse hasta que se cree un mapeo nuevo para esa trama.`}
+          confirmando={eliminando}
+          onConfirmar={confirmarEliminar}
+          onCancelar={() => setMostrandoConfirmacionEliminar(false)}
+        />
+      )}
     </div>
   );
 }

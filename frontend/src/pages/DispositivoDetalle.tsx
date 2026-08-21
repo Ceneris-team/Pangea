@@ -5,6 +5,7 @@ import { useAuth } from "../context/AuthContext";
 import { ROLES } from "../config/roles";
 import Sidebar from "../components/layout/Sidebar";
 import Topbar from "../components/layout/Topbar";
+import ConfirmarEliminacionModal from "../components/ConfirmarEliminacionModal";
 
 /**
  * DEC-09 - Ficha del Dispositivo.
@@ -203,6 +204,7 @@ export default function DispositivoDetalle() {
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
   const [eliminandoMapeo, setEliminandoMapeo] = useState(false);
+  const [mostrandoConfirmacionEliminar, setMostrandoConfirmacionEliminar] = useState(false);
   const [mensaje, setMensaje] = useState("");
   const [mensajeOk, setMensajeOk] = useState(false);
 
@@ -378,23 +380,18 @@ export default function DispositivoDetalle() {
     }
   }
 
-  async function eliminarMapeoActual() {
+  async function confirmarEliminarMapeo() {
     if (!mapeo) return;
-    const confirmado = window.confirm(
-      `¿Eliminar el mapeo de la trama '${tipoTrama}'? Los archivos ya procesados no se ven ` +
-        `afectados, pero los archivos nuevos con este prefijo dejarán de poder interpretarse ` +
-        `hasta que se cree un mapeo nuevo para esa trama.`
-    );
-    if (!confirmado) return;
-
     setEliminandoMapeo(true);
     try {
       const res = await apiFetch<{ mensaje: string }>(`/mapeos/${mapeo.id_mp}`, {
         method: "DELETE",
       });
+      setMostrandoConfirmacionEliminar(false);
       avisar(res.mensaje, true);
       cargarMapeo();
     } catch (err) {
+      setMostrandoConfirmacionEliminar(false);
       avisar(err instanceof ApiError ? err.message : "No se pudo eliminar el mapeo", false);
     } finally {
       setEliminandoMapeo(false);
@@ -638,7 +635,7 @@ export default function DispositivoDetalle() {
                   onGuardar={guardarMapeo}
                   mapeoExiste={mapeo !== null}
                   eliminando={eliminandoMapeo}
-                  onEliminar={eliminarMapeoActual}
+                  onEliminar={() => setMostrandoConfirmacionEliminar(true)}
                   inputClase={inputClase}
                   labelClase={labelClase}
                   botonPrimario={botonPrimario}
@@ -689,6 +686,16 @@ export default function DispositivoDetalle() {
           </main>
         </div>
       </div>
+
+      {mostrandoConfirmacionEliminar && (
+        <ConfirmarEliminacionModal
+          titulo={`Eliminar mapeo de la trama '${tipoTrama}'`}
+          mensaje={`Los archivos ya procesados no se ven afectados, pero los archivos nuevos con el prefijo "${tipoTrama}_" dejarán de poder interpretarse hasta que se cree un mapeo nuevo para esa trama.`}
+          confirmando={eliminandoMapeo}
+          onConfirmar={confirmarEliminarMapeo}
+          onCancelar={() => setMostrandoConfirmacionEliminar(false)}
+        />
+      )}
     </div>
   );
 }
