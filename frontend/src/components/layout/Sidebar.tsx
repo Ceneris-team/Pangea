@@ -17,8 +17,8 @@ const linkDeshabilitado = linkInactivo + " opacity-60 cursor-not-allowed";
 
 export default function Sidebar({ onLogout, activo, rol }: SidebarProps) {
   return (
-    <aside className="w-64 bg-white/[0.03] backdrop-blur-lg border-r border-white/10 hidden md:flex flex-col transition-colors duration-300">
-      <div className="h-16 flex items-center gap-2.5 px-5 border-b border-white/10">
+    <aside className="w-64 bg-white/[0.015] backdrop-blur-sm border-r border-white/5 hidden md:flex flex-col transition-colors duration-300">
+      <div className="h-16 flex items-center gap-2.5 px-5 border-b border-white/5">
         <img src={pangeaIcon} alt="" className="h-10 w-auto" />
         <span className="text-2xl font-bold text-white tracking-tight">Pangea</span>
       </div>
@@ -269,7 +269,7 @@ export default function Sidebar({ onLogout, activo, rol }: SidebarProps) {
         </a>
       </nav>
 
-      <div className="p-4 border-t border-white/10">
+      <div className="p-4 border-t border-white/5">
         <button
           onClick={onLogout}
           className="flex items-center gap-3 px-3 py-2 w-full text-left text-gray-300 hover:bg-red-500/10 hover:text-red-400 rounded-lg transition-colors"
