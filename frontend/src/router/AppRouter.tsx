@@ -18,7 +18,6 @@ import AgregarUbicacion from "../pages/AgregarUbicacion";
 import DetalleUbicacion from "../pages/DetalleUbicacion";
 import { ROLES } from "../config/roles";
 import ConexionesFTP from "../pages/ConexionesFTP";
-import ConfigurarConexionFTP from "../pages/ConfigurarConexionFTP";
 import ConsultaDatos from "../pages/ConsultaDatos";
 import Graficos from "../pages/Graficos";
 import DispositivoDetalle from "../pages/DispositivoDetalle";
@@ -182,22 +181,6 @@ export default function AppRouter() {
             element={
               <ProtectedRoute rolesPermitidos={ROLES_CONEXIONES_FTP}>
                 <ConexionesFTP />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/conexiones-ftp/nueva"
-            element={
-              <ProtectedRoute rolesPermitidos={ROLES_CONEXIONES_FTP}>
-                <ConfigurarConexionFTP />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/conexiones-ftp/:id/editar"
-            element={
-              <ProtectedRoute rolesPermitidos={ROLES_CONEXIONES_FTP}>
-                <ConfigurarConexionFTP />
               </ProtectedRoute>
             }
           />

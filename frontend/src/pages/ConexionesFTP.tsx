@@ -1,5 +1,4 @@
-import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useState, type FormEvent } from "react";
 import { apiFetch, ApiError } from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import Sidebar from "../components/layout/Sidebar";
@@ -23,7 +22,34 @@ interface ListadoPaginado {
   items: ConexionFTPListItem[];
 }
 
+interface Sede {
+  id_sd: number;
+  nmbr: string;
+}
+
+interface ConexionFTPForm {
+  id_sd: string;
+  nmbr: string;
+  hst: string;
+  prt: string;
+  usr_ftp: string;
+  contrasena_ftp: string;
+  rt_rmt: string;
+  frcnc_mnts: "1" | "60";
+}
+
 const POR_PAGINA = 10;
+
+const FORM_VACIO: ConexionFTPForm = {
+  id_sd: "",
+  nmbr: "",
+  hst: "",
+  prt: "21", // CA: "el puerto es numérico con valor por defecto 21"
+  usr_ftp: "",
+  contrasena_ftp: "",
+  rt_rmt: "",
+  frcnc_mnts: "1",
+};
 
 function textoFrecuencia(frcnc_mnts: number): string {
   return frcnc_mnts === 1 ? "Cada minuto" : "Cada hora";
@@ -37,7 +63,17 @@ export default function ConexionesFTP() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const [mostrarFormulario, setMostrarFormulario] = useState(false);
+  const [idEdicion, setIdEdicion] = useState<number | null>(null);
+  const [form, setForm] = useState<ConexionFTPForm>(FORM_VACIO);
+  const [sedes, setSedes] = useState<Sede[]>([]);
+  const [probando, setProbando] = useState(false);
+  const [guardando, setGuardando] = useState(false);
+  const [conexionValidada, setConexionValidada] = useState(false); // habilita GUARDAR
+  const [mensaje, setMensaje] = useState("");
+  const [mensajeOk, setMensajeOk] = useState(false);
+
+  function cargarConexiones() {
     let cancelado = false;
     setLoading(true);
     setError(null);
@@ -59,9 +95,150 @@ export default function ConexionesFTP() {
     return () => {
       cancelado = true;
     };
-  }, [pagina]);
+  }
+
+  useEffect(cargarConexiones, [pagina]);
+
+  // Selector de sede: un usuario con scope "global" (p. ej. Administrador o
+  // Técnico CENERIS sin sede única asignada) debe indicar a qué sede
+  // pertenece el datalogger (ver _resolver_sede en el backend).
+  useEffect(() => {
+    apiFetch<Sede[]>("/sedes").then(setSedes).catch(() => {});
+  }, []);
 
   const totalPaginas = data ? Math.max(1, Math.ceil(data.total / data.por_pagina)) : 1;
+
+  function abrirFormularioNueva() {
+    setIdEdicion(null);
+    setForm(FORM_VACIO);
+    setConexionValidada(false);
+    setMensaje("");
+    setMostrarFormulario(true);
+  }
+
+  function abrirFormularioEditar(c: ConexionFTPListItem) {
+    setIdEdicion(c.id_cnxn);
+    setForm({
+      id_sd: "",
+      nmbr: c.nmbr,
+      hst: c.hst,
+      prt: String(c.prt),
+      usr_ftp: c.usr_ftp ?? "",
+      contrasena_ftp: "",
+      rt_rmt: c.rt_rmt ?? "",
+      frcnc_mnts: c.frcnc_mnts === 1 ? "1" : "60",
+    });
+    setConexionValidada(false);
+    setMensaje("");
+    setMostrarFormulario(true);
+  }
+
+  function cerrarFormulario() {
+    setMostrarFormulario(false);
+  }
+
+  function actualizarCampo<K extends keyof ConexionFTPForm>(campo: K, valor: ConexionFTPForm[K]) {
+    setForm((prev) => ({ ...prev, [campo]: valor }));
+    // CA: cualquier cambio invalida una prueba de conexión previa
+    setConexionValidada(false);
+  }
+
+  function camposObligatoriosCompletos(): boolean {
+    return Boolean(
+      form.nmbr.trim() &&
+        form.hst.trim() &&
+        form.prt.trim() &&
+        form.usr_ftp.trim() &&
+        form.contrasena_ftp.trim() &&
+        form.rt_rmt.trim()
+    );
+  }
+
+  // CA: "El directorio remoto es una cadena de texto tipo ruta, por ejemplo /datos/estacion01."
+  function rutaRemotaValida(): boolean {
+    return form.rt_rmt.trim().startsWith("/");
+  }
+
+  async function handleProbarConexion() {
+    setMensaje("");
+    if (!camposObligatoriosCompletos()) {
+      setMensajeOk(false);
+      setMensaje("Completa todos los campos obligatorios antes de probar la conexión");
+      return;
+    }
+    if (!rutaRemotaValida()) {
+      setMensajeOk(false);
+      setMensaje("El directorio remoto debe ser una ruta absoluta (ej. /datos/estacion01)");
+      return;
+    }
+
+    setProbando(true);
+    try {
+      const res = await apiFetch<{ exitosa: boolean; mensaje: string }>("/conexiones-ftp/probar", {
+        method: "POST",
+        body: {
+          hst: form.hst.trim(),
+          prt: Number(form.prt),
+          usr_ftp: form.usr_ftp.trim(),
+          contrasena_ftp: form.contrasena_ftp,
+          rt_rmt: form.rt_rmt.trim(),
+        },
+      });
+      setConexionValidada(res.exitosa);
+      setMensajeOk(res.exitosa);
+      setMensaje(res.mensaje); // CA: "Conexión exitosa"
+    } catch (err) {
+      setConexionValidada(false);
+      setMensajeOk(false);
+      setMensaje(err instanceof ApiError ? err.message : "No se pudo probar la conexión");
+    } finally {
+      setProbando(false);
+    }
+  }
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    if (!conexionValidada) return; // CA: GUARDAR solo se habilita tras prueba exitosa
+
+    const esEdicion = idEdicion !== null;
+
+    // id_sd solo es obligatorio al crear: el backend infiere la sede del
+    // usuario "por_sede" y, al editar, la sede de la conexión no se modifica.
+    if (!esEdicion && !form.id_sd) {
+      setMensajeOk(false);
+      setMensaje("Selecciona la sede a la que pertenece este datalogger");
+      return;
+    }
+
+    setGuardando(true);
+    setMensaje("");
+    try {
+      const payload = {
+        ...(esEdicion ? {} : { id_sd: Number(form.id_sd) }),
+        nmbr: form.nmbr.trim(),
+        hst: form.hst.trim(),
+        prt: Number(form.prt),
+        usr_ftp: form.usr_ftp.trim(),
+        contrasena_ftp: form.contrasena_ftp,
+        rt_rmt: form.rt_rmt.trim(),
+        frcnc_mnts: Number(form.frcnc_mnts),
+      };
+
+      esEdicion
+        ? await apiFetch<{ mensaje: string }>(`/conexiones-ftp/${idEdicion}`, { method: "PUT", body: payload })
+        : await apiFetch<{ mensaje: string }>("/conexiones-ftp", { method: "POST", body: payload });
+
+      setMostrarFormulario(false);
+      cargarConexiones();
+    } catch (err) {
+      setMensajeOk(false);
+      setMensaje(err instanceof ApiError ? err.message : "No se pudo guardar la conexión");
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  const esEdicion = idEdicion !== null;
 
   return (
     <div className="font-sans">
@@ -84,12 +261,12 @@ export default function ConexionesFTP() {
                   Dataloggers configurados para la ingesta automática de telemetría.
                 </p>
               </div>
-              <Link
-                to="/conexiones-ftp/nueva"
+              <button
+                onClick={abrirFormularioNueva}
                 className="px-4 py-2.5 text-sm font-semibold text-[#5a7000] dark:text-[#ccff00] bg-[#ccff00]/10 hover:bg-[#ccff00]/20 border border-[#ccff00]/30 rounded-xl transition-colors"
               >
                 + Nueva conexión FTP
-              </Link>
+              </button>
             </header>
 
             <div className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl shadow-sm border border-black/10 dark:border-white/10 overflow-hidden transition-colors duration-300">
@@ -158,8 +335,8 @@ export default function ConexionesFTP() {
                             </span>
                           </td>
                           <td className="px-6 py-4 text-right">
-                            <Link
-                              to={`/conexiones-ftp/${c.id_cnxn}/editar`}
+                            <button
+                              onClick={() => abrirFormularioEditar(c)}
                               className="inline-flex items-center justify-center px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-200 bg-transparent border border-black/20 dark:border-white/20 rounded-lg hover:bg-black/10 dark:hover:bg-white/10 hover:text-gray-900 dark:hover:text-white transition-all"
                             >
                               <svg
@@ -176,7 +353,7 @@ export default function ConexionesFTP() {
                                 />
                               </svg>
                               Editar
-                            </Link>
+                            </button>
                           </td>
                         </tr>
                       ))}
@@ -211,6 +388,174 @@ export default function ConexionesFTP() {
           </main>
         </div>
       </div>
+
+      {mostrarFormulario && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl shadow-xl border border-black/10 dark:border-white/10">
+            <form onSubmit={handleSubmit}>
+              <div className="p-6 border-b border-black/10 dark:border-white/10">
+                <h2 className="text-lg font-bold text-gray-900 dark:text-white">
+                  {esEdicion ? "Editar conexión FTP" : "Nueva conexión FTP"}
+                </h2>
+                <p className="text-sm text-gray-600 dark:text-gray-300 mt-1 font-light">
+                  Configura la conexión FTP de un datalogger para iniciar la ingesta automática de telemetría.
+                </p>
+              </div>
+
+              <div className="p-6 space-y-4">
+                {!esEdicion && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Sede</label>
+                    <select
+                      required
+                      value={form.id_sd}
+                      onChange={(e) => actualizarCampo("id_sd", e.target.value)}
+                      className="bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block w-full p-2.5 outline-none cursor-pointer"
+                    >
+                      <option value="">— Selecciona una sede —</option>
+                      {sedes.map((s) => (
+                        <option key={s.id_sd} value={s.id_sd}>
+                          {s.nmbr}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
+                    Nombre del datalogger
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={form.nmbr}
+                    onChange={(e) => actualizarCampo("nmbr", e.target.value)}
+                    className="bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block w-full p-2.5 outline-none"
+                  />
+                </div>
+
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
+                      Host/IP
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={form.hst}
+                      onChange={(e) => actualizarCampo("hst", e.target.value)}
+                      className="bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block w-full p-2.5 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Puerto</label>
+                    <input
+                      type="number"
+                      required
+                      value={form.prt}
+                      onChange={(e) => actualizarCampo("prt", e.target.value)}
+                      className="bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block w-full p-2.5 outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
+                      Usuario FTP
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={form.usr_ftp}
+                      onChange={(e) => actualizarCampo("usr_ftp", e.target.value)}
+                      className="bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block w-full p-2.5 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
+                      Contraseña FTP
+                    </label>
+                    <input
+                      type="password"
+                      required
+                      value={form.contrasena_ftp}
+                      onChange={(e) => actualizarCampo("contrasena_ftp", e.target.value)}
+                      className="bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block w-full p-2.5 outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
+                    Directorio remoto
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="/datos/estacion01"
+                    value={form.rt_rmt}
+                    onChange={(e) => actualizarCampo("rt_rmt", e.target.value)}
+                    className="bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block w-full p-2.5 outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
+                    Frecuencia de polling
+                  </label>
+                  <select
+                    value={form.frcnc_mnts}
+                    onChange={(e) => actualizarCampo("frcnc_mnts", e.target.value as "1" | "60")}
+                    className="bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block w-full p-2.5 outline-none cursor-pointer"
+                  >
+                    <option value="1">Cada minuto</option>
+                    <option value="60">Cada hora</option>
+                  </select>
+                </div>
+
+                {mensaje && (
+                  <div
+                    className={`p-3 rounded-xl text-sm ${
+                      mensajeOk
+                        ? "bg-[#ccff00]/20 text-[#5a7000] dark:text-[#ccff00]"
+                        : "bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400"
+                    }`}
+                  >
+                    {mensaje}
+                  </div>
+                )}
+              </div>
+
+              <div className="p-6 border-t border-black/10 dark:border-white/10 flex flex-wrap justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={cerrarFormulario}
+                  className="px-4 py-2.5 text-sm font-semibold text-gray-700 dark:text-gray-200 bg-transparent border border-black/20 dark:border-white/20 rounded-xl hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleProbarConexion}
+                  disabled={probando}
+                  className="px-4 py-2.5 text-sm font-medium text-gray-900 dark:text-white bg-transparent border border-black/20 dark:border-white/20 rounded-xl hover:bg-black/10 dark:hover:bg-white/10 disabled:opacity-50 transition-all"
+                >
+                  {probando ? "Probando..." : "Probar conexión"}
+                </button>
+                <button
+                  type="submit"
+                  disabled={!conexionValidada || guardando}
+                  className="px-4 py-2.5 text-sm font-semibold text-[#5a7000] dark:text-[#ccff00] bg-[#ccff00]/10 hover:bg-[#ccff00]/20 border border-[#ccff00]/30 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {guardando ? "Guardando..." : esEdicion ? "Actualizar" : "Guardar"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
