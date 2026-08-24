@@ -108,7 +108,7 @@ export default function Parametros() {
               <div>
                 <h1 className="text-2xl font-extrabold text-white">Parámetros</h1>
                 <p className="text-sm text-gray-300 mt-1 font-light">
-                  Catálogo estándar de parámetros usado por los mapeos de formato (HU06).
+                  Catálogo estándar de parámetros usado por los mapeos de formato.
                 </p>
               </div>
               <button
