@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
 import { apiFetch, ApiError } from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import Sidebar from "../components/layout/Sidebar";
@@ -29,18 +28,22 @@ interface ArchivoIngestaDetalle extends ArchivoIngestaListItem {
   mnsj_errr: string | null;
 }
 
-interface RegistroIngestaItem {
-  fch_hr: string;
-  dispositivo_nombre: string;
-  parametro_nombre: string;
-  undd: string;
-  vlr: string;
+interface FilaCrudaIngesta {
+  numero_fila: number;
+  fecha_hora: string | null;
+  error: string | null;
+  valores: Record<string, string | null>;
 }
 
 interface RegistrosIngestaResponse {
-  total: number;
-  mostrados: number;
-  items: RegistroIngestaItem[];
+  columnas: string[];
+  total_filas_archivo: number;
+  filas_mostradas: number;
+  filas: FilaCrudaIngesta[];
+}
+
+function esVacio(valor: string | null): boolean {
+  return valor === null || valor.trim() === "";
 }
 
 interface ListadoColaIngesta {
@@ -340,7 +343,9 @@ export default function ColaIngesta() {
           onClick={() => setIdSeleccionado(null)}
         >
           <div
-            className="bg-white dark:bg-[#2d3748] rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 max-w-lg w-full p-6"
+            className={`bg-white dark:bg-[#2d3748] rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 w-full p-6 ${
+              detalle?.estado === "Procesado" ? "max-w-4xl" : "max-w-lg"
+            }`}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-4">
@@ -431,51 +436,70 @@ export default function ColaIngesta() {
 
                 {detalle.estado === "Procesado" && (
                   <div className="pt-3 border-t border-gray-100 dark:border-gray-700 space-y-3">
-                    <dt className="text-gray-500 dark:text-gray-400">Datos escritos</dt>
+                    <dt className="text-gray-500 dark:text-gray-400">
+                      Contenido del archivo (tal como llegó, antes del mapeo)
+                    </dt>
 
                     {registrosLoading && (
-                      <p className="text-sm text-gray-500 dark:text-gray-400">Cargando registros...</p>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">Leyendo archivo del FTP...</p>
                     )}
 
                     {registrosError && (
-                      <p className="text-sm text-red-600 dark:text-red-400">{registrosError}</p>
-                    )}
-
-                    {registros && registros.total === 0 && (
-                      <p className="text-sm text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 rounded-lg p-3">
-                        El archivo se procesó pero no generó ningún registro (mediciones ni eventos).
+                      <p className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 rounded-lg p-3">
+                        {registrosError}
                       </p>
                     )}
 
-                    {registros && registros.total > 0 && (
+                    {registros && registros.total_filas_archivo === 0 && (
+                      <p className="text-sm text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 rounded-lg p-3">
+                        El archivo no tiene filas de datos (solo header, o está vacío).
+                      </p>
+                    )}
+
+                    {registros && registros.total_filas_archivo > 0 && (
                       <div>
                         <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
-                          {registros.total === registros.mostrados
-                            ? `${registros.total} registro(s)`
-                            : `Mostrando ${registros.mostrados} de ${registros.total} registro(s)`}
+                          {registros.total_filas_archivo === registros.filas_mostradas
+                            ? `${registros.total_filas_archivo} fila(s)`
+                            : `Mostrando ${registros.filas_mostradas} de ${registros.total_filas_archivo} fila(s)`}
+                          {" · celdas vacías resaltadas"}
                         </p>
-                        <div className="max-h-56 overflow-y-auto border border-gray-100 dark:border-gray-700 rounded-lg">
+                        <div className="max-h-72 overflow-auto border border-gray-100 dark:border-gray-700 rounded-lg">
                           <table className="w-full text-xs text-left">
                             <thead className="text-[11px] text-gray-500 dark:text-gray-400 uppercase bg-gray-50 dark:bg-gray-800/50 sticky top-0">
                               <tr>
-                                <th className="px-3 py-2 font-semibold">Fecha</th>
-                                <th className="px-3 py-2 font-semibold">Dispositivo</th>
-                                <th className="px-3 py-2 font-semibold">Parámetro</th>
-                                <th className="px-3 py-2 font-semibold text-right">Valor</th>
+                                <th className="px-3 py-2 font-semibold whitespace-nowrap">#</th>
+                                {registros.columnas.map((col) => (
+                                  <th key={col} className="px-3 py-2 font-semibold whitespace-nowrap">
+                                    {col}
+                                  </th>
+                                ))}
                               </tr>
                             </thead>
                             <tbody>
-                              {registros.items.map((r, i) => (
+                              {registros.filas.map((fila) => (
                                 <tr
-                                  key={i}
+                                  key={fila.numero_fila}
                                   className="border-t border-gray-100 dark:border-gray-700 text-gray-700 dark:text-gray-300"
+                                  title={fila.error ?? undefined}
                                 >
-                                  <td className="px-3 py-1.5 whitespace-nowrap">{formatearFecha(r.fch_hr)}</td>
-                                  <td className="px-3 py-1.5">{r.dispositivo_nombre}</td>
-                                  <td className="px-3 py-1.5">{r.parametro_nombre}</td>
-                                  <td className="px-3 py-1.5 text-right whitespace-nowrap">
-                                    {r.vlr} {r.undd}
-                                  </td>
+                                  <td className="px-3 py-1.5 whitespace-nowrap text-gray-400">{fila.numero_fila}</td>
+                                  {registros.columnas.map((col) => {
+                                    const valor = fila.valores[col] ?? null;
+                                    const vacio = esVacio(valor);
+                                    return (
+                                      <td
+                                        key={col}
+                                        className={`px-3 py-1.5 whitespace-nowrap ${
+                                          vacio
+                                            ? "bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 italic"
+                                            : ""
+                                        }`}
+                                      >
+                                        {vacio ? "vacío" : valor}
+                                      </td>
+                                    );
+                                  })}
                                 </tr>
                               ))}
                             </tbody>
@@ -483,13 +507,6 @@ export default function ColaIngesta() {
                         </div>
                       </div>
                     )}
-
-                    <Link
-                      to="/consulta-datos"
-                      className="inline-flex items-center justify-center w-full px-4 py-2.5 text-sm font-semibold text-gray-900 bg-[#ccff00] rounded-xl hover:bg-[#b8e600] transition-all"
-                    >
-                      Ver datos
-                    </Link>
                   </div>
                 )}
               </dl>

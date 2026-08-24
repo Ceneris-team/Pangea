@@ -83,4 +83,18 @@ celery_app.conf.beat_schedule = {
         "task": "app.tasks.particiones.asegurar_particiones_futuras",
         "schedule": crontab(hour=3, minute=0),
     },
+    # Red de seguridad: sondear_conexiones_ftp solo encola
+    # procesar_archivo_dat en el instante en que CREA la fila de
+    # archv_ingst. Si una fila 'Pendiente' entra por otra vía (carga de
+    # datos de prueba, worker caído entre el INSERT y el .delay(), mensaje
+    # de Celery perdido por un reinicio del broker), nadie vuelve a
+    # encolarla y queda "En espera" para siempre sin que se note -pasó de
+    # verdad el 2026-08-24 con 409 archivos-. Cada 30 min alcanza: el
+    # margen de "atascado" son 15 min (ver MINUTOS_PENDIENTE_ATASCADO en
+    # tasks/ingesta.py), así que no hace falta el tick de 1 min del sondeo
+    # normal.
+    "reencolar-pendientes-atascados-cada-30-min": {
+        "task": "app.tasks.ingesta.reencolar_pendientes_atascados",
+        "schedule": 1800.0,
+    },
 }

@@ -16,12 +16,12 @@ interface UbicacionItem {
 }
 
 interface MedicionItem {
-  id_lctr: number;
+  id_registro: number;
   fch_hr: string;
   ubicacion_nombre: string;
   parametro_nombre: string;
   undd: string;
-  vlr: number;
+  vlr: number | string;
 }
 
 interface ListadoMediciones {
@@ -221,13 +221,14 @@ export default function ConsultaDatos() {
                     {!loading &&
                       mediciones?.items.map((m) => (
                         <tr
-                          key={m.id_lctr}
+                          key={m.id_registro}
                           className="bg-white dark:bg-[#2d3748] border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
                         >
                           <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">{m.parametro_nombre}</td>
                           <td className="px-6 py-4">{m.ubicacion_nombre}</td>
                           <td className="px-6 py-4">
-                            {m.vlr} {m.undd}
+                            {m.vlr}
+                            {typeof m.vlr === "number" && m.undd ? ` ${m.undd}` : ""}
                           </td>
                           <td className="px-6 py-4">{new Date(m.fch_hr).toLocaleString()}</td>
                         </tr>

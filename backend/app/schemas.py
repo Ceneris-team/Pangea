@@ -325,26 +325,28 @@ class ArchivoIngestaDetalle(BaseModel):
     mnsj_errr: str | None
 
 
-class RegistroIngestaItem(BaseModel):
-    """Una fila de tlmtr o evnt_txt generada por un archivo de la cola
-    (HU09): permite ver qué escribió realmente la ingesta -o confirmar
-    que no escribió nada- sin salir del modal de detalle."""
+class FilaCrudaIngesta(BaseModel):
+    """Una línea del .dat tal como llegó, ANTES del mapeo columna->
+    parámetro: permite ver si el datalogger mandó la fila vacía/en cero o
+    con datos reales, algo que se pierde una vez interpretada (una
+    columna sin mapeo ni siquiera llega a tlmtr/evnt_txt)."""
 
-    fch_hr: datetime
-    dispositivo_nombre: str
-    parametro_nombre: str
-    undd: str
-    vlr: str
+    numero_fila: int
+    fecha_hora: str | None
+    error: str | None
+    valores: dict[str, str | None]
 
 
 class RegistrosIngestaResponse(BaseModel):
-    """Vista previa acotada (no pretende ser exhaustiva): total real de
-    filas en tlmtr+evnt_txt para el archivo, y una muestra de las
-    primeras `mostrados`."""
+    """Vista previa acotada (no pretende ser exhaustiva) del contenido
+    crudo del .dat, re-descargado desde el FTP de origen -no se persiste
+    en la cola, ver HU09-. `columnas` es el header en orden; cada fila de
+    `filas` trae el mismo valor crudo que recibió el mapeo, sin castear."""
 
-    total: int
-    mostrados: int
-    items: list[RegistroIngestaItem]
+    columnas: list[str]
+    total_filas_archivo: int
+    filas_mostradas: int
+    filas: list[FilaCrudaIngesta]
 
 
 class ConexionFTPListItem(BaseModel):
@@ -361,16 +363,25 @@ class ConexionFTPListItem(BaseModel):
 
 
 class MedicionListItem(BaseModel):
-    """HU 13: registro de telemetría filtrado por parámetros/ubicaciones."""
+    """HU 13: registro de telemetría filtrado por parámetros/ubicaciones.
 
-    id_lctr: int
+    Combina tlmtr (parámetros 'numerico', vlr float) y evnt_txt
+    (parámetros 'texto', ej. "Puerta Abierta"): ambos son lecturas de un
+    dispositivo mapeado, y antes de esto un parámetro de texto se podía
+    seleccionar en el filtro pero nunca aparecía en la tabla (guardaba
+    en evnt_txt, que este endpoint no consultaba). id_registro es
+    id_lctr o id_evnt según origen -no se puede usar un solo id_lctr
+    porque son secuencias distintas y podrían colisionar como key de
+    React-."""
+
+    id_registro: int
     fch_hr: datetime
     id_ubccn: int
     ubicacion_nombre: str
     id_prmtr: int
     parametro_nombre: str
     undd: str
-    vlr: float
+    vlr: float | str
 
 
 class ConexionFTPProbarRequest(BaseModel):
