@@ -19,8 +19,8 @@ export default function Sidebar({ onLogout, activo, rol }: SidebarProps) {
   return (
     <aside className="w-64 bg-white/[0.05] backdrop-blur-lg border-r border-white/10 hidden md:flex flex-col transition-colors duration-300">
       <div className="h-16 flex items-center gap-2 px-5 border-b border-white/10">
-        <img src={pangeaIcon} alt="" className="h-7 w-auto" />
-        <span className="text-lg font-bold text-white tracking-tight">Pangea</span>
+        <img src={pangeaIcon} alt="" className="h-9 w-auto" />
+        <span className="text-xl font-bold text-white tracking-tight">Pangea</span>
       </div>
 
       <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
