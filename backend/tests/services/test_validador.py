@@ -12,7 +12,7 @@ el tipo del valor ya validado).
 import datetime as dt
 
 from app.services.ingesta.estandarizador import LecturaEstandar
-from app.services.ingesta.validador import validar_lecturas
+from app.services.ingesta.validador import es_valor_numerico, validar_lecturas
 
 AHORA = dt.datetime(2026, 8, 21, tzinfo=dt.timezone.utc)
 
@@ -100,3 +100,29 @@ def test_parametro_no_listado_en_tipos_parametro_se_asume_numerico():
     assert len(resultado.validas) == 0
     assert len(resultado.errores) == 1
     assert "no es numérico" in resultado.errores[0].motivo
+
+
+class TestEsValorNumerico:
+    """Usada por routers/mapeos.py (vista previa) para avisar ANTES de
+    guardar si un parámetro numérico no calza con la columna real -mismo
+    criterio que usa la ingesta, para que la vista previa no diga 'está
+    bien' y la ingesta sí pierda la fila."""
+
+    def test_numero_entero(self):
+        assert es_valor_numerico("875") is True
+
+    def test_numero_decimal(self):
+        assert es_valor_numerico("23.5") is True
+
+    def test_texto_no_numerico(self):
+        assert es_valor_numerico("Puerta Abierta") is False
+
+    def test_vacio_se_considera_numerico(self):
+        """Vacío es válido (queda como None, "sin dato"), no un error de
+        tipo -mismo criterio que _parsear_numero."""
+        assert es_valor_numerico("") is True
+        assert es_valor_numerico(None) is True
+
+    def test_decimal_con_coma_segun_delimitador(self):
+        assert es_valor_numerico("23,5", delimitador_decimal=",") is True
+        assert es_valor_numerico("23,5", delimitador_decimal=".") is False

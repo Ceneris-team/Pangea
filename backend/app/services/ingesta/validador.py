@@ -64,6 +64,16 @@ def _parsear_numero(valor_crudo, delimitador_decimal: str = "."):
         return None, f"valor '{valor_crudo}' no es numérico"
 
 
+def es_valor_numerico(valor_crudo, delimitador_decimal: str = ".") -> bool:
+    """Pública a propósito (a diferencia de _parsear_numero): la usa
+    routers/mapeos.py (vista previa) para avisar ANTES de guardar si un
+    parámetro numérico no calza con lo que trae la columna de la muestra
+    -mismo criterio de "es numérico" que usa la ingesta real, para que la
+    vista previa no diga "está bien" y la ingesta sí pierda la fila."""
+    valor, error = _parsear_numero(valor_crudo, delimitador_decimal)
+    return error is None
+
+
 def _extraer_texto(valor_crudo) -> str | None:
     """Contraparte de _parsear_numero para prmtr.tipo_dato='texto': no
     hay nada que castear ni que pueda fallar por formato -un evento como

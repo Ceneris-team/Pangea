@@ -41,11 +41,6 @@ from app.ingesta.ftp_receptor import descargar_archivo_dat, listar_archivos_dat
 from app.models import (
     ConexionFTP, Dispositivo, MapeoColumna, MapeoFormato, Parametro, Sede, Ubicacion,
 )
-from app.security.permisos import (
-    require_permiso, require_alguno_permiso, verificar_sede, LECTURA, EDICION,
-)
-from app.services.ingesta.parser import ConfiguracionParseo, parsear_dat
-from app.tasks.ingesta import normalizar_contenido_dat
 from app.schemas import (
     ArchivoFtpDisponible,
     ColumnaVistaPrevia,
@@ -71,6 +66,7 @@ from app.security.permisos import (
     verificar_sede,
 )
 from app.services.ingesta.parser import ConfiguracionParseo, parsear_dat
+from app.services.ingesta.validador import es_valor_numerico
 from app.tasks.ingesta import normalizar_contenido_dat
 
 router = APIRouter(prefix="/mapeos", tags=["Mapeos de formato"])
@@ -775,6 +771,25 @@ def _sugerir_parametros(db: Session, nombres_columnas: list[str]) -> dict[int, i
     return sugerencias
 
 
+def _hay_valor_no_numerico(resultado, nombre_columna: str, asignacion, dlmtdr_dcml: str) -> bool:
+    """True si el parámetro asignado a esta columna es 'numerico' pero
+    alguna fila de la MUESTRA (no todo el archivo, ver FILAS_VISTA_PREVIA
+    más abajo -son las mismas filas que ya se muestran en pantalla) trae
+    un valor que no pasa el mismo chequeo que usa la ingesta real
+    (es_valor_numerico). Filas de error de parseo se ignoran -ya se
+    reportan aparte-. No evalúa nada si no hay asignación o el parámetro
+    es de texto: ahí cualquier valor es válido."""
+    if asignacion is None or asignacion[2] != "numerico":
+        return False
+    for fila in resultado.filas[:FILAS_VISTA_PREVIA]:
+        if fila.error:
+            continue
+        valor = fila.valores.get(nombre_columna)
+        if not es_valor_numerico(valor, dlmtdr_dcml):
+            return True
+    return False
+
+
 def _construir_vista_previa(
     db: Session,
     contenido: str,
@@ -783,6 +798,7 @@ def _construir_vista_previa(
     frmt_fch: str,
     columna_fecha: str,
     asignaciones: str,
+    dlmtdr_dcml: str = ".",
 ) -> VistaPreviaResponse:
     delimitador = _validar_delimitador(dlmtdr)
     config = ConfiguracionParseo(
@@ -812,9 +828,12 @@ def _construir_vista_previa(
         ColumnaVistaPrevia(
             indc_clmn=indice,
             nombre_columna=nombre,
-            parametro_nombre=indice_a_parametro.get(indice, (None, None))[0],
-            parametro_unidad=indice_a_parametro.get(indice, (None, None))[1],
+            parametro_nombre=indice_a_parametro.get(indice, (None, None, None))[0],
+            parametro_unidad=indice_a_parametro.get(indice, (None, None, None))[1],
             id_prmtr_sugerido=sugerencias.get(indice) if indice not in indice_a_parametro else None,
+            tipo_dato_incompatible=_hay_valor_no_numerico(
+                resultado, nombre, indice_a_parametro.get(indice), dlmtdr_dcml
+            ),
         )
         for indice, nombre in enumerate(resultado.columnas)
     ]
@@ -867,7 +886,9 @@ async def vista_previa(
     # formulario avise del conflicto coma/coma acá y no recién al guardar.
     _validar_delimitadores_compatibles(_validar_delimitador(dlmtdr), _validar_delimitador_decimal(dlmtdr_dcml))
     contenido = _decodificar_dat(await archivo.read())
-    return _construir_vista_previa(db, contenido, dlmtdr, fl_inc_dts, frmt_fch, columna_fecha, asignaciones)
+    return _construir_vista_previa(
+        db, contenido, dlmtdr, fl_inc_dts, frmt_fch, columna_fecha, asignaciones, dlmtdr_dcml
+    )
 
 
 @router_dispositivos_mapeo.get("", response_model=list[DispositivoParaMapeo])
@@ -961,16 +982,19 @@ def vista_previa_ftp(
         )
 
     contenido = normalizar_contenido_dat(contenido)
-    return _construir_vista_previa(db, contenido, dlmtdr, fl_inc_dts, frmt_fch, columna_fecha, asignaciones)
+    return _construir_vista_previa(
+        db, contenido, dlmtdr, fl_inc_dts, frmt_fch, columna_fecha, asignaciones, dlmtdr_dcml
+    )
 
 
 def _parsear_asignaciones(db: Session, asignaciones: str, total_columnas: int) -> dict:
-    """ "0:3,2:7" -> {0: ("Temperatura", "°C"), 2: ("pH", "pH")}.
+    """ "0:3,2:7" -> {0: ("Temperatura", "°C", "numerico"), 2: ("pH", "pH", "numerico")}.
 
     Se manda como string y no como JSON porque el resto del request es
     multipart/form-data (lleva el archivo de muestra), donde un campo
-    anidado obligaría a serializar igual.
-    """
+    anidado obligaría a serializar igual. El tercer elemento (tipo_dato)
+    lo usa _construir_vista_previa para avisar si el valor real de la
+    columna no calza con el tipo del parámetro asignado."""
     if not asignaciones.strip():
         return {}
 
@@ -998,7 +1022,7 @@ def _parsear_asignaciones(db: Session, asignaciones: str, total_columnas: int) -
         for p in db.query(Parametro).filter(Parametro.id_prmtr.in_(set(pares.values()))).all()
     }
     return {
-        indice: (parametros[id_prmtr].nmbr, parametros[id_prmtr].undd)
+        indice: (parametros[id_prmtr].nmbr, parametros[id_prmtr].undd, parametros[id_prmtr].tipo_dato)
         for indice, id_prmtr in pares.items()
         if id_prmtr in parametros
     }

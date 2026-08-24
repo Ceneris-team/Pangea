@@ -1,4 +1,4 @@
-import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
+import { Fragment, useEffect, useState, type ChangeEvent, type FormEvent } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { apiFetch, apiUpload, ApiError } from "../services/api";
 import { useAuth } from "../context/AuthContext";
@@ -49,6 +49,10 @@ interface ColumnaVistaPrevia {
   parametro_nombre: string | null;
   parametro_unidad: string | null;
   id_prmtr_sugerido: number | null;
+  // true si el parámetro asignado es Numérico pero la muestra trae un
+  // valor no numérico en esta columna (ej. "Modo Normal"): esas filas se
+  // perderían en la ingesta real -ver backend _hay_valor_no_numerico.
+  tipo_dato_incompatible: boolean;
 }
 
 interface DispositivoParaMapeo {
@@ -464,6 +468,9 @@ export default function ConfigurarMapeo() {
         nombre_columna: `Columna ${indice}`,
         parametro_nombre: null,
         parametro_unidad: null,
+        // Sin una vista previa nueva no hay valores reales contra los
+        // que comparar el tipo del parámetro.
+        tipo_dato_incompatible: false,
       }));
 
   return (
@@ -826,32 +833,58 @@ export default function ConfigurarMapeo() {
                         </thead>
                         <tbody>
                           {filasAsignacion.map((c) => (
-                            <tr key={c.indc_clmn} className="border-b border-gray-100 dark:border-gray-700 last:border-0">
-                              <td className="px-4 py-2 font-mono text-xs">{c.indc_clmn}</td>
-                              <td className="px-4 py-2 text-gray-900 dark:text-white">{c.nombre_columna}</td>
-                              <td className="px-4 py-2">
-                                <select
-                                  value={asignaciones[c.indc_clmn] ?? ""}
-                                  onChange={(e) => {
-                                    const valor = e.target.value;
-                                    setAsignaciones((prev) => {
-                                      const siguiente = { ...prev };
-                                      if (valor) siguiente[c.indc_clmn] = Number(valor);
-                                      else delete siguiente[c.indc_clmn];
-                                      return siguiente;
-                                    });
-                                  }}
-                                  className={inputClase + " cursor-pointer max-w-xs"}
-                                >
-                                  <option value="">— Sin asignar —</option>
-                                  {parametros.map((p) => (
-                                    <option key={p.id_prmtr} value={p.id_prmtr}>
-                                      {p.nmbr} ({p.undd}){p.tipo_dato === "texto" ? " · texto" : ""}
-                                    </option>
-                                  ))}
-                                </select>
-                              </td>
-                            </tr>
+                            <Fragment key={c.indc_clmn}>
+                              <tr
+                                className={
+                                  "border-b " +
+                                  (c.tipo_dato_incompatible
+                                    ? "border-red-200 dark:border-red-800/40 bg-red-50/50 dark:bg-red-900/10"
+                                    : "border-gray-100 dark:border-gray-700 last:border-0")
+                                }
+                              >
+                                <td className="px-4 py-2 font-mono text-xs">{c.indc_clmn}</td>
+                                <td className="px-4 py-2 text-gray-900 dark:text-white">{c.nombre_columna}</td>
+                                <td className="px-4 py-2">
+                                  <select
+                                    value={asignaciones[c.indc_clmn] ?? ""}
+                                    onChange={(e) => {
+                                      const valor = e.target.value;
+                                      setAsignaciones((prev) => {
+                                        const siguiente = { ...prev };
+                                        if (valor) siguiente[c.indc_clmn] = Number(valor);
+                                        else delete siguiente[c.indc_clmn];
+                                        return siguiente;
+                                      });
+                                    }}
+                                    className={
+                                      inputClase +
+                                      " cursor-pointer max-w-xs" +
+                                      (c.tipo_dato_incompatible
+                                        ? " border-red-400 dark:border-red-600 focus:ring-red-400 focus:border-red-400"
+                                        : "")
+                                    }
+                                  >
+                                    <option value="">— Sin asignar —</option>
+                                    {parametros.map((p) => (
+                                      <option key={p.id_prmtr} value={p.id_prmtr}>
+                                        {p.nmbr} ({p.undd}){p.tipo_dato === "texto" ? " · texto" : ""}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </td>
+                              </tr>
+                              {c.tipo_dato_incompatible && (
+                                <tr className="border-b border-red-200 dark:border-red-800/40 bg-red-50/50 dark:bg-red-900/10">
+                                  <td colSpan={3} className="px-4 pb-3 -mt-2">
+                                    <p className="text-xs text-red-600 dark:text-red-400">
+                                      Esta columna trae un valor de texto en la muestra, pero el parámetro
+                                      elegido es Numérico. Esas filas se van a perder en la ingesta real —
+                                      elegí un parámetro de tipo Texto para esta columna.
+                                    </p>
+                                  </td>
+                                </tr>
+                              )}
+                            </Fragment>
                           ))}
                         </tbody>
                       </table>

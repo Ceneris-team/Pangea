@@ -605,6 +605,14 @@ class ColumnaVistaPrevia(BaseModel):
     parametro_nombre: str | None
     parametro_unidad: str | None
     id_prmtr_sugerido: int | None = None
+    # True si el parámetro asignado es 'numerico' pero al menos una fila
+    # de la MUESTRA trae un valor no numérico en esta columna (ej. "Modo
+    # Normal" contra un parámetro numérico): esas filas se perderían en
+    # la ingesta real, igual que perdía MensajeP/MensajeA antes de que
+    # existiera prmtr.tipo_dato. Se avisa acá, antes de guardar, en vez
+    # de que el técnico lo descubra después con datos faltantes en la
+    # cola de ingesta.
+    tipo_dato_incompatible: bool = False
 
 
 class DispositivoParaMapeo(BaseModel):

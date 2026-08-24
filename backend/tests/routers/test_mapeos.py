@@ -1067,3 +1067,62 @@ class TestVistaPrevia:
             usuario, rol.nmbr, sede_id=sede.id_sd
         )
         assert self._subir(client, "ejemplo_estado_gabinete.dat").status_code == 403
+
+    def test_avisa_si_un_parametro_numerico_recibe_texto(
+        self, client, db_session, tecnico_editor
+    ):
+        """P_demo_gabinete.dat trae "Puerta Abierta" en la columna
+        MensajeP (índice 2). Si esa columna se asigna a un parámetro
+        NUMÉRICO por error, la vista previa debe marcarlo -esas filas se
+        perderían en la ingesta real, igual que pasaba con MensajeP/
+        MensajeA antes de que existiera prmtr.tipo_dato."""
+        parametro_numerico = Parametro(
+            nmbr="Mensaje mal tipado", undd="N/A", tipo_dato="numerico"
+        )
+        db_session.add(parametro_numerico)
+        db_session.flush()
+
+        resp = self._subir(
+            client,
+            "P_demo_gabinete.dat",
+            asignaciones=f"2:{parametro_numerico.id_prmtr}",
+        )
+        assert resp.status_code == 200
+        columnas = {c["nombre_columna"]: c for c in resp.json()["columnas"]}
+        assert columnas["MensajeP"]["tipo_dato_incompatible"] is True
+
+    def test_no_avisa_si_el_parametro_es_de_tipo_texto(
+        self, client, db_session, tecnico_editor
+    ):
+        parametro_texto = Parametro(nmbr="Mensaje bien tipado", undd="N/A", tipo_dato="texto")
+        db_session.add(parametro_texto)
+        db_session.flush()
+
+        resp = self._subir(
+            client,
+            "P_demo_gabinete.dat",
+            asignaciones=f"2:{parametro_texto.id_prmtr}",
+        )
+        columnas = {c["nombre_columna"]: c for c in resp.json()["columnas"]}
+        assert columnas["MensajeP"]["tipo_dato_incompatible"] is False
+
+    def test_no_avisa_si_la_columna_numerica_calza_con_el_parametro(
+        self, client, db_session, tecnico_editor
+    ):
+        # R (índice 1) sí es numérico en P_demo_gabinete.dat.
+        parametro_numerico = Parametro(nmbr="Contador bien tipado", undd="N/A", tipo_dato="numerico")
+        db_session.add(parametro_numerico)
+        db_session.flush()
+
+        resp = self._subir(
+            client,
+            "P_demo_gabinete.dat",
+            asignaciones=f"1:{parametro_numerico.id_prmtr}",
+        )
+        columnas = {c["nombre_columna"]: c for c in resp.json()["columnas"]}
+        assert columnas["R"]["tipo_dato_incompatible"] is False
+
+    def test_no_avisa_para_una_columna_sin_asignar(self, client, tecnico_editor):
+        resp = self._subir(client, "P_demo_gabinete.dat")
+        columnas = {c["nombre_columna"]: c for c in resp.json()["columnas"]}
+        assert columnas["MensajeP"]["tipo_dato_incompatible"] is False
