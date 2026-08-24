@@ -171,7 +171,7 @@ export default function Ubicaciones() {
               </div>
             )}
 
-            <div className="bg-white/70 dark:bg-white/[0.04] backdrop-blur-md rounded-2xl shadow-sm border border-black/10 dark:border-white/10">
+            <div className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl shadow-sm border border-black/10 dark:border-white/10">
               {/* Barra de filtros */}
               <div className="p-5 flex flex-col lg:flex-row gap-3 items-center justify-between border-b border-black/10 dark:border-white/10">
                 <div className="relative w-full lg:w-80">
@@ -245,7 +245,7 @@ export default function Ubicaciones() {
                       data?.items.map((u) => (
                         <tr
                           key={u.id_ubccn}
-                          className="bg-white/70 dark:bg-white/[0.04] backdrop-blur-md border-b border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/5 transition-colors group"
+                          className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm border-b border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/5 transition-colors group"
                         >
                           <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">{u.nmbr}</td>
                           <td className="px-6 py-4">{u.dscrpcn ?? "—"}</td>

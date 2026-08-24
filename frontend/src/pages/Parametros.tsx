@@ -116,7 +116,7 @@ export default function Parametros() {
               </button>
             </header>
 
-            <div className="bg-white/70 dark:bg-white/[0.04] backdrop-blur-md rounded-2xl shadow-sm border border-black/10 dark:border-white/10 overflow-hidden transition-colors duration-300">
+            <div className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl shadow-sm border border-black/10 dark:border-white/10 overflow-hidden transition-colors duration-300">
               <div className="p-5 border-b border-black/10 dark:border-white/10">
                 <div className="relative w-full lg:max-w-md">
                   <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
@@ -181,7 +181,7 @@ export default function Parametros() {
                       parametrosFiltrados.map((p) => (
                         <tr
                           key={p.id_prmtr}
-                          className="bg-white/70 dark:bg-white/[0.04] backdrop-blur-md border-b border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+                          className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm border-b border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
                         >
                           <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">{p.nmbr}</td>
                           <td className="px-6 py-4">{p.undd}</td>
@@ -207,7 +207,7 @@ export default function Parametros() {
 
       {mostrarFormulario && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-md bg-white/70 dark:bg-white/[0.04] backdrop-blur-md rounded-2xl shadow-xl border border-black/10 dark:border-white/10">
+          <div className="w-full max-w-md bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl shadow-xl border border-black/10 dark:border-white/10">
             <form onSubmit={guardarParametro}>
               <div className="p-6 border-b border-black/10 dark:border-white/10">
                 <h2 className="text-lg font-bold text-gray-900 dark:text-white">Nuevo parámetro</h2>

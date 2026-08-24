@@ -128,7 +128,7 @@ export default function DetalleUbicacion() {
                   </header>
 
                   <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    <section className="bg-white/70 dark:bg-white/[0.04] backdrop-blur-md rounded-2xl shadow-sm border border-black/10 dark:border-white/10 p-6">
+                    <section className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl shadow-sm border border-black/10 dark:border-white/10 p-6">
                       <h2 className="text-base font-bold text-gray-900 dark:text-white mb-4">Ubicación</h2>
                       <dl className="space-y-3 text-sm">
                         <div>
@@ -148,7 +148,7 @@ export default function DetalleUbicacion() {
                       </dl>
                     </section>
 
-                    <section className="lg:col-span-2 bg-white/70 dark:bg-white/[0.04] backdrop-blur-md rounded-2xl shadow-sm border border-black/10 dark:border-white/10 p-6">
+                    <section className="lg:col-span-2 bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl shadow-sm border border-black/10 dark:border-white/10 p-6">
                       <h2 className="text-base font-bold text-gray-900 dark:text-white mb-1">
                         Parámetros en uso
                       </h2>

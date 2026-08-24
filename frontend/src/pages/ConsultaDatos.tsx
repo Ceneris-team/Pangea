@@ -125,7 +125,7 @@ export default function ConsultaDatos() {
               </p>
             </header>
 
-            <div className="bg-white/70 dark:bg-white/[0.04] backdrop-blur-md rounded-2xl shadow-sm border border-black/10 dark:border-white/10 p-5 mb-6">
+            <div className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl shadow-sm border border-black/10 dark:border-white/10 p-5 mb-6">
               <div className="flex flex-col lg:flex-row gap-6">
                 <fieldset className="flex-1">
                   <legend className="text-sm font-bold text-gray-700 dark:text-gray-200 mb-2">Parámetros</legend>
@@ -186,7 +186,7 @@ export default function ConsultaDatos() {
               </div>
             </div>
 
-            <div className="bg-white/70 dark:bg-white/[0.04] backdrop-blur-md rounded-2xl shadow-sm border border-black/10 dark:border-white/10">
+            <div className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl shadow-sm border border-black/10 dark:border-white/10">
               {error && (
                 <div className="p-4 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm border-b border-red-200 dark:border-red-800/30">
                   {error}
@@ -221,7 +221,7 @@ export default function ConsultaDatos() {
                       mediciones?.items.map((m) => (
                         <tr
                           key={m.id_lctr}
-                          className="bg-white/70 dark:bg-white/[0.04] backdrop-blur-md border-b border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+                          className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm border-b border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
                         >
                           <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">{m.parametro_nombre}</td>
                           <td className="px-6 py-4">{m.ubicacion_nombre}</td>

@@ -170,7 +170,7 @@ export default function Graficos() {
               <select
                 value={parametroId ?? ""}
                 onChange={(e) => setParametroId(e.target.value ? Number(e.target.value) : null)}
-                className="bg-white/70 dark:bg-white/[0.04] backdrop-blur-md border border-black/20 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] p-2.5 outline-none min-w-[220px]"
+                className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm border border-black/20 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] p-2.5 outline-none min-w-[220px]"
               >
                 {parametros.length === 0 && <option value="">Sin parámetros disponibles</option>}
                 {parametros.map((p) => (
@@ -197,7 +197,7 @@ export default function Graficos() {
               ].map((tile) => (
                 <div
                   key={tile.etiqueta}
-                  className="bg-white/70 dark:bg-white/[0.04] backdrop-blur-md rounded-2xl border border-black/10 dark:border-white/10 p-4"
+                  className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl border border-black/10 dark:border-white/10 p-4"
                 >
                   <div className="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">{tile.etiqueta}</div>
                   <div className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{tile.valor}</div>
@@ -205,7 +205,7 @@ export default function Graficos() {
               ))}
             </div>
 
-            <div className="bg-white/70 dark:bg-white/[0.04] backdrop-blur-md rounded-2xl border border-black/10 dark:border-white/10 p-5">
+            <div className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl border border-black/10 dark:border-white/10 p-5">
               <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
                 <h2 className="text-sm font-bold text-gray-900 dark:text-white">
                   {parametroActual ? `${parametroActual.nmbr} en el tiempo` : "Selecciona un parámetro"}

@@ -155,7 +155,7 @@ export default function ConfigurarConexionFTP() {
 
   return (
     <div className="min-h-screen bg-transparent p-6">
-      <div className="max-w-2xl mx-auto bg-white/70 dark:bg-white/[0.04] backdrop-blur-md rounded-2xl shadow-sm border border-black/10 dark:border-white/10 p-8">
+      <div className="max-w-2xl mx-auto bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl shadow-sm border border-black/10 dark:border-white/10 p-8">
         <header className="mb-6">
           <h1 className="text-2xl font-extrabold text-gray-900 dark:text-white">
             {esEdicion ? "Editar conexión FTP" : "Nueva conexión FTP"}

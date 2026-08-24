@@ -117,7 +117,7 @@ export default function Mapeos() {
               </button>
             </header>
 
-            <div className="bg-white/70 dark:bg-white/[0.04] backdrop-blur-md rounded-2xl shadow-sm border border-black/10 dark:border-white/10 overflow-hidden transition-colors duration-300">
+            <div className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl shadow-sm border border-black/10 dark:border-white/10 overflow-hidden transition-colors duration-300">
               <div className="p-5 border-b border-black/10 dark:border-white/10">
                 <div className="relative w-full lg:max-w-md">
                   <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
@@ -185,7 +185,7 @@ export default function Mapeos() {
                       itemsFiltrados.map((m) => (
                         <tr
                           key={m.id_mp}
-                          className="bg-white/70 dark:bg-white/[0.04] backdrop-blur-md border-b border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+                          className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm border-b border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
                         >
                           <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">{m.dispositivo_nombre}</td>
                           <td className="px-6 py-4">{m.mrc}</td>

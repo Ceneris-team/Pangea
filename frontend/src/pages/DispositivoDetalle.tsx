@@ -372,7 +372,7 @@ export default function DispositivoDetalle() {
                         "px-4 py-2 text-sm font-medium transition-colors " +
                         (tipoTrama === opcion.valor
                           ? "bg-[#ccff00] text-[#1a202c]"
-                          : "bg-white/70 dark:bg-white/[0.04] backdrop-blur-md text-gray-700 dark:text-gray-200")
+                          : "bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm text-gray-700 dark:text-gray-200")
                       }
                     >
                       {opcion.etiqueta}
@@ -389,7 +389,7 @@ export default function DispositivoDetalle() {
               </div>
             )}
 
-            <div className="bg-white/70 dark:bg-white/[0.04] backdrop-blur-md rounded-2xl shadow-sm border border-black/10 dark:border-white/10 p-6">
+            <div className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl shadow-sm border border-black/10 dark:border-white/10 p-6">
               {pestana === "formato" && (
                 <PestanaFormato
                   formato={formato}

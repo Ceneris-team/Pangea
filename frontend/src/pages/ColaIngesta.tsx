@@ -141,7 +141,7 @@ export default function ColaIngesta() {
               </p>
             </header>
 
-            <div className="bg-white/70 dark:bg-white/[0.04] backdrop-blur-md rounded-2xl shadow-sm border border-black/10 dark:border-white/10 overflow-hidden transition-colors duration-300">
+            <div className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl shadow-sm border border-black/10 dark:border-white/10 overflow-hidden transition-colors duration-300">
               <div className="p-5 border-b border-black/10 dark:border-white/10 flex flex-wrap items-center gap-3">
                 <label className="text-sm font-medium text-gray-700 dark:text-gray-200" htmlFor="filtro-estado">
                   Estado:
@@ -202,7 +202,7 @@ export default function ColaIngesta() {
                       <tr
                         key={item.id_archv}
                         onClick={() => setIdSeleccionado(item.id_archv)}
-                        className="bg-white/70 dark:bg-white/[0.04] backdrop-blur-md border-b border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer"
+                        className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm border-b border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer"
                       >
                         <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">{item.nmbr_archv}</td>
                         <td className="px-6 py-4">{item.datalogger_nombre}</td>
@@ -273,7 +273,7 @@ export default function ColaIngesta() {
           onClick={() => setIdSeleccionado(null)}
         >
           <div
-            className="bg-white/70 dark:bg-white/[0.04] backdrop-blur-md rounded-2xl shadow-xl border border-black/10 dark:border-white/10 max-w-lg w-full p-6"
+            className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl shadow-xl border border-black/10 dark:border-white/10 max-w-lg w-full p-6"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-4">

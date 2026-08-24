@@ -434,7 +434,7 @@ export default function ConfigurarMapeo() {
             ) : (
               <form onSubmit={handleSubmit} className="space-y-6">
                 {/* CA1: datos del formato */}
-                <section className="bg-white/70 dark:bg-white/[0.04] backdrop-blur-md rounded-2xl shadow-sm border border-black/10 dark:border-white/10 p-6">
+                <section className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl shadow-sm border border-black/10 dark:border-white/10 p-6">
                   <h2 className="text-base font-bold text-gray-900 dark:text-white mb-4">Datos del formato</h2>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -554,7 +554,7 @@ export default function ConfigurarMapeo() {
                 </section>
 
                 {/* CA2: vista previa con archivo de muestra */}
-                <section className="bg-white/70 dark:bg-white/[0.04] backdrop-blur-md rounded-2xl shadow-sm border border-black/10 dark:border-white/10 p-6">
+                <section className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl shadow-sm border border-black/10 dark:border-white/10 p-6">
                   <h2 className="text-base font-bold text-gray-900 dark:text-white mb-1">Vista previa</h2>
                   <p className="text-sm text-gray-600 dark:text-gray-300 mb-4 font-light">
                     Usa un .dat de muestra para ver las primeras 10 filas interpretadas. El archivo no se
@@ -702,7 +702,7 @@ export default function ConfigurarMapeo() {
                 </section>
 
                 {/* CA1: tabla de asignación columna -> parámetro estándar */}
-                <section className="bg-white/70 dark:bg-white/[0.04] backdrop-blur-md rounded-2xl shadow-sm border border-black/10 dark:border-white/10 p-6">
+                <section className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl shadow-sm border border-black/10 dark:border-white/10 p-6">
                   <h2 className="text-base font-bold text-gray-900 dark:text-white mb-1">
                     Asignación de columnas
                   </h2>

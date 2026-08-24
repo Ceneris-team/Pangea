@@ -225,7 +225,7 @@ export default function Usuarios() {
             {/* HU04 CA2/CA3: confirmación tras crear. Reemplaza al formulario
                 y exige un clic explícito en "VER USUARIOS" para ir al listado. */}
             {mostrarForm && creado && (
-              <div className="bg-white/70 dark:bg-white/[0.04] backdrop-blur-md rounded-2xl shadow-sm border border-[#ccff00]/40 p-5 mb-6">
+              <div className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl shadow-sm border border-[#ccff00]/40 p-5 mb-6">
                 <div className="flex items-start gap-3">
                   <span className="mt-0.5 inline-flex items-center justify-center w-8 h-8 rounded-full bg-[#ccff00]/20 text-[#5a7000] dark:text-[#ccff00]">
                     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth="2.5" stroke="currentColor">
@@ -265,7 +265,7 @@ export default function Usuarios() {
 
             {/* HU04: formulario de alta mínimo, sin mockup definido todavía */}
             {mostrarForm && !creado && (
-              <div className="bg-white/70 dark:bg-white/[0.04] backdrop-blur-md rounded-2xl shadow-sm border border-black/10 dark:border-white/10 p-5 mb-6">
+              <div className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl shadow-sm border border-black/10 dark:border-white/10 p-5 mb-6">
                 <h2 className="text-base font-bold text-gray-900 dark:text-white mb-4">Agregar usuario</h2>
                 <form onSubmit={guardarUsuario} className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
@@ -335,7 +335,7 @@ export default function Usuarios() {
             )}
 
             {/* Contenedor Principal (Tarjeta) */}
-            <div className="bg-white/70 dark:bg-white/[0.04] backdrop-blur-md rounded-2xl shadow-sm border border-black/10 dark:border-white/10 overflow-hidden transition-colors duration-300">
+            <div className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl shadow-sm border border-black/10 dark:border-white/10 overflow-hidden transition-colors duration-300">
               {/* Barra de Herramientas */}
               <div className="p-5 border-b border-black/10 dark:border-white/10 flex flex-col lg:flex-row gap-4 items-center">
                 <div className="relative flex-1 w-full">
@@ -427,7 +427,7 @@ export default function Usuarios() {
                           className={`border-b border-black/10 dark:border-white/10 transition-colors group ${
                             u.id_usr === idResaltado
                               ? "bg-[#ccff00]/10"
-                              : "bg-white/70 dark:bg-white/[0.04] backdrop-blur-md hover:bg-black/5 dark:hover:bg-white/5 "
+                              : "bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm hover:bg-black/5 dark:hover:bg-white/5 "
                           }`}
                         >
                           <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">{u.nmbr_cmplt}</td>
