@@ -37,7 +37,6 @@ interface Parametro {
 export default function DetalleUbicacion() {
   const { id } = useParams();
   const { nombreCompleto, rol, logout } = useAuth();
-  const [isDarkMode, setIsDarkMode] = useState(false);
 
   const [ubicacion, setUbicacion] = useState<UbicacionDetalle | null>(null);
   const [parametros, setParametros] = useState<Parametro[] | null>(null);
@@ -73,15 +72,13 @@ export default function DetalleUbicacion() {
   }, [id]);
 
   return (
-    <div className={`${isDarkMode ? "dark" : ""} font-sans`}>
+    <div className="font-sans">
       <div className="flex h-screen bg-transparent transition-colors duration-300 overflow-hidden">
         <Sidebar onLogout={logout} activo="ubicaciones" rol={rol} />
 
         <div className="flex-1 flex flex-col overflow-hidden">
           <div className="flex justify-end p-4 md:p-6 pb-0">
             <Topbar
-            isDarkMode={isDarkMode}
-            onToggleDarkMode={() => setIsDarkMode(!isDarkMode)}
             nombreCompleto={nombreCompleto}
             rol={rol}
             />
@@ -91,30 +88,30 @@ export default function DetalleUbicacion() {
             <div className="mb-6">
               <Link
                 to="/ubicaciones"
-                className="inline-flex items-center text-sm font-medium text-gray-300 hover:text-white transition-colors"
+                className="inline-flex items-center text-sm font-medium text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors"
               >
                 ← Volver a Ubicaciones
               </Link>
             </div>
 
             {error && (
-              <div className="p-4 mb-6 bg-red-900/20 text-red-400 text-sm rounded-xl">
+              <div className="p-4 mb-6 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm rounded-xl">
                 {error}
               </div>
             )}
 
             {cargando ? (
-              <div className="text-sm text-gray-300">Cargando…</div>
+              <div className="text-sm text-gray-600 dark:text-gray-300">Cargando…</div>
             ) : (
               ubicacion && (
                 <>
                   <header className="mb-6 flex items-center justify-between gap-4">
                     <div>
-                      <h1 className="text-2xl font-extrabold text-white">
+                      <h1 className="text-2xl font-extrabold text-gray-900 dark:text-white">
                         {ubicacion.nmbr}
                       </h1>
                       {ubicacion.dscrpcn && (
-                        <p className="text-sm text-gray-300 mt-1 font-light">
+                        <p className="text-sm text-gray-600 dark:text-gray-300 mt-1 font-light">
                           {ubicacion.dscrpcn}
                         </p>
                       )}
@@ -122,8 +119,8 @@ export default function DetalleUbicacion() {
                     <span
                       className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold border ${
                         ubicacion.estd === "Activa"
-                          ? "bg-[#ccff00]/20 text-[#ccff00] border-[#ccff00]/30"
-                          : "bg-white/10 text-gray-300 border-white/20"
+                          ? "bg-[#ccff00]/20 text-[#5a7000] dark:text-[#ccff00] border-[#ccff00]/30"
+                          : "bg-black/5 dark:bg-white/10 text-gray-600 dark:text-gray-300 border-black/20 dark:border-white/20"
                       }`}
                     >
                       {ubicacion.estd}
@@ -131,39 +128,39 @@ export default function DetalleUbicacion() {
                   </header>
 
                   <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    <section className="bg-white/[0.04] backdrop-blur-md rounded-2xl shadow-sm border border-white/10 p-6">
-                      <h2 className="text-base font-bold text-white mb-4">Ubicación</h2>
+                    <section className="bg-white/70 dark:bg-white/[0.04] backdrop-blur-md rounded-2xl shadow-sm border border-black/10 dark:border-white/10 p-6">
+                      <h2 className="text-base font-bold text-gray-900 dark:text-white mb-4">Ubicación</h2>
                       <dl className="space-y-3 text-sm">
                         <div>
-                          <dt className="text-gray-300">Latitud</dt>
-                          <dd className="font-mono text-white">{ubicacion.lttd}</dd>
+                          <dt className="text-gray-600 dark:text-gray-300">Latitud</dt>
+                          <dd className="font-mono text-gray-900 dark:text-white">{ubicacion.lttd}</dd>
                         </div>
                         <div>
-                          <dt className="text-gray-300">Longitud</dt>
-                          <dd className="font-mono text-white">{ubicacion.lngtd}</dd>
+                          <dt className="text-gray-600 dark:text-gray-300">Longitud</dt>
+                          <dd className="font-mono text-gray-900 dark:text-white">{ubicacion.lngtd}</dd>
                         </div>
                         <div>
-                          <dt className="text-gray-300">Vértices del polígono</dt>
-                          <dd className="font-mono text-white">
+                          <dt className="text-gray-600 dark:text-gray-300">Vértices del polígono</dt>
+                          <dd className="font-mono text-gray-900 dark:text-white">
                             {Math.max(0, (ubicacion.plgn_gjsn.coordinates[0]?.length ?? 1) - 1)}
                           </dd>
                         </div>
                       </dl>
                     </section>
 
-                    <section className="lg:col-span-2 bg-white/[0.04] backdrop-blur-md rounded-2xl shadow-sm border border-white/10 p-6">
-                      <h2 className="text-base font-bold text-white mb-1">
+                    <section className="lg:col-span-2 bg-white/70 dark:bg-white/[0.04] backdrop-blur-md rounded-2xl shadow-sm border border-black/10 dark:border-white/10 p-6">
+                      <h2 className="text-base font-bold text-gray-900 dark:text-white mb-1">
                         Parámetros en uso
                       </h2>
-                      <p className="text-sm text-gray-300 mb-4 font-light">
+                      <p className="text-sm text-gray-600 dark:text-gray-300 mb-4 font-light">
                         Lo que se está midiendo hoy en esta ubicación, según los mapeos de formato de sus
                         dispositivos.
                       </p>
 
                       {parametros && parametros.length === 0 && (
-                        <p className="text-sm text-gray-300">
+                        <p className="text-sm text-gray-600 dark:text-gray-300">
                           Todavía no hay parámetros mapeados para los dispositivos de esta ubicación.{" "}
-                          <Link to="/dispositivos" className="text-[#ccff00] underline">
+                          <Link to="/dispositivos" className="text-[#5a7000] dark:text-[#ccff00] underline">
                             Configura sus mapeos de formato
                           </Link>
                           .
@@ -176,7 +173,7 @@ export default function DetalleUbicacion() {
                             <li
                               key={p.id_prmtr}
                               title={p.dscrpcn ?? undefined}
-                              className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium bg-[#ccff00]/10 text-[#ccff00] border border-[#ccff00]/30"
+                              className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium bg-[#ccff00]/10 text-[#5a7000] dark:text-[#ccff00] border border-[#ccff00]/30"
                             >
                               {p.nmbr}
                               <span className="ml-1.5 text-xs opacity-70">({p.undd})</span>

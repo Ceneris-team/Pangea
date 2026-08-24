@@ -54,7 +54,6 @@ function aNumero(texto: string): number | null {
 export default function AgregarUbicacion() {
   const navigate = useNavigate();
   const { nombreCompleto, rol, logout } = useAuth();
-  const [isDarkMode, setIsDarkMode] = useState(false);
 
   const [form, setForm] = useState<UbicacionForm>(FORM_VACIO);
   const [poligono, setPoligono] = useState<PoligonoGeoJSON | null>(null);
@@ -145,19 +144,17 @@ export default function AgregarUbicacion() {
   }
 
   const inputClase =
-    "bg-white/5 border border-white/20 text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block w-full p-2.5 outline-none";
-  const labelClase = "block text-sm font-medium text-gray-200 mb-1";
+    "bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block w-full p-2.5 outline-none";
+  const labelClase = "block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1";
 
   return (
-    <div className={`${isDarkMode ? "dark" : ""} font-sans`}>
+    <div className="font-sans">
       <div className="flex h-screen bg-transparent transition-colors duration-300 overflow-hidden">
         <Sidebar onLogout={logout} activo="ubicaciones" rol={rol} />
 
         <div className="flex-1 flex flex-col overflow-hidden">
           <div className="flex justify-end p-4 md:p-6 pb-0">
             <Topbar
-            isDarkMode={isDarkMode}
-            onToggleDarkMode={() => setIsDarkMode(!isDarkMode)}
             nombreCompleto={nombreCompleto}
             rol={rol}
             />
@@ -165,18 +162,18 @@ export default function AgregarUbicacion() {
 
           <main className="flex-1 overflow-y-auto p-6 md:p-8">
             <header className="mb-6">
-              <h1 className="text-2xl font-bold text-white">Agregar ubicación</h1>
-              <p className="text-sm text-gray-300">
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Agregar ubicación</h1>
+              <p className="text-sm text-gray-600 dark:text-gray-300">
                 Registra una nueva zona de monitoreo y delimita su contorno sobre el mapa.
               </p>
             </header>
 
             <form
               onSubmit={handleSubmit}
-              className="bg-white/[0.04] backdrop-blur-md rounded-2xl shadow-sm border border-white/10"
+              className="bg-white/70 dark:bg-white/[0.04] backdrop-blur-md rounded-2xl shadow-sm border border-black/10 dark:border-white/10"
             >
               {error && (
-                <div className="p-4 bg-red-900/20 text-red-400 text-sm border-b border-red-800/30 rounded-t-2xl">
+                <div className="p-4 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm border-b border-red-200 dark:border-red-800/30 rounded-t-2xl">
                   {error}
                 </div>
               )}
@@ -222,7 +219,7 @@ export default function AgregarUbicacion() {
 
                 <div>
                   <label className={labelClase} htmlFor="dscrpcn">
-                    Descripción <span className="text-gray-400 font-normal">(opcional)</span>
+                    Descripción <span className="text-gray-500 dark:text-gray-400 font-normal">(opcional)</span>
                   </label>
                   <textarea
                     id="dscrpcn"
@@ -251,7 +248,7 @@ export default function AgregarUbicacion() {
                       placeholder="-12.046400"
                       className={inputClase}
                     />
-                    <p className="mt-1 text-xs text-gray-300">Entre -90 y 90.</p>
+                    <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">Entre -90 y 90.</p>
                   </div>
                   <div>
                     <label className={labelClase} htmlFor="lngtd">
@@ -268,7 +265,7 @@ export default function AgregarUbicacion() {
                       placeholder="-77.042800"
                       className={inputClase}
                     />
-                    <p className="mt-1 text-xs text-gray-300">
+                    <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">
                       Entre -180 y 180.
                     </p>
                   </div>
@@ -287,12 +284,12 @@ export default function AgregarUbicacion() {
                 </div>
               </div>
 
-              <div className="p-6 border-t border-white/10 flex justify-end gap-3">
+              <div className="p-6 border-t border-black/10 dark:border-white/10 flex justify-end gap-3">
                 {/* CA4: no toca el backend, solo descarta y vuelve. */}
                 <button
                   type="button"
                   onClick={handleCancelar}
-                  className="px-4 py-2 text-sm font-medium rounded-xl border border-white/20 text-gray-200 hover:bg-white/10 transition-colors"
+                  className="px-4 py-2 text-sm font-medium rounded-xl border border-black/20 dark:border-white/20 text-gray-700 dark:text-gray-200 hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
                 >
                   Cancelar
                 </button>

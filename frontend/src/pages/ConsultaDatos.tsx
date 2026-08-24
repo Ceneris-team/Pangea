@@ -39,7 +39,6 @@ function construirQuery(parametroIds: number[], ubicacionIds: number[]): string 
 
 export default function ConsultaDatos() {
   const { nombreCompleto, rol, logout } = useAuth();
-  const [isDarkMode, setIsDarkMode] = useState(false);
 
   const [parametros, setParametros] = useState<ParametroItem[]>([]);
   const [ubicaciones, setUbicaciones] = useState<UbicacionItem[]>([]);
@@ -106,15 +105,13 @@ export default function ConsultaDatos() {
   };
 
   return (
-    <div className={`${isDarkMode ? "dark" : ""} font-sans`}>
+    <div className="font-sans">
       <div className="flex h-screen bg-transparent transition-colors duration-300 overflow-hidden">
         <Sidebar onLogout={logout} activo="consulta-datos" rol={rol} />
 
         <div className="flex-1 flex flex-col overflow-hidden">
           <div className="flex justify-end p-4 md:p-6 pb-0">
             <Topbar
-            isDarkMode={isDarkMode}
-            onToggleDarkMode={() => setIsDarkMode(!isDarkMode)}
             nombreCompleto={nombreCompleto}
             rol={rol}
             />
@@ -122,22 +119,22 @@ export default function ConsultaDatos() {
 
           <main className="flex-1 overflow-y-auto p-6 md:p-8">
             <header className="mb-6">
-              <h1 className="text-2xl font-bold text-white">Consulta de Datos</h1>
-              <p className="text-sm text-gray-300">
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Consulta de Datos</h1>
+              <p className="text-sm text-gray-600 dark:text-gray-300">
                 Selecciona los parámetros y ubicaciones que quieres consultar para personalizar la vista de telemetría.
               </p>
             </header>
 
-            <div className="bg-white/[0.04] backdrop-blur-md rounded-2xl shadow-sm border border-white/10 p-5 mb-6">
+            <div className="bg-white/70 dark:bg-white/[0.04] backdrop-blur-md rounded-2xl shadow-sm border border-black/10 dark:border-white/10 p-5 mb-6">
               <div className="flex flex-col lg:flex-row gap-6">
                 <fieldset className="flex-1">
-                  <legend className="text-sm font-bold text-gray-200 mb-2">Parámetros</legend>
+                  <legend className="text-sm font-bold text-gray-700 dark:text-gray-200 mb-2">Parámetros</legend>
                   <div className="flex flex-wrap gap-3">
                     {parametros.length === 0 && (
-                      <span className="text-sm text-gray-400">No hay parámetros disponibles.</span>
+                      <span className="text-sm text-gray-500 dark:text-gray-400">No hay parámetros disponibles.</span>
                     )}
                     {parametros.map((p) => (
-                      <label key={p.id_prmtr} className="flex items-center gap-2 text-sm text-gray-200 cursor-pointer">
+                      <label key={p.id_prmtr} className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200 cursor-pointer">
                         <input
                           type="checkbox"
                           checked={seleccionParametros.includes(p.id_prmtr)}
@@ -151,13 +148,13 @@ export default function ConsultaDatos() {
                 </fieldset>
 
                 <fieldset className="flex-1">
-                  <legend className="text-sm font-bold text-gray-200 mb-2">Ubicaciones</legend>
+                  <legend className="text-sm font-bold text-gray-700 dark:text-gray-200 mb-2">Ubicaciones</legend>
                   <div className="flex flex-wrap gap-3">
                     {ubicaciones.length === 0 && (
-                      <span className="text-sm text-gray-400">No hay ubicaciones disponibles.</span>
+                      <span className="text-sm text-gray-500 dark:text-gray-400">No hay ubicaciones disponibles.</span>
                     )}
                     {ubicaciones.map((u) => (
-                      <label key={u.id_ubccn} className="flex items-center gap-2 text-sm text-gray-200 cursor-pointer">
+                      <label key={u.id_ubccn} className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200 cursor-pointer">
                         <input
                           type="checkbox"
                           checked={seleccionUbicaciones.includes(u.id_ubccn)}
@@ -181,7 +178,7 @@ export default function ConsultaDatos() {
                   <button
                     type="button"
                     onClick={handleLimpiar}
-                    className="px-4 py-2 rounded-xl border border-white/20 text-gray-200 text-sm font-bold hover:bg-white/10 transition-all"
+                    className="px-4 py-2 rounded-xl border border-black/20 dark:border-white/20 text-gray-700 dark:text-gray-200 text-sm font-bold hover:bg-black/10 dark:hover:bg-white/10 transition-all"
                   >
                     LIMPIAR FILTROS
                   </button>
@@ -189,15 +186,15 @@ export default function ConsultaDatos() {
               </div>
             </div>
 
-            <div className="bg-white/[0.04] backdrop-blur-md rounded-2xl shadow-sm border border-white/10">
+            <div className="bg-white/70 dark:bg-white/[0.04] backdrop-blur-md rounded-2xl shadow-sm border border-black/10 dark:border-white/10">
               {error && (
-                <div className="p-4 bg-red-900/20 text-red-400 text-sm border-b border-red-800/30">
+                <div className="p-4 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm border-b border-red-200 dark:border-red-800/30">
                   {error}
                 </div>
               )}
               <div className="overflow-x-auto">
-                <table className="w-full text-sm text-left text-gray-300">
-                  <thead className="text-xs text-gray-300 uppercase bg-white/5 border-b border-white/10">
+                <table className="w-full text-sm text-left text-gray-600 dark:text-gray-300">
+                  <thead className="text-xs text-gray-600 dark:text-gray-300 uppercase bg-black/5 dark:bg-white/5 border-b border-black/10 dark:border-white/10">
                     <tr>
                       <th className="px-6 py-4 font-bold tracking-wider">Parámetro</th>
                       <th className="px-6 py-4 font-bold tracking-wider">Ubicación</th>
@@ -208,14 +205,14 @@ export default function ConsultaDatos() {
                   <tbody>
                     {loading && (
                       <tr>
-                        <td colSpan={4} className="px-6 py-8 text-center text-gray-300">
+                        <td colSpan={4} className="px-6 py-8 text-center text-gray-600 dark:text-gray-300">
                           Cargando datos...
                         </td>
                       </tr>
                     )}
                     {!loading && mediciones?.items.length === 0 && (
                       <tr>
-                        <td colSpan={4} className="px-6 py-8 text-center text-gray-300">
+                        <td colSpan={4} className="px-6 py-8 text-center text-gray-600 dark:text-gray-300">
                           No hay registros para los filtros seleccionados.
                         </td>
                       </tr>
@@ -224,9 +221,9 @@ export default function ConsultaDatos() {
                       mediciones?.items.map((m) => (
                         <tr
                           key={m.id_lctr}
-                          className="bg-white/[0.04] backdrop-blur-md border-b border-white/10 hover:bg-white/5 transition-colors"
+                          className="bg-white/70 dark:bg-white/[0.04] backdrop-blur-md border-b border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
                         >
-                          <td className="px-6 py-4 font-medium text-white">{m.parametro_nombre}</td>
+                          <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">{m.parametro_nombre}</td>
                           <td className="px-6 py-4">{m.ubicacion_nombre}</td>
                           <td className="px-6 py-4">
                             {m.vlr} {m.undd}

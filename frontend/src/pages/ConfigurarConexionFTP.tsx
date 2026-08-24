@@ -155,12 +155,12 @@ export default function ConfigurarConexionFTP() {
 
   return (
     <div className="min-h-screen bg-transparent p-6">
-      <div className="max-w-2xl mx-auto bg-white/[0.04] backdrop-blur-md rounded-2xl shadow-sm border border-white/10 p-8">
+      <div className="max-w-2xl mx-auto bg-white/70 dark:bg-white/[0.04] backdrop-blur-md rounded-2xl shadow-sm border border-black/10 dark:border-white/10 p-8">
         <header className="mb-6">
-          <h1 className="text-2xl font-extrabold text-white">
+          <h1 className="text-2xl font-extrabold text-gray-900 dark:text-white">
             {esEdicion ? "Editar conexión FTP" : "Nueva conexión FTP"}
           </h1>
-          <p className="text-sm text-gray-300 mt-1 font-light">
+          <p className="text-sm text-gray-600 dark:text-gray-300 mt-1 font-light">
             Configura la conexión FTP de un datalogger para iniciar la ingesta automática de telemetría.
           </p>
         </header>
@@ -168,12 +168,12 @@ export default function ConfigurarConexionFTP() {
         <form onSubmit={handleSubmit} className="space-y-5">
           {!esEdicion && (
             <div>
-              <label className="block text-sm font-medium text-gray-200 mb-1">Sede</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Sede</label>
               <select
                 required
                 value={form.id_sd}
                 onChange={(e) => actualizarCampo("id_sd", e.target.value)}
-                className="bg-white/5 border border-white/20 text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block w-full p-2.5 outline-none cursor-pointer"
+                className="bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block w-full p-2.5 outline-none cursor-pointer"
               >
                 <option value="">— Selecciona una sede —</option>
                 {sedes.map((s) => (
@@ -186,7 +186,7 @@ export default function ConfigurarConexionFTP() {
           )}
 
           <div>
-            <label className="block text-sm font-medium text-gray-200 mb-1">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
               Nombre del datalogger
             </label>
             <input
@@ -194,46 +194,46 @@ export default function ConfigurarConexionFTP() {
               required
               value={form.nmbr}
               onChange={(e) => actualizarCampo("nmbr", e.target.value)}
-              className="bg-white/5 border border-white/20 text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block w-full p-2.5 outline-none"
+              className="bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block w-full p-2.5 outline-none"
             />
           </div>
 
           <div className="grid grid-cols-3 gap-4">
             <div className="col-span-2">
-              <label className="block text-sm font-medium text-gray-200 mb-1">Host/IP</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Host/IP</label>
               <input
                 type="text"
                 required
                 value={form.hst}
                 onChange={(e) => actualizarCampo("hst", e.target.value)}
-                className="bg-white/5 border border-white/20 text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block w-full p-2.5 outline-none"
+                className="bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block w-full p-2.5 outline-none"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-200 mb-1">Puerto</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Puerto</label>
               <input
                 type="number"
                 required
                 value={form.prt}
                 onChange={(e) => actualizarCampo("prt", e.target.value)}
-                className="bg-white/5 border border-white/20 text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block w-full p-2.5 outline-none"
+                className="bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block w-full p-2.5 outline-none"
               />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-200 mb-1">Usuario FTP</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Usuario FTP</label>
               <input
                 type="text"
                 required
                 value={form.usr_ftp}
                 onChange={(e) => actualizarCampo("usr_ftp", e.target.value)}
-                className="bg-white/5 border border-white/20 text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block w-full p-2.5 outline-none"
+                className="bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block w-full p-2.5 outline-none"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-200 mb-1">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
                 Contraseña FTP
               </label>
               <input
@@ -241,13 +241,13 @@ export default function ConfigurarConexionFTP() {
                 required
                 value={form.contrasena_ftp}
                 onChange={(e) => actualizarCampo("contrasena_ftp", e.target.value)}
-                className="bg-white/5 border border-white/20 text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block w-full p-2.5 outline-none"
+                className="bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block w-full p-2.5 outline-none"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-200 mb-1">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
               Directorio remoto
             </label>
             <input
@@ -256,18 +256,18 @@ export default function ConfigurarConexionFTP() {
               placeholder="/datos/estacion01"
               value={form.rt_rmt}
               onChange={(e) => actualizarCampo("rt_rmt", e.target.value)}
-              className="bg-white/5 border border-white/20 text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block w-full p-2.5 outline-none"
+              className="bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block w-full p-2.5 outline-none"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-200 mb-1">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
               Frecuencia de polling
             </label>
             <select
               value={form.frcnc_mnts}
               onChange={(e) => actualizarCampo("frcnc_mnts", e.target.value as "1" | "60")}
-              className="bg-white/5 border border-white/20 text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block w-full p-2.5 outline-none cursor-pointer"
+              className="bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block w-full p-2.5 outline-none cursor-pointer"
             >
               <option value="1">Cada minuto</option>
               <option value="60">Cada hora</option>
@@ -278,8 +278,8 @@ export default function ConfigurarConexionFTP() {
             <div
               className={`p-3 rounded-xl text-sm ${
                 mensajeOk
-                  ? "bg-[#ccff00]/20 text-[#ccff00]"
-                  : "bg-red-900/20 text-red-400"
+                  ? "bg-[#ccff00]/20 text-[#5a7000] dark:text-[#ccff00]"
+                  : "bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400"
               }`}
             >
               {mensaje}
@@ -291,7 +291,7 @@ export default function ConfigurarConexionFTP() {
               type="button"
               onClick={handleProbarConexion}
               disabled={probando}
-              className="px-4 py-2.5 text-sm font-medium text-white bg-transparent border border-white/20 rounded-xl hover:bg-white/10 disabled:opacity-50 transition-all"
+              className="px-4 py-2.5 text-sm font-medium text-gray-900 dark:text-white bg-transparent border border-black/20 dark:border-white/20 rounded-xl hover:bg-black/10 dark:hover:bg-white/10 disabled:opacity-50 transition-all"
             >
               {probando ? "Probando..." : "Probar conexión"}
             </button>
@@ -307,7 +307,7 @@ export default function ConfigurarConexionFTP() {
             <button
               type="button"
               onClick={() => navigate("/conexiones-ftp")}
-              className="px-4 py-2.5 text-sm font-medium text-gray-300 hover:text-white transition-all"
+              className="px-4 py-2.5 text-sm font-medium text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-all"
             >
               Ver conexiones
             </button>

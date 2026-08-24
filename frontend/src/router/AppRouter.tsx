@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "../context/AuthContext";
+import { ThemeProvider } from "../context/ThemeContext";
 import ProtectedRoute from "../components/ProtectedRoute";
 import Login from "../pages/Login";
 import OlvideContrasena from "../pages/OlvideContrasena";
@@ -48,6 +49,7 @@ const ROLES_AGREGAR_DISPOSITIVO = [ROLES.ADMINISTRADOR, ROLES.TECNICO_CENERIS] a
 export default function AppRouter() {
   return (
     <BrowserRouter>
+      <ThemeProvider>
       <AuthProvider>
         <Routes>
           <Route path="/login" element={<Login />} />
@@ -250,6 +252,7 @@ export default function AppRouter() {
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
       </AuthProvider>
+      </ThemeProvider>
     </BrowserRouter>
   );
 }
