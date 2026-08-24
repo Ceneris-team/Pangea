@@ -42,7 +42,6 @@ function formatearFechaCorta(iso: string): string {
 
 export default function Graficos() {
   const { nombreCompleto, rol, logout } = useAuth();
-  const [isDarkMode, setIsDarkMode] = useState(false);
 
   const [parametros, setParametros] = useState<ParametroItem[]>([]);
   const [parametroId, setParametroId] = useState<number | null>(null);
@@ -147,15 +146,13 @@ export default function Graficos() {
   const lineasGrilla = 4;
 
   return (
-    <div className={`${isDarkMode ? "dark" : ""} font-sans`}>
+    <div className="font-sans">
       <div className="flex h-screen bg-transparent transition-colors duration-300 overflow-hidden">
         <Sidebar onLogout={logout} activo="graficos" rol={rol} />
 
         <div className="flex-1 flex flex-col overflow-hidden">
           <div className="flex justify-end p-4 md:p-6 pb-0">
             <Topbar
-              isDarkMode={isDarkMode}
-              onToggleDarkMode={() => setIsDarkMode(!isDarkMode)}
               nombreCompleto={nombreCompleto}
               rol={rol}
             />
@@ -164,8 +161,8 @@ export default function Graficos() {
           <main className="flex-1 overflow-y-auto p-6 md:p-8">
             <header className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div>
-                <h1 className="text-2xl font-extrabold text-white">Gráficos</h1>
-                <p className="text-sm text-gray-300 mt-1 font-light">
+                <h1 className="text-2xl font-extrabold text-gray-900 dark:text-white">Gráficos</h1>
+                <p className="text-sm text-gray-600 dark:text-gray-300 mt-1 font-light">
                   Vista rápida de telemetría por parámetro, agrupada por ubicación.
                 </p>
               </div>
@@ -173,7 +170,7 @@ export default function Graficos() {
               <select
                 value={parametroId ?? ""}
                 onChange={(e) => setParametroId(e.target.value ? Number(e.target.value) : null)}
-                className="bg-white/[0.04] backdrop-blur-md border border-white/20 text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] p-2.5 outline-none min-w-[220px]"
+                className="bg-white/70 dark:bg-white/[0.04] backdrop-blur-md border border-black/20 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] p-2.5 outline-none min-w-[220px]"
               >
                 {parametros.length === 0 && <option value="">Sin parámetros disponibles</option>}
                 {parametros.map((p) => (
@@ -185,7 +182,7 @@ export default function Graficos() {
             </header>
 
             {error && (
-              <div className="mb-6 p-4 rounded-xl bg-red-900/20 text-red-400 text-sm border border-red-800/30">
+              <div className="mb-6 p-4 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm border border-red-200 dark:border-red-800/30">
                 {error}
               </div>
             )}
@@ -200,24 +197,24 @@ export default function Graficos() {
               ].map((tile) => (
                 <div
                   key={tile.etiqueta}
-                  className="bg-white/[0.04] backdrop-blur-md rounded-2xl border border-white/10 p-4"
+                  className="bg-white/70 dark:bg-white/[0.04] backdrop-blur-md rounded-2xl border border-black/10 dark:border-white/10 p-4"
                 >
-                  <div className="text-xs font-bold uppercase tracking-wider text-gray-400">{tile.etiqueta}</div>
-                  <div className="text-2xl font-bold text-white mt-1">{tile.valor}</div>
+                  <div className="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">{tile.etiqueta}</div>
+                  <div className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{tile.valor}</div>
                 </div>
               ))}
             </div>
 
-            <div className="bg-white/[0.04] backdrop-blur-md rounded-2xl border border-white/10 p-5">
+            <div className="bg-white/70 dark:bg-white/[0.04] backdrop-blur-md rounded-2xl border border-black/10 dark:border-white/10 p-5">
               <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
-                <h2 className="text-sm font-bold text-white">
+                <h2 className="text-sm font-bold text-gray-900 dark:text-white">
                   {parametroActual ? `${parametroActual.nmbr} en el tiempo` : "Selecciona un parámetro"}
                 </h2>
 
                 {series.length > 0 && (
                   <div className="flex items-center gap-4 flex-wrap">
                     {series.map((s, i) => (
-                      <div key={s.nombre} className="flex items-center gap-1.5 text-xs text-gray-300">
+                      <div key={s.nombre} className="flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-300">
                         <span
                           className="w-2.5 h-2.5 rounded-full"
                           style={{ backgroundColor: COLORES_SERIE[i] }}
@@ -233,14 +230,14 @@ export default function Graficos() {
               </div>
 
               {loading && (
-                <div className="flex justify-center items-center gap-2 py-24 text-gray-300">
+                <div className="flex justify-center items-center gap-2 py-24 text-gray-600 dark:text-gray-300">
                   <div className="w-4 h-4 rounded-full bg-[#ccff00] animate-bounce" />
                   <span>Cargando telemetría...</span>
                 </div>
               )}
 
               {!loading && itemsOrdenados.length === 0 && (
-                <div className="py-24 text-center text-gray-400 text-sm">
+                <div className="py-24 text-center text-gray-500 dark:text-gray-400 text-sm">
                   No hay mediciones registradas para este parámetro todavía.
                 </div>
               )}
@@ -311,7 +308,7 @@ export default function Graficos() {
 
                   {hover && (
                     <div
-                      className="absolute pointer-events-none bg-[#0b1220] border border-white/20 rounded-lg px-3 py-2 text-xs text-white shadow-xl"
+                      className="absolute pointer-events-none bg-[#0b1220] border border-black/20 dark:border-white/20 rounded-lg px-3 py-2 text-xs text-gray-900 dark:text-white shadow-xl"
                       style={{
                         left: `${(hover.x / ANCHO) * 100}%`,
                         top: `${(hover.y / ALTO) * 100}%`,
@@ -321,8 +318,8 @@ export default function Graficos() {
                       <div className="font-semibold">
                         {hover.item.vlr.toFixed(2)} {hover.item.undd}
                       </div>
-                      <div className="text-gray-400">{hover.item.ubicacion_nombre}</div>
-                      <div className="text-gray-400">{formatearFechaCorta(hover.item.fch_hr)}</div>
+                      <div className="text-gray-500 dark:text-gray-400">{hover.item.ubicacion_nombre}</div>
+                      <div className="text-gray-500 dark:text-gray-400">{formatearFechaCorta(hover.item.fch_hr)}</div>
                     </div>
                   )}
                 </div>

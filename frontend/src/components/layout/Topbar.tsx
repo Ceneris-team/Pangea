@@ -1,19 +1,21 @@
+import { useTheme } from "../../context/ThemeContext";
+
 interface TopbarProps {
-  isDarkMode: boolean;
-  onToggleDarkMode: () => void;
   nombreCompleto: string | null;
   rol: string | null;
 }
 
-export default function Topbar({ isDarkMode, onToggleDarkMode, nombreCompleto, rol }: TopbarProps) {
+export default function Topbar({ nombreCompleto, rol }: TopbarProps) {
+  const { esOscuro, toggleTema } = useTheme();
+
   return (
-    <div className="inline-flex items-center gap-4 bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl pl-3 pr-4 py-2 shadow-lg transition-colors duration-300">
+    <div className="inline-flex items-center gap-4 bg-white/60 dark:bg-white/10 backdrop-blur-md border border-black/10 dark:border-white/10 rounded-2xl pl-3 pr-4 py-2 shadow-lg transition-colors duration-300">
       <button
-        onClick={onToggleDarkMode}
-        className="text-gray-300 hover:bg-white/10 p-2 rounded-full transition-colors"
+        onClick={toggleTema}
+        className="text-gray-600 dark:text-gray-300 hover:bg-black/5 dark:hover:bg-white/10 p-2 rounded-full transition-colors"
         aria-label="Alternar modo oscuro"
       >
-        {isDarkMode ? (
+        {esOscuro ? (
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
           </svg>
@@ -24,10 +26,10 @@ export default function Topbar({ isDarkMode, onToggleDarkMode, nombreCompleto, r
         )}
       </button>
 
-      <div className="flex items-center gap-3 pl-4 border-l border-white/10">
+      <div className="flex items-center gap-3 pl-4 border-l border-black/10 dark:border-white/10">
         <div className="text-right hidden sm:block">
-          <div className="text-sm font-semibold text-white">{nombreCompleto ?? "Usuario"}</div>
-          <div className="text-xs text-gray-300">{rol ?? ""}</div>
+          <div className="text-sm font-semibold text-gray-900 dark:text-white">{nombreCompleto ?? "Usuario"}</div>
+          <div className="text-xs text-gray-500 dark:text-gray-300">{rol ?? ""}</div>
         </div>
         <img
           className="w-10 h-10 rounded-full border-2 border-[#ccff00] object-cover"

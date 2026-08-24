@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import Sidebar from "../components/layout/Sidebar";
@@ -90,10 +90,9 @@ const MODULOS: TarjetaModulo[] = [
 
 export default function PanelTecnico() {
   const { nombreCompleto, rol, logout } = useAuth();
-  const [isDarkMode, setIsDarkMode] = useState(false);
 
   return (
-    <div className={`${isDarkMode ? "dark" : ""} font-sans`}>
+    <div className="font-sans">
       <div className="flex h-screen bg-transparent transition-colors duration-300 overflow-hidden">
         <Sidebar onLogout={logout} activo="panel" rol={rol} />
 
@@ -101,8 +100,6 @@ export default function PanelTecnico() {
           {/* TOP NAVBAR */}
           <div className="flex justify-end p-4 md:p-6 pb-0">
             <Topbar
-              isDarkMode={isDarkMode}
-              onToggleDarkMode={() => setIsDarkMode(!isDarkMode)}
               nombreCompleto={nombreCompleto}
               rol={rol}
             />
@@ -111,10 +108,10 @@ export default function PanelTecnico() {
           {/* CONTENIDO */}
           <main className="flex-1 overflow-y-auto p-6 md:p-8">
             <header className="mb-6">
-              <h1 className="text-2xl font-bold text-white">
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
                 Hola, {nombreCompleto ?? "Técnico"}
               </h1>
-              <p className="text-sm text-gray-300">
+              <p className="text-sm text-gray-600 dark:text-gray-300">
                 Panel de Técnico CENERIS — Pangea 4.0.
               </p>
             </header>
@@ -124,15 +121,15 @@ export default function PanelTecnico() {
                 <Link
                   key={m.to}
                   to={m.to}
-                  className="bg-white/[0.04] backdrop-blur-md rounded-2xl shadow-sm border border-white/10 p-6 hover:border-[#ccff00] transition-colors"
+                  className="bg-white/70 dark:bg-white/[0.04] backdrop-blur-md rounded-2xl shadow-sm border border-black/10 dark:border-white/10 p-6 hover:border-[#ccff00] transition-colors"
                 >
                   <div className="w-10 h-10 rounded-lg bg-[#ccff00]/20 flex items-center justify-center mb-3">
-                    <svg className="w-5 h-5 text-[#ccff00]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-5 h-5 text-[#5a7000] dark:text-[#ccff00]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       {m.icono}
                     </svg>
                   </div>
-                  <h2 className="font-semibold text-white">{m.titulo}</h2>
-                  <p className="text-sm text-gray-300">{m.descripcion}</p>
+                  <h2 className="font-semibold text-gray-900 dark:text-white">{m.titulo}</h2>
+                  <p className="text-sm text-gray-600 dark:text-gray-300">{m.descripcion}</p>
                 </Link>
               ))}
             </div>
