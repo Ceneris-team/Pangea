@@ -18,8 +18,14 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import ArchivoIngesta, ConexionFTP, Dispositivo
-from app.schemas import ArchivoIngestaDetalle, ArchivoIngestaListItem, MetricasColaIngesta
+from app.models import ArchivoIngesta, ConexionFTP, Dispositivo, EventoTexto, Parametro, Telemetria
+from app.schemas import (
+    ArchivoIngestaDetalle,
+    ArchivoIngestaListItem,
+    MetricasColaIngesta,
+    RegistroIngestaItem,
+    RegistrosIngestaResponse,
+)
 from app.security.permisos import EDICION, LECTURA, require_permiso, verificar_sede
 from app.tasks.ingesta import procesar_archivo_dat
 
@@ -183,6 +189,84 @@ def detalle_archivo_ingesta(
         fch_prcsd=archivo.fch_prcsd,
         rgstrs_prcsds=archivo.rgstrs_prcsds,
         mnsj_errr=archivo.mnsj_errr,
+    )
+
+
+MOSTRADOS_REGISTROS_INGESTA = 50
+
+
+@router.get("/cola/{id_archv}/registros", response_model=RegistrosIngestaResponse)
+def registros_archivo_ingesta(
+    id_archv: int,
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(require_permiso("Ingesta", LECTURA)),
+):
+    """Vista previa de lo que un archivo procesado realmente escribió en
+    tlmtr/evnt_txt (mediciones numéricas y eventos de texto respectivamente,
+    ver app/models/telemetria.py y app/models/evento_texto.py), para poder
+    distinguir "el archivo vino vacío" de "el archivo trajo datos pero no
+    los que esperaba" sin salir del modal de detalle de HU09."""
+    archivo = db.query(ArchivoIngesta).filter(ArchivoIngesta.id_archv == id_archv).first()
+    if archivo is None:
+        raise HTTPException(status_code=404, detail="Archivo no encontrado")
+
+    conexion = db.get(ConexionFTP, archivo.id_cnxn)
+    verificar_sede(usuario, conexion.id_sd, modulo="Ingesta", accion=LECTURA)
+
+    total_medicion = (
+        db.query(func.count(Telemetria.id_lctr)).filter(Telemetria.id_archv == id_archv).scalar()
+        or 0
+    )
+    total_evento = (
+        db.query(func.count(EventoTexto.id_evnt)).filter(EventoTexto.id_archv == id_archv).scalar()
+        or 0
+    )
+
+    mediciones = (
+        db.query(Telemetria, Dispositivo.nmbr, Parametro.nmbr, Parametro.undd)
+        .join(Dispositivo, Dispositivo.id_dspstv == Telemetria.id_dspstv)
+        .join(Parametro, Parametro.id_prmtr == Telemetria.id_prmtr)
+        .filter(Telemetria.id_archv == id_archv)
+        .order_by(Telemetria.fch_hr.desc())
+        .limit(MOSTRADOS_REGISTROS_INGESTA)
+        .all()
+    )
+    eventos = (
+        db.query(EventoTexto, Dispositivo.nmbr, Parametro.nmbr, Parametro.undd)
+        .join(Dispositivo, Dispositivo.id_dspstv == EventoTexto.id_dspstv)
+        .join(Parametro, Parametro.id_prmtr == EventoTexto.id_prmtr)
+        .filter(EventoTexto.id_archv == id_archv)
+        .order_by(EventoTexto.fch_hr.desc())
+        .limit(MOSTRADOS_REGISTROS_INGESTA)
+        .all()
+    )
+
+    items = [
+        RegistroIngestaItem(
+            fch_hr=lectura.fch_hr,
+            dispositivo_nombre=dspstv_nmbr,
+            parametro_nombre=prmtr_nmbr,
+            undd=undd,
+            vlr=str(lectura.vlr),
+        )
+        for lectura, dspstv_nmbr, prmtr_nmbr, undd in mediciones
+    ] + [
+        RegistroIngestaItem(
+            fch_hr=evento.fch_hr,
+            dispositivo_nombre=dspstv_nmbr,
+            parametro_nombre=prmtr_nmbr,
+            undd=undd,
+            vlr=evento.vlr,
+        )
+        for evento, dspstv_nmbr, prmtr_nmbr, undd in eventos
+    ]
+    items.sort(key=lambda item: item.fch_hr, reverse=True)
+    items = items[:MOSTRADOS_REGISTROS_INGESTA]
+
+    return RegistrosIngestaResponse(
+        total=total_medicion + total_evento,
+        mostrados=len(items),
+        items=items,
     )
 
 

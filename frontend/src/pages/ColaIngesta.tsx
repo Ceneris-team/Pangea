@@ -29,6 +29,20 @@ interface ArchivoIngestaDetalle extends ArchivoIngestaListItem {
   mnsj_errr: string | null;
 }
 
+interface RegistroIngestaItem {
+  fch_hr: string;
+  dispositivo_nombre: string;
+  parametro_nombre: string;
+  undd: string;
+  vlr: string;
+}
+
+interface RegistrosIngestaResponse {
+  total: number;
+  mostrados: number;
+  items: RegistroIngestaItem[];
+}
+
 interface ListadoColaIngesta {
   total: number;
   pagina: number;
@@ -67,6 +81,10 @@ export default function ColaIngesta() {
   const [detalle, setDetalle] = useState<ArchivoIngestaDetalle | null>(null);
   const [detalleError, setDetalleError] = useState<string | null>(null);
   const [reintentando, setReintentando] = useState(false);
+
+  const [registros, setRegistros] = useState<RegistrosIngestaResponse | null>(null);
+  const [registrosError, setRegistrosError] = useState<string | null>(null);
+  const [registrosLoading, setRegistrosLoading] = useState(false);
 
   useEffect(() => {
     let cancelado = false;
@@ -118,6 +136,30 @@ export default function ColaIngesta() {
       cancelado = true;
     };
   }, [idSeleccionado]);
+
+  useEffect(() => {
+    if (idSeleccionado === null || detalle?.estado !== "Procesado") {
+      setRegistros(null);
+      setRegistrosError(null);
+      return;
+    }
+    let cancelado = false;
+    setRegistrosLoading(true);
+    setRegistrosError(null);
+    apiFetch<RegistrosIngestaResponse>(`/ingesta/cola/${idSeleccionado}/registros`)
+      .then((res) => {
+        if (!cancelado) setRegistros(res);
+      })
+      .catch((err) => {
+        if (!cancelado) setRegistrosError(err instanceof ApiError ? err.message : "No se pudieron cargar los registros");
+      })
+      .finally(() => {
+        if (!cancelado) setRegistrosLoading(false);
+      });
+    return () => {
+      cancelado = true;
+    };
+  }, [idSeleccionado, detalle?.estado]);
 
   const totalPaginas = data ? Math.max(1, Math.ceil(data.total / data.por_pagina)) : 1;
 
@@ -388,7 +430,60 @@ export default function ColaIngesta() {
                 )}
 
                 {detalle.estado === "Procesado" && (
-                  <div className="pt-3 border-t border-gray-100 dark:border-gray-700">
+                  <div className="pt-3 border-t border-gray-100 dark:border-gray-700 space-y-3">
+                    <dt className="text-gray-500 dark:text-gray-400">Datos escritos</dt>
+
+                    {registrosLoading && (
+                      <p className="text-sm text-gray-500 dark:text-gray-400">Cargando registros...</p>
+                    )}
+
+                    {registrosError && (
+                      <p className="text-sm text-red-600 dark:text-red-400">{registrosError}</p>
+                    )}
+
+                    {registros && registros.total === 0 && (
+                      <p className="text-sm text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 rounded-lg p-3">
+                        El archivo se procesó pero no generó ningún registro (mediciones ni eventos).
+                      </p>
+                    )}
+
+                    {registros && registros.total > 0 && (
+                      <div>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                          {registros.total === registros.mostrados
+                            ? `${registros.total} registro(s)`
+                            : `Mostrando ${registros.mostrados} de ${registros.total} registro(s)`}
+                        </p>
+                        <div className="max-h-56 overflow-y-auto border border-gray-100 dark:border-gray-700 rounded-lg">
+                          <table className="w-full text-xs text-left">
+                            <thead className="text-[11px] text-gray-500 dark:text-gray-400 uppercase bg-gray-50 dark:bg-gray-800/50 sticky top-0">
+                              <tr>
+                                <th className="px-3 py-2 font-semibold">Fecha</th>
+                                <th className="px-3 py-2 font-semibold">Dispositivo</th>
+                                <th className="px-3 py-2 font-semibold">Parámetro</th>
+                                <th className="px-3 py-2 font-semibold text-right">Valor</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {registros.items.map((r, i) => (
+                                <tr
+                                  key={i}
+                                  className="border-t border-gray-100 dark:border-gray-700 text-gray-700 dark:text-gray-300"
+                                >
+                                  <td className="px-3 py-1.5 whitespace-nowrap">{formatearFecha(r.fch_hr)}</td>
+                                  <td className="px-3 py-1.5">{r.dispositivo_nombre}</td>
+                                  <td className="px-3 py-1.5">{r.parametro_nombre}</td>
+                                  <td className="px-3 py-1.5 text-right whitespace-nowrap">
+                                    {r.vlr} {r.undd}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+
                     <Link
                       to="/consulta-datos"
                       className="inline-flex items-center justify-center w-full px-4 py-2.5 text-sm font-semibold text-gray-900 bg-[#ccff00] rounded-xl hover:bg-[#b8e600] transition-all"

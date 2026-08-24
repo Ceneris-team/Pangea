@@ -325,6 +325,28 @@ class ArchivoIngestaDetalle(BaseModel):
     mnsj_errr: str | None
 
 
+class RegistroIngestaItem(BaseModel):
+    """Una fila de tlmtr o evnt_txt generada por un archivo de la cola
+    (HU09): permite ver qué escribió realmente la ingesta -o confirmar
+    que no escribió nada- sin salir del modal de detalle."""
+
+    fch_hr: datetime
+    dispositivo_nombre: str
+    parametro_nombre: str
+    undd: str
+    vlr: str
+
+
+class RegistrosIngestaResponse(BaseModel):
+    """Vista previa acotada (no pretende ser exhaustiva): total real de
+    filas en tlmtr+evnt_txt para el archivo, y una muestra de las
+    primeras `mostrados`."""
+
+    total: int
+    mostrados: int
+    items: list[RegistroIngestaItem]
+
+
 class ConexionFTPListItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
