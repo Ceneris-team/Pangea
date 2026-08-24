@@ -1,5 +1,4 @@
-import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { apiFetch, ApiError } from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import Sidebar from "../components/layout/Sidebar";
@@ -116,7 +115,7 @@ export default function ConexionesFTP() {
     }
   }
 
-  useEffect(() => {
+  function cargarConexiones() {
     let cancelado = false;
     setLoading(true);
     setError(null);
@@ -145,11 +144,23 @@ export default function ConexionesFTP() {
   // Selector de sede: un usuario con scope "global" (p. ej. Administrador o
   // Técnico CENERIS sin sede única asignada) debe indicar a qué sede
   // pertenece el datalogger (ver _resolver_sede en el backend).
+  const [sedes, setSedes] = useState<Sede[]>([]);
   useEffect(() => {
     apiFetch<Sede[]>("/sedes").then(setSedes).catch(() => {});
   }, []);
 
   const totalPaginas = data ? Math.max(1, Math.ceil(data.total / data.por_pagina)) : 1;
+
+  // Formulario de "Nueva conexión FTP" / "Editar" como ventana emergente
+  // sobre el listado (mismo patrón que Parámetros y Dispositivos).
+  const [mostrarFormulario, setMostrarFormulario] = useState(false);
+  const [idEdicion, setIdEdicion] = useState<number | null>(null);
+  const [form, setForm] = useState<ConexionFTPForm>(FORM_VACIO);
+  const [probando, setProbando] = useState(false);
+  const [guardando, setGuardando] = useState(false);
+  const [conexionValidada, setConexionValidada] = useState(false); // habilita GUARDAR
+  const [mensaje, setMensaje] = useState("");
+  const [mensajeOk, setMensajeOk] = useState(false);
 
   function abrirFormularioNueva() {
     setIdEdicion(null);
@@ -162,7 +173,7 @@ export default function ConexionesFTP() {
   function abrirFormularioEditar(c: ConexionFTPListItem) {
     setIdEdicion(c.id_cnxn);
     setForm({
-      id_sd: "",
+      id_sd: String(c.id_sd),
       nmbr: c.nmbr,
       hst: c.hst,
       prt: String(c.prt),
@@ -378,25 +389,73 @@ export default function ConexionesFTP() {
                             </span>
                           </td>
                           <td className="px-6 py-4 text-right">
-                            <button
-                              onClick={() => abrirFormularioEditar(c)}
-                              className="inline-flex items-center justify-center px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-200 bg-transparent border border-black/20 dark:border-white/20 rounded-lg hover:bg-black/10 dark:hover:bg-white/10 hover:text-gray-900 dark:hover:text-white transition-all"
-                            >
-                              <svg
-                                className="w-4 h-4 mr-2 text-gray-600 dark:text-gray-300"
-                                fill="none"
-                                viewBox="0 0 24 24"
-                                strokeWidth="2"
-                                stroke="currentColor"
-                              >
-                                <path
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
-                                />
-                              </svg>
-                              Editar
-                            </button>
+                            {confirmandoId === c.id_cnxn ? (
+                              <div className="inline-flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => handleEliminar(c.id_cnxn)}
+                                  disabled={segundosRestantes > 0 || eliminandoId === c.id_cnxn}
+                                  className="px-3 py-1.5 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                                >
+                                  {eliminandoId === c.id_cnxn
+                                    ? "Eliminando..."
+                                    : segundosRestantes > 0
+                                      ? `Confirmar (${segundosRestantes})`
+                                      : "Confirmar eliminación"}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={cancelarConfirmacion}
+                                  disabled={eliminandoId === c.id_cnxn}
+                                  className="px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-200 bg-transparent border border-black/20 dark:border-white/20 rounded-lg hover:bg-black/10 dark:hover:bg-white/10 transition-all"
+                                >
+                                  Cancelar
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="inline-flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => abrirFormularioEditar(c)}
+                                  className="inline-flex items-center justify-center px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-200 bg-transparent border border-black/20 dark:border-white/20 rounded-lg hover:bg-black/10 dark:hover:bg-white/10 hover:text-gray-900 dark:hover:text-white transition-all"
+                                >
+                                  <svg
+                                    className="w-4 h-4 mr-2 text-gray-600 dark:text-gray-300"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    strokeWidth="2"
+                                    stroke="currentColor"
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+                                    />
+                                  </svg>
+                                  Editar
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => iniciarConfirmacion(c.id_cnxn)}
+                                  className="inline-flex items-center justify-center px-3 py-1.5 text-sm font-medium text-red-600 dark:text-red-400 bg-transparent border border-black/20 dark:border-white/20 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-all"
+                                >
+                                  <svg
+                                    className="w-4 h-4 mr-2"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    strokeWidth="2"
+                                    stroke="currentColor"
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      d="M6 18L18 6M6 6l12 12"
+                                    />
+                                  </svg>
+                                  Eliminar
+                                </button>
+                              </div>
+                            )}
                           </td>
                         </tr>
                       ))}
