@@ -11,7 +11,7 @@ export default function PanelComercial() {
   return (
     <div className={`${isDarkMode ? "dark" : ""} font-sans`}>
       <div className="flex h-screen bg-transparent transition-colors duration-300 overflow-hidden">
-        <Sidebar onLogout={logout} activo="dashboard" rol={rol} />
+        <Sidebar onLogout={logout} activo="panel" rol={rol} />
 
         <div className="flex-1 flex flex-col overflow-hidden">
           <div className="flex justify-end p-4 md:p-6 pb-0">

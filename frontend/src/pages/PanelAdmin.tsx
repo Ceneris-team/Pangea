@@ -13,7 +13,7 @@ export default function PanelAdmin() {
       <div className="flex h-screen bg-transparent transition-colors duration-300 overflow-hidden">
 
         {/* SIDEBAR */}
-        <Sidebar onLogout={logout} activo="dashboard" rol={rol} />
+        <Sidebar onLogout={logout} activo="panel" rol={rol} />
 
         {/* ÁREA PRINCIPAL */}
         <div className="flex-1 flex flex-col overflow-hidden">
