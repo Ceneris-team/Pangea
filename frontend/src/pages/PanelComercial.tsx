@@ -32,7 +32,7 @@ export default function PanelComercial() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-4">
               <Link
                 to="/ubicaciones"
-                className="bg-white/35 dark:bg-white/[0.03] backdrop-blur-md rounded-2xl shadow-sm border border-black/10 dark:border-white/10 p-6 hover:border-[#ccff00] transition-colors"
+                className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl shadow-sm border border-black/10 dark:border-white/10 p-6 hover:border-[#ccff00] transition-colors"
               >
                 <div className="w-10 h-10 rounded-lg bg-[#ccff00]/20 flex items-center justify-center mb-3">
                   <svg className="w-5 h-5 text-[#5a7000] dark:text-[#ccff00]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -46,7 +46,7 @@ export default function PanelComercial() {
 
               <Link
                 to="/mi-perfil"
-                className="bg-white/35 dark:bg-white/[0.03] backdrop-blur-md rounded-2xl shadow-sm border border-black/10 dark:border-white/10 p-6 hover:border-[#ccff00] transition-colors"
+                className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl shadow-sm border border-black/10 dark:border-white/10 p-6 hover:border-[#ccff00] transition-colors"
               >
                 <div className="w-10 h-10 rounded-lg bg-[#ccff00]/20 flex items-center justify-center mb-3">
                   <svg className="w-5 h-5 text-[#5a7000] dark:text-[#ccff00]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
