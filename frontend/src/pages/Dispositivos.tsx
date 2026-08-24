@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { apiFetch, ApiError } from "../services/api";
 import { useAuth } from "../context/AuthContext";
@@ -25,6 +25,27 @@ interface UbicacionListItem {
   id_ubccn: number;
   nmbr: string;
 }
+
+interface ConexionFTPOption {
+  id_cnxn: number;
+  nmbr: string;
+}
+
+interface DispositivoForm {
+  nmbr: string;
+  mrc: string;
+  mdl: string;
+  id_ubccn: string;
+  id_cnxn: string;
+}
+
+const FORM_VACIO: DispositivoForm = {
+  nmbr: "",
+  mrc: "",
+  mdl: "",
+  id_ubccn: "",
+  id_cnxn: "",
+};
 
 const POR_PAGINA = 10;
 
@@ -95,7 +116,7 @@ export default function Dispositivos() {
     setPagina(1);
   }, [busqueda, idUbccn, estado]);
 
-  useEffect(() => {
+  function cargarDispositivos() {
     let cancelado = false;
     setLoading(true);
     setError(null);
@@ -123,7 +144,100 @@ export default function Dispositivos() {
     return () => {
       cancelado = true;
     };
-  }, [busqueda, idUbccn, estado, pagina]);
+  }
+
+  useEffect(cargarDispositivos, [busqueda, idUbccn, estado, pagina]);
+
+  // HU11: formulario de "Añadir dispositivo" como ventana emergente sobre
+  // el listado (mismo patrón que Conexiones FTP y Parámetros).
+  const [mostrarFormulario, setMostrarFormulario] = useState(false);
+  const [form, setForm] = useState<DispositivoForm>(FORM_VACIO);
+  const [ubicacionesActivas, setUbicacionesActivas] = useState<UbicacionListItem[]>([]);
+  const [conexiones, setConexiones] = useState<ConexionFTPOption[]>([]);
+  const [guardandoDispositivo, setGuardandoDispositivo] = useState(false);
+  const [errorFormulario, setErrorFormulario] = useState("");
+
+  // CA1: el selector de Ubicación solo ofrece ubicaciones Activas.
+  useEffect(() => {
+    apiFetch<{ items: UbicacionListItem[] }>("/ubicaciones", {
+      params: { estado: "Activa", por_pagina: 100 },
+    })
+      .then((res) => setUbicacionesActivas(res.items))
+      .catch(() => setUbicacionesActivas([]));
+  }, []);
+
+  // CA1: el selector de Conexión FTP reusa GET /conexiones-ftp (HU05).
+  useEffect(() => {
+    apiFetch<{ items: ConexionFTPOption[] }>("/conexiones-ftp", {
+      params: { por_pagina: 100 },
+    })
+      .then((res) => setConexiones(res.items))
+      .catch(() => setConexiones([]));
+  }, []);
+
+  function abrirFormulario() {
+    setForm(FORM_VACIO);
+    setErrorFormulario("");
+    setMostrarFormulario(true);
+  }
+
+  /** CA4: descarta el formulario sin llamar al backend. */
+  function cerrarFormulario() {
+    setMostrarFormulario(false);
+  }
+
+  function actualizarCampoDispositivo<K extends keyof DispositivoForm>(campo: K, valor: DispositivoForm[K]) {
+    setForm((prev) => ({ ...prev, [campo]: valor }));
+  }
+
+  /** CA2 + CA3. */
+  async function handleSubmitDispositivo(e: FormEvent) {
+    e.preventDefault();
+
+    if (!form.nmbr.trim()) {
+      setErrorFormulario("El nombre del dispositivo es obligatorio");
+      return;
+    }
+    if (!form.mrc.trim()) {
+      setErrorFormulario("La marca es obligatoria");
+      return;
+    }
+    if (!form.id_ubccn) {
+      setErrorFormulario("Selecciona la ubicación del dispositivo");
+      return;
+    }
+    if (!form.id_cnxn) {
+      setErrorFormulario("Selecciona la conexión FTP del dispositivo");
+      return;
+    }
+
+    setGuardandoDispositivo(true);
+    setErrorFormulario("");
+    try {
+      await apiFetch<{ mensaje: string }>("/dispositivos", {
+        method: "POST",
+        body: {
+          nmbr: form.nmbr.trim(),
+          mrc: form.mrc.trim(),
+          mdl: form.mdl.trim() || null,
+          id_ubccn: Number(form.id_ubccn),
+          id_cnxn: Number(form.id_cnxn),
+        },
+      });
+
+      setMostrarFormulario(false);
+      setMensajeExito("Dispositivo añadido correctamente");
+      cargarDispositivos();
+    } catch (err) {
+      setErrorFormulario(err instanceof ApiError ? err.message : "No se pudo registrar el dispositivo");
+    } finally {
+      setGuardandoDispositivo(false);
+    }
+  }
+
+  const inputClaseDispositivo =
+    "bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block w-full p-2.5 outline-none";
+  const labelClaseDispositivo = "block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1";
 
   const totalPaginas = data ? Math.max(1, Math.ceil(data.total / data.por_pagina)) : 1;
   const inicioRango = data ? (data.pagina - 1) * data.por_pagina + 1 : 0;
@@ -168,7 +282,7 @@ export default function Dispositivos() {
               {/* HU11 CA1: punto de entrada al formulario de registro. */}
               {ROLES_PUEDEN_AGREGAR.includes(rol ?? "") && (
                 <button
-                  onClick={() => navigate("/dispositivos/nueva")}
+                  onClick={abrirFormulario}
                   className="inline-flex items-center px-4 py-2.5 text-sm font-semibold text-[#ccff00] bg-[#ccff00]/10 hover:bg-[#ccff00]/20 border border-[#ccff00]/30 rounded-xl transition-colors"
                 >
                   <svg
@@ -366,6 +480,134 @@ export default function Dispositivos() {
           </main>
         </div>
       </div>
+
+      {mostrarFormulario && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl shadow-xl border border-black/10 dark:border-white/10">
+            <form onSubmit={handleSubmitDispositivo}>
+              <div className="p-6 border-b border-black/10 dark:border-white/10">
+                <h2 className="text-lg font-bold text-gray-900 dark:text-white">Agregar dispositivo</h2>
+                <p className="text-sm text-gray-600 dark:text-gray-300 mt-1 font-light">
+                  Registra un nuevo dispositivo de monitoreo y asócialo a una ubicación y conexión FTP.
+                </p>
+              </div>
+
+              <div className="p-6 space-y-5">
+                {errorFormulario && (
+                  <div className="p-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm rounded-lg">
+                    {errorFormulario}
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  <div>
+                    <label className={labelClaseDispositivo} htmlFor="nmbr">
+                      Nombre <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      id="nmbr"
+                      type="text"
+                      maxLength={150}
+                      value={form.nmbr}
+                      onChange={(e) => actualizarCampoDispositivo("nmbr", e.target.value)}
+                      placeholder="CR1000-Norte"
+                      className={inputClaseDispositivo}
+                    />
+                  </div>
+
+                  <div>
+                    <label className={labelClaseDispositivo} htmlFor="mrc">
+                      Marca <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      id="mrc"
+                      type="text"
+                      maxLength={100}
+                      value={form.mrc}
+                      onChange={(e) => actualizarCampoDispositivo("mrc", e.target.value)}
+                      placeholder="Campbell"
+                      className={inputClaseDispositivo}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className={labelClaseDispositivo} htmlFor="mdl">
+                    Modelo <span className="text-gray-500 dark:text-gray-400 font-normal">(opcional)</span>
+                  </label>
+                  <input
+                    id="mdl"
+                    type="text"
+                    maxLength={100}
+                    value={form.mdl}
+                    onChange={(e) => actualizarCampoDispositivo("mdl", e.target.value)}
+                    placeholder="CR1000X"
+                    className={inputClaseDispositivo}
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  <div>
+                    <label className={labelClaseDispositivo} htmlFor="id_ubccn">
+                      Ubicación <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      id="id_ubccn"
+                      value={form.id_ubccn}
+                      onChange={(e) => actualizarCampoDispositivo("id_ubccn", e.target.value)}
+                      className={inputClaseDispositivo + " cursor-pointer"}
+                    >
+                      <option value="">Selecciona una ubicación...</option>
+                      {ubicacionesActivas.map((u) => (
+                        <option key={u.id_ubccn} value={u.id_ubccn}>
+                          {u.nmbr}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className={labelClaseDispositivo} htmlFor="id_cnxn">
+                      Conexión FTP <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      id="id_cnxn"
+                      value={form.id_cnxn}
+                      onChange={(e) => actualizarCampoDispositivo("id_cnxn", e.target.value)}
+                      className={inputClaseDispositivo + " cursor-pointer"}
+                    >
+                      <option value="">Selecciona una conexión FTP...</option>
+                      {conexiones.map((c) => (
+                        <option key={c.id_cnxn} value={c.id_cnxn}>
+                          {c.nmbr}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-6 border-t border-black/10 dark:border-white/10 flex justify-end gap-3">
+                {/* CA4: no toca el backend, solo descarta y cierra. */}
+                <button
+                  type="button"
+                  onClick={cerrarFormulario}
+                  className="px-4 py-2.5 text-sm font-semibold text-gray-700 dark:text-gray-200 bg-transparent border border-black/20 dark:border-white/20 rounded-xl hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={guardandoDispositivo}
+                  className="px-4 py-2.5 text-sm font-semibold text-[#5a7000] dark:text-[#ccff00] bg-[#ccff00]/10 hover:bg-[#ccff00]/20 border border-[#ccff00]/30 rounded-xl transition-colors disabled:opacity-50"
+                >
+                  {guardandoDispositivo ? "Guardando..." : "Guardar dispositivo"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
