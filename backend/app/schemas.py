@@ -210,6 +210,19 @@ class DispositivoCreado(BaseModel):
     estd: str
 
 
+class DispositivoUpdate(BaseModel):
+    """Edición desde la ficha del dispositivo: nombre, marca, modelo y
+    reasignación de Conexión FTP. Todos opcionales (solo se actualiza lo
+    que venga, mismo patrón que ConexionFTPUpdate). id_ubccn no es
+    editable acá: cambiar de ubicación implicaría revalidar lttd/lngtd,
+    fuera de este alcance."""
+
+    nmbr: str | None = Field(default=None, min_length=1, max_length=150)
+    mrc: str | None = Field(default=None, min_length=1, max_length=100)
+    mdl: str | None = None
+    id_cnxn: int | None = None
+
+
 # DEC-09 / IMP-06 - Ficha del dispositivo (pestañas Formato, Datos,
 # Carga de datos, Carga manual y Logs)
 
@@ -312,6 +325,28 @@ class ArchivoIngestaDetalle(BaseModel):
     mnsj_errr: str | None
 
 
+class RegistroIngestaItem(BaseModel):
+    """Una fila de tlmtr o evnt_txt generada por un archivo de la cola
+    (HU09): permite ver qué escribió realmente la ingesta -o confirmar
+    que no escribió nada- sin salir del modal de detalle."""
+
+    fch_hr: datetime
+    dispositivo_nombre: str
+    parametro_nombre: str
+    undd: str
+    vlr: str
+
+
+class RegistrosIngestaResponse(BaseModel):
+    """Vista previa acotada (no pretende ser exhaustiva): total real de
+    filas en tlmtr+evnt_txt para el archivo, y una muestra de las
+    primeras `mostrados`."""
+
+    total: int
+    mostrados: int
+    items: list[RegistroIngestaItem]
+
+
 class ConexionFTPListItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -393,16 +428,22 @@ class ParametroListItem(BaseModel):
     nmbr: str
     undd: str
     dscrpcn: str | None
+    tipo_dato: str
 
 
 class ParametroCrear(BaseModel):
     """Alta de un parámetro estándar nuevo en el catálogo (prmtr), para que
     el Técnico CENERIS no dependa de un INSERT manual cuando un mapeo
-    necesita un parámetro que todavía no existe."""
+    necesita un parámetro que todavía no existe.
+
+    tipo_dato: 'numerico' (default, va a tlmtr) o 'texto' (va a evnt_txt,
+    ver app.models.evento_texto) -para eventos como "Puerta Abierta" que
+    no son una medición y no admiten float()."""
 
     nmbr: str = Field(..., min_length=1, max_length=100)
     undd: str = Field(..., min_length=1, max_length=30)
     dscrpcn: str | None = Field(default=None, max_length=200)
+    tipo_dato: str = Field(default="numerico")
 
     @field_validator("nmbr", "undd")
     @classmethod
@@ -411,6 +452,49 @@ class ParametroCrear(BaseModel):
         if not valor:
             raise ValueError("No puede estar vacío")
         return valor
+
+    @field_validator("tipo_dato")
+    @classmethod
+    def _tipo_dato_valido(cls, valor: str) -> str:
+        if valor not in ("numerico", "texto"):
+            raise ValueError("tipo_dato debe ser 'numerico' o 'texto'")
+        return valor
+
+
+class ParametroActualizar(BaseModel):
+    """Todos los campos opcionales: se edita solo lo que cambia, mismo
+    criterio que MapeoFormatoActualizar.
+
+    tipo_dato NO se puede editar acá a propósito: si el parámetro ya
+    tiene lecturas guardadas, cambiarlo dejaría datos mezclados entre
+    tlmtr y evnt_txt bajo el mismo id_prmtr. Se define una sola vez al
+    crear (ParametroCrear); si se necesita el otro tipo, se crea un
+    parámetro nuevo."""
+
+    nmbr: str | None = Field(default=None, min_length=1, max_length=100)
+    undd: str | None = Field(default=None, min_length=1, max_length=30)
+    dscrpcn: str | None = Field(default=None, max_length=200)
+
+    @field_validator("nmbr", "undd")
+    @classmethod
+    def _no_vacio(cls, valor: str | None) -> str | None:
+        if valor is None:
+            return valor
+        valor = valor.strip()
+        if not valor:
+            raise ValueError("No puede estar vacío")
+        return valor
+
+
+class ListadoParametros(BaseModel):
+    """Paginado: el catálogo puede crecer bastante (un parámetro por cada
+    variable física que mide algún dataloger), y listarlo entero en cada
+    carga de la pantalla no escala."""
+
+    total: int
+    pagina: int
+    por_pagina: int
+    items: list[ParametroListItem]
 
 
 class SedeListItem(BaseModel):
@@ -447,7 +531,11 @@ class MapeoColumnaDetalle(MapeoColumnaItem):
 
 
 class MapeoFormatoBase(BaseModel):
-    tp_trm: str = Field(default="H")  # 'H' datos periódicos / 'E' eventos
+    tp_trm: str = Field(default="H")  # letra libre A-Z; 'H'/'E'/'P' son solo las frecuentes
+    # Descripción corta y libre de qué es esta trama (p. ej. "Nivel de
+    # napa"). Sin catálogo cerrado de tp_trm, es lo único que explica qué
+    # significa una letra que no es H/E/P.
+    dscrpcn: str | None = Field(default=None, max_length=200)
     dlmtdr: str  # obligatorio: coma, punto y coma, tabulador o espacio
     # Separador decimal del dato numérico, no de las columnas. Default '.'
     # = comportamiento previo a DEC-09, para los mapeos ya cargados.
@@ -475,6 +563,7 @@ class MapeoFormatoActualizar(BaseModel):
     dispositivo correcto."""
 
     tp_trm: str | None = None
+    dscrpcn: str | None = Field(default=None, max_length=200)
     dlmtdr: str | None = None
     dlmtdr_dcml: str | None = None
     fl_inc_dts: int | None = Field(default=None, ge=1)
@@ -498,6 +587,7 @@ class MapeoFormatoListItem(BaseModel):
     id_sd: int
     mrc: str
     tp_trm: str
+    dscrpcn: str | None
     dlmtdr: str
     dlmtdr_dcml: str
     fl_inc_dts: int
@@ -537,6 +627,14 @@ class ColumnaVistaPrevia(BaseModel):
     parametro_nombre: str | None
     parametro_unidad: str | None
     id_prmtr_sugerido: int | None = None
+    # True si el parámetro asignado es 'numerico' pero al menos una fila
+    # de la MUESTRA trae un valor no numérico en esta columna (ej. "Modo
+    # Normal" contra un parámetro numérico): esas filas se perderían en
+    # la ingesta real, igual que perdía MensajeP/MensajeA antes de que
+    # existiera prmtr.tipo_dato. Se avisa acá, antes de guardar, en vez
+    # de que el técnico lo descubra después con datos faltantes en la
+    # cola de ingesta.
+    tipo_dato_incompatible: bool = False
 
 
 class DispositivoParaMapeo(BaseModel):

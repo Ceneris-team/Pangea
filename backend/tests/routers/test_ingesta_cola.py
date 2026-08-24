@@ -11,7 +11,15 @@ from fastapi.testclient import TestClient
 
 from app.database import get_db
 from app.main import app
-from app.models import ArchivoIngesta, ConexionFTP, Dispositivo, Ubicacion
+from app.models import (
+    ArchivoIngesta,
+    ConexionFTP,
+    Dispositivo,
+    EventoTexto,
+    Parametro,
+    Telemetria,
+    Ubicacion,
+)
 from app.models.suscripcion import PermisoUsuarioSede
 from app.security.dependencies import get_current_user
 
@@ -305,3 +313,208 @@ class TestDetalleArchivoIngesta:
             usuario, rol.nmbr, sede_id=sede.id_sd
         )
         assert client.get("/ingesta/cola/1").status_code == 403
+
+
+def crear_parametro(db_session, nombre, unidad="u", tipo_dato="numerico"):
+    parametro = Parametro(nmbr=nombre, undd=unidad, tipo_dato=tipo_dato)
+    db_session.add(parametro)
+    db_session.flush()
+    return parametro
+
+
+def crear_medicion(db_session, dispositivo, parametro, sede, archivo, valor=10.0, fecha=None):
+    medicion = Telemetria(
+        fch_hr=fecha or dt.datetime.now(dt.timezone.utc),
+        id_dspstv=dispositivo.id_dspstv,
+        id_prmtr=parametro.id_prmtr,
+        id_sd=sede.id_sd,
+        vlr=valor,
+        id_archv=archivo.id_archv,
+    )
+    db_session.add(medicion)
+    db_session.flush()
+    return medicion
+
+
+def crear_evento_texto(db_session, dispositivo, parametro, sede, archivo, valor="Puerta Abierta", fecha=None):
+    evento = EventoTexto(
+        fch_hr=fecha or dt.datetime.now(dt.timezone.utc),
+        id_dspstv=dispositivo.id_dspstv,
+        id_prmtr=parametro.id_prmtr,
+        id_sd=sede.id_sd,
+        vlr=valor,
+        id_archv=archivo.id_archv,
+    )
+    db_session.add(evento)
+    db_session.flush()
+    return evento
+
+
+class TestRegistrosArchivoIngesta:
+    """Vista previa de lo que un archivo procesado escribió en tlmtr/evnt_txt."""
+
+    def test_devuelve_mediciones_y_eventos_del_archivo(self, client, db_session, tecnico_lector):
+        sede, _ = tecnico_lector
+        conexion = crear_conexion(db_session, sede)
+        dispositivo = crear_dispositivo(db_session, sede, conexion)
+        archivo = crear_archivo(db_session, conexion, estd="Exitoso", rgstrs_prcsds=2)
+        parametro_num = crear_parametro(db_session, "Nivel de napa", unidad="m")
+        parametro_txt = crear_parametro(db_session, "MensajeP", unidad="-", tipo_dato="texto")
+
+        crear_medicion(db_session, dispositivo, parametro_num, sede, archivo, valor=12.5)
+        crear_evento_texto(db_session, dispositivo, parametro_txt, sede, archivo, valor="Puerta Abierta")
+
+        resp = client.get(f"/ingesta/cola/{archivo.id_archv}/registros")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["total"] == 2
+        assert body["mostrados"] == 2
+        valores = {item["parametro_nombre"]: item["vlr"] for item in body["items"]}
+        assert valores["Nivel de napa"] == "12.5000"
+        assert valores["MensajeP"] == "Puerta Abierta"
+
+    def test_archivo_sin_registros_devuelve_total_cero(self, client, db_session, tecnico_lector):
+        sede, _ = tecnico_lector
+        conexion = crear_conexion(db_session, sede)
+        archivo = crear_archivo(db_session, conexion, estd="Exitoso", rgstrs_prcsds=0)
+
+        resp = client.get(f"/ingesta/cola/{archivo.id_archv}/registros")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["total"] == 0
+        assert body["items"] == []
+
+    def test_no_mezcla_registros_de_otro_archivo(self, client, db_session, tecnico_lector):
+        sede, _ = tecnico_lector
+        conexion = crear_conexion(db_session, sede)
+        dispositivo = crear_dispositivo(db_session, sede, conexion)
+        parametro = crear_parametro(db_session, "Nivel de napa", unidad="m")
+
+        archivo_1 = crear_archivo(db_session, conexion, nombre="H_1.dat", estd="Exitoso")
+        archivo_2 = crear_archivo(db_session, conexion, nombre="H_2.dat", estd="Exitoso")
+        crear_medicion(db_session, dispositivo, parametro, sede, archivo_1, valor=1)
+        crear_medicion(db_session, dispositivo, parametro, sede, archivo_2, valor=2)
+
+        resp = client.get(f"/ingesta/cola/{archivo_1.id_archv}/registros")
+        body = resp.json()
+        assert body["total"] == 1
+        assert body["items"][0]["vlr"] == "1.0000"
+
+    def test_archivo_inexistente_devuelve_404(self, client, tecnico_lector):
+        assert client.get("/ingesta/cola/999999/registros").status_code == 404
+
+    def test_usuario_de_otra_sede_no_ve_los_registros(self, client, db_session, tecnico_lector, fabrica):
+        sede, _ = tecnico_lector
+        conexion = crear_conexion(db_session, sede)
+        archivo = crear_archivo(db_session, conexion, estd="Exitoso")
+
+        otro_rol = fabrica.rol("Administrador")
+        otra_sede = fabrica.sede()
+        otro_usuario = fabrica.usuario(rol=otro_rol)
+        agregar_permiso(db_session, otro_usuario, otra_sede, "Ingesta", "Lectura", otro_rol)
+        app.dependency_overrides[get_current_user] = lambda: usuario_jwt(
+            otro_usuario, otro_rol.nmbr, sede_id=otra_sede.id_sd
+        )
+
+        assert client.get(f"/ingesta/cola/{archivo.id_archv}/registros").status_code == 403
+
+    def test_denegado_sin_permiso(self, client, db_session, fabrica):
+        rol = fabrica.rol("Cliente Final")
+        sede = fabrica.sede()
+        usuario = fabrica.usuario(rol=rol)
+        app.dependency_overrides[get_current_user] = lambda: usuario_jwt(
+            usuario, rol.nmbr, sede_id=sede.id_sd
+        )
+        assert client.get("/ingesta/cola/1/registros").status_code == 403
+
+
+@pytest.fixture()
+def tecnico_editor(db_session, fabrica):
+    """Técnico CENERIS con permiso de Edición sobre Ingesta en su sede -
+    nivel que exige POST /ingesta/cola/{id}/reintentar, a diferencia de los
+    GET de este módulo que solo piden Lectura."""
+    rol = fabrica.rol("Técnico CENERIS")
+    sede = fabrica.sede()
+    usuario = fabrica.usuario(rol=rol)
+    agregar_permiso(db_session, usuario, sede, "Ingesta", "Edición", rol)
+    app.dependency_overrides[get_current_user] = lambda: usuario_jwt(
+        usuario, rol.nmbr, sede_id=sede.id_sd
+    )
+    return sede, rol
+
+
+@pytest.fixture()
+def reintentos_encolados(monkeypatch):
+    """Spy sobre procesar_archivo_dat: lo que corresponde verificar acá es
+    que el endpoint reencola la task con el id correcto, no que el
+    pipeline corra de nuevo de punta a punta (eso ya lo cubren los tests
+    de app/tasks/ingesta.py)."""
+    llamadas = []
+
+    class TaskFalsa:
+        @staticmethod
+        def delay(**kwargs):
+            llamadas.append(kwargs)
+
+    monkeypatch.setattr("app.routers.ingesta.procesar_archivo_dat", TaskFalsa)
+    return llamadas
+
+
+class TestReintentarArchivoIngesta:
+    """HU31: reprocesamiento manual de un archivo Fallido."""
+
+    def test_reencola_un_archivo_fallido(
+        self, client, db_session, tecnico_editor, reintentos_encolados
+    ):
+        sede, _ = tecnico_editor
+        conexion = crear_conexion(db_session, sede)
+        archivo = crear_archivo(
+            db_session,
+            conexion,
+            estd="Fallido",
+            mnsj_errr="dispositivo no resoluble",
+            rgstrs_prcsds=0,
+        )
+
+        resp = client.post(f"/ingesta/cola/{archivo.id_archv}/reintentar")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["estado"] == "En espera"
+        assert body["mnsj_errr"] is None
+        assert body["rgstrs_prcsds"] is None
+        assert reintentos_encolados == [{"id_archv": archivo.id_archv}]
+
+    def test_archivo_no_fallido_devuelve_409(self, client, db_session, tecnico_editor):
+        sede, _ = tecnico_editor
+        conexion = crear_conexion(db_session, sede)
+        archivo = crear_archivo(db_session, conexion, estd="Exitoso")
+
+        resp = client.post(f"/ingesta/cola/{archivo.id_archv}/reintentar")
+        assert resp.status_code == 409
+
+    def test_archivo_inexistente_devuelve_404(self, client, tecnico_editor):
+        assert client.post("/ingesta/cola/999999/reintentar").status_code == 404
+
+    def test_usuario_de_otra_sede_no_puede_reintentar(
+        self, client, db_session, tecnico_editor, fabrica
+    ):
+        sede, _ = tecnico_editor
+        conexion = crear_conexion(db_session, sede)
+        archivo = crear_archivo(db_session, conexion, estd="Fallido")
+
+        otro_rol = fabrica.rol("Administrador")
+        otra_sede = fabrica.sede()
+        otro_usuario = fabrica.usuario(rol=otro_rol)
+        agregar_permiso(db_session, otro_usuario, otra_sede, "Ingesta", "Edición", otro_rol)
+        app.dependency_overrides[get_current_user] = lambda: usuario_jwt(
+            otro_usuario, otro_rol.nmbr, sede_id=otra_sede.id_sd
+        )
+
+        assert client.post(f"/ingesta/cola/{archivo.id_archv}/reintentar").status_code == 403
+
+    def test_denegado_con_solo_permiso_de_lectura(self, client, db_session, tecnico_lector):
+        sede, _ = tecnico_lector
+        conexion = crear_conexion(db_session, sede)
+        archivo = crear_archivo(db_session, conexion, estd="Fallido")
+
+        assert client.post(f"/ingesta/cola/{archivo.id_archv}/reintentar").status_code == 403

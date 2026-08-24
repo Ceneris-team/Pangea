@@ -17,12 +17,22 @@ from app.database import Base
 class MapeoFormato(Base):
     """HU 06: mini-ETL por DISPOSITIVO (DEC-09).
 
-    Un datalogger manda dos formatos distintos de archivo, con distinto
+    Un datalogger manda varios formatos distintos de archivo, con distinto
     número y significado de columnas, y por eso el formato se identifica
     por dispositivo + tipo de trama (PP-96):
 
       tp_trm='H' -> archivos H_*.dat: datos periódicos (lectura real)
       tp_trm='E' -> archivos E_*.dat: estados y eventos del equipo
+      tp_trm='P' -> archivos P_*.dat: eventos de puerta/acceso
+
+    tp_trm YA NO es un catálogo cerrado: el equipo de telemetría configura
+    dataloggers con prefijos de archivo distintos según el proyecto, y
+    exigir una migración + deploy por cada letra nueva no escala. H/E/P de
+    arriba son simplemente los primeros valores cargados -no reciben trato
+    especial en el modelo ni en el motor de ingesta-; el único chequeo de
+    formato (una letra A-Z) vive en _validar_tipo_trama (routers/mapeos.py),
+    y services/ingesta/mapeo.py resuelve el prefijo del archivo consultando
+    los mp_frmt activos del dispositivo en vez de un diccionario fijo.
 
     DEC-09: antes el formato colgaba de (id_sd, mrc). Dos dataloggers de
     la misma marca en la misma sede, pero con sensores distintos
@@ -37,7 +47,8 @@ class MapeoFormato(Base):
 
     __tablename__ = "mp_frmt"
     __table_args__ = (
-        CheckConstraint("tp_trm IN ('H','E')", name="mpfrmt_tptrm_check"),
+        # Sin CHECK de valores fijos: tp_trm es una letra libre validada en
+        # el router (_validar_tipo_trama), no un catálogo cerrado en la BD.
         CheckConstraint("dlmtdr_dcml IN ('.', ',')", name="mpfrmt_dlmtdrdcml_check"),
         # Un dispositivo puede tener como máximo un mapeo ACTIVO por tipo
         # de trama (uno H y uno E). El parcial sobre estd deja convivir
@@ -57,6 +68,12 @@ class MapeoFormato(Base):
     id_mp = Column(Integer, primary_key=True, autoincrement=True)
     id_dspstv = Column(Integer, ForeignKey("dspstv.id_dspstv"), nullable=False)
     tp_trm = Column(String(5), nullable=False, server_default="H")
+    # Descripción corta y libre de qué es esta trama (p. ej. "Nivel de
+    # napa" para una letra que el técnico de telemetría definió). Antes
+    # de que tp_trm fuera libre no hacía falta -H/E/P se explicaban solos
+    # en la UI-; con letras arbitrarias, sin esto nadie sabe qué es "X"
+    # sin abrir el mapeo.
+    dscrpcn = Column(String(200))
     dlmtdr = Column(String(5), nullable=False, server_default=",")
     # Separador decimal del propio dato numérico, independiente del
     # delimitador de columna: un datalogger en locale europeo manda
@@ -69,12 +86,29 @@ class MapeoFormato(Base):
 
 
 class Parametro(Base):
+    """tipo_dato distingue una MEDICIÓN numérica (tlmtr.vlr es
+    Numeric(14,4) NOT NULL, no admite texto) de un EVENTO de texto (ej.
+    "MensajeP"/"MensajeA" de una trama de puerta: "Puerta Abierta", "Llave
+    No Encontrada"). Antes de esto todo parámetro se validaba como
+    número (validador._parsear_numero); un parámetro de texto perdía cada
+    fila en silencio porque float("Puerta Abierta") siempre falla.
+
+    Un parámetro de tipo 'texto' se persiste en evnt_txt (ver
+    EventoTexto), no en tlmtr -no se puede simplemente volver tlmtr.vlr
+    texto/nullable: es una tabla particionada con datos reales, y
+    mezclar mediciones numéricas con mensajes de texto en la misma
+    columna rompería las consultas/alarmas que asumen vlr numérico."""
+
     __tablename__ = "prmtr"
+    __table_args__ = (
+        CheckConstraint("tipo_dato IN ('numerico','texto')", name="prmtr_tipodato_check"),
+    )
 
     id_prmtr = Column(Integer, primary_key=True, autoincrement=True)
     nmbr = Column(String(100), nullable=False, unique=True)
     undd = Column(String(30), nullable=False)
     dscrpcn = Column(String(200))
+    tipo_dato = Column(String(10), nullable=False, server_default="numerico")
 
 
 class MapeoColumna(Base):

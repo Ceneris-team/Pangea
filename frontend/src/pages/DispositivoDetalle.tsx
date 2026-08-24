@@ -5,6 +5,7 @@ import { useAuth } from "../context/AuthContext";
 import { ROLES } from "../config/roles";
 import Sidebar from "../components/layout/Sidebar";
 import Topbar from "../components/layout/Topbar";
+import ConfirmarEliminacionModal from "../components/ConfirmarEliminacionModal";
 
 /**
  * DEC-09 - Ficha del Dispositivo.
@@ -29,8 +30,17 @@ import Topbar from "../components/layout/Topbar";
  * pestaña.
  */
 
-type TipoTrama = "H" | "E";
+// Letra libre (A-Z), no un catálogo cerrado: el técnico de telemetría
+// define el prefijo de archivo de cada dataloger (ver backend
+// _validar_tipo_trama). H/E/P son solo los valores más frecuentes.
+type TipoTrama = string;
 type Pestana = "formato" | "datos" | "carga" | "manual" | "logs";
+
+const TIPOS_TRAMA_FRECUENTES: { valor: TipoTrama; etiqueta: string }[] = [
+  { valor: "H", etiqueta: "Datos periódicos (H)" },
+  { valor: "E", etiqueta: "Estados y eventos (E)" },
+  { valor: "P", etiqueta: "Eventos de puerta (P)" },
+];
 
 interface DispositivoDetalleResponse {
   id_dspstv: number;
@@ -46,11 +56,25 @@ interface DispositivoDetalleResponse {
   conexion_frcnc_mnts: number;
 }
 
+interface ConexionFTPOption {
+  id_cnxn: number;
+  nmbr: string;
+  estd: string;
+}
+
+/** Estado editable del bloque "Editar dispositivo" del header: nombre y
+ *  conexión FTP, mismo patrón de formulario que AgregarDispositivo.tsx. */
+interface DispositivoEditForm {
+  nmbr: string;
+  id_cnxn: string;
+}
+
 interface Parametro {
   id_prmtr: number;
   nmbr: string;
   undd: string;
   dscrpcn: string | null;
+  tipo_dato: "numerico" | "texto";
 }
 
 interface MapeoColumnaDetalle {
@@ -67,6 +91,7 @@ interface MapeoDetalle {
   id_sd: number;
   mrc: string;
   tp_trm: string;
+  dscrpcn: string | null;
   dlmtdr: string;
   dlmtdr_dcml: string;
   fl_inc_dts: number;
@@ -89,6 +114,7 @@ interface LogIngesta {
 /** Estado editable de la pestaña Formato, en las unidades del formulario
  *  (todo string, como lo entrega un <input>). */
 interface FormatoForm {
+  dscrpcn: string;
   dlmtdr: string;
   dlmtdr_dcml: string;
   fl_inc_dts: string;
@@ -114,6 +140,7 @@ const DELIMITADORES_DECIMALES = [
 ];
 
 const FORMATO_VACIO: FormatoForm = {
+  dscrpcn: "",
   dlmtdr: ",",
   dlmtdr_dcml: ".",
   fl_inc_dts: "1",
@@ -144,6 +171,26 @@ export default function DispositivoDetalle() {
   // Compartido por Formato y Datos: son dos vistas del MISMO registro de
   // mp_frmt, elegido por (este dispositivo, este tipo de trama).
   const [tipoTrama, setTipoTrama] = useState<TipoTrama>("H");
+  // Letras con mapeo ya configurado para este dispositivo (además de las
+  // frecuentes H/E/P), para que el selector muestre lo que el técnico ya
+  // armó y no solo el catálogo sugerido.
+  const [tramasExistentes, setTramasExistentes] = useState<string[]>([]);
+  const [agregandoTrama, setAgregandoTrama] = useState(false);
+  const [nuevaTrama, setNuevaTrama] = useState("");
+
+  // Pills del selector: las existentes van primero y las frecuentes
+  // después, así que al fusionar por letra (Map conserva el ÚLTIMO valor
+  // por key) una letra frecuente con mapeo ya cargado (p. ej. "H") se
+  // queda con su etiqueta completa ("Datos periódicos (H)") en vez de la
+  // etiqueta pelada que le daría tratarla solo como "existente".
+  const opcionesTrama = Array.from(
+    new Map(
+      [
+        ...tramasExistentes.map((t) => ({ valor: t, etiqueta: t })),
+        ...TIPOS_TRAMA_FRECUENTES,
+      ].map((o) => [o.valor, o])
+    ).values()
+  );
 
   const [dispositivo, setDispositivo] = useState<DispositivoDetalleResponse | null>(null);
   const [parametros, setParametros] = useState<Parametro[]>([]);
@@ -156,8 +203,17 @@ export default function DispositivoDetalle() {
 
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
+  const [eliminandoMapeo, setEliminandoMapeo] = useState(false);
+  const [mostrandoConfirmacionEliminar, setMostrandoConfirmacionEliminar] = useState(false);
   const [mensaje, setMensaje] = useState("");
   const [mensajeOk, setMensajeOk] = useState(false);
+
+  // Edición de nombre/conexión FTP desde el header (mismo caso que crear
+  // el dispositivo, HU11): reasignar la conexión correcta sin recrearlo.
+  const [editando, setEditando] = useState(false);
+  const [conexiones, setConexiones] = useState<ConexionFTPOption[]>([]);
+  const [formEdicion, setFormEdicion] = useState<DispositivoEditForm>({ nmbr: "", id_cnxn: "" });
+  const [guardandoEdicion, setGuardandoEdicion] = useState(false);
 
   function avisar(texto: string, ok: boolean) {
     setMensajeOk(ok);
@@ -182,6 +238,46 @@ export default function DispositivoDetalle() {
       );
   }, [id]);
 
+  // Selector de Conexión FTP del formulario de edición: mismo patrón que
+  // AgregarDispositivo.tsx (GET /conexiones-ftp, hasta 100 por página).
+  useEffect(() => {
+    apiFetch<{ items: ConexionFTPOption[] }>("/conexiones-ftp", { params: { por_pagina: 100 } })
+      .then((res) => setConexiones(res.items))
+      .catch(() => setConexiones([]));
+  }, []);
+
+  function abrirEdicion() {
+    if (!dispositivo) return;
+    setFormEdicion({ nmbr: dispositivo.nmbr, id_cnxn: String(dispositivo.id_cnxn) });
+    setEditando(true);
+  }
+
+  async function guardarEdicionDispositivo(e: FormEvent) {
+    e.preventDefault();
+    if (!id || !dispositivo) return;
+
+    setGuardandoEdicion(true);
+    try {
+      const res = await apiFetch<{ mensaje: string; dispositivo: DispositivoDetalleResponse }>(
+        `/dispositivos/${id}`,
+        {
+          method: "PUT",
+          body: {
+            nmbr: formEdicion.nmbr.trim(),
+            id_cnxn: Number(formEdicion.id_cnxn),
+          },
+        }
+      );
+      setDispositivo(res.dispositivo);
+      setEditando(false);
+      avisar(res.mensaje, true);
+    } catch (err) {
+      avisar(err instanceof ApiError ? err.message : "No se pudo actualizar el dispositivo", false);
+    } finally {
+      setGuardandoEdicion(false);
+    }
+  }
+
   /** Carga el mapeo de (este dispositivo, tipo de trama actual). Que no
    *  exista es un estado válido -el dispositivo todavía no se configuró
    *  para ese tipo-, así que deja el formulario en blanco sin error. */
@@ -192,6 +288,9 @@ export default function DispositivoDetalle() {
       params: { id_dspstv: id },
     })
       .then(async (res) => {
+        setTramasExistentes(
+          Array.from(new Set(res.items.filter((m) => m.estd === "Activo").map((m) => m.tp_trm)))
+        );
         const enLista = res.items.find(
           (m) => m.tp_trm === tipoTrama && m.estd === "Activo"
         );
@@ -205,6 +304,7 @@ export default function DispositivoDetalle() {
         const detalle = await apiFetch<MapeoDetalle>(`/mapeos/${enLista.id_mp}`);
         setMapeo(detalle);
         setFormato({
+          dscrpcn: detalle.dscrpcn ?? "",
           dlmtdr: detalle.dlmtdr,
           dlmtdr_dcml: detalle.dlmtdr_dcml,
           fl_inc_dts: String(detalle.fl_inc_dts),
@@ -253,6 +353,7 @@ export default function DispositivoDetalle() {
 
       const comun = {
         tp_trm: tipoTrama,
+        dscrpcn: formato.dscrpcn.trim() || null,
         dlmtdr: formato.dlmtdr,
         dlmtdr_dcml: formato.dlmtdr_dcml,
         fl_inc_dts: Number(formato.fl_inc_dts),
@@ -276,6 +377,24 @@ export default function DispositivoDetalle() {
       avisar(err instanceof ApiError ? err.message : "No se pudo guardar el mapeo", false);
     } finally {
       setGuardando(false);
+    }
+  }
+
+  async function confirmarEliminarMapeo() {
+    if (!mapeo) return;
+    setEliminandoMapeo(true);
+    try {
+      const res = await apiFetch<{ mensaje: string }>(`/mapeos/${mapeo.id_mp}`, {
+        method: "DELETE",
+      });
+      setMostrandoConfirmacionEliminar(false);
+      avisar(res.mensaje, true);
+      cargarMapeo();
+    } catch (err) {
+      setMostrandoConfirmacionEliminar(false);
+      avisar(err instanceof ApiError ? err.message : "No se pudo eliminar el mapeo", false);
+    } finally {
+      setEliminandoMapeo(false);
     }
   }
 
@@ -307,14 +426,77 @@ export default function DispositivoDetalle() {
             </button>
 
             <header className="mb-6">
-              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-                {dispositivo?.nmbr ?? "Dispositivo"}
-              </h1>
-              <p className="text-sm text-gray-600 dark:text-gray-300">
-                {dispositivo
-                  ? `${dispositivo.mrc}${dispositivo.mdl ? ` · ${dispositivo.mdl}` : ""} · ${dispositivo.ubicacion_nombre}`
-                  : "Cargando..."}
-              </p>
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+                    {dispositivo?.nmbr ?? "Dispositivo"}
+                  </h1>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    {dispositivo
+                      ? `${dispositivo.mrc}${dispositivo.mdl ? ` · ${dispositivo.mdl}` : ""} · ${dispositivo.ubicacion_nombre} · Conexión: ${dispositivo.conexion_nombre}`
+                      : "Cargando..."}
+                  </p>
+                </div>
+                {puedeEditar && dispositivo && !editando && (
+                  <button
+                    type="button"
+                    onClick={abrirEdicion}
+                    className="px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-transparent border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-all shrink-0"
+                  >
+                    Editar dispositivo
+                  </button>
+                )}
+              </div>
+
+              {editando && (
+                <form
+                  onSubmit={guardarEdicionDispositivo}
+                  className="mt-4 p-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/40 grid grid-cols-1 md:grid-cols-2 gap-4"
+                >
+                  <div>
+                    <label className={labelClase}>Nombre del dispositivo</label>
+                    <input
+                      type="text"
+                      required
+                      value={formEdicion.nmbr}
+                      onChange={(e) =>
+                        setFormEdicion((prev) => ({ ...prev, nmbr: e.target.value }))
+                      }
+                      className={inputClase}
+                    />
+                  </div>
+                  <div>
+                    <label className={labelClase}>Conexión FTP</label>
+                    <select
+                      required
+                      value={formEdicion.id_cnxn}
+                      onChange={(e) =>
+                        setFormEdicion((prev) => ({ ...prev, id_cnxn: e.target.value }))
+                      }
+                      className={inputClase + " cursor-pointer"}
+                    >
+                      {conexiones.map((c) => (
+                        <option key={c.id_cnxn} value={c.id_cnxn}>
+                          {c.nmbr} {c.estd !== "Activa" ? `(${c.estd})` : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="md:col-span-2 flex gap-3">
+                    <button type="submit" disabled={guardandoEdicion} className={botonPrimario}>
+                      {guardandoEdicion ? "Guardando..." : "Guardar cambios"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditando(false)}
+                      disabled={guardandoEdicion}
+                      className="px-4 py-2 text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-all"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </form>
+              )}
             </header>
 
             {mensaje && (
@@ -353,31 +535,84 @@ export default function DispositivoDetalle() {
 
             {/* Selector de tipo de trama: compartido por Formato y Datos.
                 No aplica a Carga de datos (el tipo lo decide el prefijo
-                H_/E_ del archivo) ni a Logs. */}
+                del archivo, resuelto contra las tramas configuradas) ni a
+                Logs. Letra libre (A-Z): combina las frecuentes (H/E/P) con
+                las que este dispositivo ya tiene configuradas, más un
+                botón para agregar una letra nueva -el técnico de
+                telemetría ya no depende de que se programe cada letra. */}
             {(pestana === "formato" || pestana === "datos") && (
               <div className="mb-6">
                 <span className={labelClase}>Tipo de trama</span>
-                <div className="inline-flex rounded-xl border border-black/20 dark:border-white/20 overflow-hidden">
-                  {(
-                    [
-                      { valor: "H" as TipoTrama, etiqueta: "Datos periódicos (H)" },
-                      { valor: "E" as TipoTrama, etiqueta: "Estados y eventos (E)" },
-                    ]
-                  ).map((opcion) => (
-                    <button
-                      key={opcion.valor}
-                      type="button"
-                      onClick={() => setTipoTrama(opcion.valor)}
-                      className={
-                        "px-4 py-2 text-sm font-medium transition-colors " +
-                        (tipoTrama === opcion.valor
-                          ? "bg-[#ccff00] text-[#1a202c]"
-                          : "bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm text-gray-700 dark:text-gray-200")
-                      }
-                    >
-                      {opcion.etiqueta}
-                    </button>
-                  ))}
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="inline-flex rounded-xl border border-gray-300 dark:border-gray-600 overflow-hidden">
+                    {opcionesTrama.map((opcion) => (
+                      <button
+                        key={opcion.valor}
+                        type="button"
+                        onClick={() => {
+                          setTipoTrama(opcion.valor);
+                          setAgregandoTrama(false);
+                        }}
+                        className={
+                          "px-4 py-2 text-sm font-medium transition-colors " +
+                          (tipoTrama === opcion.valor
+                            ? "bg-[#ccff00] text-[#1a202c]"
+                            : "bg-white dark:bg-[#2d3748] text-gray-700 dark:text-gray-300")
+                        }
+                      >
+                        {opcion.etiqueta}
+                      </button>
+                    ))}
+                  </div>
+
+                  {puedeEditar &&
+                    (agregandoTrama ? (
+                      <form
+                        className="inline-flex items-center gap-1.5"
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          const letra = nuevaTrama.trim().toUpperCase();
+                          if (!/^[A-Z]$/.test(letra)) {
+                            avisar("El tipo de trama debe ser una sola letra (A-Z)", false);
+                            return;
+                          }
+                          setTipoTrama(letra);
+                          setAgregandoTrama(false);
+                          setNuevaTrama("");
+                        }}
+                      >
+                        <input
+                          autoFocus
+                          type="text"
+                          maxLength={1}
+                          placeholder="X"
+                          value={nuevaTrama}
+                          onChange={(e) => setNuevaTrama(e.target.value.toUpperCase())}
+                          className={inputClase + " w-14 uppercase text-center"}
+                        />
+                        <button type="submit" className="px-3 py-2 text-sm font-medium text-[#5a7000] dark:text-[#ccff00]">
+                          Usar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAgregandoTrama(false);
+                            setNuevaTrama("");
+                          }}
+                          className="px-2 py-2 text-sm text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                        >
+                          Cancelar
+                        </button>
+                      </form>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setAgregandoTrama(true)}
+                        className="px-3 py-2 text-sm font-medium text-gray-600 dark:text-gray-300 border border-dashed border-gray-300 dark:border-gray-600 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700"
+                      >
+                        + Otra trama
+                      </button>
+                    ))}
                 </div>
                 <p className="mt-2 text-xs text-gray-600 dark:text-gray-300">
                   {cargando
@@ -398,6 +633,9 @@ export default function DispositivoDetalle() {
                   puedeEditar={puedeEditar}
                   guardando={guardando}
                   onGuardar={guardarMapeo}
+                  mapeoExiste={mapeo !== null}
+                  eliminando={eliminandoMapeo}
+                  onEliminar={() => setMostrandoConfirmacionEliminar(true)}
                   inputClase={inputClase}
                   labelClase={labelClase}
                   botonPrimario={botonPrimario}
@@ -448,6 +686,16 @@ export default function DispositivoDetalle() {
           </main>
         </div>
       </div>
+
+      {mostrandoConfirmacionEliminar && (
+        <ConfirmarEliminacionModal
+          titulo={`Eliminar mapeo de la trama '${tipoTrama}'`}
+          mensaje={`Los archivos ya procesados no se ven afectados, pero los archivos nuevos con el prefijo "${tipoTrama}_" dejarán de poder interpretarse hasta que se cree un mapeo nuevo para esa trama.`}
+          confirmando={eliminandoMapeo}
+          onConfirmar={confirmarEliminarMapeo}
+          onCancelar={() => setMostrandoConfirmacionEliminar(false)}
+        />
+      )}
     </div>
   );
 }
@@ -463,6 +711,9 @@ function PestanaFormato({
   puedeEditar,
   guardando,
   onGuardar,
+  mapeoExiste,
+  eliminando,
+  onEliminar,
   inputClase,
   labelClase,
   botonPrimario,
@@ -473,6 +724,9 @@ function PestanaFormato({
   puedeEditar: boolean;
   guardando: boolean;
   onGuardar: (e: FormEvent) => void;
+  mapeoExiste: boolean;
+  eliminando: boolean;
+  onEliminar: () => void;
   inputClase: string;
   labelClase: string;
   botonPrimario: string;
@@ -483,6 +737,22 @@ function PestanaFormato({
 
   return (
     <form onSubmit={onGuardar}>
+      <div className="mb-5">
+        <label className={labelClase}>Descripción de la trama</label>
+        <input
+          type="text"
+          maxLength={200}
+          placeholder='Ej. "Nivel de napa" o "Eventos de bomba"'
+          value={formato.dscrpcn}
+          onChange={(e) => campo("dscrpcn", e.target.value)}
+          disabled={!puedeEditar}
+          className={inputClase}
+        />
+        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+          Opcional. Explica qué es esta trama para quien la vea después.
+        </p>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         <div>
           <label className={labelClase}>Delimitador de columna CSV</label>
@@ -583,6 +853,16 @@ function PestanaFormato({
         <button type="submit" disabled={!puedeEditar || guardando} className={botonPrimario}>
           {guardando ? "Guardando..." : "Guardar"}
         </button>
+        {puedeEditar && mapeoExiste && (
+          <button
+            type="button"
+            onClick={onEliminar}
+            disabled={eliminando}
+            className="px-4 py-2 text-sm font-medium text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800/40 rounded-xl hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50 transition-all"
+          >
+            {eliminando ? "Eliminando..." : "Eliminar mapeo"}
+          </button>
+        )}
         {!puedeEditar && (
           <span className="text-xs text-gray-600 dark:text-gray-300">
             Tu rol no permite modificar la configuración de formato.
@@ -623,6 +903,12 @@ function PestanaDatos({
   botonPrimario: string;
 }) {
   const [nuevoIndice, setNuevoIndice] = useState("");
+  // Genera varias filas de una vez (desde un índice inicial) en vez de
+  // tener que escribir número + click "Añadir" columna por columna: con
+  // datalogers de 20+ columnas ese ciclo era el cuello de botella que
+  // reportó el usuario.
+  const [indiceInicial, setIndiceInicial] = useState("0");
+  const [cantidadGenerar, setCantidadGenerar] = useState("");
 
   const indices = Object.keys(asignaciones)
     .map(Number)
@@ -647,6 +933,23 @@ function PestanaDatos({
     // 0 = "sin asignar todavía": el guardado filtra los que sigan en 0.
     setAsignaciones((prev) => ({ ...prev, [indice]: 0 }));
     setNuevoIndice("");
+  }
+
+  function generarFilas() {
+    const inicio = Number(indiceInicial);
+    const cantidad = Number(cantidadGenerar);
+    if (!cantidadGenerar || Number.isNaN(inicio) || inicio < 0) return;
+    if (Number.isNaN(cantidad) || cantidad < 1) return;
+    setAsignaciones((prev) => {
+      const siguiente = { ...prev };
+      for (let i = inicio; i < inicio + cantidad; i++) {
+        // No pisa una fila que ya tiene parámetro asignado -generar de
+        // nuevo no debe perder trabajo ya hecho, solo completar lo que falta.
+        if (!(i in siguiente)) siguiente[i] = 0;
+      }
+      return siguiente;
+    });
+    setCantidadGenerar("");
   }
 
   return (
@@ -685,6 +988,58 @@ function PestanaDatos({
         Asignación de columnas
       </h3>
 
+      {/* Genera de una vez varias filas consecutivas: para un datalogger
+          con muchas columnas, escribir número + click "Añadir" una por una
+          es el paso lento. Acá se define el rango y la tabla de abajo
+          aparece con todas esas filas listas para elegir el parámetro de
+          cada una sin volver a tocar este control. */}
+      <div className="mb-4 p-4 rounded-xl border border-dashed border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800/40">
+        <p className="text-sm font-medium text-gray-700 dark:text-gray-200 mb-3">
+          Generar varias columnas de una vez
+        </p>
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="w-32">
+            <label className={labelClase}>Desde columna N°</label>
+            <input
+              type="number"
+              min={0}
+              value={indiceInicial}
+              onChange={(e) => setIndiceInicial(e.target.value)}
+              disabled={!puedeEditar}
+              className={inputClase}
+            />
+          </div>
+          <div className="w-32">
+            <label className={labelClase}>Cantidad</label>
+            <input
+              type="number"
+              min={1}
+              placeholder="Ej. 20"
+              value={cantidadGenerar}
+              onChange={(e) => setCantidadGenerar(e.target.value)}
+              disabled={!puedeEditar}
+              className={inputClase}
+            />
+          </div>
+          <button
+            type="button"
+            onClick={generarFilas}
+            disabled={!puedeEditar || !cantidadGenerar}
+            className="px-4 py-2.5 text-sm font-semibold text-gray-900 bg-[#ccff00] rounded-xl hover:bg-[#b8e600] disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+          >
+            Generar filas
+          </button>
+        </div>
+        <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+          Crea las filas {indiceInicial || "0"} a{" "}
+          {cantidadGenerar
+            ? Number(indiceInicial || 0) + Number(cantidadGenerar) - 1
+            : "…"}{" "}
+          en la tabla de abajo, sin parámetro asignado todavía. Las que ya tengan un parámetro
+          elegido no se tocan.
+        </p>
+      </div>
+
       <div className="overflow-x-auto">
         <table className="w-full text-sm text-left text-gray-600 dark:text-gray-300">
           <thead className="text-xs uppercase bg-black/5 dark:bg-white/5 border-b border-black/10 dark:border-white/10">
@@ -720,7 +1075,7 @@ function PestanaDatos({
                     <option value="">Sin asignar</option>
                     {parametros.map((p) => (
                       <option key={p.id_prmtr} value={p.id_prmtr}>
-                        {p.nmbr} ({p.undd})
+                        {p.nmbr} ({p.undd}){p.tipo_dato === "texto" ? " · texto" : ""}
                       </option>
                     ))}
                   </select>
@@ -957,8 +1312,8 @@ function PestanaCargaManual({
 
   return (
     <div>
-      {tipoTrama === "E" && (
-        <div className="mb-4 p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 text-sm">
+      {tipoTrama !== "H" && (
+        <div className="mb-4 p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 text-sm">
           La carga manual aplica solo a datos periódicos (H). El formulario usa
           los parámetros mapeados para la trama H de este dispositivo.
         </div>

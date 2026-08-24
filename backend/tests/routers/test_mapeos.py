@@ -140,6 +140,50 @@ class TestListarParametros:
         nombres = [p["nmbr"] for p in resp.json()]
         assert "Temperatura HU06" in nombres
 
+    def test_sin_parametros_de_paginacion_devuelve_lista_plana(
+        self, client, tecnico_editor, parametros
+    ):
+        """Los selectores de ConfigurarMapeo/DispositivoDetalle necesitan
+        ver TODO el catálogo, no una página: sin pagina/por_pagina la
+        respuesta debe seguir siendo una lista, no el objeto paginado."""
+        resp = client.get("/parametros")
+        assert isinstance(resp.json(), list)
+
+    def test_con_paginacion_devuelve_el_objeto_paginado(
+        self, client, tecnico_editor, parametros
+    ):
+        resp = client.get("/parametros", params={"pagina": 1, "por_pagina": 2})
+        assert resp.status_code == 200
+        body = resp.json()
+        assert isinstance(body, dict)
+        assert body["pagina"] == 1
+        assert body["por_pagina"] == 2
+        assert len(body["items"]) == 2
+        assert body["total"] == len(parametros)
+
+    def test_paginacion_segunda_pagina(self, client, tecnico_editor, parametros):
+        resp = client.get("/parametros", params={"pagina": 2, "por_pagina": 2})
+        body = resp.json()
+        assert len(body["items"]) == 1  # 3 parámetros de la fixture, 2 en pág 1
+
+    def test_filtro_q_busca_en_todo_el_catalogo_no_solo_la_pagina(
+        self, client, tecnico_editor, parametros
+    ):
+        """3 parámetros: 'Temperatura HU06', 'pH HU06', 'Conductividad
+        HU06'. Con por_pagina=1 'Temperatura' cae en otra página que
+        'Conductividad' si no se filtra en el servidor."""
+        resp = client.get(
+            "/parametros", params={"pagina": 1, "por_pagina": 1, "q": "conductividad"}
+        )
+        body = resp.json()
+        assert body["total"] == 1
+        assert body["items"][0]["nmbr"] == "Conductividad HU06"
+
+    def test_filtro_q_insensible_a_mayusculas(self, client, tecnico_editor, parametros):
+        resp = client.get("/parametros", params={"q": "TEMPERATURA"})
+        nombres = [p["nmbr"] for p in resp.json()]
+        assert "Temperatura HU06" in nombres
+
     def test_denegado_sin_permiso(self, client, db_session, fabrica):
         rol = fabrica.rol("Cliente Final")
         sede = fabrica.sede()
@@ -148,6 +192,123 @@ class TestListarParametros:
             usuario, rol.nmbr, sede_id=sede.id_sd
         )
         assert client.get("/parametros").status_code == 403
+
+
+class TestCrearParametro:
+    """tipo_dato distingue una medición numérica (va a tlmtr) de un
+    evento de texto (va a evnt_txt, ver services/ingesta/persistencia.py)
+    -antes de esto todo parámetro se validaba como número y un parámetro
+    de texto perdía cada fila en silencio."""
+
+    def test_crear_sin_tipo_dato_usa_numerico_por_defecto(
+        self, client, db_session, tecnico_editor
+    ):
+        resp = client.post(
+            "/parametros", json={"nmbr": "Parametro numerico default", "undd": "N/A"}
+        )
+        assert resp.status_code == 201
+        assert resp.json()["tipo_dato"] == "numerico"
+
+    def test_crear_parametro_de_texto(self, client, db_session, tecnico_editor):
+        resp = client.post(
+            "/parametros",
+            json={"nmbr": "Mensaje puerta", "undd": "N/A", "tipo_dato": "texto"},
+        )
+        assert resp.status_code == 201
+        assert resp.json()["tipo_dato"] == "texto"
+
+    def test_tipo_dato_invalido_devuelve_422(self, client, db_session, tecnico_editor):
+        resp = client.post(
+            "/parametros",
+            json={"nmbr": "Parametro invalido", "undd": "N/A", "tipo_dato": "booleano"},
+        )
+        assert resp.status_code == 422
+
+
+class TestActualizarParametro:
+    def test_edita_nombre_unidad_y_descripcion(self, client, db_session, tecnico_editor, parametros):
+        id_prmtr = parametros[0].id_prmtr
+        resp = client.put(
+            f"/parametros/{id_prmtr}",
+            json={"nmbr": "Temperatura editada", "undd": "K", "dscrpcn": "nueva descripcion"},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["nmbr"] == "Temperatura editada"
+        assert body["undd"] == "K"
+        assert body["dscrpcn"] == "nueva descripcion"
+
+    def test_editar_a_un_nombre_ya_usado_devuelve_409(
+        self, client, db_session, tecnico_editor, parametros
+    ):
+        resp = client.put(
+            f"/parametros/{parametros[0].id_prmtr}", json={"nmbr": parametros[1].nmbr}
+        )
+        assert resp.status_code == 409
+
+    def test_parametro_inexistente_devuelve_404(self, client, tecnico_editor):
+        assert client.put("/parametros/999999", json={"nmbr": "x"}).status_code == 404
+
+    def test_tipo_dato_no_se_puede_editar(self, client, db_session, tecnico_editor, parametros):
+        """Cambiar tipo_dato de un parámetro con lecturas ya guardadas
+        dejaría datos mezclados entre tlmtr y evnt_txt bajo el mismo
+        id_prmtr -por eso el schema ni siquiera acepta el campo (ver
+        ParametroActualizar). Un PUT que lo manda igual lo ignora en vez
+        de fallar: es un campo desconocido para ese schema, Pydantic lo
+        descarta."""
+        id_prmtr = parametros[0].id_prmtr
+        resp = client.put(f"/parametros/{id_prmtr}", json={"tipo_dato": "texto"})
+        assert resp.status_code == 200
+        assert resp.json()["tipo_dato"] == "numerico"
+
+    def test_denegado_con_permiso_de_solo_lectura(
+        self, client, db_session, tecnico_editor, fabrica, parametros
+    ):
+        sede, _ = tecnico_editor
+        rol_lector = fabrica.rol("Cliente Final")
+        lector = fabrica.usuario(rol=rol_lector)
+        agregar_permiso(db_session, lector, sede, "Ingesta", "Lectura", rol_lector)
+        app.dependency_overrides[get_current_user] = lambda: usuario_jwt(
+            lector, rol_lector.nmbr, sede_id=sede.id_sd
+        )
+        resp = client.put(f"/parametros/{parametros[0].id_prmtr}", json={"nmbr": "x"})
+        assert resp.status_code == 403
+
+
+class TestEliminarParametro:
+    def test_elimina_un_parametro_sin_uso(self, client, db_session, tecnico_editor, parametros):
+        id_prmtr = parametros[0].id_prmtr
+        resp = client.delete(f"/parametros/{id_prmtr}")
+        assert resp.status_code == 200
+        assert db_session.query(Parametro).filter(Parametro.id_prmtr == id_prmtr).first() is None
+
+    def test_no_elimina_un_parametro_en_uso_por_un_mapeo(
+        self, client, db_session, tecnico_editor, parametros
+    ):
+        sede, _ = tecnico_editor
+        dispositivo = crear_dispositivo(db_session, sede)
+        client.post("/mapeos", json=cuerpo_mapeo(parametros, dispositivo.id_dspstv))
+
+        resp = client.delete(f"/parametros/{parametros[0].id_prmtr}")
+        assert resp.status_code == 409
+        assert db_session.query(Parametro).filter(
+            Parametro.id_prmtr == parametros[0].id_prmtr
+        ).first() is not None
+
+    def test_parametro_inexistente_devuelve_404(self, client, tecnico_editor):
+        assert client.delete("/parametros/999999").status_code == 404
+
+    def test_denegado_con_permiso_de_solo_lectura(
+        self, client, db_session, tecnico_editor, fabrica, parametros
+    ):
+        sede, _ = tecnico_editor
+        rol_lector = fabrica.rol("Cliente Final")
+        lector = fabrica.usuario(rol=rol_lector)
+        agregar_permiso(db_session, lector, sede, "Ingesta", "Lectura", rol_lector)
+        app.dependency_overrides[get_current_user] = lambda: usuario_jwt(
+            lector, rol_lector.nmbr, sede_id=sede.id_sd
+        )
+        assert client.delete(f"/parametros/{parametros[0].id_prmtr}").status_code == 403
 
 
 class TestCrearMapeo:
@@ -301,15 +462,81 @@ class TestCrearMapeo:
         )
         assert resp.status_code == 422
 
-    def test_tipo_de_trama_invalido_devuelve_422(
+    def test_tipo_de_trama_ya_no_es_un_catalogo_cerrado(
         self, client, db_session, tecnico_editor, parametros
     ):
+        """El tipo de trama es una letra libre (A-Z) que el técnico de
+        telemetría define al crear el mapeo, no un catálogo fijo H/E/P:
+        una letra fuera de ese catálogo histórico debe aceptarse igual."""
         sede, _ = tecnico_editor
         dispositivo = crear_dispositivo(db_session, sede)
         resp = client.post(
             "/mapeos", json=cuerpo_mapeo(parametros, dispositivo.id_dspstv, tp_trm="X")
         )
+        assert resp.status_code == 201
+        assert resp.json()["mapeo"]["tp_trm"] == "X"
+
+    def test_tipo_de_trama_se_normaliza_a_mayuscula(
+        self, client, db_session, tecnico_editor, parametros
+    ):
+        sede, _ = tecnico_editor
+        dispositivo = crear_dispositivo(db_session, sede)
+        resp = client.post(
+            "/mapeos", json=cuerpo_mapeo(parametros, dispositivo.id_dspstv, tp_trm="x")
+        )
+        assert resp.status_code == 201
+        assert resp.json()["mapeo"]["tp_trm"] == "X"
+
+    def test_tipo_de_trama_vacio_devuelve_422(
+        self, client, db_session, tecnico_editor, parametros
+    ):
+        sede, _ = tecnico_editor
+        dispositivo = crear_dispositivo(db_session, sede)
+        resp = client.post(
+            "/mapeos", json=cuerpo_mapeo(parametros, dispositivo.id_dspstv, tp_trm="")
+        )
         assert resp.status_code == 422
+
+    def test_tipo_de_trama_de_mas_de_una_letra_devuelve_422(
+        self, client, db_session, tecnico_editor, parametros
+    ):
+        sede, _ = tecnico_editor
+        dispositivo = crear_dispositivo(db_session, sede)
+        resp = client.post(
+            "/mapeos", json=cuerpo_mapeo(parametros, dispositivo.id_dspstv, tp_trm="HE")
+        )
+        assert resp.status_code == 422
+
+    def test_tipo_de_trama_no_alfabetico_devuelve_422(
+        self, client, db_session, tecnico_editor, parametros
+    ):
+        sede, _ = tecnico_editor
+        dispositivo = crear_dispositivo(db_session, sede)
+        resp = client.post(
+            "/mapeos", json=cuerpo_mapeo(parametros, dispositivo.id_dspstv, tp_trm="1")
+        )
+        assert resp.status_code == 422
+
+    def test_guarda_la_descripcion_de_la_trama(
+        self, client, db_session, tecnico_editor, parametros
+    ):
+        sede, _ = tecnico_editor
+        dispositivo = crear_dispositivo(db_session, sede)
+        resp = client.post(
+            "/mapeos",
+            json=cuerpo_mapeo(
+                parametros, dispositivo.id_dspstv, tp_trm="X", dscrpcn="Nivel de napa"
+            ),
+        )
+        assert resp.status_code == 201
+        assert resp.json()["mapeo"]["dscrpcn"] == "Nivel de napa"
+
+    def test_descripcion_es_opcional(self, client, db_session, tecnico_editor, parametros):
+        sede, _ = tecnico_editor
+        dispositivo = crear_dispositivo(db_session, sede)
+        resp = client.post("/mapeos", json=cuerpo_mapeo(parametros, dispositivo.id_dspstv))
+        assert resp.status_code == 201
+        assert resp.json()["mapeo"]["dscrpcn"] is None
 
     def test_parametro_inexistente_devuelve_422(
         self, client, db_session, tecnico_editor, parametros
@@ -629,6 +856,113 @@ class TestActualizarMapeo:
         assert client.put(f"/mapeos/{id_mp}", json={"dlmtdr": ";"}).status_code == 403
 
 
+class TestEliminarMapeo:
+    """DELETE /mapeos/{id_mp}: borrado lógico (estd='Inactivo'), no
+    borrado físico -los archivos ya procesados no deben perder su
+    trazabilidad (mp_clmn sigue existiendo aunque el mapeo se desactive)."""
+
+    def test_marca_el_mapeo_como_inactivo(self, client, db_session, tecnico_editor, parametros):
+        sede, _ = tecnico_editor
+        dispositivo = crear_dispositivo(db_session, sede)
+        id_mp = client.post("/mapeos", json=cuerpo_mapeo(parametros, dispositivo.id_dspstv)).json()[
+            "mapeo"
+        ]["id_mp"]
+
+        resp = client.delete(f"/mapeos/{id_mp}")
+        assert resp.status_code == 200
+        assert resp.json()["mensaje"] == "Mapeo eliminado correctamente"
+
+        formato = db_session.query(MapeoFormato).filter(MapeoFormato.id_mp == id_mp).first()
+        assert formato.estd == "Inactivo"
+
+    def test_no_borra_la_fila_ni_las_columnas(
+        self, client, db_session, tecnico_editor, parametros
+    ):
+        sede, _ = tecnico_editor
+        dispositivo = crear_dispositivo(db_session, sede)
+        id_mp = client.post("/mapeos", json=cuerpo_mapeo(parametros, dispositivo.id_dspstv)).json()[
+            "mapeo"
+        ]["id_mp"]
+
+        client.delete(f"/mapeos/{id_mp}")
+
+        assert db_session.query(MapeoFormato).filter(MapeoFormato.id_mp == id_mp).first() is not None
+        columnas = db_session.query(MapeoColumna).filter(MapeoColumna.id_mp == id_mp).all()
+        assert len(columnas) == 2
+
+    def test_libera_la_letra_para_un_mapeo_nuevo(
+        self, client, db_session, tecnico_editor, parametros
+    ):
+        """El índice único parcial (id_dspstv, tp_trm) WHERE estd='Activo'
+        no debe bloquear crear un mapeo nuevo con la misma letra una vez
+        que el anterior está Inactivo -es el caso de uso real: el técnico
+        se equivocó de configuración y quiere reemplazar la trama."""
+        sede, _ = tecnico_editor
+        dispositivo = crear_dispositivo(db_session, sede)
+        id_mp = client.post(
+            "/mapeos", json=cuerpo_mapeo(parametros, dispositivo.id_dspstv, tp_trm="X")
+        ).json()["mapeo"]["id_mp"]
+
+        client.delete(f"/mapeos/{id_mp}")
+
+        resp = client.post(
+            "/mapeos", json=cuerpo_mapeo(parametros, dispositivo.id_dspstv, tp_trm="X")
+        )
+        assert resp.status_code == 201
+
+    def test_eliminar_un_mapeo_ya_inactivo_devuelve_409(
+        self, client, db_session, tecnico_editor, parametros
+    ):
+        sede, _ = tecnico_editor
+        dispositivo = crear_dispositivo(db_session, sede)
+        id_mp = client.post("/mapeos", json=cuerpo_mapeo(parametros, dispositivo.id_dspstv)).json()[
+            "mapeo"
+        ]["id_mp"]
+        client.delete(f"/mapeos/{id_mp}")
+
+        assert client.delete(f"/mapeos/{id_mp}").status_code == 409
+
+    def test_mapeo_inexistente_devuelve_404(self, client, tecnico_editor):
+        assert client.delete("/mapeos/999999").status_code == 404
+
+    def test_usuario_de_otra_sede_no_puede_eliminar(
+        self, client, db_session, tecnico_editor, fabrica, parametros
+    ):
+        sede, _ = tecnico_editor
+        dispositivo = crear_dispositivo(db_session, sede)
+        id_mp = client.post("/mapeos", json=cuerpo_mapeo(parametros, dispositivo.id_dspstv)).json()[
+            "mapeo"
+        ]["id_mp"]
+
+        otro_rol = fabrica.rol("Administrador")
+        otra_sede = fabrica.sede()
+        otro_usuario = fabrica.usuario(rol=otro_rol)
+        agregar_permiso(db_session, otro_usuario, otra_sede, "Ingesta", "Edición", otro_rol)
+        app.dependency_overrides[get_current_user] = lambda: usuario_jwt(
+            otro_usuario, otro_rol.nmbr, sede_id=otra_sede.id_sd
+        )
+
+        assert client.delete(f"/mapeos/{id_mp}").status_code == 403
+
+    def test_denegado_con_permiso_de_solo_lectura(
+        self, client, db_session, tecnico_editor, fabrica, parametros
+    ):
+        sede, _ = tecnico_editor
+        dispositivo = crear_dispositivo(db_session, sede)
+        id_mp = client.post("/mapeos", json=cuerpo_mapeo(parametros, dispositivo.id_dspstv)).json()[
+            "mapeo"
+        ]["id_mp"]
+
+        rol_lector = fabrica.rol("Cliente Final")
+        lector = fabrica.usuario(rol=rol_lector)
+        agregar_permiso(db_session, lector, sede, "Ingesta", "Lectura", rol_lector)
+        app.dependency_overrides[get_current_user] = lambda: usuario_jwt(
+            lector, rol_lector.nmbr, sede_id=sede.id_sd
+        )
+
+        assert client.delete(f"/mapeos/{id_mp}").status_code == 403
+
+
 class TestVistaPrevia:
     """CA2: primeras 10 filas interpretadas, sin persistir el archivo."""
 
@@ -733,3 +1067,62 @@ class TestVistaPrevia:
             usuario, rol.nmbr, sede_id=sede.id_sd
         )
         assert self._subir(client, "ejemplo_estado_gabinete.dat").status_code == 403
+
+    def test_avisa_si_un_parametro_numerico_recibe_texto(
+        self, client, db_session, tecnico_editor
+    ):
+        """P_demo_gabinete.dat trae "Puerta Abierta" en la columna
+        MensajeP (índice 2). Si esa columna se asigna a un parámetro
+        NUMÉRICO por error, la vista previa debe marcarlo -esas filas se
+        perderían en la ingesta real, igual que pasaba con MensajeP/
+        MensajeA antes de que existiera prmtr.tipo_dato."""
+        parametro_numerico = Parametro(
+            nmbr="Mensaje mal tipado", undd="N/A", tipo_dato="numerico"
+        )
+        db_session.add(parametro_numerico)
+        db_session.flush()
+
+        resp = self._subir(
+            client,
+            "P_demo_gabinete.dat",
+            asignaciones=f"2:{parametro_numerico.id_prmtr}",
+        )
+        assert resp.status_code == 200
+        columnas = {c["nombre_columna"]: c for c in resp.json()["columnas"]}
+        assert columnas["MensajeP"]["tipo_dato_incompatible"] is True
+
+    def test_no_avisa_si_el_parametro_es_de_tipo_texto(
+        self, client, db_session, tecnico_editor
+    ):
+        parametro_texto = Parametro(nmbr="Mensaje bien tipado", undd="N/A", tipo_dato="texto")
+        db_session.add(parametro_texto)
+        db_session.flush()
+
+        resp = self._subir(
+            client,
+            "P_demo_gabinete.dat",
+            asignaciones=f"2:{parametro_texto.id_prmtr}",
+        )
+        columnas = {c["nombre_columna"]: c for c in resp.json()["columnas"]}
+        assert columnas["MensajeP"]["tipo_dato_incompatible"] is False
+
+    def test_no_avisa_si_la_columna_numerica_calza_con_el_parametro(
+        self, client, db_session, tecnico_editor
+    ):
+        # R (índice 1) sí es numérico en P_demo_gabinete.dat.
+        parametro_numerico = Parametro(nmbr="Contador bien tipado", undd="N/A", tipo_dato="numerico")
+        db_session.add(parametro_numerico)
+        db_session.flush()
+
+        resp = self._subir(
+            client,
+            "P_demo_gabinete.dat",
+            asignaciones=f"1:{parametro_numerico.id_prmtr}",
+        )
+        columnas = {c["nombre_columna"]: c for c in resp.json()["columnas"]}
+        assert columnas["R"]["tipo_dato_incompatible"] is False
+
+    def test_no_avisa_para_una_columna_sin_asignar(self, client, tecnico_editor):
+        resp = self._subir(client, "P_demo_gabinete.dat")
+        columnas = {c["nombre_columna"]: c for c in resp.json()["columnas"]}
+        assert columnas["MensajeP"]["tipo_dato_incompatible"] is False

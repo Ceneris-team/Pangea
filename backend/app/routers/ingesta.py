@@ -18,9 +18,16 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import ArchivoIngesta, ConexionFTP, Dispositivo
-from app.schemas import ArchivoIngestaDetalle, ArchivoIngestaListItem, MetricasColaIngesta
-from app.security.permisos import LECTURA, require_permiso, verificar_sede
+from app.models import ArchivoIngesta, ConexionFTP, Dispositivo, EventoTexto, Parametro, Telemetria
+from app.schemas import (
+    ArchivoIngestaDetalle,
+    ArchivoIngestaListItem,
+    MetricasColaIngesta,
+    RegistroIngestaItem,
+    RegistrosIngestaResponse,
+)
+from app.security.permisos import EDICION, LECTURA, require_permiso, verificar_sede
+from app.tasks.ingesta import procesar_archivo_dat
 
 router = APIRouter(prefix="/ingesta", tags=["Ingesta"])
 
@@ -173,6 +180,135 @@ def detalle_archivo_ingesta(
 
     datalogger_nombre = _mapa_dataloggers(db, {archivo.id_cnxn}).get(archivo.id_cnxn, "Desconocido")
 
+    return ArchivoIngestaDetalle(
+        id_archv=archivo.id_archv,
+        nmbr_archv=archivo.nmbr_archv,
+        datalogger_nombre=datalogger_nombre,
+        estado=ESTADO_BD_A_NEGOCIO.get(archivo.estd, archivo.estd),
+        fch_dtccn=archivo.fch_dtccn,
+        fch_prcsd=archivo.fch_prcsd,
+        rgstrs_prcsds=archivo.rgstrs_prcsds,
+        mnsj_errr=archivo.mnsj_errr,
+    )
+
+
+MOSTRADOS_REGISTROS_INGESTA = 50
+
+
+@router.get("/cola/{id_archv}/registros", response_model=RegistrosIngestaResponse)
+def registros_archivo_ingesta(
+    id_archv: int,
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(require_permiso("Ingesta", LECTURA)),
+):
+    """Vista previa de lo que un archivo procesado realmente escribió en
+    tlmtr/evnt_txt (mediciones numéricas y eventos de texto respectivamente,
+    ver app/models/telemetria.py y app/models/evento_texto.py), para poder
+    distinguir "el archivo vino vacío" de "el archivo trajo datos pero no
+    los que esperaba" sin salir del modal de detalle de HU09."""
+    archivo = db.query(ArchivoIngesta).filter(ArchivoIngesta.id_archv == id_archv).first()
+    if archivo is None:
+        raise HTTPException(status_code=404, detail="Archivo no encontrado")
+
+    conexion = db.get(ConexionFTP, archivo.id_cnxn)
+    verificar_sede(usuario, conexion.id_sd, modulo="Ingesta", accion=LECTURA)
+
+    total_medicion = (
+        db.query(func.count(Telemetria.id_lctr)).filter(Telemetria.id_archv == id_archv).scalar()
+        or 0
+    )
+    total_evento = (
+        db.query(func.count(EventoTexto.id_evnt)).filter(EventoTexto.id_archv == id_archv).scalar()
+        or 0
+    )
+
+    mediciones = (
+        db.query(Telemetria, Dispositivo.nmbr, Parametro.nmbr, Parametro.undd)
+        .join(Dispositivo, Dispositivo.id_dspstv == Telemetria.id_dspstv)
+        .join(Parametro, Parametro.id_prmtr == Telemetria.id_prmtr)
+        .filter(Telemetria.id_archv == id_archv)
+        .order_by(Telemetria.fch_hr.desc())
+        .limit(MOSTRADOS_REGISTROS_INGESTA)
+        .all()
+    )
+    eventos = (
+        db.query(EventoTexto, Dispositivo.nmbr, Parametro.nmbr, Parametro.undd)
+        .join(Dispositivo, Dispositivo.id_dspstv == EventoTexto.id_dspstv)
+        .join(Parametro, Parametro.id_prmtr == EventoTexto.id_prmtr)
+        .filter(EventoTexto.id_archv == id_archv)
+        .order_by(EventoTexto.fch_hr.desc())
+        .limit(MOSTRADOS_REGISTROS_INGESTA)
+        .all()
+    )
+
+    items = [
+        RegistroIngestaItem(
+            fch_hr=lectura.fch_hr,
+            dispositivo_nombre=dspstv_nmbr,
+            parametro_nombre=prmtr_nmbr,
+            undd=undd,
+            vlr=str(lectura.vlr),
+        )
+        for lectura, dspstv_nmbr, prmtr_nmbr, undd in mediciones
+    ] + [
+        RegistroIngestaItem(
+            fch_hr=evento.fch_hr,
+            dispositivo_nombre=dspstv_nmbr,
+            parametro_nombre=prmtr_nmbr,
+            undd=undd,
+            vlr=evento.vlr,
+        )
+        for evento, dspstv_nmbr, prmtr_nmbr, undd in eventos
+    ]
+    items.sort(key=lambda item: item.fch_hr, reverse=True)
+    items = items[:MOSTRADOS_REGISTROS_INGESTA]
+
+    return RegistrosIngestaResponse(
+        total=total_medicion + total_evento,
+        mostrados=len(items),
+        items=items,
+    )
+
+
+@router.post("/cola/{id_archv}/reintentar", response_model=ArchivoIngestaDetalle)
+def reintentar_archivo_ingesta(
+    id_archv: int,
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(require_permiso("Ingesta", EDICION)),
+):
+    """HU31: reprocesamiento manual de un archivo Fallido.
+
+    Cubre el caso que autoretry_for de procesar_archivo_dat deja afuera a
+    propósito (ver app/tasks/ingesta.py): errores de datos/configuración
+    (ErrorDatosNoRecuperable) no se reintentan solos porque reintentar no
+    los arregla -alguien tiene que corregir la causa primero (ej. cargar
+    el mapeo que faltaba, resolver el dispositivo)-. Este endpoint es esa
+    acción manual: solo tiene sentido sobre un archivo en estado Fallido,
+    y vuelve a dejarlo Pendiente para que un worker lo tome de nuevo desde
+    cero.
+    """
+    archivo = db.query(ArchivoIngesta).filter(ArchivoIngesta.id_archv == id_archv).first()
+    if archivo is None:
+        raise HTTPException(status_code=404, detail="Archivo no encontrado")
+
+    conexion = db.get(ConexionFTP, archivo.id_cnxn)
+    verificar_sede(usuario, conexion.id_sd, modulo="Ingesta", accion=EDICION)
+
+    if archivo.estd != "Fallido":
+        raise HTTPException(
+            status_code=409,
+            detail="Solo se pueden reintentar archivos en estado Fallido",
+        )
+
+    archivo.estd = "Pendiente"
+    archivo.mnsj_errr = None
+    archivo.fch_prcsd = None
+    archivo.rgstrs_prcsds = None
+    db.commit()
+
+    procesar_archivo_dat.delay(id_archv=archivo.id_archv)
+
+    datalogger_nombre = _mapa_dataloggers(db, {archivo.id_cnxn}).get(archivo.id_cnxn, "Desconocido")
     return ArchivoIngestaDetalle(
         id_archv=archivo.id_archv,
         nmbr_archv=archivo.nmbr_archv,

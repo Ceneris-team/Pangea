@@ -30,6 +30,7 @@ corresponde a la configuración de la ingesta; no existe un módulo
 
 import csv
 import ftplib
+import re
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from sqlalchemy.exc import IntegrityError
@@ -40,21 +41,18 @@ from app.ingesta.ftp_receptor import descargar_archivo_dat, listar_archivos_dat
 from app.models import (
     ConexionFTP, Dispositivo, MapeoColumna, MapeoFormato, Parametro, Sede, Ubicacion,
 )
-from app.security.permisos import (
-    require_permiso, require_alguno_permiso, verificar_sede, LECTURA, EDICION,
-)
-from app.services.ingesta.parser import ConfiguracionParseo, parsear_dat
-from app.tasks.ingesta import normalizar_contenido_dat
 from app.schemas import (
     ArchivoFtpDisponible,
     ColumnaVistaPrevia,
     DispositivoParaMapeo,
     FilaVistaPrevia,
+    ListadoParametros,
     MapeoColumnaDetalle,
     MapeoFormatoActualizar,
     MapeoFormatoCrear,
     MapeoFormatoDetalle,
     MapeoFormatoListItem,
+    ParametroActualizar,
     ParametroCrear,
     ParametroListItem,
     SedeListItem,
@@ -68,6 +66,7 @@ from app.security.permisos import (
     verificar_sede,
 )
 from app.services.ingesta.parser import ConfiguracionParseo, parsear_dat
+from app.services.ingesta.validador import es_valor_numerico
 from app.tasks.ingesta import normalizar_contenido_dat
 
 router = APIRouter(prefix="/mapeos", tags=["Mapeos de formato"])
@@ -88,7 +87,15 @@ DELIMITADORES_VALIDOS = {
     " ": "espacio",
 }
 
-TIPOS_TRAMA_VALIDOS = {"H", "E"}  # CHECK constraint de mp_frmt (PP-96)
+# HU06/PP-96: el tipo de trama ya no es un catálogo cerrado (antes era un
+# CHECK constraint de mp_frmt con {"H", "E", "P"}) -el equipo de
+# telemetría define el prefijo de archivo de cada dataloger según el
+# proyecto, y exigir una migración por cada letra nueva no escala. Se
+# valida solo el FORMATO acá: una letra A-Z, que es lo que puede preceder
+# a un "_" en un nombre de archivo (H_, E_, P_, X_...). Ver
+# services/ingesta/mapeo.py: detectar_tipo_trama ya no usa un diccionario
+# fijo, resuelve el prefijo contra los mp_frmt activos del dispositivo.
+TIPO_TRAMA_PATRON = re.compile(r"^[A-Z]$")
 
 # Separador decimal del dato numérico (DEC-09). Solo punto o coma: son los
 # dos que produce un datalogger real, y el CHECK de mp_frmt exige lo mismo.
@@ -152,11 +159,28 @@ def _validar_delimitador_decimal(dlmtdr_dcml: str) -> str:
     return dlmtdr_dcml
 
 
-def _validar_tipo_trama(tp_trm: str) -> str:
-    if tp_trm not in TIPOS_TRAMA_VALIDOS:
+ESTADOS_MAPEO_VALIDOS = {"Activo", "Inactivo"}
+
+
+def _validar_estado_mapeo(estd: str) -> str:
+    if estd not in ESTADOS_MAPEO_VALIDOS:
         raise HTTPException(
             status_code=422,
-            detail="El tipo de trama solo admite 'H' (datos periódicos) o 'E' (estados y eventos)",
+            detail="El estado del mapeo solo admite 'Activo' o 'Inactivo'",
+        )
+    return estd
+
+
+def _validar_tipo_trama(tp_trm: str) -> str:
+    """Letra libre (A-Z): define el prefijo de archivo que este mapeo
+    interpreta (p. ej. 'X' -> X_*.dat). Se normaliza a mayúscula porque
+    detectar_tipo_trama compara sobre el nombre de archivo en mayúsculas
+    (los dataloggers no son consistentes con el case)."""
+    tp_trm = tp_trm.strip().upper()
+    if not TIPO_TRAMA_PATRON.match(tp_trm):
+        raise HTTPException(
+            status_code=422,
+            detail="El tipo de trama debe ser una sola letra (A-Z), p. ej. 'H', 'E' o 'P'",
         )
     return tp_trm
 
@@ -247,6 +271,7 @@ def _a_list_item(
         id_sd=ubicacion.id_sd,
         mrc=dispositivo.mrc,
         tp_trm=formato.tp_trm,
+        dscrpcn=formato.dscrpcn,
         dlmtdr=formato.dlmtdr,
         dlmtdr_dcml=formato.dlmtdr_dcml,
         fl_inc_dts=formato.fl_inc_dts,
@@ -292,14 +317,40 @@ def _columnas_detalle(db: Session, id_mp: int) -> list[MapeoColumnaDetalle]:
     ]
 
 
-@router_parametros.get("", response_model=list[ParametroListItem])
+@router_parametros.get("", response_model=list[ParametroListItem] | ListadoParametros)
 def listar_parametros(
+    pagina: int | None = Query(default=None, ge=1),
+    por_pagina: int | None = Query(default=None, ge=1, le=100),
+    q: str | None = Query(default=None, description="Filtro por nombre, insensible a mayúsculas"),
     db: Session = Depends(get_db),
     _usuario: dict = Depends(require_permiso("Ingesta", LECTURA)),
 ):
-    """CA1: pobla el selector de parámetro estándar del formulario."""
-    parametros = db.query(Parametro).order_by(Parametro.nmbr).all()
-    return [ParametroListItem.model_validate(p) for p in parametros]
+    """CA1: pobla el selector de parámetro estándar del formulario.
+
+    Sin pagina/por_pagina devuelve la lista COMPLETA (comportamiento
+    original): los selectores de "parámetro estándar" en ConfigurarMapeo y
+    en la ficha de Dispositivo necesitan ver todo el catálogo para poder
+    elegir cualquiera, no solo una página. Con esos params, pagina -lo usa
+    la pantalla de catálogo (Parámetros), que sí puede crecer bastante. `q`
+    filtra por nombre en el SERVIDOR (no solo en la página cargada): así
+    una búsqueda encuentra un parámetro aunque esté en otra página."""
+    query = db.query(Parametro).order_by(Parametro.nmbr)
+    if q:
+        query = query.filter(Parametro.nmbr.ilike(f"%{q}%"))
+
+    if pagina is None and por_pagina is None:
+        return [ParametroListItem.model_validate(p) for p in query.all()]
+
+    pagina = pagina or 1
+    por_pagina = por_pagina or 25
+    total = query.count()
+    parametros = query.offset((pagina - 1) * por_pagina).limit(por_pagina).all()
+    return ListadoParametros(
+        total=total,
+        pagina=pagina,
+        por_pagina=por_pagina,
+        items=[ParametroListItem.model_validate(p) for p in parametros],
+    )
 
 
 @router_parametros.post("", response_model=ParametroListItem, status_code=201)
@@ -316,7 +367,9 @@ def crear_parametro(
     if ya_existe is not None:
         raise HTTPException(status_code=409, detail=f"Ya existe un parámetro llamado '{body.nmbr}'")
 
-    parametro = Parametro(nmbr=body.nmbr, undd=body.undd, dscrpcn=body.dscrpcn)
+    parametro = Parametro(
+        nmbr=body.nmbr, undd=body.undd, dscrpcn=body.dscrpcn, tipo_dato=body.tipo_dato
+    )
     db.add(parametro)
     try:
         db.commit()
@@ -325,6 +378,79 @@ def crear_parametro(
         raise HTTPException(status_code=409, detail=f"Ya existe un parámetro llamado '{body.nmbr}'")
     db.refresh(parametro)
     return ParametroListItem.model_validate(parametro)
+
+
+@router_parametros.put("/{id_prmtr}", response_model=ParametroListItem)
+def actualizar_parametro(
+    id_prmtr: int,
+    body: ParametroActualizar,
+    db: Session = Depends(get_db),
+    _usuario: dict = Depends(require_permiso("Ingesta", EDICION)),
+):
+    """Edita un parámetro del catálogo. No afecta los mapeos que ya lo
+    usan (mp_clmn referencia id_prmtr, no el nombre): renombrar o cambiar
+    la unidad de un parámetro se ve reflejado en todos los mapeos que lo
+    tienen asignado, que es el comportamiento esperado de un catálogo
+    compartido."""
+    parametro = db.query(Parametro).filter(Parametro.id_prmtr == id_prmtr).first()
+    if parametro is None:
+        raise HTTPException(status_code=404, detail="Parámetro no encontrado")
+
+    if body.nmbr is not None and body.nmbr != parametro.nmbr:
+        ya_existe = db.query(Parametro).filter(Parametro.nmbr == body.nmbr).first()
+        if ya_existe is not None:
+            raise HTTPException(
+                status_code=409, detail=f"Ya existe un parámetro llamado '{body.nmbr}'"
+            )
+        parametro.nmbr = body.nmbr
+    if body.undd is not None:
+        parametro.undd = body.undd
+    if body.dscrpcn is not None:
+        parametro.dscrpcn = body.dscrpcn.strip() or None
+
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=409, detail=f"Ya existe un parámetro llamado '{body.nmbr}'"
+        )
+    db.refresh(parametro)
+    return ParametroListItem.model_validate(parametro)
+
+
+@router_parametros.delete("/{id_prmtr}")
+def eliminar_parametro(
+    id_prmtr: int,
+    db: Session = Depends(get_db),
+    _usuario: dict = Depends(require_permiso("Ingesta", EDICION)),
+):
+    """Borra un parámetro del catálogo -a diferencia del borrado de mapeo
+    (ver eliminar_mapeo más abajo), acá SÍ es un borrado físico: un
+    parámetro sin ningún mapeo que lo use no tiene historial que proteger,
+    a diferencia de mp_frmt (los archivos ya procesados dependen de que su
+    mp_clmn siga existiendo).
+
+    Si algún mp_clmn ya lo usa, se bloquea con 409 en vez de dejar que la
+    FK reviente con un IntegrityError crudo: borrarlo rompería la
+    asignación de columnas de esos mapeos en silencio."""
+    parametro = db.query(Parametro).filter(Parametro.id_prmtr == id_prmtr).first()
+    if parametro is None:
+        raise HTTPException(status_code=404, detail="Parámetro no encontrado")
+
+    en_uso = db.query(MapeoColumna).filter(MapeoColumna.id_prmtr == id_prmtr).first()
+    if en_uso is not None:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"El parámetro '{parametro.nmbr}' está en uso por al menos un mapeo "
+                f"y no se puede eliminar. Quita la asignación de esa columna primero."
+            ),
+        )
+
+    db.delete(parametro)
+    db.commit()
+    return {"mensaje": "Parámetro eliminado correctamente"}
 
 
 @router_sedes.get("", response_model=list[SedeListItem])
@@ -461,6 +587,7 @@ def crear_mapeo(
     formato = MapeoFormato(
         id_dspstv=dispositivo.id_dspstv,
         tp_trm=tipo_trama,
+        dscrpcn=body.dscrpcn.strip() if body.dscrpcn else None,
         dlmtdr=delimitador,
         dlmtdr_dcml=delimitador_decimal,
         fl_inc_dts=body.fl_inc_dts,
@@ -535,12 +662,14 @@ def actualizar_mapeo(
     _validar_delimitadores_compatibles(formato.dlmtdr, formato.dlmtdr_dcml)
     if body.tp_trm is not None:
         formato.tp_trm = _validar_tipo_trama(body.tp_trm)
+    if body.dscrpcn is not None:
+        formato.dscrpcn = body.dscrpcn.strip() or None
     if body.fl_inc_dts is not None:
         formato.fl_inc_dts = body.fl_inc_dts
     if body.frmt_fch is not None:
         formato.frmt_fch = a_formato_strptime(body.frmt_fch)
     if body.estd is not None:
-        formato.estd = body.estd
+        formato.estd = _validar_estado_mapeo(body.estd)
 
     # `columnas` omitido = no se toca la tabla de asignación; `columnas`
     # presente = reemplaza la asignación completa. Se distingue con None,
@@ -578,6 +707,39 @@ def actualizar_mapeo(
     }
 
 
+@router.delete("/{id_mp}")
+def eliminar_mapeo(
+    id_mp: int,
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(require_permiso("Ingesta", EDICION)),
+):
+    """Elimina (lógicamente) un mapeo: lo marca 'Inactivo' en vez de
+    borrar la fila.
+
+    Un borrado físico rompería la trazabilidad: archv_ingst no guarda
+    id_mp, pero los archivos ya interpretados con este mapeo dependen de
+    que mp_clmn siga existiendo si alguna vez hay que auditar por qué una
+    lectura vieja se guardó bajo tal parámetro. Desactivar además libera
+    el índice único parcial (id_dspstv, tp_trm) WHERE estd='Activo', así
+    que la misma letra se puede volver a usar con un mapeo nuevo -que es
+    justo el caso de uso: el técnico se equivocó de configuración y quiere
+    "borrar y volver a crear" esa trama."""
+    formato = db.query(MapeoFormato).filter(MapeoFormato.id_mp == id_mp).first()
+    if formato is None:
+        raise HTTPException(status_code=404, detail="Mapeo no encontrado")
+
+    dispositivo, ubicacion = _cargar_contexto(db, formato)
+    verificar_sede(usuario, ubicacion.id_sd, modulo="Ingesta", accion=EDICION)
+
+    if formato.estd == "Inactivo":
+        raise HTTPException(status_code=409, detail="Este mapeo ya está inactivo")
+
+    formato.estd = "Inactivo"
+    db.commit()
+
+    return {"mensaje": "Mapeo eliminado correctamente"}
+
+
 def _decodificar_dat(contenido_bytes: bytes) -> str:
     try:
         contenido = contenido_bytes.decode("utf-8")
@@ -609,6 +771,25 @@ def _sugerir_parametros(db: Session, nombres_columnas: list[str]) -> dict[int, i
     return sugerencias
 
 
+def _hay_valor_no_numerico(resultado, nombre_columna: str, asignacion, dlmtdr_dcml: str) -> bool:
+    """True si el parámetro asignado a esta columna es 'numerico' pero
+    alguna fila de la MUESTRA (no todo el archivo, ver FILAS_VISTA_PREVIA
+    más abajo -son las mismas filas que ya se muestran en pantalla) trae
+    un valor que no pasa el mismo chequeo que usa la ingesta real
+    (es_valor_numerico). Filas de error de parseo se ignoran -ya se
+    reportan aparte-. No evalúa nada si no hay asignación o el parámetro
+    es de texto: ahí cualquier valor es válido."""
+    if asignacion is None or asignacion[2] != "numerico":
+        return False
+    for fila in resultado.filas[:FILAS_VISTA_PREVIA]:
+        if fila.error:
+            continue
+        valor = fila.valores.get(nombre_columna)
+        if not es_valor_numerico(valor, dlmtdr_dcml):
+            return True
+    return False
+
+
 def _construir_vista_previa(
     db: Session,
     contenido: str,
@@ -617,6 +798,7 @@ def _construir_vista_previa(
     frmt_fch: str,
     columna_fecha: str,
     asignaciones: str,
+    dlmtdr_dcml: str = ".",
 ) -> VistaPreviaResponse:
     delimitador = _validar_delimitador(dlmtdr)
     config = ConfiguracionParseo(
@@ -646,9 +828,12 @@ def _construir_vista_previa(
         ColumnaVistaPrevia(
             indc_clmn=indice,
             nombre_columna=nombre,
-            parametro_nombre=indice_a_parametro.get(indice, (None, None))[0],
-            parametro_unidad=indice_a_parametro.get(indice, (None, None))[1],
+            parametro_nombre=indice_a_parametro.get(indice, (None, None, None))[0],
+            parametro_unidad=indice_a_parametro.get(indice, (None, None, None))[1],
             id_prmtr_sugerido=sugerencias.get(indice) if indice not in indice_a_parametro else None,
+            tipo_dato_incompatible=_hay_valor_no_numerico(
+                resultado, nombre, indice_a_parametro.get(indice), dlmtdr_dcml
+            ),
         )
         for indice, nombre in enumerate(resultado.columnas)
     ]
@@ -701,7 +886,9 @@ async def vista_previa(
     # formulario avise del conflicto coma/coma acá y no recién al guardar.
     _validar_delimitadores_compatibles(_validar_delimitador(dlmtdr), _validar_delimitador_decimal(dlmtdr_dcml))
     contenido = _decodificar_dat(await archivo.read())
-    return _construir_vista_previa(db, contenido, dlmtdr, fl_inc_dts, frmt_fch, columna_fecha, asignaciones)
+    return _construir_vista_previa(
+        db, contenido, dlmtdr, fl_inc_dts, frmt_fch, columna_fecha, asignaciones, dlmtdr_dcml
+    )
 
 
 @router_dispositivos_mapeo.get("", response_model=list[DispositivoParaMapeo])
@@ -795,16 +982,19 @@ def vista_previa_ftp(
         )
 
     contenido = normalizar_contenido_dat(contenido)
-    return _construir_vista_previa(db, contenido, dlmtdr, fl_inc_dts, frmt_fch, columna_fecha, asignaciones)
+    return _construir_vista_previa(
+        db, contenido, dlmtdr, fl_inc_dts, frmt_fch, columna_fecha, asignaciones, dlmtdr_dcml
+    )
 
 
 def _parsear_asignaciones(db: Session, asignaciones: str, total_columnas: int) -> dict:
-    """ "0:3,2:7" -> {0: ("Temperatura", "°C"), 2: ("pH", "pH")}.
+    """ "0:3,2:7" -> {0: ("Temperatura", "°C", "numerico"), 2: ("pH", "pH", "numerico")}.
 
     Se manda como string y no como JSON porque el resto del request es
     multipart/form-data (lleva el archivo de muestra), donde un campo
-    anidado obligaría a serializar igual.
-    """
+    anidado obligaría a serializar igual. El tercer elemento (tipo_dato)
+    lo usa _construir_vista_previa para avisar si el valor real de la
+    columna no calza con el tipo del parámetro asignado."""
     if not asignaciones.strip():
         return {}
 
@@ -832,7 +1022,7 @@ def _parsear_asignaciones(db: Session, asignaciones: str, total_columnas: int) -
         for p in db.query(Parametro).filter(Parametro.id_prmtr.in_(set(pares.values()))).all()
     }
     return {
-        indice: (parametros[id_prmtr].nmbr, parametros[id_prmtr].undd)
+        indice: (parametros[id_prmtr].nmbr, parametros[id_prmtr].undd, parametros[id_prmtr].tipo_dato)
         for indice, id_prmtr in pares.items()
         if id_prmtr in parametros
     }

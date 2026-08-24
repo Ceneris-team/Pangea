@@ -1,12 +1,16 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { apiFetch, ApiError } from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import Sidebar from "../components/layout/Sidebar";
 import Topbar from "../components/layout/Topbar";
 
+const SEGUNDOS_CONFIRMACION = 5;
+
 interface ConexionFTPListItem {
   id_cnxn: number;
   nmbr: string;
+  id_sd: number;
   hst: string;
   prt: number;
   usr_ftp: string | null;
@@ -63,17 +67,56 @@ export default function ConexionesFTP() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [mostrarFormulario, setMostrarFormulario] = useState(false);
-  const [idEdicion, setIdEdicion] = useState<number | null>(null);
-  const [form, setForm] = useState<ConexionFTPForm>(FORM_VACIO);
-  const [sedes, setSedes] = useState<Sede[]>([]);
-  const [probando, setProbando] = useState(false);
-  const [guardando, setGuardando] = useState(false);
-  const [conexionValidada, setConexionValidada] = useState(false); // habilita GUARDAR
-  const [mensaje, setMensaje] = useState("");
-  const [mensajeOk, setMensajeOk] = useState(false);
+  // Confirmación de borrado: id de la fila en confirmación + segundos
+  // restantes antes de que el botón "Eliminar definitivamente" se habilite.
+  const [confirmandoId, setConfirmandoId] = useState<number | null>(null);
+  const [segundosRestantes, setSegundosRestantes] = useState(SEGUNDOS_CONFIRMACION);
+  const [eliminandoId, setEliminandoId] = useState<number | null>(null);
+  const intervaloRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  function cargarConexiones() {
+  function iniciarConfirmacion(id: number) {
+    setConfirmandoId(id);
+    setSegundosRestantes(SEGUNDOS_CONFIRMACION);
+    if (intervaloRef.current) clearInterval(intervaloRef.current);
+    intervaloRef.current = setInterval(() => {
+      setSegundosRestantes((prev) => {
+        if (prev <= 1) {
+          if (intervaloRef.current) clearInterval(intervaloRef.current);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  }
+
+  function cancelarConfirmacion() {
+    if (intervaloRef.current) clearInterval(intervaloRef.current);
+    setConfirmandoId(null);
+  }
+
+  useEffect(() => {
+    return () => {
+      if (intervaloRef.current) clearInterval(intervaloRef.current);
+    };
+  }, []);
+
+  async function handleEliminar(id: number) {
+    setEliminandoId(id);
+    setError(null);
+    try {
+      await apiFetch<{ mensaje: string }>(`/conexiones-ftp/${id}`, { method: "DELETE" });
+      cancelarConfirmacion();
+      setData((prev) =>
+        prev ? { ...prev, items: prev.items.filter((c) => c.id_cnxn !== id) } : prev
+      );
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "No se pudo eliminar la conexión");
+    } finally {
+      setEliminandoId(null);
+    }
+  }
+
+  useEffect(() => {
     let cancelado = false;
     setLoading(true);
     setError(null);

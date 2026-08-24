@@ -1,9 +1,10 @@
-import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
+import { Fragment, useEffect, useState, type ChangeEvent, type FormEvent } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { apiFetch, apiUpload, ApiError } from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import Sidebar from "../components/layout/Sidebar";
 import Topbar from "../components/layout/Topbar";
+import ConfirmarEliminacionModal from "../components/ConfirmarEliminacionModal";
 
 /**
  * HU06 - Mapear formato de dispositivo.
@@ -28,6 +29,7 @@ interface Parametro {
   nmbr: string;
   undd: string;
   dscrpcn: string | null;
+  tipo_dato: "numerico" | "texto";
 }
 
 /** DEC-09: el mapeo se cuelga de un dispositivo concreto. La marca y la
@@ -47,6 +49,10 @@ interface ColumnaVistaPrevia {
   parametro_nombre: string | null;
   parametro_unidad: string | null;
   id_prmtr_sugerido: number | null;
+  // true si el parámetro asignado es Numérico pero la muestra trae un
+  // valor no numérico en esta columna (ej. "Modo Normal"): esas filas se
+  // perderían en la ingesta real -ver backend _hay_valor_no_numerico.
+  tipo_dato_incompatible: boolean;
 }
 
 interface DispositivoParaMapeo {
@@ -88,6 +94,7 @@ interface MapeoDetalle {
   id_sd: number;
   mrc: string;
   tp_trm: string;
+  dscrpcn: string | null;
   dlmtdr: string;
   fl_inc_dts: number;
   frmt_fch: string;
@@ -97,7 +104,15 @@ interface MapeoDetalle {
 
 interface MapeoForm {
   id_dspstv: string;
-  tp_trm: "H" | "E";
+  // Letra libre (A-Z), no un catálogo cerrado: el técnico de telemetría
+  // define el prefijo de archivo de cada dataloger (ver backend
+  // _validar_tipo_trama). H/E/P quedan como atajos frecuentes, no como
+  // únicos valores posibles.
+  tp_trm: string;
+  // Explica qué es esta trama cuando la letra no es H/E/P (o incluso
+  // cuando sí lo es, si el técnico quiere aclarar algo específico del
+  // dispositivo).
+  dscrpcn: string;
   dlmtdr: string;
   fl_inc_dts: string;
   frmt_fch: string;
@@ -112,9 +127,18 @@ const DELIMITADORES = [
   { valor: "espacio", etiqueta: "Espacio" },
 ];
 
+// Atajos frecuentes para no tipear siempre lo mismo; el campo real acepta
+// cualquier letra A-Z (ver TIPO_TRAMA_PATRON en el backend).
+const TIPOS_TRAMA_FRECUENTES = [
+  { valor: "H", etiqueta: "H · Datos periódicos" },
+  { valor: "E", etiqueta: "E · Estados y eventos" },
+  { valor: "P", etiqueta: "P · Eventos de puerta" },
+];
+
 const FORM_VACIO: MapeoForm = {
   id_dspstv: "",
   tp_trm: "H",
+  dscrpcn: "",
   dlmtdr: ",",
   fl_inc_dts: "1", // regla de negocio: entero, por defecto 1
   frmt_fch: "YYYY-MM-DD HH:mm:ss",
@@ -142,15 +166,14 @@ export default function ConfigurarMapeo() {
   // indice de columna -> id_prmtr asignado. Es la tabla de asignación de CA1.
   const [asignaciones, setAsignaciones] = useState<Record<number, number>>({});
 
-  // Solo para mostrar en modo edición (id_dspstv no es editable).
-  const [dispositivoInfo, setDispositivoInfo] = useState<{ nombre: string; marca: string } | null>(
-    null
-  );
   // Fuente de la muestra para la vista previa: subir un .dat a mano, o
   // elegir uno ya recibido por FTP para un dispositivo (evita el paso
-  // manual de bajarlo del servidor y volverlo a subir).
+  // manual de bajarlo del servidor y volverlo a subir). Selector propio
+  // (no reusa `dispositivos`/DispositivoOption de arriba): ese trae
+  // ubicacion_nombre/estd para el selector "dueño del mapeo", este trae
+  // mdl para mostrarlo junto al datalogger en el selector de muestra FTP.
   const [fuenteMuestra, setFuenteMuestra] = useState<"archivo" | "ftp">("archivo");
-  const [dispositivos, setDispositivos] = useState<DispositivoParaMapeo[]>([]);
+  const [dispositivosFtp, setDispositivosFtp] = useState<DispositivoParaMapeo[]>([]);
   const [dispositivoFtp, setDispositivoFtp] = useState("");
   const [archivosFtp, setArchivosFtp] = useState<ArchivoFtpDisponible[]>([]);
   const [archivoFtpElegido, setArchivoFtpElegido] = useState("");
@@ -159,6 +182,8 @@ export default function ConfigurarMapeo() {
   const [cargando, setCargando] = useState(false);
   const [previsualizando, setPrevisualizando] = useState(false);
   const [guardando, setGuardando] = useState(false);
+  const [eliminando, setEliminando] = useState(false);
+  const [mostrandoConfirmacionEliminar, setMostrandoConfirmacionEliminar] = useState(false);
   const [mensaje, setMensaje] = useState("");
   const [mensajeOk, setMensajeOk] = useState(false);
 
@@ -185,6 +210,19 @@ export default function ConfigurarMapeo() {
         setMensajeOk(false);
         setMensaje(
           err instanceof ApiError ? err.message : "No se pudieron cargar los dispositivos"
+        );
+      });
+  }, []);
+
+  // Selector "Elegir uno ya recibido por FTP": solo dispositivos con
+  // conexión FTP configurada (ver GET /mapeos/dispositivos en el backend).
+  useEffect(() => {
+    apiFetch<DispositivoParaMapeo[]>("/mapeos/dispositivos")
+      .then(setDispositivosFtp)
+      .catch((err) => {
+        setMensajeOk(false);
+        setMensaje(
+          err instanceof ApiError ? err.message : "No se pudieron cargar los dispositivos con FTP"
         );
       });
   }, []);
@@ -227,13 +265,13 @@ export default function ConfigurarMapeo() {
       .then((detalle) => {
         setForm({
           id_dspstv: String(detalle.id_dspstv),
-          tp_trm: detalle.tp_trm === "E" ? "E" : "H",
+          tp_trm: detalle.tp_trm,
+          dscrpcn: detalle.dscrpcn ?? "",
           dlmtdr: detalle.dlmtdr,
           fl_inc_dts: String(detalle.fl_inc_dts),
           frmt_fch: detalle.frmt_fch,
           columna_fecha: FORM_VACIO.columna_fecha,
         });
-        setDispositivoInfo({ nombre: detalle.dispositivo_nombre, marca: detalle.dispositivo_marca });
         setAsignaciones(
           Object.fromEntries(detalle.columnas.map((c) => [c.indc_clmn, c.id_prmtr]))
         );
@@ -341,6 +379,11 @@ export default function ConfigurarMapeo() {
       setMensaje("El delimitador es obligatorio");
       return;
     }
+    if (!/^[A-Z]$/.test(form.tp_trm)) {
+      setMensajeOk(false);
+      setMensaje("El tipo de trama debe ser una sola letra (A-Z)");
+      return;
+    }
     if (!esEdicion && !form.id_dspstv) {
       setMensajeOk(false);
       setMensaje("Selecciona el dispositivo al que pertenece este mapeo");
@@ -360,6 +403,7 @@ export default function ConfigurarMapeo() {
       const payload = {
         ...(esEdicion ? {} : { id_dspstv: Number(form.id_dspstv) }),
         tp_trm: form.tp_trm,
+        dscrpcn: form.dscrpcn.trim() || null,
         dlmtdr: form.dlmtdr,
         fl_inc_dts: Number(form.fl_inc_dts),
         frmt_fch: form.frmt_fch.trim(),
@@ -377,6 +421,25 @@ export default function ConfigurarMapeo() {
       setMensaje(err instanceof ApiError ? err.message : "No se pudo guardar el mapeo");
     } finally {
       setGuardando(false);
+    }
+  }
+
+  async function confirmarEliminar() {
+    if (!id) return;
+    setEliminando(true);
+    setMensaje("");
+    try {
+      const res = await apiFetch<{ mensaje: string }>(`/mapeos/${id}`, { method: "DELETE" });
+      setMostrandoConfirmacionEliminar(false);
+      setMensajeOk(true);
+      setMensaje(res.mensaje);
+      setTimeout(() => navigate("/mapeos"), 1000);
+    } catch (err) {
+      setMostrandoConfirmacionEliminar(false);
+      setMensajeOk(false);
+      setMensaje(err instanceof ApiError ? err.message : "No se pudo eliminar el mapeo");
+    } finally {
+      setEliminando(false);
     }
   }
 
@@ -404,6 +467,9 @@ export default function ConfigurarMapeo() {
         nombre_columna: `Columna ${indice}`,
         parametro_nombre: null,
         parametro_unidad: null,
+        // Sin una vista previa nueva no hay valores reales contra los
+        // que comparar el tipo del parámetro.
+        tipo_dato_incompatible: false,
       }));
 
   return (
@@ -487,16 +553,52 @@ export default function ConfigurarMapeo() {
 
                     <div>
                       <label className={labelClase}>Tipo de trama *</label>
-                      <select
+                      <input
+                        type="text"
+                        required
+                        maxLength={1}
+                        placeholder="H"
                         value={form.tp_trm}
-                        onChange={(e) => actualizarCampo("tp_trm", e.target.value as "H" | "E")}
-                        className={inputClase + " cursor-pointer"}
-                      >
-                        <option value="H">H · Datos periódicos (H_*.dat)</option>
-                        <option value="E">E · Estados y eventos (E_*.dat)</option>
-                      </select>
-                      <p className="text-xs text-gray-600 dark:text-gray-300 mt-1">
-                        Determina la extensión/prefijo del archivo que aplica a este mapeo.
+                        onChange={(e) => actualizarCampo("tp_trm", e.target.value.toUpperCase())}
+                        className={inputClase + " uppercase"}
+                      />
+                      <div className="flex flex-wrap gap-1.5 mt-2">
+                        {TIPOS_TRAMA_FRECUENTES.map((t) => (
+                          <button
+                            key={t.valor}
+                            type="button"
+                            onClick={() => actualizarCampo("tp_trm", t.valor)}
+                            className={`px-2.5 py-1 text-xs font-medium rounded-lg border transition-all ${
+                              form.tp_trm === t.valor
+                                ? "bg-[#ccff00]/20 text-[#5a7000] dark:text-[#ccff00] border-[#ccff00]/40"
+                                : "text-gray-600 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700"
+                            }`}
+                          >
+                            {t.etiqueta}
+                          </button>
+                        ))}
+                      </div>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        Una letra (A-Z): determina el prefijo del archivo que aplica a este mapeo
+                        (p. ej. "{form.tp_trm || "X"}" → {form.tp_trm || "X"}_*.dat). Debe coincidir
+                        exactamente con el prefijo que usa el datalogger.
+                      </p>
+                    </div>
+
+                    <div className="md:col-span-2">
+                      <label className={labelClase}>Descripción de la trama</label>
+                      <input
+                        type="text"
+                        maxLength={200}
+                        placeholder='Ej. "Nivel de napa" o "Eventos de bomba"'
+                        value={form.dscrpcn}
+                        onChange={(e) => actualizarCampo("dscrpcn", e.target.value)}
+                        className={inputClase}
+                      />
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        Opcional. Explica qué es esta trama, sobre todo si la letra no es una de
+                        las frecuentes -sin esto, nadie más sabe qué significa "{form.tp_trm || "X"}"
+                        para este dispositivo.
                       </p>
                     </div>
 
@@ -611,7 +713,7 @@ export default function ConfigurarMapeo() {
                         className={inputClase + " cursor-pointer max-w-xs"}
                       >
                         <option value="">— Selecciona un dispositivo —</option>
-                        {dispositivos.map((d) => (
+                        {dispositivosFtp.map((d) => (
                           <option key={d.id_dspstv} value={d.id_dspstv}>
                             {d.nmbr} — {d.mrc}
                             {d.mdl ? ` (${d.mdl})` : ""}
@@ -730,32 +832,58 @@ export default function ConfigurarMapeo() {
                         </thead>
                         <tbody>
                           {filasAsignacion.map((c) => (
-                            <tr key={c.indc_clmn} className="border-b border-black/10 dark:border-white/10 last:border-0">
-                              <td className="px-4 py-2 font-mono text-xs">{c.indc_clmn}</td>
-                              <td className="px-4 py-2 text-gray-900 dark:text-white">{c.nombre_columna}</td>
-                              <td className="px-4 py-2">
-                                <select
-                                  value={asignaciones[c.indc_clmn] ?? ""}
-                                  onChange={(e) => {
-                                    const valor = e.target.value;
-                                    setAsignaciones((prev) => {
-                                      const siguiente = { ...prev };
-                                      if (valor) siguiente[c.indc_clmn] = Number(valor);
-                                      else delete siguiente[c.indc_clmn];
-                                      return siguiente;
-                                    });
-                                  }}
-                                  className={inputClase + " cursor-pointer max-w-xs"}
-                                >
-                                  <option value="">— Sin asignar —</option>
-                                  {parametros.map((p) => (
-                                    <option key={p.id_prmtr} value={p.id_prmtr}>
-                                      {p.nmbr} ({p.undd})
-                                    </option>
-                                  ))}
-                                </select>
-                              </td>
-                            </tr>
+                            <Fragment key={c.indc_clmn}>
+                              <tr
+                                className={
+                                  "border-b " +
+                                  (c.tipo_dato_incompatible
+                                    ? "border-red-200 dark:border-red-800/40 bg-red-50/50 dark:bg-red-900/10"
+                                    : "border-gray-100 dark:border-gray-700 last:border-0")
+                                }
+                              >
+                                <td className="px-4 py-2 font-mono text-xs">{c.indc_clmn}</td>
+                                <td className="px-4 py-2 text-gray-900 dark:text-white">{c.nombre_columna}</td>
+                                <td className="px-4 py-2">
+                                  <select
+                                    value={asignaciones[c.indc_clmn] ?? ""}
+                                    onChange={(e) => {
+                                      const valor = e.target.value;
+                                      setAsignaciones((prev) => {
+                                        const siguiente = { ...prev };
+                                        if (valor) siguiente[c.indc_clmn] = Number(valor);
+                                        else delete siguiente[c.indc_clmn];
+                                        return siguiente;
+                                      });
+                                    }}
+                                    className={
+                                      inputClase +
+                                      " cursor-pointer max-w-xs" +
+                                      (c.tipo_dato_incompatible
+                                        ? " border-red-400 dark:border-red-600 focus:ring-red-400 focus:border-red-400"
+                                        : "")
+                                    }
+                                  >
+                                    <option value="">— Sin asignar —</option>
+                                    {parametros.map((p) => (
+                                      <option key={p.id_prmtr} value={p.id_prmtr}>
+                                        {p.nmbr} ({p.undd}){p.tipo_dato === "texto" ? " · texto" : ""}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </td>
+                              </tr>
+                              {c.tipo_dato_incompatible && (
+                                <tr className="border-b border-red-200 dark:border-red-800/40 bg-red-50/50 dark:bg-red-900/10">
+                                  <td colSpan={3} className="px-4 pb-3 -mt-2">
+                                    <p className="text-xs text-red-600 dark:text-red-400">
+                                      Esta columna trae un valor de texto en la muestra, pero el parámetro
+                                      elegido es Numérico. Esas filas se van a perder en la ingesta real —
+                                      elegí un parámetro de tipo Texto para esta columna.
+                                    </p>
+                                  </td>
+                                </tr>
+                              )}
+                            </Fragment>
                           ))}
                         </tbody>
                       </table>
@@ -790,12 +918,32 @@ export default function ConfigurarMapeo() {
                   >
                     Ver mapeos
                   </button>
+                  {esEdicion && (
+                    <button
+                      type="button"
+                      onClick={() => setMostrandoConfirmacionEliminar(true)}
+                      disabled={eliminando}
+                      className="ml-auto px-4 py-2.5 text-sm font-medium text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800/40 rounded-xl hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50 transition-all"
+                    >
+                      {eliminando ? "Eliminando…" : "Eliminar mapeo"}
+                    </button>
+                  )}
                 </div>
               </form>
             )}
           </main>
         </div>
       </div>
+
+      {mostrandoConfirmacionEliminar && (
+        <ConfirmarEliminacionModal
+          titulo={`Eliminar mapeo de la trama '${form.tp_trm}'`}
+          mensaje={`Los archivos ya procesados no se ven afectados, pero los archivos nuevos con el prefijo "${form.tp_trm}_" dejarán de poder interpretarse hasta que se cree un mapeo nuevo para esa trama.`}
+          confirmando={eliminando}
+          onConfirmar={confirmarEliminar}
+          onCancelar={() => setMostrandoConfirmacionEliminar(false)}
+        />
+      )}
     </div>
   );
 }
