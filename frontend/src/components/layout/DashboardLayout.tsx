@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import Sidebar, { type SeccionActiva } from "./Sidebar";
 import Topbar from "./Topbar";
@@ -12,7 +12,6 @@ interface DashboardLayoutProps {
 }
 
 export default function DashboardLayout({ children, activo = "panel" }: DashboardLayoutProps) {
-  const [isDarkMode, setIsDarkMode] = useState(false);
   const { nombreCompleto, rol, logout } = useAuth();
   const navigate = useNavigate();
 
@@ -22,20 +21,15 @@ export default function DashboardLayout({ children, activo = "panel" }: Dashboar
   }
 
   return (
-    <div className={isDarkMode ? "dark" : ""}>
-      <div className="flex h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-300 overflow-hidden font-sans">
-        <Sidebar onLogout={handleLogout} activo={activo} rol={rol} />
+    <div className="flex h-screen bg-transparent transition-colors duration-300 overflow-hidden font-sans">
+      <Sidebar onLogout={handleLogout} activo={activo} rol={rol} />
 
-        <div className="flex-1 flex flex-col overflow-hidden">
-          <Topbar
-            isDarkMode={isDarkMode}
-            onToggleDarkMode={() => setIsDarkMode((v) => !v)}
-            nombreCompleto={nombreCompleto}
-            rol={rol}
-          />
-
-          <main className="flex-1 overflow-y-auto p-6 md:p-8">{children}</main>
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="flex justify-end p-4 md:p-6 pb-0">
+          <Topbar nombreCompleto={nombreCompleto} rol={rol} />
         </div>
+
+        <main className="flex-1 overflow-y-auto p-6 md:p-8">{children}</main>
       </div>
     </div>
   );

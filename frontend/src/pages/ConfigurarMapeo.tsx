@@ -151,7 +151,6 @@ export default function ConfigurarMapeo() {
   const esEdicion = Boolean(id);
   const navigate = useNavigate();
   const { nombreCompleto, rol, logout } = useAuth();
-  const [isDarkMode, setIsDarkMode] = useState(false);
 
   // Al llegar desde "Configurar mapeo" en Dispositivos, el dispositivo
   // viene preseleccionado por query param.
@@ -445,8 +444,8 @@ export default function ConfigurarMapeo() {
   }
 
   const inputClase =
-    "bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block w-full p-2.5 outline-none";
-  const labelClase = "block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1";
+    "bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block w-full p-2.5 outline-none";
+  const labelClase = "block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1";
 
   // La columna de fecha NO se asigna acá: se configura arriba ("Columna de
   // fecha") y el motor la usa directo, sin pasar por mp_clmn/prmtr. Si se
@@ -474,34 +473,34 @@ export default function ConfigurarMapeo() {
       }));
 
   return (
-    <div className={`${isDarkMode ? "dark" : ""} font-sans`}>
-      <div className="flex h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-300 overflow-hidden">
+    <div className="font-sans">
+      <div className="flex h-screen bg-transparent transition-colors duration-300 overflow-hidden">
         <Sidebar onLogout={logout} activo="mapeos" rol={rol} />
 
         <div className="flex-1 flex flex-col overflow-hidden">
-          <Topbar
-            isDarkMode={isDarkMode}
-            onToggleDarkMode={() => setIsDarkMode(!isDarkMode)}
+          <div className="flex justify-end p-4 md:p-6 pb-0">
+            <Topbar
             nombreCompleto={nombreCompleto}
             rol={rol}
-          />
+            />
+          </div>
 
           <main className="flex-1 overflow-y-auto p-6 md:p-8">
             <header className="mb-6">
               <h1 className="text-2xl font-extrabold text-gray-900 dark:text-white">
                 {esEdicion ? "Editar mapeo de formato" : "Nuevo mapeo de formato"}
               </h1>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 font-light">
+              <p className="text-sm text-gray-600 dark:text-gray-300 mt-1 font-light">
                 Define cómo se interpretan los archivos .dat de un dispositivo.
               </p>
             </header>
 
             {cargando ? (
-              <div className="text-sm text-gray-500 dark:text-gray-400">Cargando mapeo…</div>
+              <div className="text-sm text-gray-600 dark:text-gray-300">Cargando mapeo…</div>
             ) : (
               <form onSubmit={handleSubmit} className="space-y-6">
                 {/* CA1: datos del formato */}
-                <section className="bg-white dark:bg-[#2d3748] rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+                <section className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl shadow-sm border border-black/10 dark:border-white/10 p-6">
                   <h2 className="text-base font-bold text-gray-900 dark:text-white mb-4">Datos del formato</h2>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -535,7 +534,7 @@ export default function ConfigurarMapeo() {
                       {/* Marca y ubicación del dispositivo elegido, en modo
                           solo lectura: ya no se tipean ni se eligen aparte. */}
                       {dispositivoSeleccionado && (
-                        <div className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
+                        <div className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-xs text-gray-600 dark:text-gray-300">
                           <span>
                             Marca:{" "}
                             <span className="font-medium text-gray-700 dark:text-gray-200">
@@ -649,7 +648,7 @@ export default function ConfigurarMapeo() {
                         onChange={(e) => actualizarCampo("columna_fecha", e.target.value)}
                         className={inputClase}
                       />
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      <p className="text-xs text-gray-600 dark:text-gray-300 mt-1">
                         Solo afecta la vista previa: el motor de ingesta usa "Fecha" (ver README).
                       </p>
                     </div>
@@ -657,9 +656,9 @@ export default function ConfigurarMapeo() {
                 </section>
 
                 {/* CA2: vista previa con archivo de muestra */}
-                <section className="bg-white dark:bg-[#2d3748] rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+                <section className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl shadow-sm border border-black/10 dark:border-white/10 p-6">
                   <h2 className="text-base font-bold text-gray-900 dark:text-white mb-1">Vista previa</h2>
-                  <p className="text-sm text-gray-500 dark:text-gray-400 mb-4 font-light">
+                  <p className="text-sm text-gray-600 dark:text-gray-300 mb-4 font-light">
                     Usa un .dat de muestra para ver las primeras 10 filas interpretadas. El archivo no se
                     guarda.
                   </p>
@@ -671,7 +670,7 @@ export default function ConfigurarMapeo() {
                       className={`px-3 py-1.5 text-sm font-medium rounded-lg border transition-all ${
                         fuenteMuestra === "archivo"
                           ? "bg-[#ccff00]/20 text-[#5a7000] dark:text-[#ccff00] border-[#ccff00]/40"
-                          : "text-gray-600 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700"
+                          : "text-gray-700 dark:text-gray-200 border-black/20 dark:border-white/20 hover:bg-black/10 dark:hover:bg-white/10"
                       }`}
                     >
                       Subir archivo
@@ -682,7 +681,7 @@ export default function ConfigurarMapeo() {
                       className={`px-3 py-1.5 text-sm font-medium rounded-lg border transition-all ${
                         fuenteMuestra === "ftp"
                           ? "bg-[#ccff00]/20 text-[#5a7000] dark:text-[#ccff00] border-[#ccff00]/40"
-                          : "text-gray-600 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700"
+                          : "text-gray-700 dark:text-gray-200 border-black/20 dark:border-white/20 hover:bg-black/10 dark:hover:bg-white/10"
                       }`}
                     >
                       Elegir uno ya recibido por FTP
@@ -695,13 +694,13 @@ export default function ConfigurarMapeo() {
                         type="file"
                         accept=".dat,.csv,.txt"
                         onChange={seleccionarArchivo}
-                        className="text-sm text-gray-600 dark:text-gray-300 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-[#ccff00]/10 file:text-[#5a7000] dark:file:text-[#ccff00] hover:file:bg-[#ccff00]/20 file:cursor-pointer"
+                        className="text-sm text-gray-700 dark:text-gray-200 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-[#ccff00]/10 file:text-[#5a7000] dark:file:text-[#ccff00] hover:file:bg-[#ccff00]/20 file:cursor-pointer"
                       />
                       <button
                         type="button"
                         onClick={handleVistaPrevia}
                         disabled={previsualizando || !archivo}
-                        className="px-4 py-2.5 text-sm font-medium text-gray-900 dark:text-white bg-white dark:bg-transparent border border-gray-300 dark:border-gray-600 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                        className="px-4 py-2.5 text-sm font-medium text-gray-900 dark:text-white bg-transparent border border-black/20 dark:border-white/20 rounded-xl hover:bg-black/10 dark:hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                       >
                         {previsualizando ? "Generando…" : "Vista previa"}
                       </button>
@@ -746,7 +745,7 @@ export default function ConfigurarMapeo() {
                         type="button"
                         onClick={handleVistaPrevia}
                         disabled={previsualizando || !dispositivoFtp || !archivoFtpElegido}
-                        className="px-4 py-2.5 text-sm font-medium text-gray-900 dark:text-white bg-white dark:bg-transparent border border-gray-300 dark:border-gray-600 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                        className="px-4 py-2.5 text-sm font-medium text-gray-900 dark:text-white bg-transparent border border-black/20 dark:border-white/20 rounded-xl hover:bg-black/10 dark:hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                       >
                         {previsualizando ? "Generando…" : "Vista previa"}
                       </button>
@@ -755,13 +754,13 @@ export default function ConfigurarMapeo() {
 
                   {vistaPrevia && (
                     <div className="mt-5">
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                      <p className="text-xs text-gray-600 dark:text-gray-300 mb-2">
                         Mostrando {vistaPrevia.filas_mostradas} de {vistaPrevia.total_filas_archivo} filas del
                         archivo.
                       </p>
-                      <div className="overflow-x-auto border border-gray-200 dark:border-gray-700 rounded-xl">
-                        <table className="w-full text-sm text-left text-gray-500 dark:text-gray-400">
-                          <thead className="text-xs uppercase bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700">
+                      <div className="overflow-x-auto border border-black/10 dark:border-white/10 rounded-xl">
+                        <table className="w-full text-sm text-left text-gray-600 dark:text-gray-300">
+                          <thead className="text-xs uppercase bg-black/5 dark:bg-white/5 border-b border-black/10 dark:border-white/10">
                             <tr>
                               <th className="px-4 py-3 font-bold">Fila</th>
                               {vistaPrevia.columnas.map((c) => (
@@ -780,7 +779,7 @@ export default function ConfigurarMapeo() {
                             {vistaPrevia.filas.map((fila) => (
                               <tr
                                 key={fila.numero_fila}
-                                className="border-b border-gray-100 dark:border-gray-700 last:border-0"
+                                className="border-b border-black/10 dark:border-white/10 last:border-0"
                               >
                                 <td className="px-4 py-2 font-mono text-xs">
                                   {fila.numero_fila}
@@ -805,26 +804,26 @@ export default function ConfigurarMapeo() {
                 </section>
 
                 {/* CA1: tabla de asignación columna -> parámetro estándar */}
-                <section className="bg-white dark:bg-[#2d3748] rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+                <section className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl shadow-sm border border-black/10 dark:border-white/10 p-6">
                   <h2 className="text-base font-bold text-gray-900 dark:text-white mb-1">
                     Asignación de columnas
                   </h2>
-                  <p className="text-sm text-gray-500 dark:text-gray-400 mb-1 font-light">
+                  <p className="text-sm text-gray-600 dark:text-gray-300 mb-1 font-light">
                     Indica qué parámetro estándar corresponde a cada columna del archivo.
                   </p>
-                  <p className="text-xs text-gray-400 dark:text-gray-500 mb-4 font-light">
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-4 font-light">
                     La columna de fecha ("{form.columna_fecha}") no aparece aquí: se configura arriba, en
                     "Columna de fecha".
                   </p>
 
                   {filasAsignacion.length === 0 ? (
-                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                    <p className="text-sm text-gray-600 dark:text-gray-300">
                       Genera primero una vista previa para ver las columnas del archivo.
                     </p>
                   ) : (
                     <div className="overflow-x-auto">
-                      <table className="w-full text-sm text-left text-gray-500 dark:text-gray-400">
-                        <thead className="text-xs uppercase bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700">
+                      <table className="w-full text-sm text-left text-gray-600 dark:text-gray-300">
+                        <thead className="text-xs uppercase bg-black/5 dark:bg-white/5 border-b border-black/10 dark:border-white/10">
                           <tr>
                             <th className="px-4 py-3 font-bold w-20">Índice</th>
                             <th className="px-4 py-3 font-bold">Columna del archivo</th>
@@ -915,7 +914,7 @@ export default function ConfigurarMapeo() {
                   <button
                     type="button"
                     onClick={() => navigate("/mapeos")}
-                    className="px-4 py-2.5 text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-all"
+                    className="px-4 py-2.5 text-sm font-medium text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-all"
                   >
                     Ver mapeos
                   </button>

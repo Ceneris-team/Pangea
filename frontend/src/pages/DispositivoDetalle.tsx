@@ -164,7 +164,6 @@ export default function DispositivoDetalle() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { nombreCompleto, rol, logout } = useAuth();
-  const [isDarkMode, setIsDarkMode] = useState(false);
 
   const puedeEditar = ROLES_PUEDEN_EDITAR.includes(rol ?? "");
 
@@ -400,28 +399,28 @@ export default function DispositivoDetalle() {
   }
 
   const inputClase =
-    "bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block w-full p-2.5 outline-none";
-  const labelClase = "block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1";
+    "bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block w-full p-2.5 outline-none";
+  const labelClase = "block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1";
   const botonPrimario =
     "inline-flex items-center px-4 py-2 text-sm font-bold rounded-xl bg-[#ccff00] text-[#1a202c] hover:bg-[#b8e600] transition-colors disabled:opacity-50";
 
   return (
-    <div className={`${isDarkMode ? "dark" : ""} font-sans`}>
-      <div className="flex h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-300 overflow-hidden">
+    <div className="font-sans">
+      <div className="flex h-screen bg-transparent transition-colors duration-300 overflow-hidden">
         <Sidebar onLogout={logout} activo="dispositivos" rol={rol} />
 
         <div className="flex-1 flex flex-col overflow-hidden">
-          <Topbar
-            isDarkMode={isDarkMode}
-            onToggleDarkMode={() => setIsDarkMode(!isDarkMode)}
+          <div className="flex justify-end p-4 md:p-6 pb-0">
+            <Topbar
             nombreCompleto={nombreCompleto}
             rol={rol}
-          />
+            />
+          </div>
 
           <main className="flex-1 overflow-y-auto p-6 md:p-8">
             <button
               onClick={() => navigate("/dispositivos")}
-              className="mb-4 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
+              className="mb-4 text-sm text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
             >
               &larr; Volver a Gestión de Dispositivos
             </button>
@@ -506,7 +505,7 @@ export default function DispositivoDetalle() {
                   "mb-4 p-4 rounded-xl text-sm border " +
                   (mensajeOk
                     ? "bg-[#ccff00]/20 border-[#ccff00]/40 text-[#5a7000] dark:text-[#ccff00]"
-                    : "bg-red-50 dark:bg-red-900/20 border-red-100 dark:border-red-800/30 text-red-600 dark:text-red-400")
+                    : "bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800/30 text-red-600 dark:text-red-400")
                 }
               >
                 {mensaje}
@@ -514,7 +513,7 @@ export default function DispositivoDetalle() {
             )}
 
             {/* Pestañas */}
-            <div className="border-b border-gray-200 dark:border-gray-700 mb-6 flex gap-1 overflow-x-auto">
+            <div className="border-b border-black/10 dark:border-white/10 mb-6 flex gap-1 overflow-x-auto">
               {PESTANAS.map((p) => (
                 <button
                   key={p.clave}
@@ -526,7 +525,7 @@ export default function DispositivoDetalle() {
                     "px-4 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap transition-colors " +
                     (pestana === p.clave
                       ? "border-[#ccff00] text-gray-900 dark:text-white"
-                      : "border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white")
+                      : "border-transparent text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white")
                   }
                 >
                   {p.etiqueta}
@@ -615,7 +614,7 @@ export default function DispositivoDetalle() {
                       </button>
                     ))}
                 </div>
-                <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                <p className="mt-2 text-xs text-gray-600 dark:text-gray-300">
                   {cargando
                     ? "Cargando configuración..."
                     : mapeo
@@ -625,7 +624,7 @@ export default function DispositivoDetalle() {
               </div>
             )}
 
-            <div className="bg-white dark:bg-[#2d3748] rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
+            <div className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl shadow-sm border border-black/10 dark:border-white/10 p-6">
               {pestana === "formato" && (
                 <PestanaFormato
                   formato={formato}
@@ -797,7 +796,7 @@ function PestanaFormato({
             disabled={!puedeEditar}
             className={inputClase}
           />
-          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+          <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">
             Filas de encabezado que el motor omite antes de leer datos.
           </p>
         </div>
@@ -844,7 +843,7 @@ function PestanaFormato({
             disabled
             className={inputClase + " opacity-60"}
           />
-          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+          <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">
             Se configura en la Conexión FTP de este dispositivo.
           </p>
         </div>
@@ -865,7 +864,7 @@ function PestanaFormato({
           </button>
         )}
         {!puedeEditar && (
-          <span className="text-xs text-gray-500 dark:text-gray-400">
+          <span className="text-xs text-gray-600 dark:text-gray-300">
             Tu rol no permite modificar la configuración de formato.
           </span>
         )}
@@ -958,7 +957,7 @@ function PestanaDatos({
       {/* Fila especial de Fecha y Hora: no pasa por mp_clmn/prmtr -la
           fecha no es una medición y no tiene parámetro estándar-, el motor
           la lee directo con estos dos campos. */}
-      <div className="mb-6 p-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/40">
+      <div className="mb-6 p-4 rounded-xl border border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5">
         <h3 className="text-sm font-bold text-gray-900 dark:text-white mb-3">Fecha y hora</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
@@ -1042,8 +1041,8 @@ function PestanaDatos({
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full text-sm text-left text-gray-500 dark:text-gray-400">
-          <thead className="text-xs uppercase bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700">
+        <table className="w-full text-sm text-left text-gray-600 dark:text-gray-300">
+          <thead className="text-xs uppercase bg-black/5 dark:bg-white/5 border-b border-black/10 dark:border-white/10">
             <tr>
               <th className="px-4 py-3 font-bold">N° de columna</th>
               <th className="px-4 py-3 font-bold">Parámetro estándar</th>
@@ -1061,7 +1060,7 @@ function PestanaDatos({
             {indices.map((indice) => (
               <tr
                 key={indice}
-                className="border-b border-gray-100 dark:border-gray-700"
+                className="border-b border-black/10 dark:border-white/10"
               >
                 <td className="px-4 py-3 font-medium text-gray-900 dark:text-white">
                   {indice}
@@ -1113,7 +1112,7 @@ function PestanaDatos({
           type="button"
           onClick={agregarFila}
           disabled={!puedeEditar}
-          className="px-3 py-2.5 text-sm font-medium rounded-xl border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50"
+          className="px-3 py-2.5 text-sm font-medium rounded-xl border border-black/20 dark:border-white/20 text-gray-700 dark:text-gray-200 hover:bg-black/10 dark:hover:bg-white/10 disabled:opacity-50"
         >
           Añadir
         </button>
@@ -1180,7 +1179,7 @@ function PestanaCargaArchivo({
 
   return (
     <div>
-      <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+      <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">
         El archivo se procesa con el mismo pipeline que la ingesta automática por
         FTP. El tipo de trama sale del prefijo del nombre del archivo:{" "}
         <code className="font-mono">H_*.dat</code> para datos periódicos y{" "}
@@ -1194,7 +1193,7 @@ function PestanaCargaArchivo({
           setArchivo(e.target.files?.[0] ?? null)
         }
         disabled={!puedeEditar}
-        className="block w-full text-sm text-gray-500 dark:text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-bold file:bg-[#ccff00] file:text-[#1a202c] hover:file:bg-[#b8e600]"
+        className="block w-full text-sm text-gray-600 dark:text-gray-300 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-bold file:bg-[#ccff00] file:text-[#1a202c] hover:file:bg-[#b8e600]"
       />
 
       <div className="mt-5">
@@ -1211,21 +1210,21 @@ function PestanaCargaArchivo({
       {resultado && (
         <dl className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
           <div>
-            <dt className="text-gray-500 dark:text-gray-400">Tipo de trama</dt>
+            <dt className="text-gray-600 dark:text-gray-300">Tipo de trama</dt>
             <dd className="font-bold text-gray-900 dark:text-white">{resultado.tipo_trama}</dd>
           </div>
           <div>
-            <dt className="text-gray-500 dark:text-gray-400">Lecturas guardadas</dt>
+            <dt className="text-gray-600 dark:text-gray-300">Lecturas guardadas</dt>
             <dd className="font-bold text-gray-900 dark:text-white">{resultado.guardadas}</dd>
           </div>
           <div>
-            <dt className="text-gray-500 dark:text-gray-400">Sin valor</dt>
+            <dt className="text-gray-600 dark:text-gray-300">Sin valor</dt>
             <dd className="font-bold text-gray-900 dark:text-white">
               {resultado.omitidas_sin_valor}
             </dd>
           </div>
           <div>
-            <dt className="text-gray-500 dark:text-gray-400">Errores de validación</dt>
+            <dt className="text-gray-600 dark:text-gray-300">Errores de validación</dt>
             <dd className="font-bold text-gray-900 dark:text-white">
               {resultado.errores_validacion}
             </dd>
@@ -1332,7 +1331,7 @@ function PestanaCargaManual({
       </div>
 
       {parametrosMapeados.length === 0 ? (
-        <p className="text-sm text-gray-500 dark:text-gray-400">
+        <p className="text-sm text-gray-600 dark:text-gray-300">
           Este dispositivo todavía no tiene parámetros mapeados. Configúralos en
           la pestaña Datos (trama H) antes de cargar mediciones a mano.
         </p>
@@ -1341,7 +1340,7 @@ function PestanaCargaManual({
           {parametrosMapeados.map((p) => (
             <div key={p.id_prmtr}>
               <label className={labelClase}>
-                {p.nmbr} <span className="text-gray-400">({p.undd})</span>
+                {p.nmbr} <span className="text-gray-500 dark:text-gray-400">({p.undd})</span>
               </label>
               <input
                 type="number"
@@ -1403,20 +1402,20 @@ function PestanaLogs({
   const colorEstado: Record<string, string> = {
     Exitoso: "bg-[#ccff00]/20 text-[#5a7000] dark:text-[#ccff00] border-[#ccff00]/30",
     Fallido: "bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 border-red-200",
-    Procesando: "bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 border-blue-200",
-    Pendiente: "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200",
+    Procesando: "bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800/30",
+    Pendiente: "bg-black/5 dark:bg-white/10 text-gray-600 dark:text-gray-300 border-gray-200",
   };
 
   return (
     <div>
-      <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+      <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">
         Archivos procesados para este dispositivo, tanto los recibidos por FTP
         como los subidos desde la pestaña Carga de datos.
       </p>
 
       <div className="overflow-x-auto">
-        <table className="w-full text-sm text-left text-gray-500 dark:text-gray-400">
-          <thead className="text-xs uppercase bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700">
+        <table className="w-full text-sm text-left text-gray-600 dark:text-gray-300">
+          <thead className="text-xs uppercase bg-black/5 dark:bg-white/5 border-b border-black/10 dark:border-white/10">
             <tr>
               <th className="px-4 py-3 font-bold">Archivo</th>
               <th className="px-4 py-3 font-bold">Estado</th>
@@ -1443,7 +1442,7 @@ function PestanaLogs({
             )}
             {!cargando &&
               logs.map((log) => (
-                <tr key={log.id_archv} className="border-b border-gray-100 dark:border-gray-700">
+                <tr key={log.id_archv} className="border-b border-black/10 dark:border-white/10">
                   <td className="px-4 py-3 font-medium text-gray-900 dark:text-white">
                     {log.nmbr_archv}
                   </td>
