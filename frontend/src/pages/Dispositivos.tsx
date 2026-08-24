@@ -172,7 +172,7 @@ export default function Dispositivos() {
               {ROLES_PUEDEN_AGREGAR.includes(rol ?? "") && (
                 <button
                   onClick={() => navigate("/dispositivos/nueva")}
-                  className="inline-flex items-center px-4 py-2 text-sm font-bold rounded-xl bg-[#ccff00] text-[#1a202c] hover:bg-[#b8e600] transition-colors"
+                  className="inline-flex items-center px-4 py-2.5 text-sm font-semibold text-[#ccff00] bg-[#ccff00]/10 hover:bg-[#ccff00]/20 border border-[#ccff00]/30 rounded-xl transition-colors"
                 >
                   <svg
                     className="w-4 h-4 mr-2"

@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import pangeaLogo from "../../assets/pangea-logo.png";
+import pangeaLogo from "../../assets/pangea-logo.jpg";
 import { ROLES, rutaPorRol } from "../../config/roles";
 
 export type SeccionActiva = "panel" | "usuarios" | "ubicaciones" | "dispositivos" | "conexiones-ftp" | "dashboard" | "configuracion" | "consulta-datos"| "mapeos" | "parametros" | "cola-ingesta" | "graficos";
