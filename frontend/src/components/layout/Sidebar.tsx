@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import pangeaLogo from "../../assets/pangea-logo.png";
+import pangeaIcon from "../../assets/pangea-icon-light.png";
 import { ROLES, rutaPorRol } from "../../config/roles";
 
 export type SeccionActiva = "panel" | "usuarios" | "ubicaciones" | "dispositivos" | "conexiones-ftp" | "dashboard" | "configuracion" | "consulta-datos"| "mapeos" | "parametros" | "cola-ingesta" | "graficos";
@@ -17,9 +17,10 @@ const linkDeshabilitado = linkInactivo + " opacity-60 cursor-not-allowed";
 
 export default function Sidebar({ onLogout, activo, rol }: SidebarProps) {
   return (
-    <aside className="w-64 bg-white/[0.04] backdrop-blur-md border-r border-white/10 hidden md:flex flex-col transition-colors duration-300">
-      <div className="h-16 flex items-center px-6 border-b border-white/10">
-        <img src={pangeaLogo} alt="Pangea" className="h-8 w-auto rounded-md bg-white px-2 py-1" />
+    <aside className="w-64 bg-white/[0.05] backdrop-blur-lg border-r border-white/10 hidden md:flex flex-col transition-colors duration-300">
+      <div className="h-16 flex items-center gap-2 px-5 border-b border-white/10">
+        <img src={pangeaIcon} alt="" className="h-7 w-auto" />
+        <span className="text-lg font-bold text-white tracking-tight">Pangea</span>
       </div>
 
       <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
