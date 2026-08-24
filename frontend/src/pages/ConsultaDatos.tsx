@@ -3,6 +3,8 @@ import { apiFetch, ApiError } from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import Sidebar from "../components/layout/Sidebar";
 import Topbar from "../components/layout/Topbar";
+import SelectorRangoFechas from "../components/SelectorRangoFechas";
+import { rangoUltimas24Horas, type RangoFechas } from "../utils/fechas";
 
 interface ParametroItem {
   id_prmtr: number;
@@ -29,10 +31,18 @@ interface ListadoMediciones {
   items: MedicionItem[];
 }
 
-function construirQuery(parametroIds: number[], ubicacionIds: number[]): string {
+function construirQuery(
+  parametroIds: number[],
+  ubicacionIds: number[],
+  rangoFechas: RangoFechas | null,
+): string {
   const params = new URLSearchParams();
   parametroIds.forEach((id) => params.append("parametro_ids", String(id)));
   ubicacionIds.forEach((id) => params.append("ubicacion_ids", String(id)));
+  if (rangoFechas) {
+    params.append("fecha_inicio", new Date(rangoFechas.inicio).toISOString());
+    params.append("fecha_fin", new Date(rangoFechas.fin).toISOString());
+  }
   const query = params.toString();
   return query ? `/mediciones?${query}` : "/mediciones";
 }
@@ -48,6 +58,11 @@ export default function ConsultaDatos() {
   const [seleccionUbicaciones, setSeleccionUbicaciones] = useState<number[]>([]);
   const [filtroParametros, setFiltroParametros] = useState<number[]>([]);
   const [filtroUbicaciones, setFiltroUbicaciones] = useState<number[]>([]);
+
+  // HU12: rango de fechas, con su propia selección/filtro aplicado.
+  // CA: el rango por defecto al ingresar al módulo son las últimas 24 horas.
+  const [seleccionFechas, setSeleccionFechas] = useState<RangoFechas>(rangoUltimas24Horas);
+  const [filtroFechas, setFiltroFechas] = useState<RangoFechas>(rangoUltimas24Horas);
 
   const [mediciones, setMediciones] = useState<ListadoMediciones | null>(null);
   const [loading, setLoading] = useState(false);
@@ -69,7 +84,7 @@ export default function ConsultaDatos() {
     setLoading(true);
     setError(null);
 
-    apiFetch<ListadoMediciones>(construirQuery(filtroParametros, filtroUbicaciones))
+    apiFetch<ListadoMediciones>(construirQuery(filtroParametros, filtroUbicaciones, filtroFechas))
       .then((res) => {
         if (!cancelado) setMediciones(res);
       })
@@ -84,7 +99,7 @@ export default function ConsultaDatos() {
     return () => {
       cancelado = true;
     };
-  }, [filtroParametros, filtroUbicaciones]);
+  }, [filtroParametros, filtroUbicaciones, filtroFechas]);
 
   const toggleSeleccion = (lista: number[], setLista: (v: number[]) => void, id: number) => {
     setLista(lista.includes(id) ? lista.filter((v) => v !== id) : [...lista, id]);
@@ -102,6 +117,18 @@ export default function ConsultaDatos() {
     setSeleccionUbicaciones([]);
     setFiltroParametros([]);
     setFiltroUbicaciones([]);
+  };
+
+  // HU12 CA2/CA3: aplica el rango de fechas en curso como filtro activo
+  const handleAplicarFechas = (rango: RangoFechas) => {
+    setFiltroFechas(rango);
+  };
+
+  // HU12 CA4: "LIMPIAR FILTRO" vuelve al rango por defecto (últimas 24 horas)
+  const handleLimpiarFechas = () => {
+    const rangoPorDefecto = rangoUltimas24Horas();
+    setSeleccionFechas(rangoPorDefecto);
+    setFiltroFechas(rangoPorDefecto);
   };
 
   return (
@@ -183,6 +210,15 @@ export default function ConsultaDatos() {
                     LIMPIAR FILTROS
                   </button>
                 </div>
+              </div>
+
+              <div className="mt-6 pt-6 border-t border-black/10 dark:border-white/10">
+                <SelectorRangoFechas
+                  seleccion={seleccionFechas}
+                  onCambiarSeleccion={setSeleccionFechas}
+                  onAplicar={handleAplicarFechas}
+                  onLimpiar={handleLimpiarFechas}
+                />
               </div>
             </div>
 

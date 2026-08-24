@@ -594,6 +594,85 @@ class TestCA4LimpiarFiltros:
         assert body["items"] == []
 
 
+class TestHU12RangoDeFechas:
+    """HU12: filtro por rango de fechas (fecha_inicio/fecha_fin) sobre
+    /mediciones. Independiente de HU13 (DEC-11): sin fecha_inicio/
+    fecha_fin no se aplica ningún filtro de fecha."""
+
+    def test_filtra_por_rango_de_fechas(self, client, db_session, escenario_basico):
+        ahora = dt.datetime.now(dt.timezone.utc)
+        dentro_del_rango = crear_medicion(
+            db_session,
+            escenario_basico["dispositivo"],
+            escenario_basico["parametro"],
+            escenario_basico["sede"],
+            valor=20.0,
+            fecha=ahora - dt.timedelta(hours=2),
+        )
+        fuera_del_rango = crear_medicion(
+            db_session,
+            escenario_basico["dispositivo"],
+            escenario_basico["parametro"],
+            escenario_basico["sede"],
+            valor=30.0,
+            fecha=ahora - dt.timedelta(days=5),
+        )
+
+        resp = client.get(
+            "/mediciones",
+            params={
+                "fecha_inicio": (ahora - dt.timedelta(hours=24)).isoformat(),
+                "fecha_fin": ahora.isoformat(),
+            },
+        )
+        body = resp.json()
+        ids = {i["id_lctr"] for i in body["items"]}
+        assert dentro_del_rango.id_lctr in ids
+        assert fuera_del_rango.id_lctr not in ids
+
+    def test_rechaza_fecha_inicio_posterior_a_fecha_fin(
+        self, client, db_session, escenario_basico
+    ):
+        ahora = dt.datetime.now(dt.timezone.utc)
+        resp = client.get(
+            "/mediciones",
+            params={
+                "fecha_inicio": ahora.isoformat(),
+                "fecha_fin": (ahora - dt.timedelta(hours=1)).isoformat(),
+            },
+        )
+        assert resp.status_code == 400
+
+    def test_rechaza_fecha_fin_futura(self, client, db_session, escenario_basico):
+        ahora = dt.datetime.now(dt.timezone.utc)
+        resp = client.get(
+            "/mediciones",
+            params={
+                "fecha_inicio": (ahora - dt.timedelta(hours=1)).isoformat(),
+                "fecha_fin": (ahora + dt.timedelta(days=1)).isoformat(),
+            },
+        )
+        assert resp.status_code == 400
+
+    def test_sin_fecha_no_aplica_filtro_de_fecha(self, client, db_session, escenario_basico):
+        # DEC-11: ausencia de fecha_inicio/fecha_fin no filtra por fecha,
+        # incluso si hay mediciones fuera de las últimas 24 horas.
+        ahora = dt.datetime.now(dt.timezone.utc)
+        antigua = crear_medicion(
+            db_session,
+            escenario_basico["dispositivo"],
+            escenario_basico["parametro"],
+            escenario_basico["sede"],
+            valor=99.0,
+            fecha=ahora - dt.timedelta(days=30),
+        )
+
+        resp = client.get("/mediciones")
+        body = resp.json()
+        ids = {i["id_lctr"] for i in body["items"]}
+        assert antigua.id_lctr in ids
+
+
 class TestDenegadoSinPermiso:
     def test_denegado_sin_permiso_en_tableros(self, client, db_session, fabrica):
         rol = fabrica.rol("Cliente Final")

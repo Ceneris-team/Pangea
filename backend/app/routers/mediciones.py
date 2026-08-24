@@ -1,14 +1,23 @@
 """
 HU 13 - Seleccionar parámetros y ubicaciones
+HU 12 - Seleccionar rango de fechas
 
 CA: el Cliente Final filtra la vista de telemetría por uno o más
 parámetros y/o ubicaciones (selección múltiple). Sin filtros, se muestran
 todos los datos disponibles para la cuenta. Los parámetros y ubicaciones
 ofrecidos dependen de lo asignado al usuario (prms_ubccn, HU 21) y del
 catálogo de parámetros mapeados (mp_clmn/prmtr, HU 06).
+
+HU 12: además, la vista se puede acotar a un rango de fechas (fecha_inicio/
+fecha_fin, con hora incluida). La fecha de inicio no puede ser posterior a
+la fecha de fin, y no se permiten fechas futuras. Sin fecha_inicio/
+fecha_fin, no se aplica ningún filtro de fecha (DEC-11: "LIMPIAR FILTROS"
+de HU13 sigue sin depender de ningún filtro de fecha).
 """
 
-from fastapi import APIRouter, Depends, Query
+import datetime as dt
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -78,6 +87,8 @@ def listar_parametros_disponibles(
 def listar_mediciones(
     parametro_ids: list[int] | None = Query(default=None),
     ubicacion_ids: list[int] | None = Query(default=None),
+    fecha_inicio: dt.datetime | None = Query(default=None),
+    fecha_fin: dt.datetime | None = Query(default=None),
     pagina: int = Query(default=1, ge=1),
     por_pagina: int = Query(default=50, ge=1, le=500),
     db: Session = Depends(get_db),
@@ -87,10 +98,25 @@ def listar_mediciones(
     # tiene Lectura otorgada al Cliente Final en el seed.
     usuario: dict = Depends(require_permiso("Tableros", LECTURA)),
 ):
-    """CA2-CA4: aplica los filtros de parámetros y/o ubicaciones sobre la
-    vista de datos. Si no se selecciona ninguno, se muestran todos los
-    datos disponibles para la cuenta (dentro de las ubicaciones permitidas)."""
+    """CA2-CA4: aplica los filtros de parámetros, ubicaciones y/o rango de
+    fechas (HU12) sobre la vista de datos. Si no se selecciona ninguno, se
+    muestran todos los datos disponibles para la cuenta (dentro de las
+    ubicaciones permitidas)."""
     ids_ubicaciones_permitidas = set(_ubicaciones_permitidas(db, usuario))
+
+    # HU12 CA: la fecha de inicio no puede ser posterior a la fecha de fin,
+    # y no se permiten fechas futuras (se compara contra la hora actual en
+    # UTC, ya que fch_hr se guarda con timezone).
+    ahora = dt.datetime.now(dt.timezone.utc)
+    if fecha_inicio and fecha_fin and fecha_inicio > fecha_fin:
+        raise HTTPException(
+            status_code=400,
+            detail="La fecha de inicio no puede ser posterior a la fecha de fin.",
+        )
+    if fecha_inicio and fecha_inicio > ahora:
+        raise HTTPException(status_code=400, detail="No se permiten fechas futuras.")
+    if fecha_fin and fecha_fin > ahora:
+        raise HTTPException(status_code=400, detail="No se permiten fechas futuras.")
 
     query = (
         db.query(Telemetria, Ubicacion, Parametro)
@@ -105,6 +131,10 @@ def listar_mediciones(
         query = query.filter(Ubicacion.id_ubccn.in_(ids_solicitadas))
     if parametro_ids:
         query = query.filter(Parametro.id_prmtr.in_(parametro_ids))
+    if fecha_inicio:
+        query = query.filter(Telemetria.fch_hr >= fecha_inicio)
+    if fecha_fin:
+        query = query.filter(Telemetria.fch_hr <= fecha_fin)
 
     total = query.count()
     filas = (
