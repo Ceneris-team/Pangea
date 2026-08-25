@@ -119,10 +119,37 @@ def metricas_cola_ingesta(
     )
 
 
+@router.get("/dataloggers")
+def listar_dataloggers_cola(
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(require_permiso("Ingesta", LECTURA)),
+):
+    """Dataloggers de origen con archivos en la cola, para el filtro de
+    HU09 CA2: evita mezclar en la misma vista los archivos de estaciones
+    distintas. Mismo aislamiento por sede que /cola."""
+    query = db.query(ArchivoIngesta.id_cnxn).join(
+        ConexionFTP, ConexionFTP.id_cnxn == ArchivoIngesta.id_cnxn
+    )
+    if usuario.get("scope") == "por_sede":
+        query = query.filter(ConexionFTP.id_sd == usuario["sede_id"])
+
+    ids_cnxn = {id_cnxn for (id_cnxn,) in query.distinct().all()}
+    dataloggers = _mapa_dataloggers(db, ids_cnxn)
+
+    items = sorted(
+        ({"id_cnxn": id_cnxn, "nombre": dataloggers.get(id_cnxn, "Desconocido")} for id_cnxn in ids_cnxn),
+        key=lambda d: d["nombre"],
+    )
+    return {"items": items}
+
+
 @router.get("/cola")
 def listar_cola_ingesta(
     estado: str | None = Query(
         default=None, description="En espera | Procesando | Procesado | Fallido"
+    ),
+    id_cnxn: int | None = Query(
+        default=None, description="Filtra por datalogger de origen (conexión FTP)"
     ),
     pagina: int = Query(default=1, ge=1),
     por_pagina: int = Query(default=POR_PAGINA_DEFAULT, ge=1, le=100),
@@ -130,7 +157,9 @@ def listar_cola_ingesta(
     usuario: dict = Depends(require_permiso("Ingesta", LECTURA)),
 ):
     """CA1: listado paginado de la cola, orden fch_dtccn descendente.
-    CA2: filtro opcional por estado (lenguaje de negocio de la HU)."""
+    CA2: filtro opcional por estado (lenguaje de negocio de la HU) y por
+    datalogger de origen, para no mezclar en la misma vista archivos de
+    estaciones distintas."""
     query = db.query(ArchivoIngesta).join(
         ConexionFTP, ConexionFTP.id_cnxn == ArchivoIngesta.id_cnxn
     )
@@ -143,6 +172,9 @@ def listar_cola_ingesta(
 
     if estado is not None:
         query = query.filter(ArchivoIngesta.estd == _validar_estado_negocio(estado))
+
+    if id_cnxn is not None:
+        query = query.filter(ArchivoIngesta.id_cnxn == id_cnxn)
 
     total = query.count()
     archivos = (
