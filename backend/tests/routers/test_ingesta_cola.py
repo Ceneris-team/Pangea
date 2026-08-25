@@ -11,15 +11,7 @@ from fastapi.testclient import TestClient
 
 from app.database import get_db
 from app.main import app
-from app.models import (
-    ArchivoIngesta,
-    ConexionFTP,
-    Dispositivo,
-    EventoTexto,
-    Parametro,
-    Telemetria,
-    Ubicacion,
-)
+from app.models import ArchivoIngesta, ConexionFTP, Dispositivo, MapeoFormato, Ubicacion
 from app.models.suscripcion import PermisoUsuarioSede
 from app.security.dependencies import get_current_user
 
@@ -315,90 +307,83 @@ class TestDetalleArchivoIngesta:
         assert client.get("/ingesta/cola/1").status_code == 403
 
 
-def crear_parametro(db_session, nombre, unidad="u", tipo_dato="numerico"):
-    parametro = Parametro(nmbr=nombre, undd=unidad, tipo_dato=tipo_dato)
-    db_session.add(parametro)
-    db_session.flush()
-    return parametro
-
-
-def crear_medicion(db_session, dispositivo, parametro, sede, archivo, valor=10.0, fecha=None):
-    medicion = Telemetria(
-        fch_hr=fecha or dt.datetime.now(dt.timezone.utc),
+def crear_mapeo(db_session, dispositivo, tp_trm="H"):
+    mapeo = MapeoFormato(
         id_dspstv=dispositivo.id_dspstv,
-        id_prmtr=parametro.id_prmtr,
-        id_sd=sede.id_sd,
-        vlr=valor,
-        id_archv=archivo.id_archv,
+        tp_trm=tp_trm,
+        dlmtdr=",",
+        fl_inc_dts=1,
+        frmt_fch="%Y-%m-%d %H:%M:%S",
     )
-    db_session.add(medicion)
+    db_session.add(mapeo)
     db_session.flush()
-    return medicion
+    return mapeo
 
 
-def crear_evento_texto(db_session, dispositivo, parametro, sede, archivo, valor="Puerta Abierta", fecha=None):
-    evento = EventoTexto(
-        fch_hr=fecha or dt.datetime.now(dt.timezone.utc),
-        id_dspstv=dispositivo.id_dspstv,
-        id_prmtr=parametro.id_prmtr,
-        id_sd=sede.id_sd,
-        vlr=valor,
-        id_archv=archivo.id_archv,
-    )
-    db_session.add(evento)
-    db_session.flush()
-    return evento
+@pytest.fixture()
+def dat_falso(monkeypatch):
+    """Spy/stub sobre descargar_archivo_dat: el endpoint de registros
+    re-descarga el .dat del FTP de origen (no se persiste en archv_ingst,
+    ver HU09), así que el test controla qué contenido "vuelve a traer" sin
+    tocar una conexión real."""
+    contenidos = {}
+
+    def _fake(cnxn, nombre_archivo):
+        if nombre_archivo not in contenidos:
+            raise TimeoutError(f"'{nombre_archivo}' ya no está en el FTP (simulado)")
+        return contenidos[nombre_archivo]
+
+    monkeypatch.setattr("app.routers.ingesta.descargar_archivo_dat", _fake)
+    return contenidos
 
 
 class TestRegistrosArchivoIngesta:
-    """Vista previa de lo que un archivo procesado escribió en tlmtr/evnt_txt."""
+    """Vista cruda del .dat (columna->valor tal como llegó), re-descargado
+    del FTP de origen para el modal de detalle de HU09."""
 
-    def test_devuelve_mediciones_y_eventos_del_archivo(self, client, db_session, tecnico_lector):
+    def test_devuelve_las_filas_crudas_del_archivo(self, client, db_session, tecnico_lector, dat_falso):
         sede, _ = tecnico_lector
         conexion = crear_conexion(db_session, sede)
         dispositivo = crear_dispositivo(db_session, sede, conexion)
-        archivo = crear_archivo(db_session, conexion, estd="Exitoso", rgstrs_prcsds=2)
-        parametro_num = crear_parametro(db_session, "Nivel de napa", unidad="m")
-        parametro_txt = crear_parametro(db_session, "MensajeP", unidad="-", tipo_dato="texto")
+        crear_mapeo(db_session, dispositivo)
+        archivo = crear_archivo(db_session, conexion, nombre="H_ejemplo.dat", estd="Exitoso")
 
-        crear_medicion(db_session, dispositivo, parametro_num, sede, archivo, valor=12.5)
-        crear_evento_texto(db_session, dispositivo, parametro_txt, sede, archivo, valor="Puerta Abierta")
+        dat_falso["H_ejemplo.dat"] = (
+            "Fecha,Nivel,Bateria\n"
+            "2026-08-21 12:00:00,,0\n"
+            "2026-08-21 12:05:00,12.5,11.8\n"
+        )
 
         resp = client.get(f"/ingesta/cola/{archivo.id_archv}/registros")
         assert resp.status_code == 200
         body = resp.json()
-        assert body["total"] == 2
-        assert body["mostrados"] == 2
-        valores = {item["parametro_nombre"]: item["vlr"] for item in body["items"]}
-        assert valores["Nivel de napa"] == "12.5000"
-        assert valores["MensajeP"] == "Puerta Abierta"
+        assert body["columnas"] == ["Fecha", "Nivel", "Bateria"]
+        assert body["total_filas_archivo"] == 2
+        assert body["filas"][0]["valores"] == {
+            "Fecha": "2026-08-21 12:00:00",
+            "Nivel": "",
+            "Bateria": "0",
+        }
+        assert body["filas"][1]["valores"]["Nivel"] == "12.5"
 
-    def test_archivo_sin_registros_devuelve_total_cero(self, client, db_session, tecnico_lector):
-        sede, _ = tecnico_lector
-        conexion = crear_conexion(db_session, sede)
-        archivo = crear_archivo(db_session, conexion, estd="Exitoso", rgstrs_prcsds=0)
-
-        resp = client.get(f"/ingesta/cola/{archivo.id_archv}/registros")
-        assert resp.status_code == 200
-        body = resp.json()
-        assert body["total"] == 0
-        assert body["items"] == []
-
-    def test_no_mezcla_registros_de_otro_archivo(self, client, db_session, tecnico_lector):
+    def test_archivo_ya_no_esta_en_el_ftp_devuelve_404(self, client, db_session, tecnico_lector, dat_falso):
         sede, _ = tecnico_lector
         conexion = crear_conexion(db_session, sede)
         dispositivo = crear_dispositivo(db_session, sede, conexion)
-        parametro = crear_parametro(db_session, "Nivel de napa", unidad="m")
+        crear_mapeo(db_session, dispositivo)
+        archivo = crear_archivo(db_session, conexion, nombre="H_perdido.dat", estd="Exitoso")
 
-        archivo_1 = crear_archivo(db_session, conexion, nombre="H_1.dat", estd="Exitoso")
-        archivo_2 = crear_archivo(db_session, conexion, nombre="H_2.dat", estd="Exitoso")
-        crear_medicion(db_session, dispositivo, parametro, sede, archivo_1, valor=1)
-        crear_medicion(db_session, dispositivo, parametro, sede, archivo_2, valor=2)
+        resp = client.get(f"/ingesta/cola/{archivo.id_archv}/registros")
+        assert resp.status_code == 404
 
-        resp = client.get(f"/ingesta/cola/{archivo_1.id_archv}/registros")
-        body = resp.json()
-        assert body["total"] == 1
-        assert body["items"][0]["vlr"] == "1.0000"
+    def test_sin_mapeo_activo_devuelve_422(self, client, db_session, tecnico_lector, dat_falso):
+        sede, _ = tecnico_lector
+        conexion = crear_conexion(db_session, sede)
+        crear_dispositivo(db_session, sede, conexion)
+        archivo = crear_archivo(db_session, conexion, nombre="H_sin_mapeo.dat", estd="Exitoso")
+
+        resp = client.get(f"/ingesta/cola/{archivo.id_archv}/registros")
+        assert resp.status_code == 422
 
     def test_archivo_inexistente_devuelve_404(self, client, tecnico_lector):
         assert client.get("/ingesta/cola/999999/registros").status_code == 404

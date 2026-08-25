@@ -75,7 +75,7 @@ def listar_conexiones(
 ):
     """CA: 'VER CONEXIONES' redirige al listado, la nueva configuración
     aparece registrada con estado 'Activo'."""
-    query = db.query(ConexionFTP)
+    query = db.query(ConexionFTP).filter(ConexionFTP.estd != "Inactiva")
     if usuario.get("scope") == "por_sede":
         query = query.filter(ConexionFTP.id_sd == usuario["sede_id"])
 

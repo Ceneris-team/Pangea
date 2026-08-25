@@ -25,6 +25,7 @@ from app.database import get_db
 from app.main import app
 from app.models import (
     Dispositivo,
+    EventoTexto,
     MapeoColumna,
     MapeoFormato,
     Parametro,
@@ -113,8 +114,10 @@ def crear_dispositivo(db_session, ubicacion, conexion, nombre="CR1000-HU13", mar
     return dispositivo
 
 
-def crear_parametro(db_session, nombre, unidad="u"):
-    parametro = Parametro(nmbr=nombre, undd=unidad, dscrpcn="parámetro creado por los tests")
+def crear_parametro(db_session, nombre, unidad="u", tipo_dato="numerico"):
+    parametro = Parametro(
+        nmbr=nombre, undd=unidad, dscrpcn="parámetro creado por los tests", tipo_dato=tipo_dato
+    )
     db_session.add(parametro)
     db_session.flush()
     return parametro
@@ -169,6 +172,19 @@ def crear_medicion(db_session, dispositivo, parametro, sede, valor=10.0, fecha=N
     db_session.add(medicion)
     db_session.flush()
     return medicion
+
+
+def crear_evento_texto(db_session, dispositivo, parametro, sede, valor="Puerta Abierta", fecha=None):
+    evento = EventoTexto(
+        fch_hr=fecha or dt.datetime.now(dt.timezone.utc),
+        id_dspstv=dispositivo.id_dspstv,
+        id_prmtr=parametro.id_prmtr,
+        id_sd=sede.id_sd,
+        vlr=valor,
+    )
+    db_session.add(evento)
+    db_session.flush()
+    return evento
 
 
 @pytest.fixture()
@@ -594,83 +610,48 @@ class TestCA4LimpiarFiltros:
         assert body["items"] == []
 
 
-class TestHU12RangoDeFechas:
-    """HU12: filtro por rango de fechas (fecha_inicio/fecha_fin) sobre
-    /mediciones. Independiente de HU13 (DEC-11): sin fecha_inicio/
-    fecha_fin no se aplica ningún filtro de fecha."""
+class TestEventosDeTexto:
+    """Un parámetro tipo_dato='texto' (ej. "MensajeP" de una trama de
+    puerta) se persiste en evnt_txt, no en tlmtr -y antes de esto
+    /mediciones no lo consultaba: aparecía en el selector de parámetros
+    (CA1 no filtra por tipo) pero nunca en la tabla de resultados."""
 
-    def test_filtra_por_rango_de_fechas(self, client, db_session, escenario_basico):
-        ahora = dt.datetime.now(dt.timezone.utc)
-        dentro_del_rango = crear_medicion(
+    def test_evento_de_texto_aparece_en_los_resultados(self, client, db_session, escenario_basico):
+        parametro_txt = crear_parametro(db_session, "MensajeP", unidad="-", tipo_dato="texto")
+        mapear_parametro(
+            db_session, escenario_basico["dispositivo"], parametro_txt, indice=2, tipo_trama="P"
+        )
+        crear_evento_texto(
             db_session,
             escenario_basico["dispositivo"],
-            escenario_basico["parametro"],
+            parametro_txt,
             escenario_basico["sede"],
-            valor=20.0,
-            fecha=ahora - dt.timedelta(hours=2),
-        )
-        fuera_del_rango = crear_medicion(
-            db_session,
-            escenario_basico["dispositivo"],
-            escenario_basico["parametro"],
-            escenario_basico["sede"],
-            valor=30.0,
-            fecha=ahora - dt.timedelta(days=5),
-        )
-
-        resp = client.get(
-            "/mediciones",
-            params={
-                "fecha_inicio": (ahora - dt.timedelta(hours=24)).isoformat(),
-                "fecha_fin": ahora.isoformat(),
-            },
-        )
-        body = resp.json()
-        ids = {i["id_lctr"] for i in body["items"]}
-        assert dentro_del_rango.id_lctr in ids
-        assert fuera_del_rango.id_lctr not in ids
-
-    def test_rechaza_fecha_inicio_posterior_a_fecha_fin(
-        self, client, db_session, escenario_basico
-    ):
-        ahora = dt.datetime.now(dt.timezone.utc)
-        resp = client.get(
-            "/mediciones",
-            params={
-                "fecha_inicio": ahora.isoformat(),
-                "fecha_fin": (ahora - dt.timedelta(hours=1)).isoformat(),
-            },
-        )
-        assert resp.status_code == 400
-
-    def test_rechaza_fecha_fin_futura(self, client, db_session, escenario_basico):
-        ahora = dt.datetime.now(dt.timezone.utc)
-        resp = client.get(
-            "/mediciones",
-            params={
-                "fecha_inicio": (ahora - dt.timedelta(hours=1)).isoformat(),
-                "fecha_fin": (ahora + dt.timedelta(days=1)).isoformat(),
-            },
-        )
-        assert resp.status_code == 400
-
-    def test_sin_fecha_no_aplica_filtro_de_fecha(self, client, db_session, escenario_basico):
-        # DEC-11: ausencia de fecha_inicio/fecha_fin no filtra por fecha,
-        # incluso si hay mediciones fuera de las últimas 24 horas.
-        ahora = dt.datetime.now(dt.timezone.utc)
-        antigua = crear_medicion(
-            db_session,
-            escenario_basico["dispositivo"],
-            escenario_basico["parametro"],
-            escenario_basico["sede"],
-            valor=99.0,
-            fecha=ahora - dt.timedelta(days=30),
+            valor="Puerta Abierta",
         )
 
         resp = client.get("/mediciones")
         body = resp.json()
-        ids = {i["id_lctr"] for i in body["items"]}
-        assert antigua.id_lctr in ids
+        assert body["total"] == 2  # la medición numérica de escenario_basico + este evento
+        item = next(i for i in body["items"] if i["parametro_nombre"] == "MensajeP")
+        assert item["vlr"] == "Puerta Abierta"
+
+    def test_filtra_eventos_de_texto_por_parametro(self, client, db_session, escenario_basico):
+        parametro_txt = crear_parametro(db_session, "MensajeP", unidad="-", tipo_dato="texto")
+        mapear_parametro(
+            db_session, escenario_basico["dispositivo"], parametro_txt, indice=2, tipo_trama="P"
+        )
+        crear_evento_texto(
+            db_session,
+            escenario_basico["dispositivo"],
+            parametro_txt,
+            escenario_basico["sede"],
+            valor="Llave No Encontrada",
+        )
+
+        resp = client.get("/mediciones", params={"parametro_ids": [parametro_txt.id_prmtr]})
+        body = resp.json()
+        assert body["total"] == 1
+        assert body["items"][0]["vlr"] == "Llave No Encontrada"
 
 
 class TestDenegadoSinPermiso:

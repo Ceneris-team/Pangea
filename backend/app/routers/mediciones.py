@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import (
     Dispositivo,
+    EventoTexto,
     MapeoColumna,
     MapeoFormato,
     Parametro,
@@ -98,55 +99,38 @@ def listar_mediciones(
     # tiene Lectura otorgada al Cliente Final en el seed.
     usuario: dict = Depends(require_permiso("Tableros", LECTURA)),
 ):
-    """CA2-CA4: aplica los filtros de parámetros, ubicaciones y/o rango de
-    fechas (HU12) sobre la vista de datos. Si no se selecciona ninguno, se
-    muestran todos los datos disponibles para la cuenta (dentro de las
-    ubicaciones permitidas)."""
+    """CA2-CA4: aplica los filtros de parámetros y/o ubicaciones sobre la
+    vista de datos. Si no se selecciona ninguno, se muestran todos los
+    datos disponibles para la cuenta (dentro de las ubicaciones permitidas).
+
+    Combina tlmtr (parámetros 'numerico') y evnt_txt (parámetros 'texto',
+    ej. "Puerta Abierta"): un parámetro de texto se ofrece en /parametros
+    igual que uno numérico (ver listar_parametros_disponibles, que no
+    filtra por tipo_dato), así que sin esto el filtro lo dejaba elegir
+    pero la tabla nunca mostraba sus valores."""
     ids_ubicaciones_permitidas = set(_ubicaciones_permitidas(db, usuario))
 
-    # HU12 CA: la fecha de inicio no puede ser posterior a la fecha de fin,
-    # y no se permiten fechas futuras (se compara contra la hora actual en
-    # UTC, ya que fch_hr se guarda con timezone).
-    ahora = dt.datetime.now(dt.timezone.utc)
-    if fecha_inicio and fecha_fin and fecha_inicio > fecha_fin:
-        raise HTTPException(
-            status_code=400,
-            detail="La fecha de inicio no puede ser posterior a la fecha de fin.",
+    def _query_base(modelo):
+        query = (
+            db.query(modelo, Ubicacion, Parametro)
+            .join(Dispositivo, Dispositivo.id_dspstv == modelo.id_dspstv)
+            .join(Ubicacion, Ubicacion.id_ubccn == Dispositivo.id_ubccn)
+            .join(Parametro, Parametro.id_prmtr == modelo.id_prmtr)
+            .filter(Ubicacion.id_ubccn.in_(ids_ubicaciones_permitidas))
         )
-    if fecha_inicio and fecha_inicio > ahora:
-        raise HTTPException(status_code=400, detail="No se permiten fechas futuras.")
-    if fecha_fin and fecha_fin > ahora:
-        raise HTTPException(status_code=400, detail="No se permiten fechas futuras.")
+        if ubicacion_ids:
+            ids_solicitadas = set(ubicacion_ids) & ids_ubicaciones_permitidas
+            query = query.filter(Ubicacion.id_ubccn.in_(ids_solicitadas))
+        if parametro_ids:
+            query = query.filter(Parametro.id_prmtr.in_(parametro_ids))
+        return query
 
-    query = (
-        db.query(Telemetria, Ubicacion, Parametro)
-        .join(Dispositivo, Dispositivo.id_dspstv == Telemetria.id_dspstv)
-        .join(Ubicacion, Ubicacion.id_ubccn == Dispositivo.id_ubccn)
-        .join(Parametro, Parametro.id_prmtr == Telemetria.id_prmtr)
-        .filter(Ubicacion.id_ubccn.in_(ids_ubicaciones_permitidas))
-    )
-
-    if ubicacion_ids:
-        ids_solicitadas = set(ubicacion_ids) & ids_ubicaciones_permitidas
-        query = query.filter(Ubicacion.id_ubccn.in_(ids_solicitadas))
-    if parametro_ids:
-        query = query.filter(Parametro.id_prmtr.in_(parametro_ids))
-    if fecha_inicio:
-        query = query.filter(Telemetria.fch_hr >= fecha_inicio)
-    if fecha_fin:
-        query = query.filter(Telemetria.fch_hr <= fecha_fin)
-
-    total = query.count()
-    filas = (
-        query.order_by(Telemetria.fch_hr.desc())
-        .offset((pagina - 1) * por_pagina)
-        .limit(por_pagina)
-        .all()
-    )
+    mediciones = _query_base(Telemetria).all()
+    eventos = _query_base(EventoTexto).all()
 
     items = [
         MedicionListItem(
-            id_lctr=t.id_lctr,
+            id_registro=t.id_lctr,
             fch_hr=t.fch_hr,
             id_ubccn=u.id_ubccn,
             ubicacion_nombre=u.nmbr,
@@ -155,7 +139,23 @@ def listar_mediciones(
             undd=p.undd,
             vlr=float(t.vlr),
         )
-        for t, u, p in filas
+        for t, u, p in mediciones
+    ] + [
+        MedicionListItem(
+            id_registro=e.id_evnt,
+            fch_hr=e.fch_hr,
+            id_ubccn=u.id_ubccn,
+            ubicacion_nombre=u.nmbr,
+            id_prmtr=p.id_prmtr,
+            parametro_nombre=p.nmbr,
+            undd=p.undd,
+            vlr=e.vlr,
+        )
+        for e, u, p in eventos
     ]
+    items.sort(key=lambda item: item.fch_hr, reverse=True)
 
-    return {"total": total, "pagina": pagina, "por_pagina": por_pagina, "items": items}
+    total = len(items)
+    items_pagina = items[(pagina - 1) * por_pagina : (pagina - 1) * por_pagina + por_pagina]
+
+    return {"total": total, "pagina": pagina, "por_pagina": por_pagina, "items": items_pagina}
