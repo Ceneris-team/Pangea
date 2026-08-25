@@ -50,6 +50,11 @@ interface ListadoColaIngesta {
   items: ArchivoIngestaListItem[];
 }
 
+interface DataloggerFiltro {
+  id_cnxn: number;
+  nombre: string;
+}
+
 const POR_PAGINA = 10;
 const REFRESCO_MS = 30_000;
 
@@ -72,6 +77,8 @@ export default function ColaIngesta() {
 
   const [pagina, setPagina] = useState(1);
   const [estadoFiltro, setEstadoFiltro] = useState("");
+  const [dataloggerFiltro, setDataloggerFiltro] = useState("");
+  const [dataloggers, setDataloggers] = useState<DataloggerFiltro[]>([]);
   const [data, setData] = useState<ListadoColaIngesta | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -86,12 +93,23 @@ export default function ColaIngesta() {
   const [registrosLoading, setRegistrosLoading] = useState(false);
 
   useEffect(() => {
+    apiFetch<{ items: DataloggerFiltro[] }>("/ingesta/dataloggers")
+      .then((res) => setDataloggers(res.items))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
     let cancelado = false;
 
     const cargar = () => {
       setLoading(true);
       apiFetch<ListadoColaIngesta>("/ingesta/cola", {
-        params: { pagina, por_pagina: POR_PAGINA, estado: estadoFiltro || undefined },
+        params: {
+          pagina,
+          por_pagina: POR_PAGINA,
+          estado: estadoFiltro || undefined,
+          id_cnxn: dataloggerFiltro || undefined,
+        },
       })
         .then((res) => {
           if (!cancelado) {
@@ -115,7 +133,7 @@ export default function ColaIngesta() {
       cancelado = true;
       clearInterval(intervalo);
     };
-  }, [pagina, estadoFiltro]);
+  }, [pagina, estadoFiltro, dataloggerFiltro]);
 
   useEffect(() => {
     if (idSeleccionado === null) {
@@ -228,6 +246,26 @@ export default function ColaIngesta() {
                     </option>
                   ))}
                 </select>
+
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-200" htmlFor="filtro-datalogger">
+                  Datalogger:
+                </label>
+                <select
+                  id="filtro-datalogger"
+                  value={dataloggerFiltro}
+                  onChange={(e) => {
+                    setPagina(1);
+                    setDataloggerFiltro(e.target.value);
+                  }}
+                  className="bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] p-2.5 outline-none"
+                >
+                  <option value="">Todos</option>
+                  {dataloggers.map((d) => (
+                    <option key={d.id_cnxn} value={d.id_cnxn}>
+                      {d.nombre}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               {error && (
@@ -259,7 +297,11 @@ export default function ColaIngesta() {
                     {!loading && data?.items.length === 0 && (
                       <tr>
                         <td colSpan={5} className="px-6 py-8 text-center text-gray-600 dark:text-gray-300">
-                          No hay archivos en la cola{estadoFiltro ? ` con estado "${estadoFiltro}"` : ""}.
+                          No hay archivos en la cola{estadoFiltro ? ` con estado "${estadoFiltro}"` : ""}
+                          {dataloggerFiltro
+                            ? ` para el datalogger "${dataloggers.find((d) => String(d.id_cnxn) === dataloggerFiltro)?.nombre ?? ""}"`
+                            : ""}
+                          .
                         </td>
                       </tr>
                     )}
