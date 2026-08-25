@@ -105,9 +105,7 @@ export default function ConexionesFTP() {
     try {
       await apiFetch<{ mensaje: string }>(`/conexiones-ftp/${id}`, { method: "DELETE" });
       cancelarConfirmacion();
-      setData((prev) =>
-        prev ? { ...prev, items: prev.items.filter((c) => c.id_cnxn !== id) } : prev
-      );
+      cargarConexiones();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo eliminar la conexión");
     } finally {
