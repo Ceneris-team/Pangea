@@ -138,11 +138,11 @@ export default function Ubicaciones() {
                 </p>
               </div>
 
-              {/* HU08 CA1: punto de entrada al formulario de registro. */}
-              {ROLES_PUEDEN_AGREGAR.includes(rol ?? "") && (
+              <div className="flex gap-3">
+                {/* HU22: entrada a la vista de mapa, solo lectura. */}
                 <button
-                  onClick={() => navigate("/ubicaciones/nueva")}
-                  className="inline-flex items-center px-4 py-2 text-sm font-bold rounded-xl bg-[#ccff00] text-[#1a202c] hover:bg-[#b8e600] transition-colors"
+                  onClick={() => navigate("/ubicaciones/mapa")}
+                  className="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-transparent border border-gray-300 dark:border-gray-600 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 transition-all"
                 >
                   <svg
                     className="w-4 h-4 mr-2"
@@ -153,11 +153,32 @@ export default function Ubicaciones() {
                     strokeWidth="2"
                     stroke="currentColor"
                   >
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
                   </svg>
-                  Agregar ubicación
+                  Ver en mapa
                 </button>
-              )}
+
+                {/* HU08 CA1: punto de entrada al formulario de registro. */}
+                {ROLES_PUEDEN_AGREGAR.includes(rol ?? "") && (
+                  <button
+                    onClick={() => navigate("/ubicaciones/nueva")}
+                    className="inline-flex items-center px-4 py-2 text-sm font-bold rounded-xl bg-[#ccff00] text-[#1a202c] hover:bg-[#b8e600] transition-colors"
+                  >
+                    <svg
+                      className="w-4 h-4 mr-2"
+                      aria-hidden="true"
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      strokeWidth="2"
+                      stroke="currentColor"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                    </svg>
+                    Agregar ubicación
+                  </button>
+                )}
+              </div>
             </header>
 
             {mensajeExito && (
@@ -274,16 +295,21 @@ export default function Ubicaciones() {
                               >
                                 Ver detalles
                               </Link>
-                              <button
-                                disabled
-                                title="Próximamente"
-                                className="inline-flex items-center justify-center px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-transparent border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white focus:ring-4 focus:outline-none focus:ring-gray-200 dark:focus:ring-gray-800 disabled:opacity-50 disabled:hover:bg-white dark:disabled:hover:bg-transparent transition-all"
-                              >
-                                <svg className="w-4 h-4 mr-2 text-gray-500 dark:text-gray-400" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                                </svg>
-                                Editar
-                              </button>
+                              {/* HU08 (ampliación): antes estaba deshabilitado
+                                  como "Próximamente"; ya existe la pantalla de
+                                  edición. Mismos roles que el alta, porque el
+                                  backend exige Edición sobre "Ubicaciones". */}
+                              {ROLES_PUEDEN_AGREGAR.includes(rol ?? "") && (
+                                <Link
+                                  to={`/ubicaciones/${u.id_ubccn}/editar`}
+                                  className="inline-flex items-center justify-center px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-transparent border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white focus:ring-4 focus:outline-none focus:ring-gray-200 dark:focus:ring-gray-800 transition-all"
+                                >
+                                  <svg className="w-4 h-4 mr-2 text-gray-500 dark:text-gray-400" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                  </svg>
+                                  Editar
+                                </Link>
+                              )}
                             </div>
                           </td>
                         </tr>

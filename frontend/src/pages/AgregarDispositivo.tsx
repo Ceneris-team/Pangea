@@ -14,8 +14,10 @@ import Topbar from "../components/layout/Topbar";
  *   CA3  tras guardar, vuelve al listado (HU10) con el nuevo dispositivo
  *   CA4  "Cancelar" descarta el formulario sin llamar al backend
  *
- * lttd/lngtd NO son campos de este formulario: el backend los copia de la
- * Ubicación elegida (ver routers/dispositivos.py, crear_dispositivo).
+ * DEC-28: Latitud/Longitud son el punto GPS PROPIO del dispositivo, no una
+ * copia del centro de su Ubicación. Son opcionales: si se dejan vacías, no
+ * se mandan al backend y crear_dispositivo cae al centro de la Ubicación
+ * (el comportamiento de siempre).
  *
  * DEC-09: el dispositivo ya no necesita un mapeo de formato previo para
  * crearse. El mapeo (marca/tipo de trama/columnas) se configura después,
@@ -38,6 +40,8 @@ interface DispositivoForm {
   mdl: string;
   id_ubccn: string;
   id_cnxn: string;
+  lttd: string;
+  lngtd: string;
 }
 
 const FORM_VACIO: DispositivoForm = {
@@ -46,7 +50,18 @@ const FORM_VACIO: DispositivoForm = {
   mdl: "",
   id_ubccn: "",
   id_cnxn: "",
+  lttd: "",
+  lngtd: "",
 };
+
+/** Devuelve el número solo si el texto es un número válido: "" y "-" dan
+ *  NaN y no deben viajar al backend como coordenada 0,0. Mismo helper que
+ *  AgregarUbicacion.tsx usa para sus propios lttd/lngtd. */
+function aNumero(texto: string): number | null {
+  if (texto.trim() === "") return null;
+  const valor = Number(texto);
+  return Number.isFinite(valor) ? valor : null;
+}
 
 export default function AgregarDispositivo() {
   const navigate = useNavigate();
@@ -110,6 +125,28 @@ export default function AgregarDispositivo() {
       return;
     }
 
+    // DEC-28: opcionales, pero si se escribe algo tiene que ser válido -un
+    // texto no numérico o fuera de rango se rechaza acá para no gastar un
+    // viaje al backend, que repite las mismas reglas en DispositivoCrear.
+    const latitud = aNumero(form.lttd);
+    const longitud = aNumero(form.lngtd);
+    if (form.lttd.trim() !== "" && latitud === null) {
+      setError("La latitud debe ser un número válido");
+      return;
+    }
+    if (form.lngtd.trim() !== "" && longitud === null) {
+      setError("La longitud debe ser un número válido");
+      return;
+    }
+    if (latitud !== null && (latitud < -90 || latitud > 90)) {
+      setError("La latitud debe estar entre -90 y 90");
+      return;
+    }
+    if (longitud !== null && (longitud < -180 || longitud > 180)) {
+      setError("La longitud debe estar entre -180 y 180");
+      return;
+    }
+
     setGuardando(true);
     setError("");
     try {
@@ -121,6 +158,10 @@ export default function AgregarDispositivo() {
           mdl: form.mdl.trim() || null,
           id_ubccn: Number(form.id_ubccn),
           id_cnxn: Number(form.id_cnxn),
+          // Si el usuario no las completó no se mandan, y el backend cae
+          // al centro de la Ubicación elegida.
+          ...(latitud !== null ? { lttd: latitud } : {}),
+          ...(longitud !== null ? { lngtd: longitud } : {}),
         },
       });
 
@@ -257,6 +298,49 @@ export default function AgregarDispositivo() {
                         </option>
                       ))}
                     </select>
+                  </div>
+                </div>
+
+                {/* DEC-28: punto GPS propio del dispositivo. Opcional: en
+                    blanco, el backend usa el centro de la Ubicación. */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  <div>
+                    <label className={labelClase} htmlFor="lttd">
+                      Latitud <span className="text-gray-400 font-normal">(opcional)</span>
+                    </label>
+                    <input
+                      id="lttd"
+                      type="number"
+                      step="any"
+                      min={-90}
+                      max={90}
+                      value={form.lttd}
+                      onChange={(e) => actualizarCampo("lttd", e.target.value)}
+                      placeholder="-12.046400"
+                      className={inputClase}
+                    />
+                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      Entre -90 y 90. En blanco: se usa el centro de la ubicación.
+                    </p>
+                  </div>
+                  <div>
+                    <label className={labelClase} htmlFor="lngtd">
+                      Longitud <span className="text-gray-400 font-normal">(opcional)</span>
+                    </label>
+                    <input
+                      id="lngtd"
+                      type="number"
+                      step="any"
+                      min={-180}
+                      max={180}
+                      value={form.lngtd}
+                      onChange={(e) => actualizarCampo("lngtd", e.target.value)}
+                      placeholder="-77.042800"
+                      className={inputClase}
+                    />
+                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      Entre -180 y 180. En blanco: se usa el centro de la ubicación.
+                    </p>
                   </div>
                 </div>
               </div>

@@ -1,4 +1,10 @@
-import { useRef, useState, type MouseEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { GoogleMap, Marker, Polygon, Polyline, useJsApiLoader } from "@react-google-maps/api";
+import {
+  GOOGLE_MAPS_API_KEY,
+  GOOGLE_MAPS_LIBRARIES,
+  GOOGLE_MAPS_LOADER_ID,
+} from "../config/googleMaps";
 
 /**
  * Herramienta de dibujo de polígono sobre mapa (HU08 CA1).
@@ -9,16 +15,37 @@ import { useRef, useState, type MouseEvent } from "react";
  * con un punto GPS simple; por eso el punto de referencia (lat/lng) se
  * captura aparte, en el formulario, y acá solo se dibuja el contorno.
  *
- * Por qué es SVG y no Leaflet/Mapbox: el proyecto no tiene ninguna
- * librería de mapas instalada y el CA1 pide "una herramienta de dibujo de
- * polígono sobre un mapa". Este componente resuelve el dibujo -que es lo
- * que la HU necesita- sin agregar una dependencia ni exigir tiles de un
- * servicio externo. La proyección es equirectangular (lng->x, lat->y
- * lineal), suficiente para dibujar el contorno de un terreno, que abarca
- * unos pocos cientos de metros. El fondo cartográfico real entra con
- * HU22 (Ver ubicaciones en mapa), que es la historia que sí trata sobre
- * el mapa; cuando llegue, se cambia el <svg> por la capa de tiles y este
- * mismo contrato de props (valor/onChange en GeoJSON) se conserva.
+ * El fondo cartográfico es Google Maps (DEC-20). Antes este componente
+ * dibujaba sobre un <svg> propio con proyección equirectangular, como
+ * placeholder deliberado mientras el proyecto no tenía librería de mapas
+ * ni proveedor decidido; ese SVG ya no existe.
+ *
+ * Por qué el dibujo es a mano y no con la Drawing library de Google: el
+ * DrawingManager fue deprecado en agosto 2025 y ELIMINADO de la Maps
+ * JavaScript API en la v3.65 (junio 2026) -usarlo hoy lanza una excepción
+ * que tumba la página entera-. Google recomienda migrar a Terra Draw, pero
+ * para "clic por vértice" no hace falta una dependencia nueva: se escucha
+ * el onClick del mapa y se cierra el anillo al hacer clic sobre el primer
+ * vértice. Lo que sí sigue plenamente soportado es google.maps.Polygon con
+ * editable:true, que es lo que da los vértices arrastrables una vez que el
+ * contorno está cerrado.
+ *
+ * El contrato de props (valor/onChange en GeoJSON, centroLat/centroLng) se
+ * conservó intacto en la migración desde el SVG, así que
+ * AgregarUbicacion.tsx no necesitó cambios.
+ *
+ * Arriba del mapa hay un buscador de lugares (Places Autocomplete) que
+ * solo reencuadra la vista, para no tener que arrastrar desde el centro
+ * por defecto hasta la zona a dibujar. Si "Places API" no está habilitada
+ * en el proyecto de Google Cloud, el input queda inerte y el dibujo sigue
+ * funcionando igual.
+ *
+ * Nota sobre centroLat/centroLng: los formularios ya no piden lat/lng
+ * tecleados, los DERIVAN del contorno (ver components/poligono.ts). Estas
+ * props siguen recibiendo ese punto para dibujarlo como referencia, así
+ * que el contrato no cambió.
+ *
+ * La API key va por VITE_GOOGLE_MAPS_API_KEY (nunca hardcodeada).
  */
 
 export interface PoligonoGeoJSON {
@@ -38,114 +65,283 @@ interface Props {
   centroLng: number | null;
 }
 
-const ANCHO = 640;
-const ALTO = 360;
-
-/** Grados que abarca el lienzo. ~0.01° de latitud son ~1.1 km: la escala
- *  de un terreno, que es lo que una ubicación delimita. */
-const SPAN_LAT = 0.01;
-const SPAN_LNG = 0.02;
-
 // Centro por defecto cuando el formulario todavía no tiene lat/lng:
-// Lima, Perú. Solo fija el encuadre inicial del lienzo.
+// Lima, Perú. Solo fija el encuadre inicial del mapa.
 const CENTRO_POR_DEFECTO = { lat: -12.0464, lng: -77.0428 };
 
+const CONTENEDOR_ESTILO = { width: "100%", height: "360px" };
+
+const ESTILO_POLIGONO = {
+  fillColor: "#ccff00",
+  fillOpacity: 0.25,
+  strokeColor: "#8fb300",
+  strokeWeight: 2,
+};
+
+/** Mínimo para que el anillo delimite un área. Es el mismo que valida
+ *  UbicacionCrear (Pydantic) en el backend; se repite acá para no depender
+ *  solo de esa validación tardía. */
+const VERTICES_MINIMOS = 3;
+
+/** 6 decimales: la misma precisión que Numeric(9,6) de ubccn.lttd/lngtd. */
+function redondear(valor: number): number {
+  return Number(valor.toFixed(6));
+}
+
+/** Vértices en curso -> GeoJSON, con el anillo cerrado. Devuelve null si
+ *  todavía no hay área: el formulario tiene que seguir viéndolo vacío. */
+function aGeoJSON(vertices: google.maps.LatLngLiteral[]): PoligonoGeoJSON | null {
+  if (vertices.length < VERTICES_MINIMOS) return null;
+  const anillo = vertices.map((v) => [redondear(v.lng), redondear(v.lat)]);
+  return { type: "Polygon", coordinates: [[...anillo, anillo[0]]] };
+}
+
+/** Quita el vértice de cierre para volver a la lista editable: Google Maps
+ *  cierra el anillo solo, repetirlo duplicaría un vértice sobre el primero. */
+function aVerticesAbiertos(poligono: PoligonoGeoJSON | null): google.maps.LatLngLiteral[] {
+  const anillo = poligono?.coordinates?.[0];
+  if (!anillo || anillo.length < VERTICES_MINIMOS + 1) return [];
+  return anillo.slice(0, -1).map(([lng, lat]) => ({ lat, lng }));
+}
+
 export default function MapaDibujoPoligono({ valor, onChange, centroLat, centroLng }: Props) {
-  const svgRef = useRef<SVGSVGElement | null>(null);
+  const { isLoaded, loadError } = useJsApiLoader({
+    id: GOOGLE_MAPS_LOADER_ID,
+    googleMapsApiKey: GOOGLE_MAPS_API_KEY,
+    libraries: GOOGLE_MAPS_LIBRARIES,
+  });
 
-  // Vértices en curso. Se mantienen abiertos (sin repetir el primero) y
-  // solo se cierra el anillo al emitir el GeoJSON, que es donde el
-  // formato lo exige.
-  const [vertices, setVertices] = useState<number[][]>(() => aVerticesAbiertos(valor));
+  // Vértices en curso mientras se dibuja (anillo abierto). Una vez cerrado
+  // el contorno, la fuente de verdad pasa a ser `valor` y este arreglo se
+  // vacía: si no, habría dos copias del mismo dato desincronizándose.
+  const [enCurso, setEnCurso] = useState<google.maps.LatLngLiteral[]>([]);
 
-  const centro = {
-    lat: centroLat ?? CENTRO_POR_DEFECTO.lat,
-    lng: centroLng ?? CENTRO_POR_DEFECTO.lng,
-  };
+  // El <Polygon> editable, para leer sus vértices cuando el usuario los
+  // arrastra. Vive fuera de React porque lo instancia Google Maps.
+  const poligonoRef = useRef<google.maps.Polygon | null>(null);
+  const listenersRef = useRef<google.maps.MapsEventListener[]>([]);
 
-  // El encuadre se congela en cuanto hay vértices dibujados: si se
-  // recalculara con cada tecleo en Latitud, los puntos ya marcados se
-  // moverían debajo del cursor mientras el usuario escribe. Va en estado
-  // (no en un ref leído durante el render) para que React lo trate como
-  // lo que es: un valor que participa del render.
-  const [encuadreFijado, setEncuadreFijado] = useState<{ lat: number; lng: number } | null>(null);
+  const centro = useMemo(
+    () => ({
+      lat: centroLat ?? CENTRO_POR_DEFECTO.lat,
+      lng: centroLng ?? CENTRO_POR_DEFECTO.lng,
+    }),
+    [centroLat, centroLng]
+  );
+
+  // El encuadre se congela en cuanto hay algo dibujado: si el mapa se
+  // recentrara con cada tecleo en Latitud, el contorno ya marcado se
+  // movería debajo del cursor mientras el usuario escribe.
+  const [encuadreFijado, setEncuadreFijado] = useState<google.maps.LatLngLiteral | null>(null);
   const encuadre = encuadreFijado ?? centro;
 
-  function aPixel([lng, lat]: number[]): { x: number; y: number } {
-    return {
-      x: ((lng - encuadre.lng) / SPAN_LNG + 0.5) * ANCHO,
-      // El eje Y del SVG crece hacia abajo y la latitud hacia arriba.
-      y: (0.5 - (lat - encuadre.lat) / SPAN_LAT) * ALTO,
-    };
+  const contenedorBusquedaRef = useRef<HTMLDivElement | null>(null);
+  const [busquedaDisponible, setBusquedaDisponible] = useState(true);
+
+  const cerrado = valor !== null;
+  const verticesCerrados = useMemo(() => aVerticesAbiertos(valor), [valor]);
+
+  function quitarListeners() {
+    listenersRef.current.forEach((l) => l.remove());
+    listenersRef.current = [];
   }
 
-  function aCoordenada(x: number, y: number): number[] {
-    const lng = encuadre.lng + (x / ANCHO - 0.5) * SPAN_LNG;
-    const lat = encuadre.lat + (0.5 - y / ALTO) * SPAN_LAT;
-    return [redondear(lng), redondear(lat)];
-  }
+  /** Lee los vértices del <Polygon> editable y los emite. Se llama cuando
+   *  el usuario arrastra un vértice (set_at), agrega uno tirando del punto
+   *  intermedio (insert_at) o quita uno (remove_at). */
+  const emitirDesdePoligono = useCallback(
+    (poligono: google.maps.Polygon) => {
+      const vertices = poligono
+        .getPath()
+        .getArray()
+        .map((p) => ({ lat: p.lat(), lng: p.lng() }));
+      onChange(aGeoJSON(vertices));
+    },
+    [onChange]
+  );
 
-  function emitir(nuevos: number[][]) {
-    setVertices(nuevos);
-    // Menos de 3 vértices no delimitan un área: el polígono todavía no
-    // es válido y el formulario tiene que seguir viéndolo como vacío.
-    if (nuevos.length < 3) {
-      onChange(null);
-      return;
-    }
-    onChange({ type: "Polygon", coordinates: [[...nuevos, nuevos[0]]] });
-  }
+  const onPoligonoCargado = useCallback(
+    (poligono: google.maps.Polygon) => {
+      poligonoRef.current = poligono;
+      quitarListeners();
+      const ruta = poligono.getPath();
+      listenersRef.current = [
+        ruta.addListener("set_at", () => emitirDesdePoligono(poligono)),
+        ruta.addListener("insert_at", () => emitirDesdePoligono(poligono)),
+        ruta.addListener("remove_at", () => emitirDesdePoligono(poligono)),
+      ];
+    },
+    [emitirDesdePoligono]
+  );
 
-  function agregarVertice(e: MouseEvent<SVGSVGElement>) {
-    const svg = svgRef.current;
-    if (!svg) return;
-    const caja = svg.getBoundingClientRect();
-    // El SVG se escala con el ancho disponible, así que hay que pasar de
-    // píxeles de pantalla a coordenadas del viewBox.
-    const x = ((e.clientX - caja.left) / caja.width) * ANCHO;
-    const y = ((e.clientY - caja.top) / caja.height) * ALTO;
-    // Con el primer vértice se congela el encuadre (ver encuadreFijado).
-    if (encuadreFijado === null) setEncuadreFijado(encuadre);
-    emitir([...vertices, aCoordenada(x, y)]);
-  }
+  const onPoligonoDesmontado = useCallback(() => {
+    quitarListeners();
+    poligonoRef.current = null;
+  }, []);
+
+  /** Cada clic sobre el mapa agrega un vértice. No emite todavía: el
+   *  polígono solo cuenta como válido cuando el usuario lo cierra, así el
+   *  formulario no recibe contornos a medio dibujar. */
+  const onMapaClick = useCallback(
+    (e: google.maps.MapMouseEvent) => {
+      if (cerrado || !e.latLng) return;
+      const punto = { lat: e.latLng.lat(), lng: e.latLng.lng() };
+      setEnCurso((previos) => {
+        if (previos.length === 0) setEncuadreFijado(encuadre);
+        return [...previos, punto];
+      });
+    },
+    [cerrado, encuadre]
+  );
+
+  /** Clic sobre el primer vértice: cierra el anillo y recién ahí emite. */
+  const cerrarPoligono = useCallback(() => {
+    if (enCurso.length < VERTICES_MINIMOS) return;
+    onChange(aGeoJSON(enCurso));
+    setEnCurso([]);
+  }, [enCurso, onChange]);
 
   function deshacer() {
-    const restantes = vertices.slice(0, -1);
-    if (restantes.length === 0) setEncuadreFijado(null);
-    emitir(restantes);
+    if (cerrado) return;
+    setEnCurso((previos) => {
+      const restantes = previos.slice(0, -1);
+      if (restantes.length === 0) setEncuadreFijado(null);
+      return restantes;
+    });
   }
 
   function limpiar() {
-    // Sin vértices el encuadre vuelve a seguir al punto del formulario.
+    quitarListeners();
+    poligonoRef.current = null;
+    setEnCurso([]);
     setEncuadreFijado(null);
-    setVertices([]);
     onChange(null);
   }
 
-  const puntos = vertices.map(aPixel);
-  const centroPx = aPixel([centro.lng, centro.lat]);
-  const poligonoCompleto = vertices.length >= 3;
+  useEffect(() => {
+    // Los listeners viven en objetos de Google Maps, fuera de React: sin
+    // esto quedarían colgados al desmontar el formulario.
+    return () => quitarListeners();
+  }, []);
+
+  /** Monta el buscador de lugares. Solo reencuadra el mapa: no toca el
+   *  contorno ni emite onChange.
+   *
+   *  Usa PlaceAutocompleteElement y NO el clásico
+   *  google.maps.places.Autocomplete: ese último dejó de estar disponible
+   *  para proyectos de Google Cloud creados después de marzo de 2025 -el
+   *  de Pangea lo es-, así que ahí no devuelve sugerencias nunca.
+   *  PlaceAutocompleteElement es un custom element: se inyecta en un
+   *  contenedor en vez de decorar un <input> propio.
+   *
+   *  Degradación: si "Places API (New)" no está habilitada en el proyecto,
+   *  el elemento no se monta y en su lugar queda el aviso estático; el
+   *  dibujo del contorno sigue funcionando igual. */
+  useEffect(() => {
+    const contenedor = contenedorBusquedaRef.current;
+    if (!isLoaded || !contenedor) return;
+
+    const Elemento = (
+      google.maps.places as unknown as {
+        PlaceAutocompleteElement?: new (opciones?: object) => HTMLElement;
+      }
+    )?.PlaceAutocompleteElement;
+    if (!Elemento) {
+      setBusquedaDisponible(false);
+      return;
+    }
+
+    const elemento = new Elemento();
+    elemento.style.width = "100%";
+    contenedor.replaceChildren(elemento);
+
+    // El evento entrega una referencia al lugar; hay que pedirle la
+    // ubicación explícitamente (la API nueva no la trae de entrada).
+    const onSelect = async (evento: Event) => {
+      const prediccion = (evento as unknown as { placePrediction?: unknown }).placePrediction as
+        | { toPlace: () => { fetchFields: (o: object) => Promise<void>; location?: google.maps.LatLng } }
+        | undefined;
+      if (!prediccion) return;
+      try {
+        const lugar = prediccion.toPlace();
+        await lugar.fetchFields({ fields: ["location"] });
+        if (!lugar.location) return;
+        // Mueve el encuadre aunque ya haya vértices dibujados: es una
+        // acción explícita del usuario, no el recentrado automático que
+        // encuadreFijado existe para evitar.
+        setEncuadreFijado({ lat: lugar.location.lat(), lng: lugar.location.lng() });
+      } catch {
+        // Places sin habilitar o cuota agotada: el mapa sigue usable.
+        setBusquedaDisponible(false);
+      }
+    };
+
+    elemento.addEventListener("gmp-select", onSelect as EventListener);
+    return () => {
+      elemento.removeEventListener("gmp-select", onSelect as EventListener);
+      contenedor.replaceChildren();
+    };
+  }, [isLoaded]);
+
+  if (!GOOGLE_MAPS_API_KEY) {
+    return (
+      <div className="rounded-xl border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 p-6 text-center text-sm text-red-600 dark:text-red-400">
+        Falta configurar VITE_GOOGLE_MAPS_API_KEY en el .env del frontend.
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="rounded-xl border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 p-6 text-center text-sm text-red-600 dark:text-red-400">
+        No se pudo cargar Google Maps. Revisa la API key y sus restricciones.
+      </div>
+    );
+  }
+
+  if (!isLoaded) {
+    return (
+      <div className="rounded-xl border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 p-6 text-center text-sm text-gray-500 dark:text-gray-400">
+        Cargando mapa...
+      </div>
+    );
+  }
+
+  const puedeCerrar = !cerrado && enCurso.length >= VERTICES_MINIMOS;
 
   return (
     <div>
       <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
         <p className="text-xs text-gray-500 dark:text-gray-400">
-          Haz clic sobre el mapa para marcar cada vértice del contorno de la zona. Se
-          necesitan al menos 3.
+          {cerrado
+            ? "Arrastra los vértices para ajustar el contorno."
+            : "Haz clic sobre el mapa para marcar cada vértice. Se necesitan al menos 3; luego haz clic en el primer vértice (o en «Cerrar contorno») para cerrar la zona."}
         </p>
         <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={deshacer}
-            disabled={vertices.length === 0}
-            className="px-3 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 disabled:opacity-40 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-          >
-            Deshacer punto
-          </button>
+          {!cerrado && (
+            <>
+              <button
+                type="button"
+                onClick={deshacer}
+                disabled={enCurso.length === 0}
+                className="px-3 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 disabled:opacity-40 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+              >
+                Deshacer punto
+              </button>
+              <button
+                type="button"
+                onClick={cerrarPoligono}
+                disabled={!puedeCerrar}
+                className="px-3 py-1.5 text-xs rounded-lg border border-[#8fb300] text-[#5a7000] dark:text-[#ccff00] disabled:opacity-40 hover:bg-[#ccff00]/10 transition-colors"
+              >
+                Cerrar contorno
+              </button>
+            </>
+          )}
           <button
             type="button"
             onClick={limpiar}
-            disabled={vertices.length === 0}
+            disabled={!cerrado && enCurso.length === 0}
             className="px-3 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 disabled:opacity-40 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
           >
             Limpiar
@@ -153,97 +349,90 @@ export default function MapaDibujoPoligono({ valor, onChange, centroLat, centroL
         </div>
       </div>
 
-      <svg
-        ref={svgRef}
-        viewBox={`0 0 ${ANCHO} ${ALTO}`}
-        onClick={agregarVertice}
-        role="application"
-        aria-label="Mapa para dibujar el contorno de la ubicación"
-        className="w-full h-auto rounded-xl border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 cursor-crosshair"
-      >
-        <defs>
-          <pattern id="cuadricula-mapa" width="32" height="32" patternUnits="userSpaceOnUse">
-            <path
-              d="M 32 0 L 0 0 0 32"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1"
-              className="text-gray-200 dark:text-gray-700"
+      {/* Buscador de lugares: evita tener que arrastrar el mapa desde el
+          centro por defecto (Lima) hasta la zona que se va a dibujar.
+          Solo mueve el encuadre; no toca el contorno ni el formulario.
+          El Enter se atrapa acá porque enviaría el formulario que envuelve
+          a este componente. */}
+      <div
+        ref={contenedorBusquedaRef}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") e.preventDefault();
+        }}
+        className="mb-2 [&_gmp-place-autocomplete]:w-full"
+      />
+      {!busquedaDisponible && (
+        <p className="mb-2 text-xs text-gray-500 dark:text-gray-400">
+          El buscador de lugares no está disponible (falta habilitar «Places API (New)» en
+          Google Cloud). Puedes ubicar la zona arrastrando el mapa.
+        </p>
+      )}
+
+      <div className="rounded-xl overflow-hidden border border-gray-300 dark:border-gray-600">
+        <GoogleMap
+          mapContainerStyle={CONTENEDOR_ESTILO}
+          center={encuadre}
+          zoom={15}
+          onClick={onMapaClick}
+          options={{ draggableCursor: cerrado ? undefined : "crosshair" }}
+        >
+          {/* Contorno ya cerrado: editable arrastrando vértices. */}
+          {cerrado && verticesCerrados.length >= VERTICES_MINIMOS && (
+            <Polygon
+              paths={verticesCerrados}
+              editable
+              options={ESTILO_POLIGONO}
+              onLoad={onPoligonoCargado}
+              onUnmount={onPoligonoDesmontado}
             />
-          </pattern>
-        </defs>
-        <rect width={ANCHO} height={ALTO} fill="url(#cuadricula-mapa)" />
+          )}
 
-        {poligonoCompleto && (
-          <polygon
-            points={puntos.map((p) => `${p.x},${p.y}`).join(" ")}
-            fill="#ccff00"
-            fillOpacity="0.25"
-            stroke="#8fb300"
-            strokeWidth="2"
-          />
-        )}
-
-        {/* Con 2 vértices todavía no hay área, pero sí un segmento que
-            conviene mostrar para que el trazo no parezca perdido. */}
-        {!poligonoCompleto && puntos.length === 2 && (
-          <line
-            x1={puntos[0].x}
-            y1={puntos[0].y}
-            x2={puntos[1].x}
-            y2={puntos[1].y}
-            stroke="#8fb300"
-            strokeWidth="2"
-          />
-        )}
-
-        {puntos.map((p, i) => (
-          <circle key={i} cx={p.x} cy={p.y} r="5" fill="#8fb300" stroke="#ffffff" strokeWidth="2" />
-        ))}
-
-        {/* Punto de referencia declarado en el formulario (lat/lng). */}
-        {centroLat !== null && centroLng !== null && (
-          <g>
-            <circle cx={centroPx.x} cy={centroPx.y} r="6" fill="none" stroke="#ef4444" strokeWidth="2" />
-            <line
-              x1={centroPx.x - 10}
-              y1={centroPx.y}
-              x2={centroPx.x + 10}
-              y2={centroPx.y}
-              stroke="#ef4444"
-              strokeWidth="2"
+          {/* Mientras se dibuja: la línea que une lo marcado hasta ahora.
+              Con 2 puntos todavía no hay área, pero conviene mostrar el
+              segmento para que el trazo no parezca perdido. */}
+          {!cerrado && enCurso.length >= 2 && (
+            <Polyline
+              path={enCurso}
+              options={{ strokeColor: "#8fb300", strokeWeight: 2 }}
             />
-            <line
-              x1={centroPx.x}
-              y1={centroPx.y - 10}
-              x2={centroPx.x}
-              y2={centroPx.y + 10}
-              stroke="#ef4444"
-              strokeWidth="2"
-            />
-          </g>
-        )}
-      </svg>
+          )}
+
+          {/* Vértices marcados. El primero cierra el anillo al hacer clic,
+              por eso va más grande y con su propio cursor. */}
+          {!cerrado &&
+            enCurso.map((punto, i) => (
+              <Marker
+                key={i}
+                position={punto}
+                onClick={i === 0 ? cerrarPoligono : undefined}
+                title={i === 0 ? "Clic para cerrar el contorno" : `Vértice ${i + 1}`}
+                icon={{
+                  path: google.maps.SymbolPath.CIRCLE,
+                  scale: i === 0 && puedeCerrar ? 8 : 5,
+                  fillColor: "#8fb300",
+                  fillOpacity: 1,
+                  strokeColor: "#ffffff",
+                  strokeWeight: 2,
+                }}
+              />
+            ))}
+
+          {/* Punto de referencia declarado en el formulario (lat/lng). */}
+          {centroLat !== null && centroLng !== null && (
+            <Marker position={{ lat: centroLat, lng: centroLng }} title="Punto de referencia" />
+          )}
+        </GoogleMap>
+      </div>
 
       <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-        {vertices.length === 0
-          ? "Sin contorno dibujado."
-          : `${vertices.length} vértice${vertices.length === 1 ? "" : "s"} marcado${
-              vertices.length === 1 ? "" : "s"
-            }${poligonoCompleto ? "." : " — faltan puntos para cerrar la zona."}`}
+        {cerrado
+          ? `Contorno cerrado con ${verticesCerrados.length} vértices.`
+          : enCurso.length === 0
+            ? "Sin contorno dibujado."
+            : `${enCurso.length} vértice${enCurso.length === 1 ? "" : "s"} marcado${
+                enCurso.length === 1 ? "" : "s"
+              }${puedeCerrar ? " — ya puedes cerrar el contorno." : " — faltan puntos para cerrar la zona."}`}
       </p>
     </div>
   );
-}
-
-/** Quita el vértice de cierre para volver a la lista editable. */
-function aVerticesAbiertos(poligono: PoligonoGeoJSON | null): number[][] {
-  const anillo = poligono?.coordinates?.[0];
-  if (!anillo || anillo.length < 4) return [];
-  return anillo.slice(0, -1);
-}
-
-function redondear(valor: number): number {
-  // 6 decimales: la misma precisión que Numeric(9,6) de ubccn.lttd/lngtd.
-  return Number(valor.toFixed(6));
 }

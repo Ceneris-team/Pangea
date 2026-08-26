@@ -15,6 +15,8 @@ import Dispositivos from "../pages/Dispositivos";
 import AgregarDispositivo from "../pages/AgregarDispositivo";
 import AgregarUbicacion from "../pages/AgregarUbicacion";
 import DetalleUbicacion from "../pages/DetalleUbicacion";
+import MapaUbicacionesPage from "../pages/MapaUbicacionesPage";
+import EditarUbicacion from "../pages/EditarUbicacion";
 import { ROLES } from "../config/roles";
 import ConexionesFTP from "../pages/ConexionesFTP";
 import ConfigurarConexionFTP from "../pages/ConfigurarConexionFTP";
@@ -126,6 +128,30 @@ export default function AppRouter() {
             element={
               <ProtectedRoute rolesPermitidos={ROLES_AGREGAR_UBICACION}>
                 <AgregarUbicacion />
+              </ProtectedRoute>
+            }
+          />
+          {/* HU22: mapa de ubicaciones, solo lectura. Se declara ANTES de
+              /ubicaciones/:id para que ese parámetro no la capture (mismo
+              patrón que /dispositivos/nueva vs /dispositivos/:id). */}
+          <Route
+            path="/ubicaciones/mapa"
+            element={
+              <ProtectedRoute>
+                <MapaUbicacionesPage />
+              </ProtectedRoute>
+            }
+          />
+          {/* HU08 (ampliación): editar una ubicación existente. Mismos
+              roles que el alta -el backend exige Edición sobre
+              "Ubicaciones"-. Va antes de /ubicaciones/:id por el mismo
+              motivo que /ubicaciones/mapa: el segmento literal tiene que
+              ganarle al parámetro. */}
+          <Route
+            path="/ubicaciones/:id/editar"
+            element={
+              <ProtectedRoute rolesPermitidos={ROLES_AGREGAR_UBICACION}>
+                <EditarUbicacion />
               </ProtectedRoute>
             }
           />

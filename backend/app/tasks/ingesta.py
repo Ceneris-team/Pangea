@@ -291,7 +291,9 @@ def sondear_conexiones_ftp() -> dict:
             .all()
         )
 
-        total_encolados = 0
+        # Los ids se juntan acá y se encolan DESPUÉS del commit: ver el
+        # bloque final de esta función.
+        por_encolar: list[int] = []
         for cnxn in conexiones:
             if cnxn.ultm_snd is not None:
                 proximo_sondeo = cnxn.ultm_snd + dt.timedelta(minutes=cnxn.frcnc_mnts)
@@ -322,18 +324,27 @@ def sondear_conexiones_ftp() -> dict:
                     continue
                 archivo = ArchivoIngesta(id_cnxn=cnxn.id_cnxn, nmbr_archv=nombre)
                 db.add(archivo)
-                db.flush()  # necesitamos id_archv antes de encolar
-                procesar_archivo_dat.delay(id_archv=archivo.id_archv)
-                total_encolados += 1
+                db.flush()  # asigna id_archv, todavía sin confirmar
+                por_encolar.append(archivo.id_archv)
 
             cnxn.ultm_snd = ahora
             db.commit()
 
+        # Encolar SOLO después del commit. Con .delay() dentro del bucle
+        # había una carrera real: flush() asigna el id pero no confirma la
+        # transacción, así que el worker -que toma el job en milisegundos-
+        # consultaba una fila que todavía no era visible, logueaba
+        # "archv_ingst id=N no existe, se descarta el job" y el archivo
+        # quedaba 'Pendiente' PARA SIEMPRE, porque nadie lo reencola: el
+        # sondeo siguiente lo ve en `existentes` y lo saltea.
+        for id_archv in por_encolar:
+            procesar_archivo_dat.delay(id_archv=id_archv)
+
         logger.info(
             "Sondeo FTP: %s conexiones revisadas, %s archivos nuevos encolados",
             len(conexiones),
-            total_encolados,
+            len(por_encolar),
         )
-        return {"conexiones_revisadas": len(conexiones), "encolados": total_encolados}
+        return {"conexiones_revisadas": len(conexiones), "encolados": len(por_encolar)}
     finally:
         db.close()
