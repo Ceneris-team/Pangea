@@ -310,7 +310,7 @@ export default function ConexionesFTP() {
               <div>
                 <h1 className="text-2xl font-extrabold text-gray-900 dark:text-white">Conexiones FTP</h1>
                 <p className="text-sm text-gray-600 dark:text-gray-300 mt-1 font-light">
-                  Dataloggers configurados para la ingesta automática de telemetría.
+                  Conexiones FTP configuradas para la ingesta automática de telemetría.
                 </p>
               </div>
               <button
@@ -332,7 +332,7 @@ export default function ConexionesFTP() {
                 <table className="w-full text-sm text-left text-gray-600 dark:text-gray-300">
                   <thead className="text-xs text-gray-600 dark:text-gray-300 uppercase bg-black/5 dark:bg-white/5 border-b border-black/10 dark:border-white/10">
                     <tr>
-                      <th className="px-6 py-4 font-bold tracking-wider">Datalogger</th>
+                      <th className="px-6 py-4 font-bold tracking-wider">Conexión</th>
                       <th className="px-6 py-4 font-bold tracking-wider">Host/IP</th>
                       <th className="px-6 py-4 font-bold tracking-wider">Directorio remoto</th>
                       <th className="px-6 py-4 font-bold tracking-wider">Frecuencia</th>
@@ -498,7 +498,8 @@ export default function ConexionesFTP() {
                   {esEdicion ? "Editar conexión FTP" : "Nueva conexión FTP"}
                 </h2>
                 <p className="text-sm text-gray-600 dark:text-gray-300 mt-1 font-light">
-                  Configura la conexión FTP de un datalogger para iniciar la ingesta automática de telemetría.
+                  Configura el acceso FTP de un servidor de telemetría. Luego podrás enlazar uno o varios
+                  dispositivos a esta conexión desde la sección Dispositivos.
                 </p>
               </div>
 
@@ -524,15 +525,20 @@ export default function ConexionesFTP() {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
-                    Nombre del datalogger
+                    Nombre de la conexión FTP
                   </label>
                   <input
                     type="text"
                     required
+                    placeholder="Ej: FTP Estación 01"
                     value={form.nmbr}
                     onChange={(e) => actualizarCampo("nmbr", e.target.value)}
                     className="bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block w-full p-2.5 outline-none"
                   />
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    Identifica esta conexión FTP (puede reutilizarse para varios dispositivos). El nombre del
+                    dispositivo se asigna por separado al crearlo.
+                  </p>
                 </div>
 
                 <div className="grid grid-cols-3 gap-4">
