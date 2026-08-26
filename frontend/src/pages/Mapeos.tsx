@@ -52,7 +52,6 @@ const ETIQUETA_TRAMA: Record<string, string> = {
 export default function Mapeos() {
   const { nombreCompleto, rol, logout } = useAuth();
   const navigate = useNavigate();
-  const [isDarkMode, setIsDarkMode] = useState(false);
 
   const [busqueda, setBusqueda] = useState("");
   const [data, setData] = useState<ListadoMapeos | null>(null);
@@ -103,23 +102,23 @@ export default function Mapeos() {
   });
 
   return (
-    <div className={`${isDarkMode ? "dark" : ""} font-sans`}>
-      <div className="flex h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-300 overflow-hidden">
+    <div className="font-sans">
+      <div className="flex h-screen bg-transparent transition-colors duration-300 overflow-hidden">
         <Sidebar onLogout={logout} activo="mapeos" rol={rol} />
 
         <div className="flex-1 flex flex-col overflow-hidden">
-          <Topbar
-            isDarkMode={isDarkMode}
-            onToggleDarkMode={() => setIsDarkMode(!isDarkMode)}
+          <div className="flex justify-end p-4 md:p-6 pb-0">
+            <Topbar
             nombreCompleto={nombreCompleto}
             rol={rol}
-          />
+            />
+          </div>
 
           <main className="flex-1 overflow-y-auto p-6 md:p-8">
             <header className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div>
                 <h1 className="text-2xl font-extrabold text-gray-900 dark:text-white">Mapeos de Formato</h1>
-                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 font-light">
+                <p className="text-sm text-gray-600 dark:text-gray-300 mt-1 font-light">
                   Define cómo se interpretan los archivos .dat de cada dispositivo.
                 </p>
               </div>
@@ -131,11 +130,11 @@ export default function Mapeos() {
               </button>
             </header>
 
-            <div className="bg-white dark:bg-[#2d3748] rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden transition-colors duration-300">
-              <div className="p-5 border-b border-gray-100 dark:border-gray-700">
+            <div className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl shadow-sm border border-black/10 dark:border-white/10 overflow-hidden transition-colors duration-300">
+              <div className="p-5 border-b border-black/10 dark:border-white/10">
                 <div className="relative w-full lg:max-w-md">
                   <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-                    <svg className="w-5 h-5 text-gray-400 dark:text-gray-500" fill="none" viewBox="0 0 20 20">
+                    <svg className="w-5 h-5 text-gray-500 dark:text-gray-400" fill="none" viewBox="0 0 20 20">
                       <path
                         stroke="currentColor"
                         strokeLinecap="round"
@@ -150,20 +149,20 @@ export default function Mapeos() {
                     placeholder="Filtrar por dispositivo o marca..."
                     value={busqueda}
                     onChange={(e) => setBusqueda(e.target.value)}
-                    className="bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block w-full pl-10 p-2.5 transition-all outline-none placeholder-gray-400 dark:placeholder-gray-500"
+                    className="bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block w-full pl-10 p-2.5 transition-all outline-none placeholder-gray-400"
                   />
                 </div>
               </div>
 
               {error && (
-                <div className="p-4 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm border-b border-red-100 dark:border-red-800/30">
+                <div className="p-4 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm border-b border-red-200 dark:border-red-800/30">
                   {error}
                 </div>
               )}
 
               <div className="overflow-x-auto">
-                <table className="w-full text-sm text-left text-gray-500 dark:text-gray-400">
-                  <thead className="text-xs text-gray-500 dark:text-gray-400 uppercase bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700">
+                <table className="w-full text-sm text-left text-gray-600 dark:text-gray-300">
+                  <thead className="text-xs text-gray-600 dark:text-gray-300 uppercase bg-black/5 dark:bg-white/5 border-b border-black/10 dark:border-white/10">
                     <tr>
                       <th className="px-6 py-4 font-bold tracking-wider">Dispositivo</th>
                       <th className="px-6 py-4 font-bold tracking-wider">Marca</th>
@@ -178,7 +177,7 @@ export default function Mapeos() {
                   <tbody>
                     {loading && (
                       <tr>
-                        <td colSpan={8} className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
+                        <td colSpan={8} className="px-6 py-8 text-center text-gray-600 dark:text-gray-300">
                           <div className="flex justify-center items-center gap-2">
                             <div className="w-4 h-4 rounded-full bg-[#ccff00] animate-bounce"></div>
                             <span>Cargando mapeos...</span>
@@ -189,7 +188,7 @@ export default function Mapeos() {
 
                     {!loading && itemsFiltrados.length === 0 && (
                       <tr>
-                        <td colSpan={8} className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
+                        <td colSpan={8} className="px-6 py-8 text-center text-gray-600 dark:text-gray-300">
                           Todavía no hay mapeos registrados. Crea el primero con "Nuevo mapeo".
                         </td>
                       </tr>
@@ -199,7 +198,7 @@ export default function Mapeos() {
                       itemsFiltrados.map((m) => (
                         <tr
                           key={m.id_mp}
-                          className="bg-white dark:bg-[#2d3748] border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+                          className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm border-b border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
                         >
                           <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">{m.dispositivo_nombre}</td>
                           <td className="px-6 py-4">{m.mrc}</td>
@@ -219,11 +218,11 @@ export default function Mapeos() {
                               className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold border ${
                                 m.estd === "Activo"
                                   ? "bg-[#ccff00]/20 text-[#5a7000] dark:text-[#ccff00] border-[#ccff00]/30"
-                                  : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-600"
+                                  : "bg-black/5 dark:bg-white/10 text-gray-600 dark:text-gray-300 border-black/20 dark:border-white/20"
                               }`}
                             >
                               {m.estd === "Activo" && (
-                                <span className="w-1.5 h-1.5 mr-1.5 rounded-full bg-[#8fb300] dark:bg-[#ccff00]"></span>
+                                <span className="w-1.5 h-1.5 mr-1.5 rounded-full bg-[#ccff00]"></span>
                               )}
                               {m.estd}
                             </span>
@@ -267,8 +266,8 @@ export default function Mapeos() {
               </div>
 
               {data && (
-                <div className="p-5 border-t border-gray-100 dark:border-gray-700">
-                  <span className="text-sm text-gray-500 dark:text-gray-400">
+                <div className="p-5 border-t border-black/10 dark:border-white/10">
+                  <span className="text-sm text-gray-600 dark:text-gray-300">
                     <span className="font-semibold text-gray-900 dark:text-white">
                       {itemsFiltrados.length}
                     </span>{" "}

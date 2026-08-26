@@ -3,6 +3,8 @@ import { apiFetch, ApiError } from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import Sidebar from "../components/layout/Sidebar";
 import Topbar from "../components/layout/Topbar";
+import SelectorRangoFechas from "../components/SelectorRangoFechas";
+import { rangoUltimas24Horas, type RangoFechas } from "../utils/fechas";
 
 interface ParametroItem {
   id_prmtr: number;
@@ -16,12 +18,12 @@ interface UbicacionItem {
 }
 
 interface MedicionItem {
-  id_lctr: number;
+  id_registro: number;
   fch_hr: string;
   ubicacion_nombre: string;
   parametro_nombre: string;
   undd: string;
-  vlr: number;
+  vlr: number | string;
 }
 
 interface ListadoMediciones {
@@ -29,17 +31,24 @@ interface ListadoMediciones {
   items: MedicionItem[];
 }
 
-function construirQuery(parametroIds: number[], ubicacionIds: number[]): string {
+function construirQuery(
+  parametroIds: number[],
+  ubicacionIds: number[],
+  rangoFechas: RangoFechas | null,
+): string {
   const params = new URLSearchParams();
   parametroIds.forEach((id) => params.append("parametro_ids", String(id)));
   ubicacionIds.forEach((id) => params.append("ubicacion_ids", String(id)));
+  if (rangoFechas) {
+    params.append("fecha_inicio", new Date(rangoFechas.inicio).toISOString());
+    params.append("fecha_fin", new Date(rangoFechas.fin).toISOString());
+  }
   const query = params.toString();
   return query ? `/mediciones?${query}` : "/mediciones";
 }
 
 export default function ConsultaDatos() {
   const { nombreCompleto, rol, logout } = useAuth();
-  const [isDarkMode, setIsDarkMode] = useState(false);
 
   const [parametros, setParametros] = useState<ParametroItem[]>([]);
   const [ubicaciones, setUbicaciones] = useState<UbicacionItem[]>([]);
@@ -49,6 +58,11 @@ export default function ConsultaDatos() {
   const [seleccionUbicaciones, setSeleccionUbicaciones] = useState<number[]>([]);
   const [filtroParametros, setFiltroParametros] = useState<number[]>([]);
   const [filtroUbicaciones, setFiltroUbicaciones] = useState<number[]>([]);
+
+  // HU12: rango de fechas, con su propia selección/filtro aplicado.
+  // CA: el rango por defecto al ingresar al módulo son las últimas 24 horas.
+  const [seleccionFechas, setSeleccionFechas] = useState<RangoFechas>(rangoUltimas24Horas);
+  const [filtroFechas, setFiltroFechas] = useState<RangoFechas>(rangoUltimas24Horas);
 
   const [mediciones, setMediciones] = useState<ListadoMediciones | null>(null);
   const [loading, setLoading] = useState(false);
@@ -70,7 +84,7 @@ export default function ConsultaDatos() {
     setLoading(true);
     setError(null);
 
-    apiFetch<ListadoMediciones>(construirQuery(filtroParametros, filtroUbicaciones))
+    apiFetch<ListadoMediciones>(construirQuery(filtroParametros, filtroUbicaciones, filtroFechas))
       .then((res) => {
         if (!cancelado) setMediciones(res);
       })
@@ -85,7 +99,7 @@ export default function ConsultaDatos() {
     return () => {
       cancelado = true;
     };
-  }, [filtroParametros, filtroUbicaciones]);
+  }, [filtroParametros, filtroUbicaciones, filtroFechas]);
 
   const toggleSeleccion = (lista: number[], setLista: (v: number[]) => void, id: number) => {
     setLista(lista.includes(id) ? lista.filter((v) => v !== id) : [...lista, id]);
@@ -105,34 +119,46 @@ export default function ConsultaDatos() {
     setFiltroUbicaciones([]);
   };
 
+  // HU12 CA2/CA3: aplica el rango de fechas en curso como filtro activo
+  const handleAplicarFechas = (rango: RangoFechas) => {
+    setFiltroFechas(rango);
+  };
+
+  // HU12 CA4: "LIMPIAR FILTRO" vuelve al rango por defecto (últimas 24 horas)
+  const handleLimpiarFechas = () => {
+    const rangoPorDefecto = rangoUltimas24Horas();
+    setSeleccionFechas(rangoPorDefecto);
+    setFiltroFechas(rangoPorDefecto);
+  };
+
   return (
-    <div className={`${isDarkMode ? "dark" : ""} font-sans`}>
-      <div className="flex h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-300 overflow-hidden">
+    <div className="font-sans">
+      <div className="flex h-screen bg-transparent transition-colors duration-300 overflow-hidden">
         <Sidebar onLogout={logout} activo="consulta-datos" rol={rol} />
 
         <div className="flex-1 flex flex-col overflow-hidden">
-          <Topbar
-            isDarkMode={isDarkMode}
-            onToggleDarkMode={() => setIsDarkMode(!isDarkMode)}
+          <div className="flex justify-end p-4 md:p-6 pb-0">
+            <Topbar
             nombreCompleto={nombreCompleto}
             rol={rol}
-          />
+            />
+          </div>
 
           <main className="flex-1 overflow-y-auto p-6 md:p-8">
             <header className="mb-6">
               <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Consulta de Datos</h1>
-              <p className="text-sm text-gray-500 dark:text-gray-400">
+              <p className="text-sm text-gray-600 dark:text-gray-300">
                 Selecciona los parámetros y ubicaciones que quieres consultar para personalizar la vista de telemetría.
               </p>
             </header>
 
-            <div className="bg-white dark:bg-[#2d3748] rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-5 mb-6">
+            <div className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl shadow-sm border border-black/10 dark:border-white/10 p-5 mb-6">
               <div className="flex flex-col lg:flex-row gap-6">
                 <fieldset className="flex-1">
                   <legend className="text-sm font-bold text-gray-700 dark:text-gray-200 mb-2">Parámetros</legend>
                   <div className="flex flex-wrap gap-3">
                     {parametros.length === 0 && (
-                      <span className="text-sm text-gray-400">No hay parámetros disponibles.</span>
+                      <span className="text-sm text-gray-500 dark:text-gray-400">No hay parámetros disponibles.</span>
                     )}
                     {parametros.map((p) => (
                       <label key={p.id_prmtr} className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200 cursor-pointer">
@@ -152,7 +178,7 @@ export default function ConsultaDatos() {
                   <legend className="text-sm font-bold text-gray-700 dark:text-gray-200 mb-2">Ubicaciones</legend>
                   <div className="flex flex-wrap gap-3">
                     {ubicaciones.length === 0 && (
-                      <span className="text-sm text-gray-400">No hay ubicaciones disponibles.</span>
+                      <span className="text-sm text-gray-500 dark:text-gray-400">No hay ubicaciones disponibles.</span>
                     )}
                     {ubicaciones.map((u) => (
                       <label key={u.id_ubccn} className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200 cursor-pointer">
@@ -179,23 +205,32 @@ export default function ConsultaDatos() {
                   <button
                     type="button"
                     onClick={handleLimpiar}
-                    className="px-4 py-2 rounded-xl border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 text-sm font-bold hover:bg-gray-100 dark:hover:bg-gray-800 transition-all"
+                    className="px-4 py-2 rounded-xl border border-black/20 dark:border-white/20 text-gray-700 dark:text-gray-200 text-sm font-bold hover:bg-black/10 dark:hover:bg-white/10 transition-all"
                   >
                     LIMPIAR FILTROS
                   </button>
                 </div>
               </div>
+
+              <div className="mt-6 pt-6 border-t border-black/10 dark:border-white/10">
+                <SelectorRangoFechas
+                  seleccion={seleccionFechas}
+                  onCambiarSeleccion={setSeleccionFechas}
+                  onAplicar={handleAplicarFechas}
+                  onLimpiar={handleLimpiarFechas}
+                />
+              </div>
             </div>
 
-            <div className="bg-white dark:bg-[#2d3748] rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
+            <div className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl shadow-sm border border-black/10 dark:border-white/10">
               {error && (
-                <div className="p-4 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm border-b border-red-100 dark:border-red-800/30">
+                <div className="p-4 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm border-b border-red-200 dark:border-red-800/30">
                   {error}
                 </div>
               )}
               <div className="overflow-x-auto">
-                <table className="w-full text-sm text-left text-gray-500 dark:text-gray-400">
-                  <thead className="text-xs text-gray-500 dark:text-gray-400 uppercase bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700">
+                <table className="w-full text-sm text-left text-gray-600 dark:text-gray-300">
+                  <thead className="text-xs text-gray-600 dark:text-gray-300 uppercase bg-black/5 dark:bg-white/5 border-b border-black/10 dark:border-white/10">
                     <tr>
                       <th className="px-6 py-4 font-bold tracking-wider">Parámetro</th>
                       <th className="px-6 py-4 font-bold tracking-wider">Ubicación</th>
@@ -206,14 +241,14 @@ export default function ConsultaDatos() {
                   <tbody>
                     {loading && (
                       <tr>
-                        <td colSpan={4} className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
+                        <td colSpan={4} className="px-6 py-8 text-center text-gray-600 dark:text-gray-300">
                           Cargando datos...
                         </td>
                       </tr>
                     )}
                     {!loading && mediciones?.items.length === 0 && (
                       <tr>
-                        <td colSpan={4} className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
+                        <td colSpan={4} className="px-6 py-8 text-center text-gray-600 dark:text-gray-300">
                           No hay registros para los filtros seleccionados.
                         </td>
                       </tr>
@@ -221,13 +256,14 @@ export default function ConsultaDatos() {
                     {!loading &&
                       mediciones?.items.map((m) => (
                         <tr
-                          key={m.id_lctr}
-                          className="bg-white dark:bg-[#2d3748] border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+                          key={m.id_registro}
+                          className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm border-b border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
                         >
                           <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">{m.parametro_nombre}</td>
                           <td className="px-6 py-4">{m.ubicacion_nombre}</td>
                           <td className="px-6 py-4">
-                            {m.vlr} {m.undd}
+                            {m.vlr}
+                            {typeof m.vlr === "number" && m.undd ? ` ${m.undd}` : ""}
                           </td>
                           <td className="px-6 py-4">{new Date(m.fch_hr).toLocaleString()}</td>
                         </tr>

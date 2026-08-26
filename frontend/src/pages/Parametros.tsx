@@ -40,7 +40,6 @@ const POR_PAGINA = 25;
 
 export default function Parametros() {
   const { nombreCompleto, rol, logout } = useAuth();
-  const [isDarkMode, setIsDarkMode] = useState(false);
 
   const [data, setData] = useState<ListadoParametros | null>(null);
   const [pagina, setPagina] = useState(1);
@@ -171,24 +170,24 @@ export default function Parametros() {
   }
 
   return (
-    <div className={`${isDarkMode ? "dark" : ""} font-sans`}>
-      <div className="flex h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-300 overflow-hidden">
+    <div className="font-sans">
+      <div className="flex h-screen bg-transparent transition-colors duration-300 overflow-hidden">
         <Sidebar onLogout={logout} activo="parametros" rol={rol} />
 
         <div className="flex-1 flex flex-col overflow-hidden">
-          <Topbar
-            isDarkMode={isDarkMode}
-            onToggleDarkMode={() => setIsDarkMode(!isDarkMode)}
+          <div className="flex justify-end p-4 md:p-6 pb-0">
+            <Topbar
             nombreCompleto={nombreCompleto}
             rol={rol}
-          />
+            />
+          </div>
 
           <main className="flex-1 overflow-y-auto p-6 md:p-8">
             <header className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div>
                 <h1 className="text-2xl font-extrabold text-gray-900 dark:text-white">Parámetros</h1>
-                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 font-light">
-                  Catálogo estándar de parámetros usado por los mapeos de formato (HU06).
+                <p className="text-sm text-gray-600 dark:text-gray-300 mt-1 font-light">
+                  Catálogo estándar de parámetros usado por los mapeos de formato.
                 </p>
               </div>
               <button
@@ -199,11 +198,11 @@ export default function Parametros() {
               </button>
             </header>
 
-            <div className="bg-white dark:bg-[#2d3748] rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden transition-colors duration-300">
-              <div className="p-5 border-b border-gray-100 dark:border-gray-700">
+            <div className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl shadow-sm border border-black/10 dark:border-white/10 overflow-hidden transition-colors duration-300">
+              <div className="p-5 border-b border-black/10 dark:border-white/10">
                 <div className="relative w-full lg:max-w-md">
                   <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-                    <svg className="w-5 h-5 text-gray-400 dark:text-gray-500" fill="none" viewBox="0 0 20 20">
+                    <svg className="w-5 h-5 text-gray-500 dark:text-gray-400" fill="none" viewBox="0 0 20 20">
                       <path
                         stroke="currentColor"
                         strokeLinecap="round"
@@ -224,7 +223,7 @@ export default function Parametros() {
               </div>
 
               {error && (
-                <div className="p-4 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm border-b border-red-100 dark:border-red-800/30">
+                <div className="p-4 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm border-b border-red-200 dark:border-red-800/30">
                   {error}
                 </div>
               )}
@@ -236,8 +235,8 @@ export default function Parametros() {
               )}
 
               <div className="overflow-x-auto">
-                <table className="w-full text-sm text-left text-gray-500 dark:text-gray-400">
-                  <thead className="text-xs text-gray-500 dark:text-gray-400 uppercase bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700">
+                <table className="w-full text-sm text-left text-gray-600 dark:text-gray-300">
+                  <thead className="text-xs text-gray-600 dark:text-gray-300 uppercase bg-black/5 dark:bg-white/5 border-b border-black/10 dark:border-white/10">
                     <tr>
                       <th className="px-6 py-4 font-bold tracking-wider">Nombre</th>
                       <th className="px-6 py-4 font-bold tracking-wider">Tipo</th>
@@ -272,7 +271,7 @@ export default function Parametros() {
                       data?.items.map((p) => (
                         <tr
                           key={p.id_prmtr}
-                          className="bg-white dark:bg-[#2d3748] border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+                          className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm border-b border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
                         >
                           <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">{p.nmbr}</td>
                           <td className="px-6 py-4">
@@ -349,7 +348,7 @@ export default function Parametros() {
 
       {mostrarFormulario && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-md bg-white dark:bg-[#2d3748] rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700">
+          <div className="w-full max-w-md bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl shadow-xl border border-black/10 dark:border-white/10">
             <form onSubmit={guardarParametro}>
               <div className="p-6 border-b border-gray-100 dark:border-gray-700">
                 <h2 className="text-lg font-bold text-gray-900 dark:text-white">
@@ -365,7 +364,7 @@ export default function Parametros() {
                 )}
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
                     Nombre *
                   </label>
                   <input
@@ -373,7 +372,7 @@ export default function Parametros() {
                     value={nmbr}
                     onChange={(e) => setNmbr(e.target.value)}
                     placeholder="Ej. Caudal"
-                    className="bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block w-full p-2.5 outline-none"
+                    className="bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block w-full p-2.5 outline-none"
                   />
                 </div>
 
@@ -430,12 +429,12 @@ export default function Parametros() {
                     value={undd}
                     onChange={(e) => setUndd(e.target.value)}
                     placeholder="Ej. m3/s"
-                    className="bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block w-full p-2.5 outline-none"
+                    className="bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block w-full p-2.5 outline-none"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
                     Descripción
                   </label>
                   <textarea
@@ -443,16 +442,16 @@ export default function Parametros() {
                     onChange={(e) => setDscrpcn(e.target.value)}
                     placeholder="Opcional: para qué se usa este parámetro"
                     rows={3}
-                    className="bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block w-full p-2.5 outline-none resize-none"
+                    className="bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block w-full p-2.5 outline-none resize-none"
                   />
                 </div>
               </div>
 
-              <div className="p-6 border-t border-gray-100 dark:border-gray-700 flex justify-end gap-3">
+              <div className="p-6 border-t border-black/10 dark:border-white/10 flex justify-end gap-3">
                 <button
                   type="button"
                   onClick={() => setMostrarFormulario(false)}
-                  className="px-4 py-2.5 text-sm font-semibold text-gray-700 dark:text-gray-300 bg-white dark:bg-transparent border border-gray-300 dark:border-gray-600 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                  className="px-4 py-2.5 text-sm font-semibold text-gray-700 dark:text-gray-200 bg-transparent border border-black/20 dark:border-white/20 rounded-xl hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
                 >
                   Cancelar
                 </button>

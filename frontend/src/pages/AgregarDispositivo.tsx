@@ -66,7 +66,6 @@ function aNumero(texto: string): number | null {
 export default function AgregarDispositivo() {
   const navigate = useNavigate();
   const { nombreCompleto, rol, logout } = useAuth();
-  const [isDarkMode, setIsDarkMode] = useState(false);
 
   const [form, setForm] = useState<DispositivoForm>(FORM_VACIO);
   const [ubicaciones, setUbicaciones] = useState<UbicacionOption[]>([]);
@@ -183,17 +182,18 @@ export default function AgregarDispositivo() {
   const labelClase = "block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1";
 
   return (
-    <div className={`${isDarkMode ? "dark" : ""} font-sans`}>
-      <div className="flex h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-300 overflow-hidden">
+    <div className="font-sans">
+      <div className="flex h-screen bg-transparent transition-colors duration-300 overflow-hidden">
         <Sidebar onLogout={logout} activo="dispositivos" rol={rol} />
 
         <div className="flex-1 flex flex-col overflow-hidden">
-          <Topbar
-            isDarkMode={isDarkMode}
-            onToggleDarkMode={() => setIsDarkMode(!isDarkMode)}
-            nombreCompleto={nombreCompleto}
-            rol={rol}
-          />
+          {/* TOP NAVBAR */}
+          <div className="flex justify-end p-4 md:p-6 pb-0">
+            <Topbar
+              nombreCompleto={nombreCompleto}
+              rol={rol}
+            />
+          </div>
 
           <main className="flex-1 overflow-y-auto p-6 md:p-8">
             <header className="mb-6">

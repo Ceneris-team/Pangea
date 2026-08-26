@@ -1,19 +1,29 @@
 """
 HU 13 - Seleccionar parámetros y ubicaciones
+HU 12 - Seleccionar rango de fechas
 
 CA: el Cliente Final filtra la vista de telemetría por uno o más
 parámetros y/o ubicaciones (selección múltiple). Sin filtros, se muestran
 todos los datos disponibles para la cuenta. Los parámetros y ubicaciones
 ofrecidos dependen de lo asignado al usuario (prms_ubccn, HU 21) y del
 catálogo de parámetros mapeados (mp_clmn/prmtr, HU 06).
+
+HU 12: además, la vista se puede acotar a un rango de fechas (fecha_inicio/
+fecha_fin, con hora incluida). La fecha de inicio no puede ser posterior a
+la fecha de fin, y no se permiten fechas futuras. Sin fecha_inicio/
+fecha_fin, no se aplica ningún filtro de fecha (DEC-11: "LIMPIAR FILTROS"
+de HU13 sigue sin depender de ningún filtro de fecha).
 """
 
-from fastapi import APIRouter, Depends, Query
+import datetime as dt
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import (
     Dispositivo,
+    EventoTexto,
     MapeoColumna,
     MapeoFormato,
     Parametro,
@@ -78,6 +88,8 @@ def listar_parametros_disponibles(
 def listar_mediciones(
     parametro_ids: list[int] | None = Query(default=None),
     ubicacion_ids: list[int] | None = Query(default=None),
+    fecha_inicio: dt.datetime | None = Query(default=None),
+    fecha_fin: dt.datetime | None = Query(default=None),
     pagina: int = Query(default=1, ge=1),
     por_pagina: int = Query(default=50, ge=1, le=500),
     db: Session = Depends(get_db),
@@ -89,34 +101,36 @@ def listar_mediciones(
 ):
     """CA2-CA4: aplica los filtros de parámetros y/o ubicaciones sobre la
     vista de datos. Si no se selecciona ninguno, se muestran todos los
-    datos disponibles para la cuenta (dentro de las ubicaciones permitidas)."""
+    datos disponibles para la cuenta (dentro de las ubicaciones permitidas).
+
+    Combina tlmtr (parámetros 'numerico') y evnt_txt (parámetros 'texto',
+    ej. "Puerta Abierta"): un parámetro de texto se ofrece en /parametros
+    igual que uno numérico (ver listar_parametros_disponibles, que no
+    filtra por tipo_dato), así que sin esto el filtro lo dejaba elegir
+    pero la tabla nunca mostraba sus valores."""
     ids_ubicaciones_permitidas = set(_ubicaciones_permitidas(db, usuario))
 
-    query = (
-        db.query(Telemetria, Ubicacion, Parametro)
-        .join(Dispositivo, Dispositivo.id_dspstv == Telemetria.id_dspstv)
-        .join(Ubicacion, Ubicacion.id_ubccn == Dispositivo.id_ubccn)
-        .join(Parametro, Parametro.id_prmtr == Telemetria.id_prmtr)
-        .filter(Ubicacion.id_ubccn.in_(ids_ubicaciones_permitidas))
-    )
+    def _query_base(modelo):
+        query = (
+            db.query(modelo, Ubicacion, Parametro)
+            .join(Dispositivo, Dispositivo.id_dspstv == modelo.id_dspstv)
+            .join(Ubicacion, Ubicacion.id_ubccn == Dispositivo.id_ubccn)
+            .join(Parametro, Parametro.id_prmtr == modelo.id_prmtr)
+            .filter(Ubicacion.id_ubccn.in_(ids_ubicaciones_permitidas))
+        )
+        if ubicacion_ids:
+            ids_solicitadas = set(ubicacion_ids) & ids_ubicaciones_permitidas
+            query = query.filter(Ubicacion.id_ubccn.in_(ids_solicitadas))
+        if parametro_ids:
+            query = query.filter(Parametro.id_prmtr.in_(parametro_ids))
+        return query
 
-    if ubicacion_ids:
-        ids_solicitadas = set(ubicacion_ids) & ids_ubicaciones_permitidas
-        query = query.filter(Ubicacion.id_ubccn.in_(ids_solicitadas))
-    if parametro_ids:
-        query = query.filter(Parametro.id_prmtr.in_(parametro_ids))
-
-    total = query.count()
-    filas = (
-        query.order_by(Telemetria.fch_hr.desc())
-        .offset((pagina - 1) * por_pagina)
-        .limit(por_pagina)
-        .all()
-    )
+    mediciones = _query_base(Telemetria).all()
+    eventos = _query_base(EventoTexto).all()
 
     items = [
         MedicionListItem(
-            id_lctr=t.id_lctr,
+            id_registro=t.id_lctr,
             fch_hr=t.fch_hr,
             id_ubccn=u.id_ubccn,
             ubicacion_nombre=u.nmbr,
@@ -125,7 +139,23 @@ def listar_mediciones(
             undd=p.undd,
             vlr=float(t.vlr),
         )
-        for t, u, p in filas
+        for t, u, p in mediciones
+    ] + [
+        MedicionListItem(
+            id_registro=e.id_evnt,
+            fch_hr=e.fch_hr,
+            id_ubccn=u.id_ubccn,
+            ubicacion_nombre=u.nmbr,
+            id_prmtr=p.id_prmtr,
+            parametro_nombre=p.nmbr,
+            undd=p.undd,
+            vlr=e.vlr,
+        )
+        for e, u, p in eventos
     ]
+    items.sort(key=lambda item: item.fch_hr, reverse=True)
 
-    return {"total": total, "pagina": pagina, "por_pagina": por_pagina, "items": items}
+    total = len(items)
+    items_pagina = items[(pagina - 1) * por_pagina : (pagina - 1) * por_pagina + por_pagina]
+
+    return {"total": total, "pagina": pagina, "por_pagina": por_pagina, "items": items_pagina}

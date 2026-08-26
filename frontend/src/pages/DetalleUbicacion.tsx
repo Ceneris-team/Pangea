@@ -37,7 +37,6 @@ interface Parametro {
 export default function DetalleUbicacion() {
   const { id } = useParams();
   const { nombreCompleto, rol, logout } = useAuth();
-  const [isDarkMode, setIsDarkMode] = useState(false);
 
   const [ubicacion, setUbicacion] = useState<UbicacionDetalle | null>(null);
   const [parametros, setParametros] = useState<Parametro[] | null>(null);
@@ -73,23 +72,23 @@ export default function DetalleUbicacion() {
   }, [id]);
 
   return (
-    <div className={`${isDarkMode ? "dark" : ""} font-sans`}>
-      <div className="flex h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-300 overflow-hidden">
+    <div className="font-sans">
+      <div className="flex h-screen bg-transparent transition-colors duration-300 overflow-hidden">
         <Sidebar onLogout={logout} activo="ubicaciones" rol={rol} />
 
         <div className="flex-1 flex flex-col overflow-hidden">
-          <Topbar
-            isDarkMode={isDarkMode}
-            onToggleDarkMode={() => setIsDarkMode(!isDarkMode)}
+          <div className="flex justify-end p-4 md:p-6 pb-0">
+            <Topbar
             nombreCompleto={nombreCompleto}
             rol={rol}
-          />
+            />
+          </div>
 
           <main className="flex-1 overflow-y-auto p-6 md:p-8">
             <div className="mb-6">
               <Link
                 to="/ubicaciones"
-                className="inline-flex items-center text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
+                className="inline-flex items-center text-sm font-medium text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors"
               >
                 ← Volver a Ubicaciones
               </Link>
@@ -102,7 +101,7 @@ export default function DetalleUbicacion() {
             )}
 
             {cargando ? (
-              <div className="text-sm text-gray-500 dark:text-gray-400">Cargando…</div>
+              <div className="text-sm text-gray-600 dark:text-gray-300">Cargando…</div>
             ) : (
               ubicacion && (
                 <>
@@ -112,7 +111,7 @@ export default function DetalleUbicacion() {
                         {ubicacion.nmbr}
                       </h1>
                       {ubicacion.dscrpcn && (
-                        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 font-light">
+                        <p className="text-sm text-gray-600 dark:text-gray-300 mt-1 font-light">
                           {ubicacion.dscrpcn}
                         </p>
                       )}
@@ -121,7 +120,7 @@ export default function DetalleUbicacion() {
                       className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold border ${
                         ubicacion.estd === "Activa"
                           ? "bg-[#ccff00]/20 text-[#5a7000] dark:text-[#ccff00] border-[#ccff00]/30"
-                          : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-600"
+                          : "bg-black/5 dark:bg-white/10 text-gray-600 dark:text-gray-300 border-black/20 dark:border-white/20"
                       }`}
                     >
                       {ubicacion.estd}
@@ -129,19 +128,19 @@ export default function DetalleUbicacion() {
                   </header>
 
                   <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    <section className="bg-white dark:bg-[#2d3748] rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+                    <section className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl shadow-sm border border-black/10 dark:border-white/10 p-6">
                       <h2 className="text-base font-bold text-gray-900 dark:text-white mb-4">Ubicación</h2>
                       <dl className="space-y-3 text-sm">
                         <div>
-                          <dt className="text-gray-500 dark:text-gray-400">Latitud</dt>
+                          <dt className="text-gray-600 dark:text-gray-300">Latitud</dt>
                           <dd className="font-mono text-gray-900 dark:text-white">{ubicacion.lttd}</dd>
                         </div>
                         <div>
-                          <dt className="text-gray-500 dark:text-gray-400">Longitud</dt>
+                          <dt className="text-gray-600 dark:text-gray-300">Longitud</dt>
                           <dd className="font-mono text-gray-900 dark:text-white">{ubicacion.lngtd}</dd>
                         </div>
                         <div>
-                          <dt className="text-gray-500 dark:text-gray-400">Vértices del polígono</dt>
+                          <dt className="text-gray-600 dark:text-gray-300">Vértices del polígono</dt>
                           <dd className="font-mono text-gray-900 dark:text-white">
                             {Math.max(0, (ubicacion.plgn_gjsn.coordinates[0]?.length ?? 1) - 1)}
                           </dd>
@@ -149,17 +148,17 @@ export default function DetalleUbicacion() {
                       </dl>
                     </section>
 
-                    <section className="lg:col-span-2 bg-white dark:bg-[#2d3748] rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+                    <section className="lg:col-span-2 bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl shadow-sm border border-black/10 dark:border-white/10 p-6">
                       <h2 className="text-base font-bold text-gray-900 dark:text-white mb-1">
                         Parámetros en uso
                       </h2>
-                      <p className="text-sm text-gray-500 dark:text-gray-400 mb-4 font-light">
+                      <p className="text-sm text-gray-600 dark:text-gray-300 mb-4 font-light">
                         Lo que se está midiendo hoy en esta ubicación, según los mapeos de formato de sus
                         dispositivos.
                       </p>
 
                       {parametros && parametros.length === 0 && (
-                        <p className="text-sm text-gray-500 dark:text-gray-400">
+                        <p className="text-sm text-gray-600 dark:text-gray-300">
                           Todavía no hay parámetros mapeados para los dispositivos de esta ubicación.{" "}
                           <Link to="/dispositivos" className="text-[#5a7000] dark:text-[#ccff00] underline">
                             Configura sus mapeos de formato

@@ -18,16 +18,20 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import ArchivoIngesta, ConexionFTP, Dispositivo, EventoTexto, Parametro, Telemetria
+from app.ingesta.ftp_receptor import descargar_archivo_dat
+from app.models import ArchivoIngesta, ConexionFTP, Dispositivo
 from app.schemas import (
     ArchivoIngestaDetalle,
     ArchivoIngestaListItem,
+    FilaCrudaIngesta,
     MetricasColaIngesta,
-    RegistroIngestaItem,
     RegistrosIngestaResponse,
 )
 from app.security.permisos import EDICION, LECTURA, require_permiso, verificar_sede
-from app.tasks.ingesta import procesar_archivo_dat
+from app.services.ingesta.mapeo import MapeoNoEncontradoError, resolver_formato
+from app.services.ingesta.parser import parsear_dat
+from app.services.ingesta.persistencia import DispositivoNoResueltoError, resolver_dispositivo
+from app.tasks.ingesta import normalizar_contenido_dat, procesar_archivo_dat
 
 router = APIRouter(prefix="/ingesta", tags=["Ingesta"])
 
@@ -115,10 +119,37 @@ def metricas_cola_ingesta(
     )
 
 
+@router.get("/dataloggers")
+def listar_dataloggers_cola(
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(require_permiso("Ingesta", LECTURA)),
+):
+    """Dataloggers de origen con archivos en la cola, para el filtro de
+    HU09 CA2: evita mezclar en la misma vista los archivos de estaciones
+    distintas. Mismo aislamiento por sede que /cola."""
+    query = db.query(ArchivoIngesta.id_cnxn).join(
+        ConexionFTP, ConexionFTP.id_cnxn == ArchivoIngesta.id_cnxn
+    )
+    if usuario.get("scope") == "por_sede":
+        query = query.filter(ConexionFTP.id_sd == usuario["sede_id"])
+
+    ids_cnxn = {id_cnxn for (id_cnxn,) in query.distinct().all()}
+    dataloggers = _mapa_dataloggers(db, ids_cnxn)
+
+    items = sorted(
+        ({"id_cnxn": id_cnxn, "nombre": dataloggers.get(id_cnxn, "Desconocido")} for id_cnxn in ids_cnxn),
+        key=lambda d: d["nombre"],
+    )
+    return {"items": items}
+
+
 @router.get("/cola")
 def listar_cola_ingesta(
     estado: str | None = Query(
         default=None, description="En espera | Procesando | Procesado | Fallido"
+    ),
+    id_cnxn: int | None = Query(
+        default=None, description="Filtra por datalogger de origen (conexión FTP)"
     ),
     pagina: int = Query(default=1, ge=1),
     por_pagina: int = Query(default=POR_PAGINA_DEFAULT, ge=1, le=100),
@@ -126,7 +157,9 @@ def listar_cola_ingesta(
     usuario: dict = Depends(require_permiso("Ingesta", LECTURA)),
 ):
     """CA1: listado paginado de la cola, orden fch_dtccn descendente.
-    CA2: filtro opcional por estado (lenguaje de negocio de la HU)."""
+    CA2: filtro opcional por estado (lenguaje de negocio de la HU) y por
+    datalogger de origen, para no mezclar en la misma vista archivos de
+    estaciones distintas."""
     query = db.query(ArchivoIngesta).join(
         ConexionFTP, ConexionFTP.id_cnxn == ArchivoIngesta.id_cnxn
     )
@@ -139,6 +172,9 @@ def listar_cola_ingesta(
 
     if estado is not None:
         query = query.filter(ArchivoIngesta.estd == _validar_estado_negocio(estado))
+
+    if id_cnxn is not None:
+        query = query.filter(ArchivoIngesta.id_cnxn == id_cnxn)
 
     total = query.count()
     archivos = (
@@ -192,7 +228,7 @@ def detalle_archivo_ingesta(
     )
 
 
-MOSTRADOS_REGISTROS_INGESTA = 50
+FILAS_MOSTRADAS_REGISTROS_INGESTA = 50
 
 
 @router.get("/cola/{id_archv}/registros", response_model=RegistrosIngestaResponse)
@@ -201,11 +237,18 @@ def registros_archivo_ingesta(
     db: Session = Depends(get_db),
     usuario: dict = Depends(require_permiso("Ingesta", LECTURA)),
 ):
-    """Vista previa de lo que un archivo procesado realmente escribió en
-    tlmtr/evnt_txt (mediciones numéricas y eventos de texto respectivamente,
-    ver app/models/telemetria.py y app/models/evento_texto.py), para poder
-    distinguir "el archivo vino vacío" de "el archivo trajo datos pero no
-    los que esperaba" sin salir del modal de detalle de HU09."""
+    """Vista cruda del .dat, tal como lo mandó el datalogger, ANTES del
+    mapeo columna->parámetro: permite ver si una fila vino vacía/en cero o
+    con datos reales -algo que ya no se distingue en tlmtr/evnt_txt, donde
+    una columna sin mapeo activo ni siquiera llega a guardarse-.
+
+    El archivo no se persiste en archv_ingst (HU09 solo guarda el nombre y
+    el resultado), así que se vuelve a descargar del mismo FTP de origen
+    -que conserva el .dat tras procesarlo, ver app/ingesta/ftp_receptor.py-,
+    igual que hace app.tasks.ingesta.procesar_archivo_dat. Si el archivo ya
+    no está en el FTP (limpieza externa, rotación), se informa con 404 en
+    vez de un error crudo de conexión.
+    """
     archivo = db.query(ArchivoIngesta).filter(ArchivoIngesta.id_archv == id_archv).first()
     if archivo is None:
         raise HTTPException(status_code=404, detail="Archivo no encontrado")
@@ -213,60 +256,37 @@ def registros_archivo_ingesta(
     conexion = db.get(ConexionFTP, archivo.id_cnxn)
     verificar_sede(usuario, conexion.id_sd, modulo="Ingesta", accion=LECTURA)
 
-    total_medicion = (
-        db.query(func.count(Telemetria.id_lctr)).filter(Telemetria.id_archv == id_archv).scalar()
-        or 0
-    )
-    total_evento = (
-        db.query(func.count(EventoTexto.id_evnt)).filter(EventoTexto.id_archv == id_archv).scalar()
-        or 0
-    )
+    try:
+        dispositivo = resolver_dispositivo(db, archivo.id_cnxn)
+        formato = resolver_formato(db, dispositivo.id_dspstv, archivo.nmbr_archv)
+    except (DispositivoNoResueltoError, MapeoNoEncontradoError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    mediciones = (
-        db.query(Telemetria, Dispositivo.nmbr, Parametro.nmbr, Parametro.undd)
-        .join(Dispositivo, Dispositivo.id_dspstv == Telemetria.id_dspstv)
-        .join(Parametro, Parametro.id_prmtr == Telemetria.id_prmtr)
-        .filter(Telemetria.id_archv == id_archv)
-        .order_by(Telemetria.fch_hr.desc())
-        .limit(MOSTRADOS_REGISTROS_INGESTA)
-        .all()
-    )
-    eventos = (
-        db.query(EventoTexto, Dispositivo.nmbr, Parametro.nmbr, Parametro.undd)
-        .join(Dispositivo, Dispositivo.id_dspstv == EventoTexto.id_dspstv)
-        .join(Parametro, Parametro.id_prmtr == EventoTexto.id_prmtr)
-        .filter(EventoTexto.id_archv == id_archv)
-        .order_by(EventoTexto.fch_hr.desc())
-        .limit(MOSTRADOS_REGISTROS_INGESTA)
-        .all()
-    )
+    try:
+        contenido = descargar_archivo_dat(conexion, archivo.nmbr_archv)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No se pudo volver a leer '{archivo.nmbr_archv}' del FTP de origen: {exc}",
+        ) from exc
 
-    items = [
-        RegistroIngestaItem(
-            fch_hr=lectura.fch_hr,
-            dispositivo_nombre=dspstv_nmbr,
-            parametro_nombre=prmtr_nmbr,
-            undd=undd,
-            vlr=str(lectura.vlr),
+    resultado = parsear_dat(normalizar_contenido_dat(contenido), formato.config)
+
+    filas = [
+        FilaCrudaIngesta(
+            numero_fila=fila.numero_fila,
+            fecha_hora=fila.fecha_hora.isoformat() if fila.fecha_hora else None,
+            error=fila.error,
+            valores=fila.valores,
         )
-        for lectura, dspstv_nmbr, prmtr_nmbr, undd in mediciones
-    ] + [
-        RegistroIngestaItem(
-            fch_hr=evento.fch_hr,
-            dispositivo_nombre=dspstv_nmbr,
-            parametro_nombre=prmtr_nmbr,
-            undd=undd,
-            vlr=evento.vlr,
-        )
-        for evento, dspstv_nmbr, prmtr_nmbr, undd in eventos
+        for fila in resultado.filas[:FILAS_MOSTRADAS_REGISTROS_INGESTA]
     ]
-    items.sort(key=lambda item: item.fch_hr, reverse=True)
-    items = items[:MOSTRADOS_REGISTROS_INGESTA]
 
     return RegistrosIngestaResponse(
-        total=total_medicion + total_evento,
-        mostrados=len(items),
-        items=items,
+        columnas=resultado.columnas,
+        total_filas_archivo=len(resultado.filas),
+        filas_mostradas=len(filas),
+        filas=filas,
     )
 
 

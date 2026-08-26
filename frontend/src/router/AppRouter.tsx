@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "../context/AuthContext";
+import { ThemeProvider } from "../context/ThemeContext";
 import ProtectedRoute from "../components/ProtectedRoute";
 import Login from "../pages/Login";
 import OlvideContrasena from "../pages/OlvideContrasena";
@@ -12,15 +13,14 @@ import PanelComercial from "../pages/PanelComercial";
 import Usuarios from "../pages/Usuarios";
 import Ubicaciones from "../pages/Ubicaciones";
 import Dispositivos from "../pages/Dispositivos";
-import AgregarDispositivo from "../pages/AgregarDispositivo";
 import AgregarUbicacion from "../pages/AgregarUbicacion";
 import DetalleUbicacion from "../pages/DetalleUbicacion";
 import MapaUbicacionesPage from "../pages/MapaUbicacionesPage";
 import EditarUbicacion from "../pages/EditarUbicacion";
 import { ROLES } from "../config/roles";
 import ConexionesFTP from "../pages/ConexionesFTP";
-import ConfigurarConexionFTP from "../pages/ConfigurarConexionFTP";
 import ConsultaDatos from "../pages/ConsultaDatos";
+import Graficos from "../pages/Graficos";
 import DispositivoDetalle from "../pages/DispositivoDetalle";
 import Parametros from "../pages/Parametros";
 import ColaIngesta from "../pages/ColaIngesta";
@@ -41,14 +41,10 @@ const ROLES_COLA_INGESTA = [ROLES.ADMINISTRADOR, ROLES.TECNICO_CENERIS] as const
 // EDICION); el listado (HU07) sigue siendo visible para todos los roles.
 const ROLES_AGREGAR_UBICACION = [ROLES.ADMINISTRADOR, ROLES.TECNICO_CENERIS] as const;
 
-// HU11: "Solo los roles Administrador y Técnico CENERIS pueden añadir
-// dispositivos." El backend lo exige con require_permiso('Dispositivos',
-// EDICION); el listado (HU10) sigue siendo visible para todos los roles.
-const ROLES_AGREGAR_DISPOSITIVO = [ROLES.ADMINISTRADOR, ROLES.TECNICO_CENERIS] as const;
-
 export default function AppRouter() {
   return (
     <BrowserRouter>
+      <ThemeProvider>
       <AuthProvider>
         <Routes>
           <Route path="/login" element={<Login />} />
@@ -178,15 +174,6 @@ export default function AppRouter() {
               </ProtectedRoute>
             }
           />
-          {/* HU11: agregar dispositivo */}
-          <Route
-            path="/dispositivos/nueva"
-            element={
-              <ProtectedRoute rolesPermitidos={ROLES_AGREGAR_DISPOSITIVO}>
-                <AgregarDispositivo />
-              </ProtectedRoute>
-            }
-          />
           {/* DEC-09: ficha del dispositivo. Reemplaza al módulo "Mapeos de
               Formato": acá viven las pestañas Formato y Datos (el mapeo de
               ESTE datalogger), además de Carga de datos, Carga manual y
@@ -208,22 +195,6 @@ export default function AppRouter() {
               </ProtectedRoute>
             }
           />
-          <Route
-            path="/conexiones-ftp/nueva"
-            element={
-              <ProtectedRoute rolesPermitidos={ROLES_CONEXIONES_FTP}>
-                <ConfigurarConexionFTP />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/conexiones-ftp/:id/editar"
-            element={
-              <ProtectedRoute rolesPermitidos={ROLES_CONEXIONES_FTP}>
-                <ConfigurarConexionFTP />
-              </ProtectedRoute>
-            }
-          />
 
           {/* HU13: consulta de datos de telemetría filtrada por parámetros/ubicaciones */}
           <Route
@@ -231,6 +202,16 @@ export default function AppRouter() {
             element={
               <ProtectedRoute>
                 <ConsultaDatos />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Vista rápida de telemetría en gráficos, misma fuente que HU13 */}
+          <Route
+            path="/graficos"
+            element={
+              <ProtectedRoute>
+                <Graficos />
               </ProtectedRoute>
             }
           />
@@ -265,6 +246,7 @@ export default function AppRouter() {
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
       </AuthProvider>
+      </ThemeProvider>
     </BrowserRouter>
   );
 }

@@ -348,3 +348,52 @@ def sondear_conexiones_ftp() -> dict:
         return {"conexiones_revisadas": len(conexiones), "encolados": len(por_encolar)}
     finally:
         db.close()
+
+
+MINUTOS_PENDIENTE_ATASCADO = 15
+
+
+@celery_app.task(name="app.tasks.ingesta.reencolar_pendientes_atascados")
+def reencolar_pendientes_atascados() -> dict:
+    """Red de seguridad: corre vía Celery Beat (ver celery_app.py,
+    beat_schedule) y re-encola cualquier archv_ingst en 'Pendiente' cuya
+    fch_dtccn tenga más de MINUTOS_PENDIENTE_ATASCADO.
+
+    sondear_conexiones_ftp encola procesar_archivo_dat SOLO en el momento
+    en que crea la fila (ver arriba); si esa fila entra a archv_ingst por
+    otra vía -una carga de datos de prueba, un worker caído justo entre el
+    INSERT y el .delay(), un mensaje de Celery perdido por un reinicio del
+    broker- nada vuelve a encolarla jamás, y queda "En espera" para
+    siempre sin que se note (caso real: 409 archivos así el 2026-08-24,
+    ver RAID_LOG_PANGEA.md).
+
+    15 minutos de margen porque un archivo recién detectado por el sondeo
+    normal también pasa por 'Pendiente' un instante entre el INSERT y que
+    el worker lo tome: sin margen, este job competiría por re-encolar
+    archivos que ya tienen una tarea Celery en camino.
+    """
+    db = SessionLocal()
+    try:
+        limite = dt.datetime.now(dt.timezone.utc) - dt.timedelta(minutes=MINUTOS_PENDIENTE_ATASCADO)
+        atascados = (
+            db.query(ArchivoIngesta)
+            .filter(ArchivoIngesta.estd == "Pendiente", ArchivoIngesta.fch_dtccn < limite)
+            .order_by(ArchivoIngesta.fch_dtccn.asc())
+            .all()
+        )
+
+        for archivo in atascados:
+            procesar_archivo_dat.delay(id_archv=archivo.id_archv)
+
+        if atascados:
+            logger.warning(
+                "reencolar_pendientes_atascados: %s archivo(s) en 'Pendiente' hace más de "
+                "%s min, re-encolados (ids: %s)",
+                len(atascados),
+                MINUTOS_PENDIENTE_ATASCADO,
+                [a.id_archv for a in atascados],
+            )
+
+        return {"reencolados": len(atascados)}
+    finally:
+        db.close()

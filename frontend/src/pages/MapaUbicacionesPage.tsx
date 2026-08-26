@@ -35,7 +35,6 @@ import MapaUbicaciones, {
 
 export default function MapaUbicacionesPage() {
   const { nombreCompleto, rol, logout } = useAuth();
-  const [isDarkMode, setIsDarkMode] = useState(false);
 
   const [ubicaciones, setUbicaciones] = useState<UbicacionParaMapa[] | null>(null);
   const [dispositivos, setDispositivos] = useState<DispositivoParaMapa[]>([]);
@@ -88,17 +87,18 @@ export default function MapaUbicacionesPage() {
   }, []);
 
   return (
-    <div className={`${isDarkMode ? "dark" : ""} font-sans`}>
-      <div className="flex h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-300 overflow-hidden">
+    <div className="font-sans">
+      <div className="flex h-screen bg-transparent transition-colors duration-300 overflow-hidden">
         <Sidebar onLogout={logout} activo="ubicaciones" rol={rol} />
 
         <div className="flex-1 flex flex-col overflow-hidden">
-          <Topbar
-            isDarkMode={isDarkMode}
-            onToggleDarkMode={() => setIsDarkMode(!isDarkMode)}
-            nombreCompleto={nombreCompleto}
-            rol={rol}
-          />
+          {/* TOP NAVBAR */}
+          <div className="flex justify-end p-4 md:p-6 pb-0">
+            <Topbar
+              nombreCompleto={nombreCompleto}
+              rol={rol}
+            />
+          </div>
 
           <main className="flex-1 overflow-hidden p-6 md:p-8 flex flex-col">
             <header className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
