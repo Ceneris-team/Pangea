@@ -60,7 +60,6 @@ export default function SelectorRangoFechasTimeline({ zonaHoraria, onCambiarRang
   const [siguiendoAhora, setSiguiendoAhora] = useState(true);
   const [rango, setRango] = useState<RangoFechas>(() => calcularRango("7d"));
   const [arrastrando, setArrastrando] = useState<"inicio" | "fin" | null>(null);
-  const [editando, setEditando] = useState<"inicio" | "fin" | null>(null);
 
   const trackRef = useRef<HTMLDivElement>(null);
   const rangoRef = useRef(rango);
@@ -150,99 +149,49 @@ export default function SelectorRangoFechasTimeline({ zonaHoraria, onCambiarRang
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [arrastrando, dominioInicio, dominioSpan]);
 
-  const handleEditarManual = (cual: "inicio" | "fin", valor: string) => {
-    setSiguiendoAhora(false);
-    const nuevo = cual === "inicio" ? { ...rango, inicio: valor } : { ...rango, fin: valor };
-    setRango(nuevo);
-    onCambiarRango(nuevo);
-  };
-
   const inicioPct = porcentajeDe(inicioMs);
   const finPct = porcentajeDe(finMs);
-  const maxDatetime = aValorDatetimeLocal(new Date());
 
   return (
     <div className="w-full">
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          onClick={() => setEditando(editando === "inicio" ? null : "inicio")}
-          title="Editar fecha de inicio"
-          className="shrink-0 w-8 h-8 flex items-center justify-center rounded-lg border border-black/20 dark:border-white/20 text-gray-600 dark:text-gray-300 hover:bg-black/5 dark:hover:bg-white/5"
-        >
-          📅
-        </button>
+      <div
+        ref={trackRef}
+        className="relative w-full h-9 rounded-md bg-black/10 dark:bg-white/10 select-none touch-none"
+      >
+        <div className="absolute inset-0 flex justify-between pointer-events-none">
+          {Array.from({ length: 9 }).map((_, i) => (
+            <div key={i} className="w-px h-full bg-black/10 dark:bg-white/15" />
+          ))}
+        </div>
 
         <div
-          ref={trackRef}
-          className="relative flex-1 h-9 rounded-md bg-black/10 dark:bg-white/10 select-none touch-none"
-        >
-          <div className="absolute inset-0 flex justify-between pointer-events-none">
-            {Array.from({ length: 9 }).map((_, i) => (
-              <div key={i} className="w-px h-full bg-black/10 dark:bg-white/15" />
-            ))}
-          </div>
+          className="absolute top-0 h-full bg-[#ccff00]/70 pointer-events-none"
+          style={{ left: `${inicioPct}%`, width: `${Math.max(finPct - inicioPct, 0)}%` }}
+        />
 
-          <div
-            className="absolute top-0 h-full bg-amber-400/70 pointer-events-none"
-            style={{ left: `${inicioPct}%`, width: `${Math.max(finPct - inicioPct, 0)}%` }}
-          />
-
-          {(["inicio", "fin"] as const).map((cual) => {
-            const p = cual === "inicio" ? inicioPct : finPct;
-            const t = cual === "inicio" ? inicioMs : finMs;
-            return (
+        {(["inicio", "fin"] as const).map((cual) => {
+          const p = cual === "inicio" ? inicioPct : finPct;
+          const t = cual === "inicio" ? inicioMs : finMs;
+          return (
+            <div
+              key={cual}
+              className="absolute top-0 h-full -translate-x-1/2 flex flex-col items-center z-10"
+              style={{ left: `${p}%` }}
+            >
+              <span className="mb-1 -mt-7 whitespace-nowrap rounded bg-[#ccff00] text-gray-900 text-[10px] font-bold px-1.5 py-0.5 shadow">
+                {formatearEtiquetaHandle(new Date(t), zonaHoraria)}
+              </span>
               <div
-                key={cual}
-                className="absolute top-0 h-full -translate-x-1/2 flex flex-col items-center z-10"
-                style={{ left: `${p}%` }}
-              >
-                <span className="mb-1 -mt-7 whitespace-nowrap rounded bg-amber-400 text-gray-900 text-[10px] font-bold px-1.5 py-0.5 shadow">
-                  {formatearEtiquetaHandle(new Date(t), zonaHoraria)}
-                </span>
-                <div
-                  onPointerDown={(e) => {
-                    e.preventDefault();
-                    setArrastrando(cual);
-                  }}
-                  className="w-2 h-full bg-gray-700 dark:bg-white rounded cursor-ew-resize"
-                />
-              </div>
-            );
-          })}
-        </div>
-
-        <button
-          type="button"
-          onClick={() => setEditando(editando === "fin" ? null : "fin")}
-          title="Editar fecha de fin"
-          className="shrink-0 w-8 h-8 flex items-center justify-center rounded-lg border border-black/20 dark:border-white/20 text-gray-600 dark:text-gray-300 hover:bg-black/5 dark:hover:bg-white/5"
-        >
-          📅
-        </button>
+                onPointerDown={(e) => {
+                  e.preventDefault();
+                  setArrastrando(cual);
+                }}
+                className="w-2 h-full bg-gray-700 dark:bg-white rounded cursor-ew-resize"
+              />
+            </div>
+          );
+        })}
       </div>
-
-      {editando && (
-        <div className="mt-2 flex items-center gap-2 text-sm">
-          <span className="text-gray-600 dark:text-gray-300">
-            {editando === "inicio" ? "Fecha inicio:" : "Fecha fin:"}
-          </span>
-          <input
-            type="datetime-local"
-            value={editando === "inicio" ? rango.inicio : rango.fin}
-            max={maxDatetime}
-            onChange={(e) => handleEditarManual(editando, e.target.value)}
-            className="rounded-lg border border-black/20 dark:border-white/20 bg-transparent px-3 py-1.5 text-sm text-gray-900 dark:text-white [color-scheme:light] dark:[color-scheme:dark]"
-          />
-          <button
-            type="button"
-            onClick={() => setEditando(null)}
-            className="px-3 py-1.5 rounded-lg bg-[#ccff00] text-gray-900 text-xs font-bold hover:brightness-95"
-          >
-            Listo
-          </button>
-        </div>
-      )}
 
       <div className="flex items-center justify-between mt-3 flex-wrap gap-3">
         <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
