@@ -14,6 +14,7 @@ desde "Mi perfil".
 import datetime as dt
 import os
 import secrets
+from zoneinfo import available_timezones
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, EmailStr
@@ -47,6 +48,7 @@ class LoginResponse(BaseModel):
     rol: str
     nombre_completo: str
     debe_cambiar_contrasena: bool
+    zona_horaria: str
 
 
 # Mensaje genérico a propósito: no hay que decirle al atacante si el correo
@@ -99,6 +101,7 @@ def login(request: Request, body: LoginRequest, db: Session = Depends(get_db)):
         rol=usuario.rol.nmbr,
         nombre_completo=usuario.nmbr_cmplt,
         debe_cambiar_contrasena=usuario.dbe_cmbr_pswrd,
+        zona_horaria=usuario.zn_hrr,
     )
 
 
@@ -124,7 +127,38 @@ def mi_perfil(
         "scope": usuario.scp,
         "estado": usuario.estd,
         "debe_cambiar_contrasena": usuario.dbe_cmbr_pswrd,
+        "zona_horaria": usuario.zn_hrr,
     }
+
+
+@router.get("/zonas-horarias")
+def listar_zonas_horarias():
+    """HU14 CA1: listado de zonas horarias disponibles (estándar IANA)."""
+    return {"zonas_horarias": sorted(available_timezones())}
+
+
+class ZonaHorariaRequest(BaseModel):
+    zona_horaria: str
+
+
+@router.put("/zona-horaria")
+def actualizar_zona_horaria(
+    body: ZonaHorariaRequest,
+    usuario_token: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """HU14 CA2: configurar la zona horaria de visualización del usuario."""
+    if body.zona_horaria not in available_timezones():
+        raise HTTPException(status_code=400, detail="La zona horaria indicada no es válida.")
+
+    usuario = db.query(Usuario).filter(Usuario.id_usr == int(usuario_token["sub"])).first()
+    if usuario is None:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+    usuario.zn_hrr = body.zona_horaria
+    db.commit()
+
+    return {"mensaje": "Zona horaria actualizada correctamente", "zona_horaria": usuario.zn_hrr}
 
 
 class OlvideContrasenaRequest(BaseModel):

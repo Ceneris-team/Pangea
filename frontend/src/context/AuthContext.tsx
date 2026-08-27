@@ -7,6 +7,7 @@ interface LoginResponse {
   rol: string;
   nombre_completo: string;
   debe_cambiar_contrasena: boolean;
+  zona_horaria: string;
 }
 
 interface AuthState {
@@ -17,6 +18,9 @@ interface AuthState {
    *  cambiarse en el primer inicio de sesión. Se persiste junto al token
    *  para que el guard siga aplicando si el usuario recarga la página. */
   debeCambiarContrasena: boolean;
+  /** HU14: zona horaria de visualización elegida por el usuario. Se usa
+   *  para convertir las marcas de tiempo de telemetría (almacenadas en UTC). */
+  zonaHoraria: string;
 }
 
 interface AuthContextValue extends AuthState {
@@ -25,7 +29,11 @@ interface AuthContextValue extends AuthState {
   logout: () => void;
   /** Se llama tras cambiar la contraseña para levantar el bloqueo. */
   marcarContrasenaCambiada: () => void;
+  /** HU14 CA2: se llama tras guardar la nueva zona horaria en "Mi perfil". */
+  actualizarZonaHoraria: (zona: string) => void;
 }
+
+const ZONA_HORARIA_DEFECTO = "America/Lima";
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
@@ -36,7 +44,15 @@ function readInitialState(): AuthState {
     localStorage.getItem("pangea_nombre") ?? sessionStorage.getItem("pangea_nombre");
   const debeCambiar =
     localStorage.getItem("pangea_debe_cambiar") ?? sessionStorage.getItem("pangea_debe_cambiar");
-  return { token, rol, nombreCompleto, debeCambiarContrasena: debeCambiar === "true" };
+  const zonaHoraria =
+    localStorage.getItem("pangea_zona_horaria") ?? sessionStorage.getItem("pangea_zona_horaria");
+  return {
+    token,
+    rol,
+    nombreCompleto,
+    debeCambiarContrasena: debeCambiar === "true",
+    zonaHoraria: zonaHoraria ?? ZONA_HORARIA_DEFECTO,
+  };
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -53,22 +69,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     storage.setItem("pangea_rol", data.rol);
     storage.setItem("pangea_nombre", data.nombre_completo);
     storage.setItem("pangea_debe_cambiar", String(data.debe_cambiar_contrasena));
+    storage.setItem("pangea_zona_horaria", data.zona_horaria);
 
     setState({
       token: data.access_token,
       rol: data.rol,
       nombreCompleto: data.nombre_completo,
       debeCambiarContrasena: data.debe_cambiar_contrasena,
+      zonaHoraria: data.zona_horaria,
     });
     return data;
   }
 
   function logout() {
-    ["pangea_token", "pangea_rol", "pangea_nombre", "pangea_debe_cambiar"].forEach((key) => {
+    [
+      "pangea_token",
+      "pangea_rol",
+      "pangea_nombre",
+      "pangea_debe_cambiar",
+      "pangea_zona_horaria",
+    ].forEach((key) => {
       localStorage.removeItem(key);
       sessionStorage.removeItem(key);
     });
-    setState({ token: null, rol: null, nombreCompleto: null, debeCambiarContrasena: false });
+    setState({
+      token: null,
+      rol: null,
+      nombreCompleto: null,
+      debeCambiarContrasena: false,
+      zonaHoraria: ZONA_HORARIA_DEFECTO,
+    });
+  }
+
+  /** HU14 CA2: refleja la zona horaria recién guardada sin forzar un
+   *  nuevo login (a diferencia del cambio de contraseña, este ajuste no
+   *  invalida la sesión). */
+  function actualizarZonaHoraria(zona: string) {
+    const storage = localStorage.getItem("pangea_token") ? localStorage : sessionStorage;
+    storage.setItem("pangea_zona_horaria", zona);
+    setState((prev) => ({ ...prev, zonaHoraria: zona }));
   }
 
   /** El cambio de contraseña invalida el token actual (ver
@@ -89,6 +128,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         login,
         logout,
         marcarContrasenaCambiada,
+        actualizarZonaHoraria,
       }}
     >
       {children}

@@ -10,6 +10,11 @@ interface PerfilResponse {
   rol: string;
   scope: string;
   estado: string;
+  zona_horaria: string;
+}
+
+interface ZonasHorariasResponse {
+  zonas_horarias: string[];
 }
 
 function esPasswordValido(password: string): boolean {
@@ -17,11 +22,19 @@ function esPasswordValido(password: string): boolean {
 }
 
 export default function MiPerfil() {
-  const { logout, debeCambiarContrasena, marcarContrasenaCambiada } = useAuth();
+  const { logout, debeCambiarContrasena, marcarContrasenaCambiada, actualizarZonaHoraria } =
+    useAuth();
   const navigate = useNavigate();
 
   const [perfil, setPerfil] = useState<PerfilResponse | null>(null);
   const [errorPerfil, setErrorPerfil] = useState<string | null>(null);
+
+  // HU14: selector de zona horaria en "Mi perfil".
+  const [zonasHorarias, setZonasHorarias] = useState<string[]>([]);
+  const [zonaSeleccionada, setZonaSeleccionada] = useState("");
+  const [zonaMsg, setZonaMsg] = useState("");
+  const [zonaOk, setZonaOk] = useState(false);
+  const [guardandoZona, setGuardandoZona] = useState(false);
 
   // HU04: si viene de un primer login con contraseña temporal, el formulario
   // de cambio arranca abierto y no se puede cancelar (ProtectedRoute lo
@@ -37,9 +50,42 @@ export default function MiPerfil() {
 
   useEffect(() => {
     apiFetch<PerfilResponse>("/auth/perfil")
-      .then(setPerfil)
+      .then((data) => {
+        setPerfil(data);
+        setZonaSeleccionada(data.zona_horaria);
+      })
       .catch((err) => setErrorPerfil(err instanceof ApiError ? err.message : "No se pudo cargar el perfil"));
+
+    apiFetch<ZonasHorariasResponse>("/auth/zonas-horarias")
+      .then((data) => setZonasHorarias(data.zonas_horarias))
+      .catch(() => setZonasHorarias([]));
   }, []);
+
+  // HU14 CA2: guarda la zona horaria elegida y actualiza el contexto para
+  // que el resto de la app (p. ej. el módulo de consulta) la use de inmediato.
+  async function handleGuardarZonaHoraria(e: FormEvent) {
+    e.preventDefault();
+    if (!zonaSeleccionada || zonaSeleccionada === perfil?.zona_horaria) return;
+
+    setZonaMsg("");
+    setZonaOk(false);
+    setGuardandoZona(true);
+    try {
+      const data = await apiFetch<{ mensaje: string; zona_horaria: string }>("/auth/zona-horaria", {
+        method: "PUT",
+        body: { zona_horaria: zonaSeleccionada },
+      });
+      setZonaMsg(data.mensaje);
+      setZonaOk(true);
+      setPerfil((prev) => (prev ? { ...prev, zona_horaria: data.zona_horaria } : prev));
+      actualizarZonaHoraria(data.zona_horaria);
+    } catch (err) {
+      setZonaMsg(err instanceof ApiError ? err.message : "Ocurrió un error inesperado");
+      setZonaOk(false);
+    } finally {
+      setGuardandoZona(false);
+    }
+  }
 
   const passwordOk = esPasswordValido(nuevaContrasena);
   const coinciden = confirmarContrasena.length > 0 && nuevaContrasena === confirmarContrasena;
@@ -131,6 +177,43 @@ export default function MiPerfil() {
             </dl>
           </section>
         )}
+
+        <section className="miperfil-panel">
+          <h2 className="miperfil-panel-title">Zona horaria</h2>
+          <form onSubmit={handleGuardarZonaHoraria} className="miperfil-form">
+            <div className="miperfil-field">
+              <label htmlFor="zona-horaria">Zona horaria</label>
+              <select
+                id="zona-horaria"
+                value={zonaSeleccionada}
+                onChange={(e) => setZonaSeleccionada(e.target.value)}
+              >
+                {zonaSeleccionada && !zonasHorarias.includes(zonaSeleccionada) && (
+                  <option value={zonaSeleccionada}>{zonaSeleccionada}</option>
+                )}
+                {zonasHorarias.map((zona) => (
+                  <option key={zona} value={zona}>
+                    {zona}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="miperfil-actions">
+              <button
+                className="miperfil-btn-primary"
+                type="submit"
+                disabled={
+                  guardandoZona || !zonaSeleccionada || zonaSeleccionada === perfil?.zona_horaria
+                }
+              >
+                {guardandoZona ? "Guardando…" : "Guardar"}
+              </button>
+            </div>
+
+            {zonaMsg && <p className={`miperfil-form-msg ${zonaOk ? "ok" : "err"}`}>{zonaMsg}</p>}
+          </form>
+        </section>
 
         <section className="miperfil-panel">
           {!mostrarForm ? (

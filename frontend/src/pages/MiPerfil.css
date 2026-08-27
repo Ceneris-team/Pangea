@@ -163,7 +163,8 @@
   color:var(--ink-soft);
   font-weight:500;
 }
-.miperfil-field input{
+.miperfil-field input,
+.miperfil-field select{
   width:100%;
   background:var(--moss-01);
   border:1px solid var(--line);
@@ -174,7 +175,8 @@
   outline:none;
   transition:border-color .15s ease;
 }
-.miperfil-field input:focus{
+.miperfil-field input:focus,
+.miperfil-field select:focus{
   border-color:var(--accent);
 }
 .miperfil-field small{

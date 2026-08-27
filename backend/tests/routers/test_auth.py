@@ -160,12 +160,102 @@ class TestPerfil:
         assert cuerpo["correo"] == usuario.crr
         assert cuerpo["rol"] == rol.nmbr
         assert cuerpo["estado"] == "Activo"
+        assert cuerpo["zona_horaria"] == usuario.zn_hrr
 
     def test_perfil_sin_token_devuelve_401(self, client):
         assert client.get("/auth/perfil").status_code == 401
 
     def test_perfil_con_token_invalido_devuelve_401(self, client):
         assert client.get("/auth/perfil", headers=auth("no-es-un-jwt")).status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# HU14 - Configurar zona horaria
+# ---------------------------------------------------------------------------
+
+
+class TestZonaHoraria:
+    def test_login_expone_la_zona_horaria_configurada(self, client, usuario_con_password):
+        usuario, _ = usuario_con_password
+
+        resp = client.post(
+            "/auth/login", json={"correo": usuario.crr, "contrasena": PASSWORD_ORIGINAL}
+        )
+
+        assert resp.status_code == 200
+        assert resp.json()["zona_horaria"] == "America/Lima"
+
+    def test_zona_horaria_por_defecto_es_america_lima(self, client, usuario_con_password):
+        """DETALLES: 'La zona horaria por defecto al crear la cuenta es
+        America/Lima.'"""
+        usuario, _ = usuario_con_password
+
+        resp = client.get("/auth/perfil", headers=auth(token_de(usuario)))
+
+        assert resp.json()["zona_horaria"] == "America/Lima"
+
+    def test_zonas_horarias_incluye_los_ejemplos_del_detalle_de_conversacion(self, client):
+        """DETALLES: 'siguen el estándar IANA, por ejemplo America/Lima o
+        America/Santiago.'"""
+        resp = client.get("/auth/zonas-horarias")
+
+        assert resp.status_code == 200
+        zonas = resp.json()["zonas_horarias"]
+        assert "America/Lima" in zonas
+        assert "America/Santiago" in zonas
+
+    def test_guardar_zona_horaria_actualiza_la_configuracion(
+        self, client, db_session, usuario_con_password
+    ):
+        """CA2: al seleccionar una zona y GUARDAR, el sistema la actualiza y
+        muestra 'Zona horaria actualizada correctamente'."""
+        usuario, _ = usuario_con_password
+
+        resp = client.put(
+            "/auth/zona-horaria",
+            json={"zona_horaria": "America/Santiago"},
+            headers=auth(token_de(usuario)),
+        )
+
+        assert resp.status_code == 200
+        assert resp.json()["mensaje"] == "Zona horaria actualizada correctamente"
+
+        db_session.refresh(usuario)
+        assert usuario.zn_hrr == "America/Santiago"
+
+    def test_zona_horaria_invalida_es_rechazada(self, client, usuario_con_password):
+        usuario, _ = usuario_con_password
+
+        resp = client.put(
+            "/auth/zona-horaria",
+            json={"zona_horaria": "No/Existe"},
+            headers=auth(token_de(usuario)),
+        )
+
+        assert resp.status_code == 400
+
+    def test_cambio_de_zona_horaria_no_afecta_a_otros_usuarios(
+        self, client, db_session, fabrica, usuario_con_password
+    ):
+        """DETALLES: 'La configuración de zona horaria es por usuario y no
+        afecta la vista de otros usuarios.'"""
+        usuario, rol = usuario_con_password
+        otro = fabrica.usuario(rol=rol)
+        db_session.flush()
+
+        client.put(
+            "/auth/zona-horaria",
+            json={"zona_horaria": "America/Santiago"},
+            headers=auth(token_de(usuario)),
+        )
+
+        assert client.get("/auth/perfil", headers=auth(token_de(otro))).json()[
+            "zona_horaria"
+        ] == "America/Lima"
+
+    def test_zona_horaria_sin_token_devuelve_401(self, client):
+        resp = client.put("/auth/zona-horaria", json={"zona_horaria": "America/Lima"})
+        assert resp.status_code == 401
 
 
 # ---------------------------------------------------------------------------
