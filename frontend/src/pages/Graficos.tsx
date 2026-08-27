@@ -3,16 +3,18 @@ import { apiFetch, ApiError } from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import Sidebar from "../components/layout/Sidebar";
 import Topbar from "../components/layout/Topbar";
-import SelectorRangoFechas from "../components/SelectorRangoFechas";
-import { rangoUltimas24Horas, type RangoFechas } from "../utils/fechas";
+import SelectorRangoFechasTimeline from "../components/SelectorRangoFechasTimeline";
+import type { RangoFechas } from "../utils/fechas";
 
 /**
  * HU15: visualización de telemetría en gráficos interactivos. El usuario
- * selecciona parámetros, ubicaciones y un rango de fechas (mismo patrón de
- * selección/filtro aplicado que HU13/ConsultaDatos.tsx); por cada parámetro
- * seleccionado se dibuja un gráfico independiente (una línea por ubicación,
- * con leyenda), y puede alternar entre tipo línea/área o ver los mismos
- * datos en tabla ("VER TABLA").
+ * selecciona parámetros (aplican al instante, sin botón "APLICAR") y un
+ * rango de fechas con el selector tipo línea de tiempo; por cada parámetro
+ * elegido se dibuja un gráfico independiente (una línea por ubicación, con
+ * leyenda), y puede alternar entre tipo línea/área o ver los mismos datos
+ * en tabla ("VER TABLA"). La grilla de gráficos usa 1 columna con 1-3
+ * parámetros, 2 columnas con 4-6, y 3 columnas (en pantallas grandes) con
+ * 7-8.
  */
 
 interface ParametroItem {
@@ -20,11 +22,6 @@ interface ParametroItem {
   nmbr: string;
   undd: string;
   tipo_dato: string;
-}
-
-interface UbicacionItem {
-  id_ubccn: number;
-  nmbr: string;
 }
 
 interface MedicionItem {
@@ -61,10 +58,6 @@ interface HoverInfo {
 // naranja, aqua, amarillo — en ese orden fijo, nunca por índice aleatorio.
 const COLORES_SERIE = ["#3987e5", "#d95926", "#199e70", "#c98500"];
 
-// CA: el gráfico se actualiza automáticamente cada 60 segundos cuando el
-// rango activo incluye la hora actual.
-const INTERVALO_AUTOACTUALIZACION_MS = 60_000;
-
 // HU15/HU14: los datos se almacenan en UTC y se muestran en la zona
 // horaria configurada por el usuario.
 function formatearFechaCorta(iso: string, zonaHoraria: string): string {
@@ -77,14 +70,9 @@ function formatearFechaCorta(iso: string, zonaHoraria: string): string {
   });
 }
 
-function construirQuery(
-  parametroIds: number[],
-  ubicacionIds: number[],
-  rangoFechas: RangoFechas | null,
-): string {
+function construirQuery(parametroIds: number[], rangoFechas: RangoFechas | null): string {
   const params = new URLSearchParams();
   parametroIds.forEach((id) => params.append("parametro_ids", String(id)));
-  ubicacionIds.forEach((id) => params.append("ubicacion_ids", String(id)));
   if (rangoFechas) {
     params.append("fecha_inicio", new Date(rangoFechas.inicio).toISOString());
     params.append("fecha_fin", new Date(rangoFechas.fin).toISOString());
@@ -93,23 +81,26 @@ function construirQuery(
   return query ? `/mediciones?${query}` : "/mediciones";
 }
 
+// CA: 1-3 parámetros seleccionados -> una columna; 4-6 -> dos columnas;
+// 7-8 -> tres columnas en pantallas grandes.
+function claseColumnasGrilla(cantidad: number): string {
+  if (cantidad <= 3) return "grid-cols-1";
+  if (cantidad <= 6) return "grid-cols-1 md:grid-cols-2";
+  return "grid-cols-1 md:grid-cols-2 lg:grid-cols-3";
+}
+
 export default function Graficos() {
   const { nombreCompleto, rol, logout, zonaHoraria } = useAuth();
 
   const [parametros, setParametros] = useState<ParametroItem[]>([]);
-  const [ubicaciones, setUbicaciones] = useState<UbicacionItem[]>([]);
 
-  // CA: selección en curso vs. filtros aplicados (igual que HU13).
-  const [seleccionParametros, setSeleccionParametros] = useState<number[]>([]);
-  const [seleccionUbicaciones, setSeleccionUbicaciones] = useState<number[]>([]);
-  const [filtroParametros, setFiltroParametros] = useState<number[]>([]);
-  const [filtroUbicaciones, setFiltroUbicaciones] = useState<number[]>([]);
+  // CA: la selección de parámetros aplica al instante (sin botón "APLICAR");
+  // es el único filtro además del rango de fechas.
+  const [parametrosSeleccionados, setParametrosSeleccionados] = useState<number[]>([]);
 
-  const [seleccionFechas, setSeleccionFechas] = useState<RangoFechas>(rangoUltimas24Horas);
-  const [filtroFechas, setFiltroFechas] = useState<RangoFechas>(rangoUltimas24Horas);
-  // Mientras el usuario no fije un rango propio, el rango activo "sigue" a
-  // la hora actual: cada 60s se recalcula para incluirla (CA5).
-  const [siguiendoAhora, setSiguiendoAhora] = useState(true);
+  // La controla por completo SelectorRangoFechasTimeline (rango rápido,
+  // arrastre de manijas, auto-actualización cada 60s siguiendo "ahora").
+  const [rangoFechas, setRangoFechas] = useState<RangoFechas | null>(null);
 
   const [tipoGrafico, setTipoGrafico] = useState<TipoGrafico>("linea");
   const [vista, setVista] = useState<Vista>("grafico");
@@ -131,27 +122,20 @@ export default function Graficos() {
       .then((res) => {
         setParametros(res.items);
         const primerNumerico = res.items.find((p) => p.tipo_dato === "numerico");
-        if (primerNumerico) {
-          setSeleccionParametros([primerNumerico.id_prmtr]);
-          setFiltroParametros([primerNumerico.id_prmtr]);
-        }
+        if (primerNumerico) setParametrosSeleccionados([primerNumerico.id_prmtr]);
       })
       .catch(() => setParametros([]));
-
-    apiFetch<{ items: UbicacionItem[] }>("/ubicaciones", { params: { por_pagina: 100 } })
-      .then((res) => setUbicaciones(res.items))
-      .catch(() => setUbicaciones([]));
   }, []);
 
   useEffect(() => {
-    if (filtroParametros.length === 0) {
+    if (parametrosSeleccionados.length === 0 || rangoFechas === null) {
       return;
     }
     let cancelado = false;
     setLoading(true);
     setError(null);
 
-    apiFetch<ListadoMediciones>(construirQuery(filtroParametros, filtroUbicaciones, filtroFechas))
+    apiFetch<ListadoMediciones>(construirQuery(parametrosSeleccionados, rangoFechas))
       .then((res) => {
         if (!cancelado) setMediciones(res);
       })
@@ -166,61 +150,25 @@ export default function Graficos() {
     return () => {
       cancelado = true;
     };
-  }, [filtroParametros, filtroUbicaciones, filtroFechas]);
+  }, [parametrosSeleccionados, rangoFechas]);
 
-  // CA5: mientras el rango activo siga siendo "ahora", se recalcula cada
-  // 60s para incluir la telemetría nueva sin recargar la página.
-  useEffect(() => {
-    if (!siguiendoAhora) return;
-    const id = setInterval(() => {
-      const nuevoRango = rangoUltimas24Horas();
-      setSeleccionFechas(nuevoRango);
-      setFiltroFechas(nuevoRango);
-    }, INTERVALO_AUTOACTUALIZACION_MS);
-    return () => clearInterval(id);
-  }, [siguiendoAhora]);
-
-  const toggleSeleccion = (lista: number[], setLista: (v: number[]) => void, id: number) => {
-    setLista(lista.includes(id) ? lista.filter((v) => v !== id) : [...lista, id]);
-  };
-
-  const handleAplicar = () => {
-    setFiltroParametros(seleccionParametros);
-    setFiltroUbicaciones(seleccionUbicaciones);
-  };
-
-  const handleLimpiar = () => {
-    setSeleccionParametros([]);
-    setSeleccionUbicaciones([]);
-    setFiltroParametros([]);
-    setFiltroUbicaciones([]);
-  };
-
-  const handleAplicarFechas = (rango: RangoFechas) => {
-    setFiltroFechas(rango);
-    setSiguiendoAhora(false);
-  };
-
-  const handleLimpiarFechas = () => {
-    const rangoPorDefecto = rangoUltimas24Horas();
-    setSeleccionFechas(rangoPorDefecto);
-    setFiltroFechas(rangoPorDefecto);
-    setSiguiendoAhora(true);
+  const toggleParametro = (id: number) => {
+    setParametrosSeleccionados((actual) => (actual.includes(id) ? actual.filter((v) => v !== id) : [...actual, id]));
   };
 
   // El backend devuelve más reciente primero; para la línea de tiempo se
   // necesita orden cronológico ascendente. Solo valores numéricos son
   // graficables (los parámetros de texto no aplican a línea/área).
   const itemsOrdenados = useMemo(() => {
-    if (filtroParametros.length === 0) return [];
     return [...(mediciones?.items ?? [])]
       .filter((item): item is MedicionNumerica => typeof item.vlr === "number")
       .sort((a, b) => new Date(a.fch_hr).getTime() - new Date(b.fch_hr).getTime());
-  }, [mediciones, filtroParametros]);
+  }, [mediciones]);
 
-  // Un grupo (con su propio gráfico) por cada parámetro seleccionado,
-  // en el orden del catálogo para que el orden no salte con la selección.
-  const gruposPorParametro = useMemo(() => {
+  // Un gráfico por cada parámetro seleccionado (aunque todavía no tenga
+  // datos), en el orden del catálogo para que no salte con la selección:
+  // así N parámetros elegidos siempre producen N gráficos.
+  const parametrosARenderizar = useMemo(() => {
     const porParametro = new Map<number, MedicionNumerica[]>();
     for (const item of itemsOrdenados) {
       const lista = porParametro.get(item.id_prmtr);
@@ -228,9 +176,9 @@ export default function Graficos() {
       else porParametro.set(item.id_prmtr, [item]);
     }
     return parametrosGraficables
-      .filter((p) => porParametro.has(p.id_prmtr))
-      .map((p) => ({ parametro: p, items: porParametro.get(p.id_prmtr)! }));
-  }, [itemsOrdenados, parametrosGraficables]);
+      .filter((p) => parametrosSeleccionados.includes(p.id_prmtr))
+      .map((p) => ({ parametro: p, items: porParametro.get(p.id_prmtr) ?? [] }));
+  }, [itemsOrdenados, parametrosGraficables, parametrosSeleccionados]);
 
   return (
     <div className="font-sans">
@@ -243,81 +191,29 @@ export default function Graficos() {
           </div>
 
           <main className="flex-1 overflow-y-auto p-6 md:p-8">
-            <header className="mb-6">
-              <h1 className="text-2xl font-extrabold text-gray-900 dark:text-white">Gráficos</h1>
-              <p className="text-sm text-gray-600 dark:text-gray-300 mt-1 font-light">
-                Selecciona uno o más parámetros y ubicaciones: por cada parámetro elegido se muestra su propio
-                gráfico con la evolución en el tiempo.
-              </p>
-            </header>
-
             <div className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl shadow-sm border border-black/10 dark:border-white/10 p-5 mb-6">
-              <div className="flex flex-col lg:flex-row gap-6">
-                <fieldset className="flex-1">
-                  <legend className="text-sm font-bold text-gray-700 dark:text-gray-200 mb-2">Parámetros</legend>
-                  <div className="flex flex-wrap gap-3">
-                    {parametrosGraficables.length === 0 && (
-                      <span className="text-sm text-gray-500 dark:text-gray-400">No hay parámetros disponibles.</span>
-                    )}
-                    {parametrosGraficables.map((p) => (
-                      <label key={p.id_prmtr} className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={seleccionParametros.includes(p.id_prmtr)}
-                          onChange={() => toggleSeleccion(seleccionParametros, setSeleccionParametros, p.id_prmtr)}
-                          className="accent-[#ccff00]"
-                        />
-                        {p.nmbr} ({p.undd})
-                      </label>
-                    ))}
-                  </div>
-                </fieldset>
-
-                <fieldset className="flex-1">
-                  <legend className="text-sm font-bold text-gray-700 dark:text-gray-200 mb-2">Ubicaciones</legend>
-                  <div className="flex flex-wrap gap-3">
-                    {ubicaciones.length === 0 && (
-                      <span className="text-sm text-gray-500 dark:text-gray-400">No hay ubicaciones disponibles.</span>
-                    )}
-                    {ubicaciones.map((u) => (
-                      <label key={u.id_ubccn} className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={seleccionUbicaciones.includes(u.id_ubccn)}
-                          onChange={() => toggleSeleccion(seleccionUbicaciones, setSeleccionUbicaciones, u.id_ubccn)}
-                          className="accent-[#ccff00]"
-                        />
-                        {u.nmbr}
-                      </label>
-                    ))}
-                  </div>
-                </fieldset>
-
-                <div className="flex lg:flex-col gap-2 justify-end">
-                  <button
-                    type="button"
-                    onClick={handleAplicar}
-                    className="px-4 py-2 rounded-xl bg-[#ccff00] text-gray-900 text-sm font-bold hover:brightness-95 transition-all"
-                  >
-                    APLICAR
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleLimpiar}
-                    className="px-4 py-2 rounded-xl border border-black/20 dark:border-white/20 text-gray-700 dark:text-gray-200 text-sm font-bold hover:bg-black/10 dark:hover:bg-white/10 transition-all"
-                  >
-                    LIMPIAR FILTROS
-                  </button>
+              <fieldset>
+                <legend className="text-sm font-bold text-gray-700 dark:text-gray-200 mb-2">Parámetros</legend>
+                <div className="flex flex-wrap gap-3">
+                  {parametrosGraficables.length === 0 && (
+                    <span className="text-sm text-gray-500 dark:text-gray-400">No hay parámetros disponibles.</span>
+                  )}
+                  {parametrosGraficables.map((p) => (
+                    <label key={p.id_prmtr} className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={parametrosSeleccionados.includes(p.id_prmtr)}
+                        onChange={() => toggleParametro(p.id_prmtr)}
+                        className="accent-[#ccff00]"
+                      />
+                      {p.nmbr} ({p.undd})
+                    </label>
+                  ))}
                 </div>
-              </div>
+              </fieldset>
 
               <div className="mt-6 pt-6 border-t border-black/10 dark:border-white/10">
-                <SelectorRangoFechas
-                  seleccion={seleccionFechas}
-                  onCambiarSeleccion={setSeleccionFechas}
-                  onAplicar={handleAplicarFechas}
-                  onLimpiar={handleLimpiarFechas}
-                />
+                <SelectorRangoFechasTimeline zonaHoraria={zonaHoraria} onCambiarRango={setRangoFechas} />
               </div>
             </div>
 
@@ -365,15 +261,9 @@ export default function Graficos() {
               </div>
             )}
 
-            {!loading && filtroParametros.length === 0 && (
+            {!loading && parametrosSeleccionados.length === 0 && (
               <div className="py-24 text-center text-gray-500 dark:text-gray-400 text-sm">
                 Selecciona al menos un parámetro para ver sus gráficos.
-              </div>
-            )}
-
-            {!loading && filtroParametros.length > 0 && gruposPorParametro.length === 0 && (
-              <div className="py-24 text-center text-gray-500 dark:text-gray-400 text-sm">
-                No hay mediciones registradas para los filtros seleccionados.
               </div>
             )}
 
@@ -410,9 +300,9 @@ export default function Graficos() {
               </div>
             )}
 
-            {!loading && vista === "grafico" && gruposPorParametro.length > 0 && (
-              <div className="flex flex-col gap-6">
-                {gruposPorParametro.map(({ parametro, items }) => (
+            {!loading && vista === "grafico" && parametrosARenderizar.length > 0 && (
+              <div className={`grid ${claseColumnasGrilla(parametrosARenderizar.length)} gap-6`}>
+                {parametrosARenderizar.map(({ parametro, items }) => (
                   <GraficoDeParametro
                     key={parametro.id_prmtr}
                     parametro={parametro}
