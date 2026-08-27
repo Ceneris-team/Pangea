@@ -17,3 +17,10 @@ export function rangoUltimas24Horas(): RangoFechas {
   const hace24h = new Date(ahora.getTime() - 24 * 60 * 60 * 1000);
   return { inicio: aValorDatetimeLocal(hace24h), fin: aValorDatetimeLocal(ahora) };
 }
+
+/** HU14: los datos se almacenan en UTC; esto los convierte a la zona
+ *  horaria configurada por el usuario (America/Lima por defecto) para
+ *  mostrarlos en el módulo de consulta. */
+export function formatearFechaHoraEnZona(iso: string, zonaHoraria: string): string {
+  return new Date(iso).toLocaleString("es", { timeZone: zonaHoraria });
+}
