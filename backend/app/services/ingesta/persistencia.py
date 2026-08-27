@@ -47,6 +47,18 @@ class ResultadoPersistencia:
     guardadas: int
     omitidas_sin_valor: int
     omitidas_parametro_desconocido: list  # nombres de parámetro sin fila en prmtr
+    # HU17 CA3: la lectura MÁS RECIENTE de cada parámetro dentro de este
+    # archivo, como {nombre_parametro: (valor, fecha_hora)}, más la
+    # ubicación a la que pertenecen. Es lo que la tarea de ingesta publica
+    # al bus de eventos del mapa (ver app/services/mapa/eventos.py).
+    #
+    # Se calcula ACÁ, en el bucle que ya recorre las lecturas, y no con una
+    # consulta posterior: un .dat trae decenas de filas del mismo parámetro
+    # y al marcador solo le sirve la última. Volver a leerlas de tlmtr
+    # después del commit sería una consulta extra por archivo para
+    # recuperar un dato que esta función ya tuvo en la mano.
+    ultimos_por_parametro: dict = dataclasses.field(default_factory=dict)
+    id_ubccn: int | None = None
 
 
 def resolver_dispositivo(db: Session, id_cnxn: int) -> Dispositivo:
@@ -86,6 +98,9 @@ def guardar_lecturas(
     omitidas_sin_valor = 0
     parametros_desconocidos = set()
     fechas_numericas = []
+    # HU17 CA3: {nombre_parametro: (valor, fecha_hora)} con la lectura más
+    # reciente de cada parámetro vista en este archivo.
+    ultimos_por_parametro: dict = {}
 
     for lectura in lecturas:
         if lectura.valor is None:
@@ -122,6 +137,13 @@ def guardar_lecturas(
             fechas_numericas.append(lectura.fecha_hora)
         guardadas += 1
 
+        # HU17 CA3: se queda con la lectura más reciente de cada parámetro.
+        # Las filas de un .dat no vienen necesariamente ordenadas por
+        # fecha, así que se compara en vez de sobrescribir sin más.
+        anterior = ultimos_por_parametro.get(lectura.parametro)
+        if anterior is None or lectura.fecha_hora > anterior[1]:
+            ultimos_por_parametro[lectura.parametro] = (lectura.valor, lectura.fecha_hora)
+
     # flush explícito para que el INSERT viaje a Postgres AQUÍ y no en el
     # commit del llamador: es la única forma de traducir el fallo por
     # partición faltante (HT-08 CA4) a un error de dominio con contexto
@@ -155,4 +177,6 @@ def guardar_lecturas(
         guardadas=guardadas,
         omitidas_sin_valor=omitidas_sin_valor,
         omitidas_parametro_desconocido=sorted(parametros_desconocidos),
+        ultimos_por_parametro=ultimos_por_parametro,
+        id_ubccn=dispositivo.id_ubccn,
     )

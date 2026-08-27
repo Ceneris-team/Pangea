@@ -14,13 +14,18 @@ criterio que mapeos.py e ingesta.py usan con su propio id_sd.
 HU 11 - Añadir dispositivo
 
 CA1: formulario con Nombre, Marca, Modelo (opcional), Ubicación y Conexión
-FTP. Un campo del modelo NO está en el formulario y el POST lo resuelve
-solo (documentado en crear_dispositivo):
+FTP, más el punto GPS del dispositivo:
 
-  lttd/lngtd (NOT NULL, punto GPS del dispositivo): se copian de la
-  Ubicación elegida como valor por defecto. Son columnas independientes de
-  las de Ubicacion (no hay FK), así que un dispositivo con punto propio
-  distinto al de su ubicación es una decisión de una HU futura, no de esta.
+  lttd/lngtd (NOT NULL, punto GPS del dispositivo): DEC-28 los convierte
+  en el punto PROPIO del dispositivo, no una copia del centro de su
+  Ubicación. Son opcionales en el body: si no vienen, crear_dispositivo
+  cae al centro de la Ubicación (comportamiento previo) para no romper a
+  los clientes que todavía no los mandan. Son columnas independientes de
+  las de Ubicacion (no hay FK).
+
+  Todavía NO se valida que el punto caiga dentro del polígono de su
+  Ubicación (plgn_gjsn): eso es tarea aparte (R-06 del RAID), y depende
+  de que el punto sea real y editable, que es justo lo que hace DEC-28.
 
 DEC-09: el dispositivo ya NO resuelve un mapeo de formato al crearse. El
 mapeo pasó a colgar del dispositivo (mp_frmt.id_dspstv), así que primero
@@ -53,6 +58,7 @@ from app.schemas import (
     DispositivoCrear,
     DispositivoDetalle,
     DispositivoListItem,
+    DispositivoParaMapa,
     DispositivoUpdate,
     LogIngestaListItem,
 )
@@ -126,6 +132,48 @@ def listar_dispositivos(
     return {"total": total, "pagina": pagina, "por_pagina": por_pagina, "items": items}
 
 
+@router.get("/mapa", response_model=list[DispositivoParaMapa])
+def dispositivos_para_mapa(
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(require_permiso("Dispositivos", LECTURA)),
+):
+    """I-17: los dispositivos que pinta la vista de mapa (HU22), con su
+    punto GPS propio (DEC-28), en una sola llamada.
+
+    Se declara ANTES de GET /{id_dspstv}: si fuera después, esa ruta
+    capturaría "mapa" como si fuera un id y respondería 422.
+
+    Endpoint propio y no un campo anidado dentro de GET /ubicaciones/mapa
+    porque "Ubicaciones" y "Dispositivos" son módulos de permiso
+    SEPARADOS (HT-03): anidarlos entregaría datos de dispositivos a quien
+    solo tiene Lectura sobre Ubicaciones. Así cada recurso sigue
+    exigiendo el suyo, y el frontend hace dos llamadas en paralelo -no
+    N+1: una por recurso, no una por ubicación-.
+
+    Sin paginar ni filtrar por estado, igual que /ubicaciones/mapa: se
+    muestran todos y el color los distingue. Los filtros de visibilidad
+    (sede y PermisoUbicacion) sí se mantienen, replicando exactamente los
+    de listar_dispositivos, porque son reglas de acceso.
+    """
+    query = db.query(Dispositivo).join(Ubicacion, Ubicacion.id_ubccn == Dispositivo.id_ubccn)
+
+    # Aislamiento por sede (HT-09 CA3). Dispositivo no tiene id_sd propio:
+    # se resuelve por su ubicación, igual que en listar_dispositivos.
+    if usuario.get("scope") == "por_sede":
+        query = query.filter(Ubicacion.id_sd == usuario["sede_id"])
+
+    if usuario.get("rol") not in ROLES_CON_ACCESO_TOTAL:
+        id_usr = int(usuario["sub"])
+        query = query.join(
+            PermisoUbicacion, PermisoUbicacion.id_ubccn == Dispositivo.id_ubccn
+        ).filter(PermisoUbicacion.id_usr == id_usr)
+
+    return [
+        DispositivoParaMapa.model_validate(dispositivo)
+        for dispositivo in query.order_by(Dispositivo.nmbr).all()
+    ]
+
+
 @router.post("", status_code=201)
 def crear_dispositivo(
     body: DispositivoCrear,
@@ -169,8 +217,11 @@ def crear_dispositivo(
         nmbr=body.nmbr,
         mrc=body.mrc,
         mdl=body.mdl,
-        lttd=ubicacion.lttd,
-        lngtd=ubicacion.lngtd,
+        # DEC-28: el punto GPS propio del dispositivo. Si el formulario no
+        # lo manda, se cae al centro de la Ubicación -el comportamiento de
+        # siempre- para no romper a quien todavía crea sin coordenadas.
+        lttd=body.lttd if body.lttd is not None else ubicacion.lttd,
+        lngtd=body.lngtd if body.lngtd is not None else ubicacion.lngtd,
         # estd lo pone el server_default 'Activo' del modelo.
     )
     db.add(dispositivo)
@@ -237,6 +288,8 @@ def obtener_dispositivo(
         mrc=dispositivo.mrc,
         mdl=dispositivo.mdl,
         estd=dispositivo.estd,
+        lttd=dispositivo.lttd,
+        lngtd=dispositivo.lngtd,
         id_ubccn=ubicacion.id_ubccn,
         ubicacion_nombre=ubicacion.nmbr,
         id_sd=ubicacion.id_sd,
@@ -292,6 +345,14 @@ def actualizar_dispositivo(
             )
 
     datos = body.model_dump(exclude_unset=True)
+    # lttd/lngtd son NOT NULL en el modelo: un null EXPLÍCITO en el body
+    # pasa el filtro de exclude_unset (se envió, solo que vacío) y
+    # reventaría como IntegrityError en el commit. Para estos dos campos
+    # "null" significa "no lo toques", igual que omitirlos.
+    for campo in ("lttd", "lngtd"):
+        if campo in datos and datos[campo] is None:
+            del datos[campo]
+
     for campo, valor in datos.items():
         setattr(dispositivo, campo, valor)
 
@@ -307,6 +368,8 @@ def actualizar_dispositivo(
             mrc=dispositivo.mrc,
             mdl=dispositivo.mdl,
             estd=dispositivo.estd,
+            lttd=dispositivo.lttd,
+            lngtd=dispositivo.lngtd,
             id_ubccn=ubicacion.id_ubccn,
             ubicacion_nombre=ubicacion.nmbr,
             id_sd=ubicacion.id_sd,

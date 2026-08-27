@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { apiFetch, ApiError } from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import Sidebar from "../components/layout/Sidebar";
@@ -92,6 +93,15 @@ function claseColumnasGrilla(cantidad: number): string {
 export default function Graficos() {
   const { nombreCompleto, rol, logout, zonaHoraria } = useAuth();
 
+  // HU17 CA4: ubicación preseleccionada por query param. Se lee con
+  // useSearchParams (y no de window.location) para que quede sincronizada
+  // con la navegación de React Router: volver atrás desde el mapa
+  // restaura el filtro anterior sin recargar.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const ubicacionIdParam = searchParams.get("ubicacion_id");
+  const ubicacionId = ubicacionIdParam !== null ? Number(ubicacionIdParam) : null;
+  const ubicacionIdValida = ubicacionId !== null && Number.isFinite(ubicacionId);
+
   const [parametros, setParametros] = useState<ParametroItem[]>([]);
 
   // CA: la selección de parámetros aplica al instante (sin botón "APLICAR");
@@ -126,6 +136,15 @@ export default function Graficos() {
       })
       .catch(() => setParametros([]));
   }, []);
+
+  // HU17 CA4: nombre de la ubicación preseleccionada, para el aviso de
+  // "filtrando por...". Se pide solo cuando hay filtro activo.
+  useEffect(() => {
+    if (!ubicacionIdValida) return;
+    apiFetch<{ items: UbicacionItem[] }>("/ubicaciones", { params: { por_pagina: 100 } })
+      .then((res) => setUbicaciones(res.items))
+      .catch(() => setUbicaciones([]));
+  }, [ubicacionIdValida]);
 
   useEffect(() => {
     if (parametrosSeleccionados.length === 0 || rangoFechas === null) {
@@ -247,6 +266,37 @@ export default function Graficos() {
                 {vista === "grafico" ? "VER TABLA" : "VER GRÁFICOS"}
               </button>
             </div>
+
+            {/* HU17 CA4: aviso de que se está viendo UNA sola ubicación,
+                con salida a la vista completa. Sin esto, alguien que
+                llega desde el mapa podría creer que su cuenta solo tiene
+                datos de esa estación. */}
+            {ubicacionIdValida && (
+              <div className="mb-6 p-4 rounded-xl bg-[#ccff00]/10 border border-[#ccff00]/30 text-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <span className="text-gray-700 dark:text-gray-200">
+                  Mostrando solo la ubicación{" "}
+                  <strong className="font-semibold">
+                    {ubicaciones.find((u) => u.id_ubccn === ubicacionId)?.nmbr ??
+                      `#${ubicacionId}`}
+                  </strong>
+                  , preseleccionada desde el mapa de estaciones.
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    // Se quita solo este parámetro y se conservan los
+                    // demás: hoy es el único, pero borrar toda la query
+                    // string sería un bug latente en cuanto se agregue otro.
+                    const siguiente = new URLSearchParams(searchParams);
+                    siguiente.delete("ubicacion_id");
+                    setSearchParams(siguiente, { replace: true });
+                  }}
+                  className="shrink-0 self-start sm:self-auto inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-lg border border-black/20 dark:border-white/20 text-gray-700 dark:text-gray-200 hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+                >
+                  Ver todas las ubicaciones
+                </button>
+              </div>
+            )}
 
             {error && (
               <div className="mb-6 p-4 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm border border-red-200 dark:border-red-800/30">

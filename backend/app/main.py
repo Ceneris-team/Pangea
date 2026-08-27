@@ -11,6 +11,7 @@ from app.routers import (
     conexiones_ftp,
     dispositivos,
     ingesta,
+    mapa_cliente,
     mapeos,
     mediciones,
     ubicaciones,
@@ -50,6 +51,9 @@ app.include_router(mapeos.router_parametros)
 app.include_router(mapeos.router_sedes)
 app.include_router(mapeos.router_dispositivos_mapeo)
 app.include_router(dispositivos.router)
+# HU17: mapa del Cliente Final (REST de carga inicial + WebSocket en vivo).
+# Router propio, separado del de HU22 (/ubicaciones/mapa), que no se toca.
+app.include_router(mapa_cliente.router)
 
 
 @app.get("/")

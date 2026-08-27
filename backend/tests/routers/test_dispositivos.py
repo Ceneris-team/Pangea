@@ -411,8 +411,9 @@ def cuerpo_valido(ubicacion, conexion, **overrides):
 
 class TestCrearDispositivo:
     """CA1/CA2: formulario con Nombre, Marca, Modelo (opcional), Ubicación
-    y Conexión FTP. lttd/lngtd se copian de la Ubicación (ver decisiones de
-    diseño documentadas en routers/dispositivos.py).
+    y Conexión FTP. DEC-28: lttd/lngtd son el punto GPS propio del
+    dispositivo, opcionales, con fallback al centro de la Ubicación (ver
+    TestPuntoGpsPropio y las decisiones en routers/dispositivos.py).
 
     DEC-09: el dispositivo ya no necesita un mapeo de formato previo; el
     mapeo se configura después y cuelga de él (mp_frmt.id_dspstv)."""
@@ -623,3 +624,356 @@ class TestCrearDispositivo:
 
         resp = client.post("/dispositivos", json=cuerpo_valido(ubicacion, conexion))
         assert resp.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# DEC-28 - Punto GPS propio del dispositivo (POST y PUT /dispositivos)
+# ---------------------------------------------------------------------------
+
+
+class TestPuntoGpsPropio:
+    """DEC-28: lttd/lngtd dejan de ser una copia del centro de la Ubicación
+    y pasan a ser el punto propio del dispositivo, enviable al crear y
+    editable después.
+
+    Van OPCIONALES en el body a propósito: las columnas ya existían
+    llenándose por copia, así que exigirlas rompería a todo cliente y test
+    que hoy crea dispositivos sin coordenadas. Sin ellas se mantiene el
+    fallback de siempre.
+
+    Fuera de alcance acá: que el punto caiga DENTRO del polígono de su
+    Ubicación (R-06 del RAID) -esta tarea solo lo hace real y editable-."""
+
+    def test_sin_coordenadas_cae_al_centro_de_la_ubicacion(
+        self, client, db_session, tecnico_editor
+    ):
+        """El comportamiento previo a DEC-28 sigue intacto: quien no manda
+        coordenadas hereda el centro de su Ubicación."""
+        sede, _ = tecnico_editor
+        ubicacion = crear_ubicacion(db_session, sede)
+        ubicacion.lttd = -12.046400
+        ubicacion.lngtd = -77.042800
+        db_session.flush()
+        conexion = crear_conexion(db_session, sede)
+
+        resp = client.post("/dispositivos", json=cuerpo_valido(ubicacion, conexion))
+
+        assert resp.status_code == 201
+        guardado = (
+            db_session.query(Dispositivo)
+            .filter(Dispositivo.id_dspstv == resp.json()["dispositivo"]["id_dspstv"])
+            .one()
+        )
+        assert float(guardado.lttd) == -12.046400
+        assert float(guardado.lngtd) == -77.042800
+
+    def test_con_coordenadas_propias_no_las_pisa_el_centro(
+        self, client, db_session, tecnico_editor
+    ):
+        """El punto enviado se guarda tal cual: es el corazón de DEC-28.
+        Antes el router ignoraba cualquier coordenada del body."""
+        sede, _ = tecnico_editor
+        ubicacion = crear_ubicacion(db_session, sede)
+        ubicacion.lttd = -12.046400
+        ubicacion.lngtd = -77.042800
+        db_session.flush()
+        conexion = crear_conexion(db_session, sede)
+
+        resp = client.post(
+            "/dispositivos",
+            json=cuerpo_valido(ubicacion, conexion, lttd=-12.121200, lngtd=-77.030300),
+        )
+
+        assert resp.status_code == 201
+        guardado = (
+            db_session.query(Dispositivo)
+            .filter(Dispositivo.id_dspstv == resp.json()["dispositivo"]["id_dspstv"])
+            .one()
+        )
+        assert float(guardado.lttd) == -12.121200
+        assert float(guardado.lngtd) == -77.030300
+        # Y no quedó pegado al centro de su ubicación.
+        assert float(guardado.lttd) != float(ubicacion.lttd)
+
+    @pytest.mark.parametrize(
+        "campo,valor",
+        [
+            ("lttd", 200),
+            ("lttd", -91),
+            ("lngtd", 181),
+            ("lngtd", -180.5),
+        ],
+    )
+    def test_rango_invalido_da_422(self, client, db_session, tecnico_editor, campo, valor):
+        """Mismo criterio que UbicacionCrear: Pydantic responde 422 con la
+        causa antes de que reviente el CheckConstraint de la BD."""
+        sede, _ = tecnico_editor
+        ubicacion = crear_ubicacion(db_session, sede)
+        conexion = crear_conexion(db_session, sede)
+
+        resp = client.post(
+            "/dispositivos", json=cuerpo_valido(ubicacion, conexion, **{campo: valor})
+        )
+
+        assert resp.status_code == 422
+
+    def test_la_ficha_expone_el_punto(self, client, db_session, tecnico_editor):
+        """GET /dispositivos/{id} devuelve lttd/lngtd: sin eso el formulario
+        de edición no tendría con qué precargar los campos."""
+        sede, _ = tecnico_editor
+        ubicacion = crear_ubicacion(db_session, sede)
+        conexion = crear_conexion(db_session, sede)
+        resp_crear = client.post(
+            "/dispositivos",
+            json=cuerpo_valido(ubicacion, conexion, lttd=-12.1212, lngtd=-77.0303),
+        )
+        id_dspstv = resp_crear.json()["dispositivo"]["id_dspstv"]
+
+        resp = client.get(f"/dispositivos/{id_dspstv}")
+
+        assert resp.status_code == 200
+        assert resp.json()["lttd"] == -12.1212
+        assert resp.json()["lngtd"] == -77.0303
+
+    def test_editar_actualiza_el_punto(self, client, db_session, tecnico_editor):
+        """PUT /dispositivos/{id}: antes lttd/lngtd estaban bloqueados."""
+        sede, _ = tecnico_editor
+        ubicacion = crear_ubicacion(db_session, sede)
+        conexion = crear_conexion(db_session, sede)
+        id_dspstv = client.post(
+            "/dispositivos", json=cuerpo_valido(ubicacion, conexion)
+        ).json()["dispositivo"]["id_dspstv"]
+
+        resp = client.put(f"/dispositivos/{id_dspstv}", json={"lttd": -12.5, "lngtd": -77.5})
+
+        assert resp.status_code == 200
+        db_session.expire_all()
+        guardado = db_session.query(Dispositivo).filter(Dispositivo.id_dspstv == id_dspstv).one()
+        assert float(guardado.lttd) == -12.5
+        assert float(guardado.lngtd) == -77.5
+
+    def test_editar_rango_invalido_da_422(self, client, db_session, tecnico_editor):
+        sede, _ = tecnico_editor
+        ubicacion = crear_ubicacion(db_session, sede)
+        conexion = crear_conexion(db_session, sede)
+        id_dspstv = client.post(
+            "/dispositivos", json=cuerpo_valido(ubicacion, conexion)
+        ).json()["dispositivo"]["id_dspstv"]
+
+        resp = client.put(f"/dispositivos/{id_dspstv}", json={"lttd": 200})
+
+        assert resp.status_code == 422
+
+    def test_editar_otro_campo_no_toca_el_punto(self, client, db_session, tecnico_editor):
+        """exclude_unset: un PUT que solo cambia el nombre no debe mover el
+        punto GPS."""
+        sede, _ = tecnico_editor
+        ubicacion = crear_ubicacion(db_session, sede)
+        conexion = crear_conexion(db_session, sede)
+        id_dspstv = client.post(
+            "/dispositivos",
+            json=cuerpo_valido(ubicacion, conexion, lttd=-12.1212, lngtd=-77.0303),
+        ).json()["dispositivo"]["id_dspstv"]
+
+        resp = client.put(f"/dispositivos/{id_dspstv}", json={"nmbr": "Renombrado"})
+
+        assert resp.status_code == 200
+        db_session.expire_all()
+        guardado = db_session.query(Dispositivo).filter(Dispositivo.id_dspstv == id_dspstv).one()
+        assert guardado.nmbr == "Renombrado"
+        assert float(guardado.lttd) == -12.1212
+        assert float(guardado.lngtd) == -77.0303
+
+    def test_null_explicito_no_rompe_la_columna_not_null(
+        self, client, db_session, tecnico_editor
+    ):
+        """lttd/lngtd son NOT NULL. Un null explícito en el body pasa el
+        filtro de exclude_unset (se envió, solo que vacío), así que el
+        router lo descarta: 'null' significa 'no lo toques'. Sin esa
+        guarda, esto reventaría como IntegrityError en el commit."""
+        sede, _ = tecnico_editor
+        ubicacion = crear_ubicacion(db_session, sede)
+        conexion = crear_conexion(db_session, sede)
+        id_dspstv = client.post(
+            "/dispositivos",
+            json=cuerpo_valido(ubicacion, conexion, lttd=-12.1212, lngtd=-77.0303),
+        ).json()["dispositivo"]["id_dspstv"]
+
+        resp = client.put(f"/dispositivos/{id_dspstv}", json={"lttd": None, "lngtd": None})
+
+        assert resp.status_code == 200
+        db_session.expire_all()
+        guardado = db_session.query(Dispositivo).filter(Dispositivo.id_dspstv == id_dspstv).one()
+        assert float(guardado.lttd) == -12.1212
+        assert float(guardado.lngtd) == -77.0303
+
+
+# ---------------------------------------------------------------------------
+# I-17 - Dispositivos en el mapa (GET /dispositivos/mapa)
+# ---------------------------------------------------------------------------
+
+
+class TestDispositivosParaMapa:
+    """I-17: el mapa de HU22 pinta el punto propio de cada dispositivo
+    (DEC-28) dentro del polígono de su ubicación.
+
+    Endpoint separado de /ubicaciones/mapa a propósito: "Ubicaciones" y
+    "Dispositivos" son módulos de permiso distintos (HT-03)."""
+
+    def test_devuelve_el_punto_propio_de_cada_dispositivo(
+        self, client, db_session, tecnico_lector
+    ):
+        """DEC-28: el punto es del dispositivo, no una copia del centro de
+        su ubicación; el endpoint tiene que devolver el suyo."""
+        sede, _ = tecnico_lector
+        ubicacion = crear_ubicacion(db_session, sede)
+        ubicacion.lttd = -12.0464
+        ubicacion.lngtd = -77.0428
+        conexion = crear_conexion(db_session, sede)
+        dispositivo = crear_dispositivo(db_session, ubicacion, conexion, nombre="CR1000-Norte")
+        dispositivo.lttd = -12.1212
+        dispositivo.lngtd = -77.0303
+        db_session.flush()
+
+        respuesta = client.get("/dispositivos/mapa")
+
+        assert respuesta.status_code == 200
+        item = respuesta.json()[0]
+        assert item["nmbr"] == "CR1000-Norte"
+        assert item["lttd"] == -12.1212
+        assert item["lngtd"] == -77.0303
+        # Y no el centro de su ubicación.
+        assert item["lttd"] != float(ubicacion.lttd)
+
+    def test_trae_los_campos_del_panel(self, client, db_session, tecnico_lector):
+        """El InfoWindow muestra nombre, marca y estado; id_ubccn viaja
+        para relacionar el punto con su zona."""
+        sede, _ = tecnico_lector
+        ubicacion = crear_ubicacion(db_session, sede)
+        conexion = crear_conexion(db_session, sede)
+        crear_dispositivo(db_session, ubicacion, conexion, nombre="CR1000-A", marca="Campbell")
+
+        item = client.get("/dispositivos/mapa").json()[0]
+
+        assert item["nmbr"] == "CR1000-A"
+        assert item["mrc"] == "Campbell"
+        assert item["estd"] == "Activo"
+        assert item["id_ubccn"] == ubicacion.id_ubccn
+
+    def test_incluye_los_inactivos(self, client, db_session, tecnico_lector):
+        """Igual que las ubicaciones Inactivas en HU22 CA1: se muestran, en
+        otro color. Filtrarlos acá dejaría al frontend sin nada que pintar
+        en gris."""
+        sede, _ = tecnico_lector
+        ubicacion = crear_ubicacion(db_session, sede)
+        con_a = crear_conexion(db_session, sede, nombre="Conexion A")
+        con_b = crear_conexion(db_session, sede, nombre="Conexion B")
+        crear_dispositivo(db_session, ubicacion, con_a, nombre="Activo-1", estado="Activo")
+        crear_dispositivo(db_session, ubicacion, con_b, nombre="Inactivo-1", estado="Inactivo")
+
+        estados = {d["nmbr"]: d["estd"] for d in client.get("/dispositivos/mapa").json()}
+
+        assert estados == {"Activo-1": "Activo", "Inactivo-1": "Inactivo"}
+
+    def test_devuelve_los_de_todas_las_ubicaciones(self, client, db_session, tecnico_lector):
+        """El mapa general los muestra todos, de todas las zonas."""
+        sede, _ = tecnico_lector
+        primera = crear_ubicacion(db_session, sede, nombre="Zona 1")
+        segunda = crear_ubicacion(db_session, sede, nombre="Zona 2")
+        crear_dispositivo(
+            db_session, primera, crear_conexion(db_session, sede, nombre="C1"), nombre="D1"
+        )
+        crear_dispositivo(
+            db_session, segunda, crear_conexion(db_session, sede, nombre="C2"), nombre="D2"
+        )
+
+        items = client.get("/dispositivos/mapa").json()
+
+        assert {d["nmbr"] for d in items} == {"D1", "D2"}
+        assert {d["id_ubccn"] for d in items} == {primera.id_ubccn, segunda.id_ubccn}
+
+    def test_sin_dispositivos_devuelve_lista_vacia(self, client, db_session, tecnico_lector):
+        """No es un error: el mapa igual pinta las ubicaciones."""
+        sede, _ = tecnico_lector
+        crear_ubicacion(db_session, sede)
+
+        respuesta = client.get("/dispositivos/mapa")
+
+        assert respuesta.status_code == 200
+        assert respuesta.json() == []
+
+    def test_cliente_final_solo_ve_los_de_sus_ubicaciones(self, client, db_session, fabrica):
+        """Mismo filtro por rol que listar_dispositivos (HU21): es una regla
+        de acceso, no de presentación."""
+        rol = fabrica.rol("Cliente Final")
+        sede = fabrica.sede()
+        usuario = fabrica.usuario(rol=rol)
+        agregar_permiso(db_session, usuario, sede, "Dispositivos", "Lectura", rol)
+
+        asignada = crear_ubicacion(db_session, sede, nombre="Asignada")
+        ajena = crear_ubicacion(db_session, sede, nombre="Ajena")
+        crear_dispositivo(
+            db_session, asignada, crear_conexion(db_session, sede, nombre="C-mia"), nombre="Mio"
+        )
+        crear_dispositivo(
+            db_session, ajena, crear_conexion(db_session, sede, nombre="C-ajena"), nombre="Ajeno"
+        )
+        db_session.add(PermisoUbicacion(id_usr=usuario.id_usr, id_ubccn=asignada.id_ubccn))
+        db_session.flush()
+
+        app.dependency_overrides[get_current_user] = lambda: usuario_jwt(
+            usuario, rol.nmbr, sede_id=sede.id_sd
+        )
+
+        nombres = [d["nmbr"] for d in client.get("/dispositivos/mapa").json()]
+
+        assert nombres == ["Mio"]
+
+    def test_aislamiento_por_sede(self, client, db_session, fabrica):
+        """HT-09 CA3: un usuario 'por_sede' no ve dispositivos de otra sede.
+        Dispositivo no tiene id_sd propio: se resuelve por su ubicación."""
+        rol = fabrica.rol("Técnico CENERIS")
+        sede_propia = fabrica.sede()
+        sede_ajena = fabrica.sede()
+        usuario = fabrica.usuario(rol=rol)
+        agregar_permiso(db_session, usuario, sede_propia, "Dispositivos", "Lectura", rol)
+
+        propia = crear_ubicacion(db_session, sede_propia, nombre="De mi sede")
+        ajena = crear_ubicacion(db_session, sede_ajena, nombre="De otra sede")
+        crear_dispositivo(
+            db_session, propia, crear_conexion(db_session, sede_propia, nombre="C1"), nombre="Mio"
+        )
+        crear_dispositivo(
+            db_session, ajena, crear_conexion(db_session, sede_ajena, nombre="C2"), nombre="Ajeno"
+        )
+
+        app.dependency_overrides[get_current_user] = lambda: usuario_jwt(
+            usuario, rol.nmbr, sede_id=sede_propia.id_sd
+        )
+
+        nombres = [d["nmbr"] for d in client.get("/dispositivos/mapa").json()]
+
+        assert nombres == ["Mio"]
+
+    def test_denegado_sin_permiso_de_lectura_en_dispositivos(self, client, db_session, fabrica):
+        """La razón de que este endpoint exista aparte: exige permiso sobre
+        "Dispositivos". Un usuario con Lectura solo sobre "Ubicaciones"
+        -que sí podría ver /ubicaciones/mapa- no pasa de acá."""
+        rol = fabrica.rol("Cliente Final")
+        sede = fabrica.sede()
+        usuario = fabrica.usuario(rol=rol)
+        agregar_permiso(db_session, usuario, sede, "Ubicaciones", "Lectura", rol)
+
+        app.dependency_overrides[get_current_user] = lambda: usuario_jwt(
+            usuario, rol.nmbr, sede_id=sede.id_sd
+        )
+
+        assert client.get("/dispositivos/mapa").status_code == 403
+
+    def test_ruta_mapa_no_la_captura_el_endpoint_de_ficha(self, client, tecnico_lector):
+        """GET /dispositivos/{id_dspstv} está declarado después de /mapa; si
+        se invirtiera el orden, "mapa" entraría como id y daría 422."""
+        respuesta = client.get("/dispositivos/mapa")
+
+        assert respuesta.status_code == 200
+        assert isinstance(respuesta.json(), list)

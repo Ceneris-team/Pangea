@@ -16,6 +16,19 @@ nombre único. CA3/CA4 (redirección al listado y cancelar) son de
 frontend. Solo Administrador y Técnico CENERIS registran ubicaciones:
 se exige Edición sobre el módulo "Ubicaciones" (HT-09), mismo mecanismo
 que el GET de arriba usa con LECTURA.
+
+HU 08 (ampliación) - Editar ubicación
+
+PUT /ubicaciones/{id_ubccn} edita nombre, descripción, punto de
+referencia, polígono y estado. La SEDE no es editable: ver el docstring
+de actualizar_ubicacion y el de UbicacionActualizar.
+
+HU 22 - Ver ubicaciones en mapa
+
+GET /ubicaciones/mapa devuelve, en una sola llamada, todo lo que la vista
+de mapa necesita: el punto y el polígono de cada ubicación (CA1) más los
+datos del panel emergente, incluida la cantidad de dispositivos asociados
+(CA2). CA3 y CA4 son navegación, puro frontend.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -29,7 +42,8 @@ from app.models import (
 )
 from app.security.permisos import require_permiso, verificar_sede, LECTURA, EDICION
 from app.schemas import (
-    ParametroListItem, UbicacionCrear, UbicacionCreada, UbicacionDetalle, UbicacionListItem,
+    ParametroListItem, UbicacionActualizar, UbicacionCrear, UbicacionCreada, UbicacionDetalle,
+    UbicacionListItem, UbicacionParaMapa,
 )
 
 router = APIRouter(prefix="/ubicaciones", tags=["Ubicaciones"])
@@ -69,6 +83,57 @@ def listar_ubicaciones(
     items = [UbicacionListItem.model_validate(u) for u in ubicaciones]
 
     return {"total": total, "pagina": pagina, "por_pagina": por_pagina, "items": items}
+
+
+@router.get("/mapa", response_model=list[UbicacionParaMapa])
+def ubicaciones_para_mapa(
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(require_permiso("Ubicaciones", LECTURA)),
+):
+    """HU22: las ubicaciones que pinta la vista de mapa, en una sola
+    llamada.
+
+    Se declara ANTES de GET /{id_ubccn} a propósito: si fuera después, esa
+    ruta capturaría "mapa" como si fuera un id y respondería 422.
+
+    Sin paginar ni filtrar por estado: CA1 pide "todas las ubicaciones
+    registradas", y las Inactivas se muestran igual, en gris. El filtro de
+    visibilidad por rol sí se mantiene -mismo criterio que
+    listar_ubicaciones-, porque es una regla de acceso, no de presentación.
+
+    Existe como endpoint propio para no hacer N+1: el listado de HU07 no
+    trae plgn_gjsn, así que el mapa tenía que pedir el detalle de cada
+    ubicación por separado. Acá todo sale en una consulta, con el conteo
+    de dispositivos (CA2) resuelto por LEFT JOIN + COUNT en vez de una
+    consulta por ubicación.
+    """
+    filas = (
+        db.query(Ubicacion, func.count(Dispositivo.id_dspstv))
+        # LEFT JOIN: una ubicación sin dispositivos tiene que aparecer en
+        # el mapa igual, con el conteo en 0.
+        .outerjoin(Dispositivo, Dispositivo.id_ubccn == Ubicacion.id_ubccn)
+        .group_by(Ubicacion.id_ubccn)
+    )
+
+    if usuario.get("rol") not in ROLES_CON_ACCESO_TOTAL:
+        id_usr = int(usuario["sub"])
+        filas = filas.join(
+            PermisoUbicacion, PermisoUbicacion.id_ubccn == Ubicacion.id_ubccn
+        ).filter(PermisoUbicacion.id_usr == id_usr)
+
+    return [
+        UbicacionParaMapa(
+            id_ubccn=ubicacion.id_ubccn,
+            nmbr=ubicacion.nmbr,
+            dscrpcn=ubicacion.dscrpcn,
+            lttd=ubicacion.lttd,
+            lngtd=ubicacion.lngtd,
+            estd=ubicacion.estd,
+            plgn_gjsn=ubicacion.plgn_gjsn,
+            dispositivos_count=cantidad,
+        )
+        for ubicacion, cantidad in filas.order_by(Ubicacion.nmbr).all()
+    ]
 
 
 def _verificar_acceso_ubicacion(db: Session, usuario: dict, ubicacion: Ubicacion) -> None:
@@ -215,4 +280,81 @@ def crear_ubicacion(
     return {
         "mensaje": "Ubicación registrada correctamente",
         "ubicacion": UbicacionCreada.model_validate(ubicacion),
+    }
+
+
+@router.put("/{id_ubccn}")
+def actualizar_ubicacion(
+    id_ubccn: int,
+    body: UbicacionActualizar,
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(require_permiso("Ubicaciones", EDICION)),
+):
+    """HU08 (ampliación): editar una ubicación ya registrada.
+
+    Mismos permisos que el alta -Edición sobre "Ubicaciones"-, y PUT como
+    el resto de los recursos del proyecto (conexiones_ftp, dispositivos,
+    mapeos). El body es parcial: solo se toca lo que venga.
+
+    La sede NO se puede cambiar acá: UbicacionActualizar no declara id_sd,
+    así que Pydantic lo descarta si alguien lo manda. Mover una ubicación
+    de sede arrastraría a sus dispositivos y a los permisos ya concedidos
+    sobre ella; es una operación de jerarquía administrativa, no una
+    edición de la zona.
+    """
+    ubicacion = db.query(Ubicacion).filter(Ubicacion.id_ubccn == id_ubccn).first()
+    if ubicacion is None:
+        raise HTTPException(status_code=404, detail="Ubicación no encontrada")
+
+    # Mismo aislamiento por sede que el resto del módulo (HT-09 CA3): un
+    # usuario 'por_sede' no edita ubicaciones de otra sede.
+    verificar_sede(usuario, ubicacion.id_sd, modulo="Ubicaciones", accion=EDICION)
+
+    # CA de HU08: nombre único DENTRO de la sede (uq_ubccn_sd_nombre). Se
+    # excluye el propio registro: guardar sin cambiar el nombre no puede
+    # chocar consigo mismo.
+    if body.nmbr is not None:
+        duplicada = (
+            db.query(Ubicacion)
+            .filter(
+                Ubicacion.id_sd == ubicacion.id_sd,
+                func.lower(Ubicacion.nmbr) == body.nmbr.lower(),
+                Ubicacion.id_ubccn != id_ubccn,
+            )
+            .first()
+        )
+        if duplicada is not None:
+            raise HTTPException(
+                status_code=409, detail="Ya existe una ubicación con ese nombre en esta sede"
+            )
+
+    datos = body.model_dump(exclude_unset=True)
+
+    # dscrpcn es la única columna nullable del conjunto: un string vacío se
+    # normaliza a NULL, igual que en el alta. El resto son NOT NULL, así
+    # que un null explícito se descarta -significa "no lo toques"- en vez
+    # de reventar como IntegrityError en el commit.
+    if "dscrpcn" in datos:
+        datos["dscrpcn"] = (datos["dscrpcn"].strip() or None) if datos["dscrpcn"] else None
+    for campo in ("nmbr", "lttd", "lngtd", "plgn_gjsn", "estd"):
+        if campo in datos and datos[campo] is None:
+            del datos[campo]
+
+    for campo, valor in datos.items():
+        setattr(ubicacion, campo, valor)
+
+    try:
+        db.commit()
+    except IntegrityError:
+        # Red de seguridad ante dos ediciones simultáneas: el UNIQUE real
+        # de la BD es la garantía, el chequeo de arriba solo da el mensaje.
+        db.rollback()
+        raise HTTPException(
+            status_code=409, detail="Ya existe una ubicación con ese nombre en esta sede"
+        )
+    db.refresh(ubicacion)
+
+    return {
+        "mensaje": "Ubicación actualizada correctamente",
+        "ubicacion": UbicacionDetalle.model_validate(ubicacion),
     }

@@ -1,10 +1,11 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { apiFetch, ApiError } from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import Sidebar from "../components/layout/Sidebar";
 import Topbar from "../components/layout/Topbar";
 import MapaDibujoPoligono, { type PoligonoGeoJSON } from "../components/MapaDibujoPoligono";
+import { centroideDePoligono } from "../components/poligono";
 
 /**
  * HU08 - Agregar ubicación.
@@ -18,8 +19,11 @@ import MapaDibujoPoligono, { type PoligonoGeoJSON } from "../components/MapaDibu
  * Geometría (decisión de diseño del equipo): un DISPOSITIVO se ubica con
  * un punto GPS simple; una UBICACIÓN se delimita además con un polígono
  * GeoJSON de varios vértices, que dibuja el contorno real e irregular del
- * terreno. Por eso lat/lng y el polígono son ambos obligatorios: el punto
- * es la referencia/centro y el polígono el límite de la zona.
+ * terreno. El punto de referencia (lttd/lngtd) sigue siendo obligatorio en
+ * la BD, pero ya no se teclea: se CALCULA del contorno dibujado (ver
+ * components/poligono.ts). Pedirlo a mano era redundante -quien dibuja la
+ * zona ya dijo dónde está- y permitía que el centro declarado cayera fuera
+ * de su propio polígono, cosa que pasó con datos reales.
  */
 
 interface Sede {
@@ -30,26 +34,14 @@ interface Sede {
 interface UbicacionForm {
   nmbr: string;
   dscrpcn: string;
-  lttd: string;
-  lngtd: string;
   id_sd: string;
 }
 
 const FORM_VACIO: UbicacionForm = {
   nmbr: "",
   dscrpcn: "",
-  lttd: "",
-  lngtd: "",
   id_sd: "",
 };
-
-/** Devuelve el número solo si el texto es un número válido: "" y "-" dan
- *  NaN y no deben dibujarse como coordenada 0,0 en el mapa. */
-function aNumero(texto: string): number | null {
-  if (texto.trim() === "") return null;
-  const valor = Number(texto);
-  return Number.isFinite(valor) ? valor : null;
-}
 
 export default function AgregarUbicacion() {
   const navigate = useNavigate();
@@ -77,8 +69,10 @@ export default function AgregarUbicacion() {
     setForm((prev) => ({ ...prev, [campo]: valor }));
   }
 
-  const latitud = aNumero(form.lttd);
-  const longitud = aNumero(form.lngtd);
+  // El punto de referencia se DERIVA del contorno, ya no se teclea: pedir
+  // lat/lng a mano a quien ya dibujó la zona es redundante y permite que
+  // el centro quede fuera de su propio polígono.
+  const centro = useMemo(() => centroideDePoligono(poligono), [poligono]);
 
   /** CA4: descarta el formulario y vuelve al listado. No llama al backend. */
   function handleCancelar() {
@@ -98,19 +92,8 @@ export default function AgregarUbicacion() {
       setError("El nombre de la ubicación es obligatorio");
       return;
     }
-    if (latitud === null || longitud === null) {
-      setError("La latitud y la longitud son obligatorias");
-      return;
-    }
-    if (latitud < -90 || latitud > 90) {
-      setError("La latitud debe estar entre -90 y 90");
-      return;
-    }
-    if (longitud < -180 || longitud > 180) {
-      setError("La longitud debe estar entre -180 y 180");
-      return;
-    }
-    if (!poligono) {
+    // El contorno es lo único que se pide: el punto sale de él.
+    if (!poligono || !centro) {
       setError("Dibuja sobre el mapa el contorno de la zona (mínimo 3 vértices)");
       return;
     }
@@ -123,8 +106,9 @@ export default function AgregarUbicacion() {
         body: {
           nmbr: form.nmbr.trim(),
           dscrpcn: form.dscrpcn.trim() || null,
-          lttd: latitud,
-          lngtd: longitud,
+          // Derivado del contorno, no tecleado (ver `centro`).
+          lttd: centro.lat,
+          lngtd: centro.lng,
           plgn_gjsn: poligono,
           ...(form.id_sd ? { id_sd: Number(form.id_sd) } : {}),
         },
@@ -232,45 +216,6 @@ export default function AgregarUbicacion() {
                   />
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                  <div>
-                    <label className={labelClase} htmlFor="lttd">
-                      Latitud <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      id="lttd"
-                      type="number"
-                      step="any"
-                      min={-90}
-                      max={90}
-                      value={form.lttd}
-                      onChange={(e) => actualizarCampo("lttd", e.target.value)}
-                      placeholder="-12.046400"
-                      className={inputClase}
-                    />
-                    <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">Entre -90 y 90.</p>
-                  </div>
-                  <div>
-                    <label className={labelClase} htmlFor="lngtd">
-                      Longitud <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      id="lngtd"
-                      type="number"
-                      step="any"
-                      min={-180}
-                      max={180}
-                      value={form.lngtd}
-                      onChange={(e) => actualizarCampo("lngtd", e.target.value)}
-                      placeholder="-77.042800"
-                      className={inputClase}
-                    />
-                    <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">
-                      Entre -180 y 180.
-                    </p>
-                  </div>
-                </div>
-
                 <div>
                   <span className={labelClase}>
                     Contorno de la zona <span className="text-red-500">*</span>
@@ -278,9 +223,19 @@ export default function AgregarUbicacion() {
                   <MapaDibujoPoligono
                     valor={poligono}
                     onChange={setPoligono}
-                    centroLat={latitud}
-                    centroLng={longitud}
+                    centroLat={centro?.lat ?? null}
+                    centroLng={centro?.lng ?? null}
                   />
+                  <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                    El punto de referencia de la zona se calcula del contorno:{" "}
+                    {centro ? (
+                      <span className="font-mono">
+                        {centro.lat.toFixed(6)}, {centro.lng.toFixed(6)}
+                      </span>
+                    ) : (
+                      "se definirá al cerrar el contorno."
+                    )}
+                  </p>
                 </div>
               </div>
 
