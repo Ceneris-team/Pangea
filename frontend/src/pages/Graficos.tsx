@@ -65,8 +65,16 @@ const COLORES_SERIE = ["#3987e5", "#d95926", "#199e70", "#c98500"];
 // rango activo incluye la hora actual.
 const INTERVALO_AUTOACTUALIZACION_MS = 60_000;
 
-function formatearFechaCorta(iso: string): string {
-  return new Date(iso).toLocaleString("es", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+// HU15/HU14: los datos se almacenan en UTC y se muestran en la zona
+// horaria configurada por el usuario.
+function formatearFechaCorta(iso: string, zonaHoraria: string): string {
+  return new Date(iso).toLocaleString("es", {
+    timeZone: zonaHoraria,
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function construirQuery(
@@ -86,7 +94,7 @@ function construirQuery(
 }
 
 export default function Graficos() {
-  const { nombreCompleto, rol, logout } = useAuth();
+  const { nombreCompleto, rol, logout, zonaHoraria } = useAuth();
 
   const [parametros, setParametros] = useState<ParametroItem[]>([]);
   const [ubicaciones, setUbicaciones] = useState<UbicacionItem[]>([]);
@@ -388,8 +396,8 @@ export default function Graficos() {
                           key={`${item.id_prmtr}-${item.id_registro}`}
                           className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm border-b border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
                         >
-                          <td className="px-6 py-4">{fecha.toLocaleDateString("es")}</td>
-                          <td className="px-6 py-4">{fecha.toLocaleTimeString("es")}</td>
+                          <td className="px-6 py-4">{fecha.toLocaleDateString("es", { timeZone: zonaHoraria })}</td>
+                          <td className="px-6 py-4">{fecha.toLocaleTimeString("es", { timeZone: zonaHoraria })}</td>
                           <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">{item.parametro_nombre}</td>
                           <td className="px-6 py-4">
                             {item.vlr} {item.undd}
@@ -410,6 +418,7 @@ export default function Graficos() {
                     parametro={parametro}
                     items={items}
                     tipoGrafico={tipoGrafico}
+                    zonaHoraria={zonaHoraria}
                     hover={hover?.parametroId === parametro.id_prmtr ? hover : null}
                     onHover={setHover}
                   />
@@ -427,11 +436,12 @@ interface GraficoDeParametroProps {
   parametro: ParametroItem;
   items: MedicionNumerica[];
   tipoGrafico: TipoGrafico;
+  zonaHoraria: string;
   hover: HoverInfo | null;
   onHover: (hover: HoverInfo | null) => void;
 }
 
-function GraficoDeParametro({ parametro, items, tipoGrafico, hover, onHover }: GraficoDeParametroProps) {
+function GraficoDeParametro({ parametro, items, tipoGrafico, zonaHoraria, hover, onHover }: GraficoDeParametroProps) {
   // Serie por ubicación, hasta 4 (paleta categórica validada). El resto se
   // agrupa como "Otras" en vez de generar un color nuevo por índice.
   const { series, otrasUbicaciones } = useMemo(() => {
@@ -544,10 +554,10 @@ function GraficoDeParametro({ parametro, items, tipoGrafico, hover, onHover }: G
 
             {/* Eje de tiempo: primero y último timestamp */}
             <text x={PAD.left} y={ALTO - 10} fontSize={10} fill="rgba(255,255,255,0.4)">
-              {formatearFechaCorta(new Date(minT).toISOString())}
+              {formatearFechaCorta(new Date(minT).toISOString(), zonaHoraria)}
             </text>
             <text x={ANCHO - PAD.right} y={ALTO - 10} textAnchor="end" fontSize={10} fill="rgba(255,255,255,0.4)">
-              {formatearFechaCorta(new Date(maxT).toISOString())}
+              {formatearFechaCorta(new Date(maxT).toISOString(), zonaHoraria)}
             </text>
 
             {series.map((s, i) => {
@@ -597,7 +607,7 @@ function GraficoDeParametro({ parametro, items, tipoGrafico, hover, onHover }: G
                 {hover.item.vlr} {hover.item.undd}
               </div>
               <div className="text-gray-500 dark:text-gray-400">{hover.item.ubicacion_nombre}</div>
-              <div className="text-gray-500 dark:text-gray-400">{formatearFechaCorta(hover.item.fch_hr)}</div>
+              <div className="text-gray-500 dark:text-gray-400">{formatearFechaCorta(hover.item.fch_hr, zonaHoraria)}</div>
             </div>
           )}
         </div>
