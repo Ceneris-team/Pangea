@@ -220,10 +220,26 @@ async def websocket_telemetria(websocket: WebSocket, token: str | None = None):
         )
 
         while True:
-            mensaje = await pubsub.get_message(
-                ignore_subscribe_messages=True,
-                timeout=SEGUNDOS_ENTRE_PINGS,
-            )
+            if ids_permitidas:
+                mensaje = await pubsub.get_message(
+                    ignore_subscribe_messages=True,
+                    timeout=SEGUNDOS_ENTRE_PINGS,
+                )
+            else:
+                # Sin ubicaciones asignadas no hay ningún canal suscrito, y
+                # llamar a get_message() sobre un PubSub sin canales lanza
+                # RuntimeError ("pubsub connection not set: did you forget
+                # to call subscribe()?"), que cerraba la conexión con un
+                # 1006 en cuanto el usuario no tenía nada asignado -el
+                # caso real que apareció en producción, donde el Cliente
+                # Final todavía no tiene filas en prms_ubccn-.
+                #
+                # Se espera el mismo intervalo y se cae al ping de abajo:
+                # la conexión queda viva y lista para cuando el
+                # administrador le asigne una ubicación (el cliente
+                # reconecta al recargar y ahí sí se suscribe).
+                await asyncio.sleep(SEGUNDOS_ENTRE_PINGS)
+                mensaje = None
 
             if mensaje is None:
                 # Sin eventos en la ventana: se manda un ping de
