@@ -4,7 +4,7 @@ import { useAuth } from "../context/AuthContext";
 import Sidebar from "../components/layout/Sidebar";
 import Topbar from "../components/layout/Topbar";
 import SelectorRangoFechas from "../components/SelectorRangoFechas";
-import { rangoUltimas24Horas, type RangoFechas } from "../utils/fechas";
+import { formatearFechaHoraEnZona, rangoUltimas24Horas, type RangoFechas } from "../utils/fechas";
 
 interface ParametroItem {
   id_prmtr: number;
@@ -48,7 +48,7 @@ function construirQuery(
 }
 
 export default function ConsultaDatos() {
-  const { nombreCompleto, rol, logout } = useAuth();
+  const { nombreCompleto, rol, logout, zonaHoraria } = useAuth();
 
   const [parametros, setParametros] = useState<ParametroItem[]>([]);
   const [ubicaciones, setUbicaciones] = useState<UbicacionItem[]>([]);
@@ -265,7 +265,7 @@ export default function ConsultaDatos() {
                             {m.vlr}
                             {typeof m.vlr === "number" && m.undd ? ` ${m.undd}` : ""}
                           </td>
-                          <td className="px-6 py-4">{new Date(m.fch_hr).toLocaleString()}</td>
+                          <td className="px-6 py-4">{formatearFechaHoraEnZona(m.fch_hr, zonaHoraria)}</td>
                         </tr>
                       ))}
                   </tbody>
