@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { GoogleMap, Marker, Polygon, Polyline, useJsApiLoader } from "@react-google-maps/api";
+import { GoogleMap, Marker, Polygon, useJsApiLoader } from "@react-google-maps/api";
 import {
   GOOGLE_MAPS_API_KEY,
   GOOGLE_MAPS_LIBRARIES,
@@ -119,6 +119,12 @@ export default function MapaDibujoPoligono({ valor, onChange, centroLat, centroL
   // El <Polygon> editable, para leer sus vértices cuando el usuario los
   // arrastra. Vive fuera de React porque lo instancia Google Maps.
   const poligonoRef = useRef<google.maps.Polygon | null>(null);
+  const mapaRef = useRef<google.maps.Map | null>(null);
+  const [mapaListo, setMapaListo] = useState(false);
+  // UNA sola polilínea para el trazo en curso, creada con la API nativa y
+  // reutilizada: se le cambia el path en vez de recrearla. Con <Polyline>
+  // de la librería cada cambio dejaba el trazo anterior pintado.
+  const lineaRef = useRef<google.maps.Polyline | null>(null);
   const listenersRef = useRef<google.maps.MapsEventListener[]>([]);
 
   const centro = useMemo(
@@ -212,7 +218,13 @@ export default function MapaDibujoPoligono({ valor, onChange, centroLat, centroL
 
   function limpiar() {
     quitarListeners();
+    poligonoRef.current?.setMap(null);
     poligonoRef.current = null;
+    // La línea en curso se borra acá además de en su onUnmount: así el
+    // mapa queda limpio en el mismo gesto, sin depender de cuándo React
+    // desmonte el componente.
+    lineaRef.current?.setMap(null);
+    lineaRef.current = null;
     setEnCurso([]);
     setEncuadreFijado(null);
     onChange(null);
@@ -222,6 +234,42 @@ export default function MapaDibujoPoligono({ valor, onChange, centroLat, centroL
     // Los listeners viven en objetos de Google Maps, fuera de React: sin
     // esto quedarían colgados al desmontar el formulario.
     return () => quitarListeners();
+  }, []);
+
+  /** Mantiene la línea del trazo en curso en sincronía con `enCurso`.
+   *
+   *  Se hace con la API nativa y UNA sola instancia reutilizada, en vez de
+   *  un <Polyline> declarativo: la librería no actualiza el trazo cuando
+   *  cambia `path` ni lo borra al desmontarse, así que cada clic dejaba
+   *  una línea huérfana y "Deshacer"/"Limpiar" no las quitaban. */
+  useEffect(() => {
+    const mapa = mapaRef.current;
+    if (!mapa) return;
+
+    const debeVerse = !cerrado && enCurso.length >= 2;
+
+    if (!debeVerse) {
+      lineaRef.current?.setMap(null);
+      return;
+    }
+
+    if (!lineaRef.current) {
+      lineaRef.current = new google.maps.Polyline({
+        strokeColor: "#8fb300",
+        strokeWeight: 2,
+      });
+    }
+    lineaRef.current.setPath(enCurso);
+    lineaRef.current.setMap(mapa);
+  }, [enCurso, cerrado, mapaListo]);
+
+  useEffect(() => {
+    // La línea vive fuera de React: hay que retirarla del mapa al
+    // desmontar el formulario o quedaría dibujada.
+    return () => {
+      lineaRef.current?.setMap(null);
+      lineaRef.current = null;
+    };
   }, []);
 
   /** Monta el buscador de lugares. Solo reencuadra el mapa: no toca el
@@ -375,6 +423,16 @@ export default function MapaDibujoPoligono({ valor, onChange, centroLat, centroL
           zoom={15}
           onClick={onMapaClick}
           options={{ draggableCursor: cerrado ? undefined : "crosshair" }}
+          // La instancia hace falta para dibujar la línea del trazo con la
+          // API nativa (ver el efecto que sincroniza `lineaRef`).
+          onLoad={(mapa) => {
+            mapaRef.current = mapa;
+            setMapaListo(true);
+          }}
+          onUnmount={() => {
+            mapaRef.current = null;
+            setMapaListo(false);
+          }}
         >
           {/* Contorno ya cerrado: editable arrastrando vértices. */}
           {cerrado && verticesCerrados.length >= VERTICES_MINIMOS && (
@@ -387,23 +445,25 @@ export default function MapaDibujoPoligono({ valor, onChange, centroLat, centroL
             />
           )}
 
-          {/* Mientras se dibuja: la línea que une lo marcado hasta ahora.
-              Con 2 puntos todavía no hay área, pero conviene mostrar el
-              segmento para que el trazo no parezca perdido. */}
-          {!cerrado && enCurso.length >= 2 && (
-            <Polyline
-              path={enCurso}
-              options={{ strokeColor: "#8fb300", strokeWeight: 2 }}
-            />
-          )}
+          {/* La línea del trazo en curso NO se declara acá: la maneja un
+              efecto con la API nativa (ver `lineaRef`). Con <Polyline> de
+              la librería quedaban trazos huérfanos sobre el mapa, porque
+              no sincroniza `path` ni limpia su geometría al desmontarse. */}
 
           {/* Vértices marcados. El primero cierra el anillo al hacer clic,
-              por eso va más grande y con su propio cursor. */}
+              por eso va más grande y con su propio cursor.
+
+              La key va por ÍNDICE a propósito: así React reutiliza el
+              marcador y solo desmonta el sobrante al deshacer. Con una key
+              por coordenadas se creaba uno nuevo en cada cambio y los
+              viejos quedaban pintados. onUnmount es la red de seguridad:
+              la librería no retira el marcador del mapa al desmontarlo. */}
           {!cerrado &&
             enCurso.map((punto, i) => (
               <Marker
                 key={i}
                 position={punto}
+                onUnmount={(marcador) => marcador.setMap(null)}
                 onClick={i === 0 ? cerrarPoligono : undefined}
                 title={i === 0 ? "Clic para cerrar el contorno" : `Vértice ${i + 1}`}
                 icon={{

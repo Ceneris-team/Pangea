@@ -89,7 +89,10 @@ export default function MapaUbicacionesPage() {
   return (
     <div className="font-sans">
       <div className="flex h-screen bg-transparent transition-colors duration-300 overflow-hidden">
-        <Sidebar onLogout={logout} activo="ubicaciones" rol={rol} />
+        {/* "mapa-ubicaciones", no "ubicaciones": son dos items distintos del
+            menú. Con el valor anterior se resaltaba "Gestion de Ubicaciones"
+            mientras el usuario estaba en el mapa. */}
+        <Sidebar onLogout={logout} activo="mapa-ubicaciones" rol={rol} />
 
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* TOP NAVBAR */}

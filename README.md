@@ -1,4 +1,6 @@
-# Pangea 4.0
+
+
+ # Pangea 4.0
 
 Plataforma de monitoreo ambiental en tiempo real. Backend en FastAPI +
 PostgreSQL, frontend en React + Vite + TypeScript.

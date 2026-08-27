@@ -16,6 +16,7 @@ import Dispositivos from "../pages/Dispositivos";
 import AgregarUbicacion from "../pages/AgregarUbicacion";
 import DetalleUbicacion from "../pages/DetalleUbicacion";
 import MapaUbicacionesPage from "../pages/MapaUbicacionesPage";
+import MapaEstacionesPage from "../pages/MapaEstacionesPage";
 import EditarUbicacion from "../pages/EditarUbicacion";
 import { ROLES } from "../config/roles";
 import ConexionesFTP from "../pages/ConexionesFTP";
@@ -192,6 +193,22 @@ export default function AppRouter() {
             element={
               <ProtectedRoute rolesPermitidos={ROLES_CONEXIONES_FTP}>
                 <ConexionesFTP />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* HU17: mapa de estaciones del Cliente Final, con telemetría en
+              vivo. Es una pantalla DISTINTA de /ubicaciones/mapa (HU22,
+              vista de Administrador): esta muestra solo las ubicaciones
+              asignadas al usuario y su último dato. Sin restricción de rol
+              adicional -el backend ya filtra por prms_ubccn (HU21) y exige
+              Lectura sobre "Tableros"-, así que un Administrador también
+              puede entrar y ve todas, igual que en el resto de la app. */}
+          <Route
+            path="/mapa-estaciones"
+            element={
+              <ProtectedRoute>
+                <MapaEstacionesPage />
               </ProtectedRoute>
             }
           />

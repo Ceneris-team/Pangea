@@ -1,5 +1,8 @@
 fastapi
-uvicorn
+# HU17: los extras de uvicorn traen `websockets`, sin el cual uvicorn
+# RECHAZA los handshakes de WebSocket (el endpoint /mapa-cliente/ws no
+# funciona ni en local). `uvicorn` pelado no incluye ningún protocolo WS.
+uvicorn[standard]
 sqlalchemy
 alembic
 celery
