@@ -64,6 +64,89 @@ class UbicacionDetalle(UbicacionListItem):
     plgn_gjsn: dict
 
 
+class UbicacionParaMapa(UbicacionListItem):
+    """HU22: una ubicación tal como la necesita la vista de mapa.
+
+    Trae de una sola vez lo que el mapa pinta y lo que el panel emergente
+    muestra al hacer clic en un marcador (CA2): los campos del listado
+    (nombre, descripción, estado y el punto lttd/lngtd) más el polígono y
+    el conteo de dispositivos.
+
+    Por qué un schema propio y no agregar los campos a UbicacionListItem:
+    UbicacionDetalle HEREDA de UbicacionListItem, así que cualquier campo
+    agregado al padre se filtraría también a GET /ubicaciones/{id}, que no
+    lo necesita -y el conteo obligaría a ese endpoint a hacer un JOIN que
+    hoy no hace-. Acá el costo se paga solo en el endpoint que lo usa.
+    """
+
+    plgn_gjsn: dict
+    # CA2: "la cantidad de dispositivos asociados". Se calcula con un
+    # LEFT JOIN + COUNT en el router; una ubicación sin dispositivos
+    # cuenta 0, no se omite del mapa.
+    dispositivos_count: int
+
+
+# Los dos estados que maneja una Ubicación (mismos valores que ofrece el
+# filtro del listado, HU07, y que pone el server_default 'Activa').
+ESTADOS_UBICACION = ("Activa", "Inactiva")
+
+
+def _validar_nombre_ubicacion(valor: str) -> str:
+    """Un nombre de solo espacios pasa min_length=1 pero no es un nombre:
+    se normaliza acá para que el UNIQUE por sede compare siempre el valor
+    ya recortado.
+
+    Vive fuera de la clase porque el alta (UbicacionCrear) y la edición
+    (UbicacionActualizar) exigen exactamente la misma regla; duplicarla
+    invitaría a que una de las dos se quede atrás al cambiarla.
+    """
+    recortado = valor.strip()
+    if not recortado:
+        raise ValueError("El nombre es obligatorio")
+    return recortado
+
+
+def _validar_poligono_geojson(valor: dict) -> dict:
+    """Valida la forma mínima de un GeoJSON Polygon: un anillo exterior
+    cerrado (primer vértice == último) de al menos 3 vértices distintos,
+    con coordenadas en rango. Sin esto entraría a JSONB cualquier objeto
+    -incluido `{}`- y el campo dejaría de significar "el contorno de la
+    zona".
+
+    Compartida entre el alta y la edición por el mismo motivo que
+    _validar_nombre_ubicacion: es una sola regla de negocio.
+    """
+    if valor.get("type") != "Polygon":
+        raise ValueError("El polígono debe ser un GeoJSON de tipo 'Polygon'")
+
+    anillos = valor.get("coordinates")
+    if not isinstance(anillos, list) or not anillos:
+        raise ValueError("El polígono debe tener al menos un anillo de coordenadas")
+
+    exterior = anillos[0]
+    if not isinstance(exterior, list) or len(exterior) < 4:
+        raise ValueError("El polígono debe tener al menos 3 vértices para delimitar la zona")
+
+    for vertice in exterior:
+        if not isinstance(vertice, (list, tuple)) or len(vertice) < 2:
+            raise ValueError("Cada vértice del polígono debe ser un par [lng, lat]")
+        lng, lat = vertice[0], vertice[1]
+        if not isinstance(lng, (int, float)) or not isinstance(lat, (int, float)):
+            raise ValueError("Las coordenadas del polígono deben ser numéricas")
+        # GeoJSON usa el orden [longitud, latitud], no [lat, lng].
+        if not -180 <= lng <= 180:
+            raise ValueError("La longitud de cada vértice debe estar entre -180 y 180")
+        if not -90 <= lat <= 90:
+            raise ValueError("La latitud de cada vértice debe estar entre -90 y 90")
+
+    if list(exterior[0][:2]) != list(exterior[-1][:2]):
+        raise ValueError(
+            "El polígono debe estar cerrado: el último vértice debe coincidir con el primero"
+        )
+
+    return valor
+
+
 class UbicacionCrear(BaseModel):
     """HU08 CA1/CA2: campos del formulario de alta de ubicación.
 
@@ -90,50 +173,64 @@ class UbicacionCrear(BaseModel):
     @field_validator("nmbr")
     @classmethod
     def _nombre_no_vacio(cls, valor: str) -> str:
-        """Un nombre de solo espacios pasa min_length=1 pero no es un
-        nombre: se normaliza acá para que el UNIQUE por sede compare
-        siempre el valor ya recortado."""
-        recortado = valor.strip()
-        if not recortado:
-            raise ValueError("El nombre es obligatorio")
-        return recortado
+        return _validar_nombre_ubicacion(valor)
 
     @field_validator("plgn_gjsn")
     @classmethod
     def _poligono_valido(cls, valor: dict) -> dict:
-        """Valida la forma mínima de un GeoJSON Polygon: un anillo
-        exterior cerrado (primer vértice == último) de al menos 3 vértices
-        distintos, con coordenadas en rango. Sin esto entraría a JSONB
-        cualquier objeto -incluido `{}`- y el campo dejaría de significar
-        "el contorno de la zona"."""
-        if valor.get("type") != "Polygon":
-            raise ValueError("El polígono debe ser un GeoJSON de tipo 'Polygon'")
+        return _validar_poligono_geojson(valor)
 
-        anillos = valor.get("coordinates")
-        if not isinstance(anillos, list) or not anillos:
-            raise ValueError("El polígono debe tener al menos un anillo de coordenadas")
 
-        exterior = anillos[0]
-        if not isinstance(exterior, list) or len(exterior) < 4:
-            raise ValueError("El polígono debe tener al menos 3 vértices para delimitar la zona")
+class UbicacionActualizar(BaseModel):
+    """HU08 (ampliación): edición de una ubicación existente.
 
-        for vertice in exterior:
-            if not isinstance(vertice, (list, tuple)) or len(vertice) < 2:
-                raise ValueError("Cada vértice del polígono debe ser un par [lng, lat]")
-            lng, lat = vertice[0], vertice[1]
-            if not isinstance(lng, (int, float)) or not isinstance(lat, (int, float)):
-                raise ValueError("Las coordenadas del polígono deben ser numéricas")
-            # GeoJSON usa el orden [longitud, latitud], no [lat, lng].
-            if not -180 <= lng <= 180:
-                raise ValueError("La longitud de cada vértice debe estar entre -180 y 180")
-            if not -90 <= lat <= 90:
-                raise ValueError("La latitud de cada vértice debe estar entre -90 y 90")
+    Todos los campos son opcionales -solo se actualiza lo que venga, mismo
+    patrón que ConexionFTPUpdate y DispositivoUpdate-, y reusan las mismas
+    validaciones del alta vía _validar_nombre_ubicacion /
+    _validar_poligono_geojson.
 
-        if list(exterior[0][:2]) != list(exterior[-1][:2]):
-            raise ValueError(
-                "El polígono debe estar cerrado: el último vértice debe coincidir con el primero"
-            )
+    id_sd NO está y no debe estarlo: mover una ubicación de sede es un
+    cambio de jerarquía administrativa (Cliente -> Sede), no una edición
+    de la zona. Además arrastraría a sus dispositivos y a los permisos por
+    sede ya concedidos sobre ella. Al no declararse acá, Pydantic lo
+    descarta del body en vez de aplicarlo en silencio.
 
+    Ojo con el None: significa "no lo mandes, no lo toques"
+    (exclude_unset lo filtra en el router), NO "ponlo en NULL" -salvo
+    dscrpcn, la única columna que sí admite NULL-.
+    """
+
+    nmbr: str | None = Field(default=None, min_length=1, max_length=150)
+    dscrpcn: str | None = Field(default=None, max_length=300)
+    lttd: float | None = Field(default=None, ge=-90, le=90)
+    lngtd: float | None = Field(default=None, ge=-180, le=180)
+    plgn_gjsn: dict | None = None
+    estd: str | None = None
+
+    @field_validator("nmbr")
+    @classmethod
+    def _nombre_no_vacio(cls, valor: str | None) -> str | None:
+        if valor is None:
+            return valor
+        return _validar_nombre_ubicacion(valor)
+
+    @field_validator("plgn_gjsn")
+    @classmethod
+    def _poligono_valido(cls, valor: dict | None) -> dict | None:
+        if valor is None:
+            return valor
+        return _validar_poligono_geojson(valor)
+
+    @field_validator("estd")
+    @classmethod
+    def _estado_valido(cls, valor: str | None) -> str | None:
+        """Los mismos dos estados que ofrece el filtro del listado (HU07).
+        La columna es un String(20) sin CHECK, así que sin esto entraría
+        cualquier texto y el filtro dejaría de encontrar el registro."""
+        if valor is None:
+            return valor
+        if valor not in ESTADOS_UBICACION:
+            raise ValueError(f"El estado debe ser uno de: {', '.join(ESTADOS_UBICACION)}")
         return valor
 
 
@@ -173,14 +270,50 @@ class DispositivoListItem(BaseModel):
     estd: str
 
 
+class DispositivoParaMapa(BaseModel):
+    """I-17: un dispositivo tal como lo necesita la vista de mapa (HU22).
+
+    Trae su punto GPS propio (DEC-28) para pintarlo dentro del polígono de
+    su ubicación, más lo que muestra el panel al hacer clic: nombre, marca
+    y estado.
+
+    Schema propio y no una extensión de DispositivoListItem porque ese es
+    el del listado de HU10, que no necesita coordenadas -y agregárselas lo
+    obligaría a cargar columnas que su tabla no muestra-. Mismo criterio
+    que se usó con UbicacionParaMapa.
+
+    id_ubccn viaja para que el frontend pueda relacionar cada punto con su
+    zona sin una segunda consulta.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id_dspstv: int
+    id_ubccn: int
+    nmbr: str
+    mrc: str
+    estd: str
+    lttd: float
+    lngtd: float
+
+
 # HU11 - Añadir dispositivo
 
 
 class DispositivoCrear(BaseModel):
     """HU11 CA1: campos del formulario (Nombre, Marca, Modelo opcional,
-    Ubicación, Conexión FTP). lttd/lngtd NO son campos del formulario: se
-    copian de la Ubicación elegida (ver crear_dispositivo en
-    routers/dispositivos.py).
+    Ubicación, Conexión FTP).
+
+    DEC-28: lttd/lngtd son el punto GPS PROPIO del dispositivo, no una
+    copia del centro de su Ubicación. Van opcionales y no obligatorios
+    porque las columnas ya existían llenándose por copia: exigirlos ahora
+    rompería todo cliente y test que hoy crea dispositivos sin
+    coordenadas. Si no se envían, crear_dispositivo cae al centro de la
+    Ubicación (mismo comportamiento previo) y el equipo migra gradual.
+
+    Los rangos ya los garantizan los CheckConstraint dspstv_lttd_check /
+    dspstv_lngtd_check, pero se repiten en Pydantic para responder 422 con
+    la causa real antes de tocar la BD -mismo criterio que UbicacionCrear-.
 
     DEC-09: el dispositivo ya no necesita un mapeo de formato previo para
     crearse; el mapeo se configura después, apuntando a este dispositivo."""
@@ -190,6 +323,8 @@ class DispositivoCrear(BaseModel):
     mdl: str | None = None
     id_ubccn: int
     id_cnxn: int
+    lttd: float | None = Field(default=None, ge=-90, le=90)
+    lngtd: float | None = Field(default=None, ge=-180, le=180)
 
 
 class DispositivoCreado(BaseModel):
@@ -211,16 +346,26 @@ class DispositivoCreado(BaseModel):
 
 
 class DispositivoUpdate(BaseModel):
-    """Edición desde la ficha del dispositivo: nombre, marca, modelo y
-    reasignación de Conexión FTP. Todos opcionales (solo se actualiza lo
-    que venga, mismo patrón que ConexionFTPUpdate). id_ubccn no es
-    editable acá: cambiar de ubicación implicaría revalidar lttd/lngtd,
-    fuera de este alcance."""
+    """Edición desde la ficha del dispositivo: nombre, marca, modelo,
+    punto GPS y reasignación de Conexión FTP. Todos opcionales (solo se
+    actualiza lo que venga, mismo patrón que ConexionFTPUpdate).
+
+    DEC-28: lttd/lngtd pasan a ser editables -antes estaban bloqueados
+    porque el punto se heredaba de la Ubicación y editarlo no tenía
+    sentido-. id_ubccn sigue sin ser editable acá: cambiar de ubicación
+    implicaría revalidar el punto contra el polígono de la nueva zona,
+    fuera de este alcance.
+
+    Ojo con el None: para estos dos campos significa "no lo mandes, no lo
+    toques" (exclude_unset lo filtra en el router), NO "ponlo en NULL" -las
+    columnas son NOT NULL-."""
 
     nmbr: str | None = Field(default=None, min_length=1, max_length=150)
     mrc: str | None = Field(default=None, min_length=1, max_length=100)
     mdl: str | None = None
     id_cnxn: int | None = None
+    lttd: float | None = Field(default=None, ge=-90, le=90)
+    lngtd: float | None = Field(default=None, ge=-180, le=180)
 
 
 # DEC-09 / IMP-06 - Ficha del dispositivo (pestañas Formato, Datos,
@@ -243,6 +388,11 @@ class DispositivoDetalle(BaseModel):
     mrc: str
     mdl: str | None
     estd: str
+    # DEC-28: el punto GPS propio del dispositivo. Va en la ficha para que
+    # el formulario de edición pueda precargarlo -sin esto no habría con
+    # qué llenar los campos antes de editarlos-.
+    lttd: float
+    lngtd: float
     id_ubccn: int
     ubicacion_nombre: str
     id_sd: int

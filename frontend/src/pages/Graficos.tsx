@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { apiFetch, ApiError } from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import Sidebar from "../components/layout/Sidebar";
@@ -9,6 +10,12 @@ import Topbar from "../components/layout/Topbar";
  * que Consulta de Datos (HU13: /mediciones y /mediciones/parametros), pero
  * en vez de una tabla muestra una serie de tiempo simple por ubicación
  * para el parámetro elegido, más un resumen (mín/prom/máx).
+ *
+ * HU17 CA4: acepta ?ubicacion_id=N para entrar con una ubicación ya
+ * preseleccionada. Es la que usa el botón "Ver gráfico" del panel del
+ * mapa de estaciones (MapaEstacionesCliente.tsx). Sin el parámetro, la
+ * pantalla se comporta exactamente como antes: todas las ubicaciones
+ * permitidas.
  */
 
 interface ParametroItem {
@@ -18,7 +25,11 @@ interface ParametroItem {
 }
 
 interface MedicionItem {
-  id_lctr: number;
+  // El backend devuelve id_registro (no id_lctr): es id_lctr o id_evnt
+  // según la lectura venga de tlmtr o de evnt_txt, que son secuencias
+  // distintas y podrían colisionar como key de React. Ver el docstring
+  // de MedicionListItem en backend/app/schemas.py.
+  id_registro: number;
   fch_hr: string;
   id_ubccn: number;
   ubicacion_nombre: string;
@@ -32,6 +43,11 @@ interface ListadoMediciones {
   items: MedicionItem[];
 }
 
+interface UbicacionItem {
+  id_ubccn: number;
+  nmbr: string;
+}
+
 // Paleta categórica validada para fondo oscuro (dataviz skill): azul,
 // naranja, aqua, amarillo — en ese orden fijo, nunca por índice aleatorio.
 const COLORES_SERIE = ["#3987e5", "#d95926", "#199e70", "#c98500"];
@@ -43,8 +59,20 @@ function formatearFechaCorta(iso: string): string {
 export default function Graficos() {
   const { nombreCompleto, rol, logout } = useAuth();
 
+  // HU17 CA4: ubicación preseleccionada por query param. Se lee con
+  // useSearchParams (y no de window.location) para que quede sincronizada
+  // con la navegación de React Router: volver atrás desde el mapa
+  // restaura el filtro anterior sin recargar.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const ubicacionIdParam = searchParams.get("ubicacion_id");
+  const ubicacionId = ubicacionIdParam !== null ? Number(ubicacionIdParam) : null;
+  const ubicacionIdValida = ubicacionId !== null && Number.isFinite(ubicacionId);
+
   const [parametros, setParametros] = useState<ParametroItem[]>([]);
   const [parametroId, setParametroId] = useState<number | null>(null);
+  // Solo para poder mostrar el NOMBRE de la ubicación filtrada. Si la
+  // llamada falla, el filtro sigue funcionando igual: se muestra el id.
+  const [ubicaciones, setUbicaciones] = useState<UbicacionItem[]>([]);
 
   const [mediciones, setMediciones] = useState<ListadoMediciones | null>(null);
   const [loading, setLoading] = useState(false);
@@ -61,13 +89,29 @@ export default function Graficos() {
       .catch(() => setParametros([]));
   }, []);
 
+  // HU17 CA4: nombre de la ubicación preseleccionada, para el aviso de
+  // "filtrando por...". Se pide solo cuando hay filtro activo.
+  useEffect(() => {
+    if (!ubicacionIdValida) return;
+    apiFetch<{ items: UbicacionItem[] }>("/ubicaciones", { params: { por_pagina: 100 } })
+      .then((res) => setUbicaciones(res.items))
+      .catch(() => setUbicaciones([]));
+  }, [ubicacionIdValida]);
+
   useEffect(() => {
     if (parametroId === null) return;
     let cancelado = false;
     setLoading(true);
     setError(null);
 
-    apiFetch<ListadoMediciones>(`/mediciones?parametro_ids=${parametroId}&por_pagina=200`)
+    // HU17 CA4: el filtro de ubicación se delega al backend (que ya lo
+    // soporta desde HU13) en vez de traer todo y filtrar en el cliente:
+    // así el gráfico no descarta 200 filas para quedarse con 20.
+    const filtroUbicacion = ubicacionIdValida ? `&ubicacion_ids=${ubicacionId}` : "";
+
+    apiFetch<ListadoMediciones>(
+      `/mediciones?parametro_ids=${parametroId}${filtroUbicacion}&por_pagina=200`
+    )
       .then((res) => {
         if (!cancelado) setMediciones(res);
       })
@@ -82,7 +126,7 @@ export default function Graficos() {
     return () => {
       cancelado = true;
     };
-  }, [parametroId]);
+  }, [parametroId, ubicacionId, ubicacionIdValida]);
 
   // El backend devuelve más reciente primero; para la línea de tiempo se
   // necesita orden cronológico ascendente.
@@ -180,6 +224,37 @@ export default function Graficos() {
                 ))}
               </select>
             </header>
+
+            {/* HU17 CA4: aviso de que se está viendo UNA sola ubicación,
+                con salida a la vista completa. Sin esto, alguien que
+                llega desde el mapa podría creer que su cuenta solo tiene
+                datos de esa estación. */}
+            {ubicacionIdValida && (
+              <div className="mb-6 p-4 rounded-xl bg-[#ccff00]/10 border border-[#ccff00]/30 text-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <span className="text-gray-700 dark:text-gray-200">
+                  Mostrando solo la ubicación{" "}
+                  <strong className="font-semibold">
+                    {ubicaciones.find((u) => u.id_ubccn === ubicacionId)?.nmbr ??
+                      `#${ubicacionId}`}
+                  </strong>
+                  , preseleccionada desde el mapa de estaciones.
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    // Se quita solo este parámetro y se conservan los
+                    // demás: hoy es el único, pero borrar toda la query
+                    // string sería un bug latente en cuanto se agregue otro.
+                    const siguiente = new URLSearchParams(searchParams);
+                    siguiente.delete("ubicacion_id");
+                    setSearchParams(siguiente, { replace: true });
+                  }}
+                  className="shrink-0 self-start sm:self-auto inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-lg border border-black/20 dark:border-white/20 text-gray-700 dark:text-gray-200 hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+                >
+                  Ver todas las ubicaciones
+                </button>
+              </div>
+            )}
 
             {error && (
               <div className="mb-6 p-4 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm border border-red-200 dark:border-red-800/30">
@@ -289,16 +364,16 @@ export default function Graficos() {
                           />
                           {s.items.map((item) => (
                             <circle
-                              key={item.id_lctr}
+                              key={item.id_registro}
                               cx={xDe(item)}
                               cy={yDe(item)}
-                              r={hover?.item.id_lctr === item.id_lctr ? 5 : 3}
+                              r={hover?.item.id_registro === item.id_registro ? 5 : 3}
                               fill={color}
                               stroke="#0b1220"
                               strokeWidth={1.5}
                               className="cursor-pointer"
                               onMouseEnter={() => setHover({ x: xDe(item), y: yDe(item), item })}
-                              onMouseLeave={() => setHover((h) => (h?.item.id_lctr === item.id_lctr ? null : h))}
+                              onMouseLeave={() => setHover((h) => (h?.item.id_registro === item.id_registro ? null : h))}
                             />
                           ))}
                         </g>

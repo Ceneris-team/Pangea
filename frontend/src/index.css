@@ -2,6 +2,30 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Oculta la barra de scroll sin perder el scroll.
+ *
+ * Se usa en contenedores que SÍ tienen que poder desplazarse (el menú
+ * lateral en pantallas bajas) pero donde la barra ensucia el diseño: es
+ * un panel angosto y de altura fija, así que la barra ocupa una franja
+ * visible permanente en vez de aparecer solo al hacer falta.
+ *
+ * Deliberadamente NO es `overflow: hidden`: eso recortaría los últimos
+ * items del menú en una pantalla baja y los dejaría inalcanzables. Acá el
+ * contenido sigue siendo desplazable con rueda, trackpad, teclado y
+ * touch; lo único que se oculta es el indicador visual.
+ */
+.scrollbar-oculta {
+  /* Firefox */
+  scrollbar-width: none;
+  /* IE / Edge legacy */
+  -ms-overflow-style: none;
+}
+
+.scrollbar-oculta::-webkit-scrollbar {
+  /* Chrome, Safari, Edge */
+  display: none;
+}
+
 body {
   min-height: 100vh;
   background-color: #eef0f2;

@@ -6,6 +6,7 @@ from app.core.celery_app import celery_app
 from app.database import SessionLocal
 from app.ingesta.ftp_receptor import descargar_archivo_dat, listar_archivos_dat
 from app.models.archivo_ingesta import ArchivoIngesta
+from app.models.mapeo_dispositivo import Parametro
 from app.models.ubicacion_conexion import ConexionFTP
 from app.services.ingesta.estandarizador import estandarizar_filas
 from app.services.ingesta.mapeo import (
@@ -21,6 +22,7 @@ from app.services.ingesta.persistencia import (
     resolver_dispositivo,
 )
 from app.services.ingesta.validador import validar_lecturas
+from app.services.mapa.eventos import construir_evento, publicar_lecturas
 from app.services.particiones import ParticionInexistenteError
 
 logger = logging.getLogger(__name__)
@@ -109,6 +111,45 @@ def interpretar_y_guardar(
         id_archv,
     )
     return resultado_validacion, resultado_persistencia
+
+
+def _publicar_eventos_mapa(db, resultado_persistencia) -> None:
+    """HU17 CA3: publica al bus del mapa el último valor de cada parámetro
+    guardado en este archivo.
+
+    Solo el resumen que el marcador necesita (parámetro, valor, unidad,
+    fecha/hora), nunca el archivo completo ni la fila entera de tlmtr.
+
+    La unidad sale de prmtr.undd en UNA consulta para todos los parámetros
+    del archivo: el frontend la muestra junto al valor en el panel de CA2,
+    y sin ella tendría que mantener su propio catálogo de unidades.
+    """
+    ultimos = resultado_persistencia.ultimos_por_parametro
+    id_ubccn = resultado_persistencia.id_ubccn
+    if not ultimos or id_ubccn is None:
+        return
+
+    unidades = {
+        nombre: undd
+        for nombre, undd in db.query(Parametro.nmbr, Parametro.undd)
+        .filter(Parametro.nmbr.in_(list(ultimos.keys())))
+        .all()
+    }
+
+    eventos = [
+        construir_evento(
+            id_ubccn=id_ubccn,
+            nombre_parametro=nombre,
+            unidad=unidades.get(nombre, ""),
+            valor=valor,
+            fecha_hora=fecha_hora,
+        )
+        for nombre, (valor, fecha_hora) in ultimos.items()
+    ]
+    publicar_lecturas(eventos)
+    logger.info(
+        "HU17: publicados %s evento(s) de mapa para ubicacion=%s", len(eventos), id_ubccn
+    )
 
 
 @celery_app.task(
@@ -211,6 +252,17 @@ def procesar_archivo_dat(self, id_archv: int) -> dict:
             archivo.mnsj_errr = resumen_errores[:500]
         db.commit()
 
+        # HU17 CA3: la lectura ya está PERSISTIDA Y CONFIRMADA (el commit
+        # de arriba). Recién ahora se avisa al mapa, nunca antes: publicar
+        # un valor que después se revierte dejaría el marcador mostrando un
+        # dato que no existe en la BD.
+        #
+        # publicar_eventos_mapa() no lanza nunca (ver eventos.py): si Redis
+        # está caído, el archivo sigue siendo 'Exitoso' -los datos están
+        # guardados- y solo se pierde la actualización en vivo, que se
+        # recupera sola en cuanto el usuario recargue el mapa.
+        _publicar_eventos_mapa(db, resultado_persistencia)
+
         logger.info(
             "archv_ingst id=%s procesado: %s guardadas, %s sin valor, %s con error de validación",
             id_archv,
@@ -291,7 +343,9 @@ def sondear_conexiones_ftp() -> dict:
             .all()
         )
 
-        total_encolados = 0
+        # Los ids se juntan acá y se encolan DESPUÉS del commit: ver el
+        # bloque final de esta función.
+        por_encolar: list[int] = []
         for cnxn in conexiones:
             if cnxn.ultm_snd is not None:
                 proximo_sondeo = cnxn.ultm_snd + dt.timedelta(minutes=cnxn.frcnc_mnts)
@@ -322,19 +376,28 @@ def sondear_conexiones_ftp() -> dict:
                     continue
                 archivo = ArchivoIngesta(id_cnxn=cnxn.id_cnxn, nmbr_archv=nombre)
                 db.add(archivo)
-                db.flush()  # necesitamos id_archv antes de encolar
-                procesar_archivo_dat.delay(id_archv=archivo.id_archv)
-                total_encolados += 1
+                db.flush()  # asigna id_archv, todavía sin confirmar
+                por_encolar.append(archivo.id_archv)
 
             cnxn.ultm_snd = ahora
             db.commit()
 
+        # Encolar SOLO después del commit. Con .delay() dentro del bucle
+        # había una carrera real: flush() asigna el id pero no confirma la
+        # transacción, así que el worker -que toma el job en milisegundos-
+        # consultaba una fila que todavía no era visible, logueaba
+        # "archv_ingst id=N no existe, se descarta el job" y el archivo
+        # quedaba 'Pendiente' PARA SIEMPRE, porque nadie lo reencola: el
+        # sondeo siguiente lo ve en `existentes` y lo saltea.
+        for id_archv in por_encolar:
+            procesar_archivo_dat.delay(id_archv=id_archv)
+
         logger.info(
             "Sondeo FTP: %s conexiones revisadas, %s archivos nuevos encolados",
             len(conexiones),
-            total_encolados,
+            len(por_encolar),
         )
-        return {"conexiones_revisadas": len(conexiones), "encolados": total_encolados}
+        return {"conexiones_revisadas": len(conexiones), "encolados": len(por_encolar)}
     finally:
         db.close()
 

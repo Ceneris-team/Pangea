@@ -27,28 +27,22 @@ from app.models import (
     MapeoColumna,
     MapeoFormato,
     Parametro,
-    PermisoUbicacion,
     Telemetria,
     Ubicacion,
 )
 from app.schemas import MedicionListItem, ParametroListItem
 from app.security.permisos import LECTURA, require_permiso
 
+# HU 21: el filtro "qué ubicaciones ve este usuario" se movió a
+# security/ubicaciones_permitidas.py para que HU 17 (mapa del Cliente
+# Final) lo REUTILICE en vez de copiarlo. El comportamiento es idéntico
+# al que tenía la función privada que vivía acá.
+from app.security.ubicaciones_permitidas import (  # noqa: F401  (ROLES_... se reexporta)
+    ROLES_CON_ACCESO_TOTAL,
+    ubicaciones_permitidas as _ubicaciones_permitidas,
+)
+
 router = APIRouter(prefix="/mediciones", tags=["Mediciones"])
-
-ROLES_CON_ACCESO_TOTAL = {"Administrador", "Tecnico CENERIS", "Técnico CENERIS"}
-
-
-def _ubicaciones_permitidas(db: Session, usuario: dict):
-    """CA: el Cliente Final solo ve parámetros/ubicaciones que le asignó
-    el Administrador (HU 21). Administrador/Técnico ven todo."""
-    query = db.query(Ubicacion.id_ubccn)
-    if usuario.get("rol") not in ROLES_CON_ACCESO_TOTAL:
-        id_usr = int(usuario["sub"])
-        query = query.join(
-            PermisoUbicacion, PermisoUbicacion.id_ubccn == Ubicacion.id_ubccn
-        ).filter(PermisoUbicacion.id_usr == id_usr)
-    return [row[0] for row in query.all()]
 
 
 @router.get("/parametros")

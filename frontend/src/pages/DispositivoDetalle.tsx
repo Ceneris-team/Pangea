@@ -48,6 +48,9 @@ interface DispositivoDetalleResponse {
   mrc: string;
   mdl: string | null;
   estd: string;
+  /** DEC-28: punto GPS propio del dispositivo. */
+  lttd: number;
+  lngtd: number;
   id_ubccn: number;
   ubicacion_nombre: string;
   id_sd: number;
@@ -62,11 +65,22 @@ interface ConexionFTPOption {
   estd: string;
 }
 
-/** Estado editable del bloque "Editar dispositivo" del header: nombre y
- *  conexión FTP, mismo patrón de formulario que AgregarDispositivo.tsx. */
+/** Estado editable del bloque "Editar dispositivo" del header: nombre,
+ *  conexión FTP y punto GPS (DEC-28), mismo patrón de formulario que
+ *  AgregarDispositivo.tsx. */
 interface DispositivoEditForm {
   nmbr: string;
   id_cnxn: string;
+  lttd: string;
+  lngtd: string;
+}
+
+/** Devuelve el número solo si el texto es un número válido: "" y "-" dan
+ *  NaN y no deben viajar al backend como coordenada 0,0. */
+function aNumero(texto: string): number | null {
+  if (texto.trim() === "") return null;
+  const valor = Number(texto);
+  return Number.isFinite(valor) ? valor : null;
 }
 
 interface Parametro {
@@ -212,7 +226,12 @@ export default function DispositivoDetalle() {
   // el dispositivo, HU11): reasignar la conexión correcta sin recrearlo.
   const [editando, setEditando] = useState(false);
   const [conexiones, setConexiones] = useState<ConexionFTPOption[]>([]);
-  const [formEdicion, setFormEdicion] = useState<DispositivoEditForm>({ nmbr: "", id_cnxn: "" });
+  const [formEdicion, setFormEdicion] = useState<DispositivoEditForm>({
+    nmbr: "",
+    id_cnxn: "",
+    lttd: "",
+    lngtd: "",
+  });
   const [guardandoEdicion, setGuardandoEdicion] = useState(false);
 
   function avisar(texto: string, ok: boolean) {
@@ -248,13 +267,35 @@ export default function DispositivoDetalle() {
 
   function abrirEdicion() {
     if (!dispositivo) return;
-    setFormEdicion({ nmbr: dispositivo.nmbr, id_cnxn: String(dispositivo.id_cnxn) });
+    setFormEdicion({
+      nmbr: dispositivo.nmbr,
+      id_cnxn: String(dispositivo.id_cnxn),
+      lttd: String(dispositivo.lttd),
+      lngtd: String(dispositivo.lngtd),
+    });
     setEditando(true);
   }
 
   async function guardarEdicionDispositivo(e: FormEvent) {
     e.preventDefault();
     if (!id || !dispositivo) return;
+
+    // DEC-28: el punto GPS es editable. Se valida acá para no gastar un
+    // viaje al backend, que repite las mismas reglas en DispositivoUpdate.
+    const latitud = aNumero(formEdicion.lttd);
+    const longitud = aNumero(formEdicion.lngtd);
+    if (latitud === null || longitud === null) {
+      avisar("La latitud y la longitud deben ser números válidos", false);
+      return;
+    }
+    if (latitud < -90 || latitud > 90) {
+      avisar("La latitud debe estar entre -90 y 90", false);
+      return;
+    }
+    if (longitud < -180 || longitud > 180) {
+      avisar("La longitud debe estar entre -180 y 180", false);
+      return;
+    }
 
     setGuardandoEdicion(true);
     try {
@@ -265,6 +306,8 @@ export default function DispositivoDetalle() {
           body: {
             nmbr: formEdicion.nmbr.trim(),
             id_cnxn: Number(formEdicion.id_cnxn),
+            lttd: latitud,
+            lngtd: longitud,
           },
         }
       );
@@ -481,6 +524,41 @@ export default function DispositivoDetalle() {
                         </option>
                       ))}
                     </select>
+                  </div>
+                  {/* DEC-28: punto GPS propio del dispositivo, editable. */}
+                  <div>
+                    <label className={labelClase}>Latitud</label>
+                    <input
+                      type="number"
+                      step="any"
+                      min={-90}
+                      max={90}
+                      required
+                      value={formEdicion.lttd}
+                      onChange={(e) =>
+                        setFormEdicion((prev) => ({ ...prev, lttd: e.target.value }))
+                      }
+                      className={inputClase}
+                    />
+                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Entre -90 y 90.</p>
+                  </div>
+                  <div>
+                    <label className={labelClase}>Longitud</label>
+                    <input
+                      type="number"
+                      step="any"
+                      min={-180}
+                      max={180}
+                      required
+                      value={formEdicion.lngtd}
+                      onChange={(e) =>
+                        setFormEdicion((prev) => ({ ...prev, lngtd: e.target.value }))
+                      }
+                      className={inputClase}
+                    />
+                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      Entre -180 y 180.
+                    </p>
                   </div>
                   <div className="md:col-span-2 flex gap-3">
                     <button type="submit" disabled={guardandoEdicion} className={botonPrimario}>
