@@ -187,7 +187,7 @@ export default function Sidebar({ onLogout, activo, rol }: SidebarProps) {
             />
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
           </svg>
-          Gestion de Ubicaciones
+          Ubicaciones
         </Link>
 
         {/* HU10: listar dispositivos. Visible para todos los roles, igual
