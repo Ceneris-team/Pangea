@@ -1,12 +1,16 @@
 """
 HU 05 - Configurar conexión FTP del datalogger
 
-CA: formulario con Nombre del datalogger, Host/IP, Puerto (default 21),
+CA: formulario con Nombre de la conexión, Host/IP, Puerto (default 21),
 Usuario FTP, Contraseña FTP, Directorio remoto y Frecuencia de polling
 (cada minuto / cada hora). "PROBAR CONEXIÓN" valida las credenciales
 contra el servidor FTP real antes de habilitar "GUARDAR". Las
 credenciales se cifran (HT-04, app/security/ftp_crypto.py) y nunca se
 devuelven en texto plano. Solo Técnico CENERIS y Administrador acceden.
+
+Nota: ConexionFTP.nmbr identifica la conexión en sí (puede haber
+varios dispositivos apuntando a la misma), no es el nombre del
+dispositivo/datalogger, que se asigna por separado en Dispositivo.nmbr.
 """
 
 import ftplib
