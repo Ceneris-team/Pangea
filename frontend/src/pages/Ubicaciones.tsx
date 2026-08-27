@@ -294,6 +294,15 @@ export default function Ubicaciones() {
                               >
                                 Ver detalles
                               </Link>
+                              {/* HU15/HU17: misma preselección por
+                                  ?ubicacion_id= que usa el mapa de
+                                  estaciones para abrir Gráficos. */}
+                              <Link
+                                to={`/graficos?ubicacion_id=${u.id_ubccn}`}
+                                className="inline-flex items-center justify-center px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-200 bg-transparent border border-black/20 dark:border-white/20 rounded-lg hover:bg-black/10 dark:hover:bg-white/10 hover:text-gray-900 dark:hover:text-white transition-all"
+                              >
+                                Ver gráficos
+                              </Link>
                               {/* HU08 (ampliación): antes estaba deshabilitado
                                   como "Próximamente"; ya existe la pantalla de
                                   edición. Mismos roles que el alta, porque el

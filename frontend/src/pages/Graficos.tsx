@@ -25,6 +25,11 @@ interface ParametroItem {
   tipo_dato: string;
 }
 
+interface UbicacionItem {
+  id_ubccn: number;
+  nmbr: string;
+}
+
 interface MedicionItem {
   id_registro: number;
   fch_hr: string;
@@ -71,9 +76,10 @@ function formatearFechaCorta(iso: string, zonaHoraria: string): string {
   });
 }
 
-function construirQuery(parametroIds: number[], rangoFechas: RangoFechas | null): string {
+function construirQuery(parametroIds: number[], ubicacionIds: number[], rangoFechas: RangoFechas | null): string {
   const params = new URLSearchParams();
   parametroIds.forEach((id) => params.append("parametro_ids", String(id)));
+  ubicacionIds.forEach((id) => params.append("ubicacion_ids", String(id)));
   if (rangoFechas) {
     params.append("fecha_inicio", new Date(rangoFechas.inicio).toISOString());
     params.append("fecha_fin", new Date(rangoFechas.fin).toISOString());
@@ -103,6 +109,9 @@ export default function Graficos() {
   const ubicacionIdValida = ubicacionId !== null && Number.isFinite(ubicacionId);
 
   const [parametros, setParametros] = useState<ParametroItem[]>([]);
+  // HU17 CA4: solo se usa para mostrar el nombre de la ubicación
+  // preseleccionada en el aviso; no es un filtro visible en la UI.
+  const [ubicaciones, setUbicaciones] = useState<UbicacionItem[]>([]);
 
   // CA: la selección de parámetros aplica al instante (sin botón "APLICAR");
   // es el único filtro además del rango de fechas.
@@ -154,7 +163,8 @@ export default function Graficos() {
     setLoading(true);
     setError(null);
 
-    apiFetch<ListadoMediciones>(construirQuery(parametrosSeleccionados, rangoFechas))
+    const ubicacionIds = ubicacionIdValida ? [ubicacionId as number] : [];
+    apiFetch<ListadoMediciones>(construirQuery(parametrosSeleccionados, ubicacionIds, rangoFechas))
       .then((res) => {
         if (!cancelado) setMediciones(res);
       })
@@ -169,7 +179,7 @@ export default function Graficos() {
     return () => {
       cancelado = true;
     };
-  }, [parametrosSeleccionados, rangoFechas]);
+  }, [parametrosSeleccionados, rangoFechas, ubicacionId, ubicacionIdValida]);
 
   const toggleParametro = (id: number) => {
     setParametrosSeleccionados((actual) => (actual.includes(id) ? actual.filter((v) => v !== id) : [...actual, id]));
