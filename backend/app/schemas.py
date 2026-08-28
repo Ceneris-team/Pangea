@@ -922,3 +922,26 @@ class VistaPreviaResponse(BaseModel):
     filas: list[FilaVistaPrevia]
     total_filas_archivo: int
     filas_mostradas: int
+
+
+# ---------------------------------------------------------------------------
+# HT-11 - Log de auditoría
+# ---------------------------------------------------------------------------
+
+
+class AuditoriaListItem(BaseModel):
+    """HT-11 CA1/CA5: una fila de lg_adtr, ya con el nombre del usuario
+    ejecutor resuelto -la tabla solo guarda id_usr- para que el panel no
+    tenga que hacer un segundo viaje por cada fila."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id_evnt: int
+    id_usr: int
+    usuario_nombre: str | None
+    id_sd: int | None
+    accn: str
+    entdd: str
+    vlrs_antrrs: dict | list | None
+    vlrs_nvs: dict | list | None
+    fch_evnt: datetime

@@ -196,7 +196,7 @@ def crear_dispositivo(
 
     # Un usuario 'por_sede' no puede crear un dispositivo en una ubicación
     # de otra sede aunque conozca su id_ubccn (HT-09 CA3).
-    verificar_sede(usuario, ubicacion.id_sd, modulo="Dispositivos", accion=EDICION)
+    verificar_sede(usuario, ubicacion.id_sd, db, modulo="Dispositivos", accion=EDICION)
 
     # resolver_dispositivo() en services/ingesta/persistencia.py asume
     # exactamente 1 dispositivo Activo por conexión FTP; un segundo
@@ -252,7 +252,7 @@ def _cargar_ficha(db: Session, id_dspstv: int, usuario: dict, accion: str):
         raise HTTPException(status_code=404, detail="Dispositivo no encontrado")
 
     dispositivo, ubicacion, conexion = fila
-    verificar_sede(usuario, ubicacion.id_sd, modulo="Dispositivos", accion=accion)
+    verificar_sede(usuario, ubicacion.id_sd, db, modulo="Dispositivos", accion=accion)
 
     # Un Cliente Final solo ve dispositivos de ubicaciones que tenga
     # asignadas, mismo criterio que el listado de HU10.

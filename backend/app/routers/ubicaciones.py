@@ -179,7 +179,7 @@ def _verificar_acceso_ubicacion(db: Session, usuario: dict, ubicacion: Ubicacion
     """Mismo criterio de listar_ubicaciones: Administrador/Técnico ven
     cualquier ubicación (dentro de su sede, ver verificar_sede);
     Cliente Final solo la suya, vía PermisoUbicacion (HU 21)."""
-    verificar_sede(usuario, ubicacion.id_sd, modulo="Ubicaciones", accion=LECTURA)
+    verificar_sede(usuario, ubicacion.id_sd, db, modulo="Ubicaciones", accion=LECTURA)
     if usuario.get("rol") not in ROLES_CON_ACCESO_TOTAL:
         id_usr = int(usuario["sub"])
         tiene_permiso = (
@@ -281,7 +281,7 @@ def crear_ubicacion(
     # Un usuario 'por_sede' ya opera sobre su sede por _resolver_sede; esto
     # cubre al 'global' que manda un id_sd ajeno y a cualquier cambio futuro
     # que deje pasar id_sd desde el body.
-    verificar_sede(usuario, id_sd, modulo="Ubicaciones", accion=EDICION)
+    verificar_sede(usuario, id_sd, db, modulo="Ubicaciones", accion=EDICION)
 
     # CA: nombre único dentro de la sede. Se chequea antes del insert para
     # devolver el 409 con el mensaje de negocio; el UNIQUE de la BD sigue
@@ -347,7 +347,7 @@ def actualizar_ubicacion(
 
     # Mismo aislamiento por sede que el resto del módulo (HT-09 CA3): un
     # usuario 'por_sede' no edita ubicaciones de otra sede.
-    verificar_sede(usuario, ubicacion.id_sd, modulo="Ubicaciones", accion=EDICION)
+    verificar_sede(usuario, ubicacion.id_sd, db, modulo="Ubicaciones", accion=EDICION)
 
     # CA de HU08: nombre único DENTRO de la sede (uq_ubccn_sd_nombre). Se
     # excluye el propio registro: guardar sin cambiar el nombre no puede

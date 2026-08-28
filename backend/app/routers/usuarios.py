@@ -28,6 +28,7 @@ from app.schemas import (
     UsuarioDetalle,
     UsuarioListItem,
 )
+from app.security.auditoria import auditar_cambios
 from app.security.hashing import generar_password_temporal, hash_password
 from app.security.permisos import EDICION, LECTURA, require_permiso
 from app.security.ubicaciones_permitidas import ROLES_CON_ACCESO_TOTAL
@@ -164,7 +165,11 @@ def obtener_usuario(
 def actualizar_usuario(
     id_usr: int,
     body: UsuarioActualizar,
-    db: Session = Depends(get_db),
+    # HT-11 CA1: en vez de get_db, auditar_cambios -que internamente
+    # también entrega la sesión- marca en db.info quién ejecuta este PUT,
+    # para que el listener de before_flush (security/auditoria.py) arme la
+    # fila de lg_adtr automáticamente en el mismo commit de más abajo.
+    db: Session = Depends(auditar_cambios),
     usuario_actual: dict = Depends(require_permiso("Usuarios", EDICION)),
 ):
     """HU20 CA2: actualiza los datos y responde con el mensaje exacto
@@ -336,7 +341,8 @@ def listar_permisos_ubicaciones(
 def actualizar_permisos_ubicaciones(
     id_usr: int,
     body: PermisosUbicacionActualizar,
-    db: Session = Depends(get_db),
+    # HT-11 CA1: ver el comentario equivalente en actualizar_usuario.
+    db: Session = Depends(auditar_cambios),
     _usuario: dict = Depends(require_permiso("Usuarios", EDICION)),
 ):
     """HU21 CA2: reemplaza el conjunto de ubicaciones habilitadas y responde

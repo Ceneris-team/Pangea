@@ -710,3 +710,125 @@ escribir no hace nada, así que los endpoints responden igual consultando Postgr
 solo más lento. Los sockets llevan `socket_timeout=2s` para que un Redis colgado no
 bloquee una petición. Los tests que requieren Redis se saltan solos si no está
 levantado.
+
+## Log de auditoría (HT-11)
+
+**Estado: implementado.** `lg_adtr` (modelo `LogAuditoria`, `app/models/varios.py`)
+ya existía en el esquema desde el inicio, sin ningún uso — HT-11 la conecta.
+
+| CA | Cómo se cumple |
+|---|---|
+| CA1 | Editar usuario (HU20) y conceder permisos (HU21) generan automáticamente un registro con usuario ejecutor, sede, valores anteriores y nuevos |
+| CA2 | `GET /auditoria` filtra por sede/usuario/fecha, solo Administrador |
+| CA3 | No existe ningún PUT/PATCH/DELETE sobre auditoría en la app; ver además el script SQL más abajo |
+| CA4 | Aislamiento por sede + decisión explícita sobre `id_sd IS NULL`, ver abajo |
+| CA5 | Los accesos denegados de HT-09 (`require_permiso`, `require_alguno_permiso`, `verificar_sede`) quedan en el mismo histórico |
+
+Cubierto por `tests/routers/test_auditoria.py` (32 tests, uno o más por CA) y las
+4 pruebas de `tests/test_permisos.py::TestVerificarSede` actualizadas para la nueva
+firma de `verificar_sede`.
+
+### Por qué no es un middleware HTTP literal (CA1)
+
+El documento de la HT pide "un middleware en FastAPI". Un `app.middleware("http")`
+solo ve el `Request` de entrada y la `Response` de salida — para cuando podría
+inspeccionar la respuesta, el `db.commit()` del endpoint **ya corrió**, así que jamás
+podría reconstruir `vlrs_antrrs`: el valor "antes" ya no existe en ningún lado
+accesible desde ahí.
+
+El mecanismo real, documentado con detalle en `app/security/auditoria.py`: un
+**listener de eventos de SQLAlchemy** (`Session.before_flush`, registrado una sola
+vez con `event.listen`) que sí puede leer el `history` de cada atributo modificado
+-el valor previo sigue disponible hasta que el flush lo confirma-, combinado con una
+**dependencia reutilizable** (`auditar_cambios`) que marca en `db.info` quién es el
+usuario ejecutor antes de que el endpoint toque el modelo. Los routers de HU20/HU21
+solo cambian `Depends(get_db)` por `Depends(auditar_cambios)`; ninguno escribe el log
+a mano.
+
+El listener solo actúa si encuentra esa marca en la sesión — así un `UPDATE` sobre
+`Usuario` que no pasó por HU20 (el contador de intentos fallidos en `/auth/login`, o
+`/auth/cambiar-contrasena`) no genera una fila de auditoría fantasma.
+
+### Columnas excluidas (nunca en `vlrs_antrrs`/`vlrs_nvs`)
+
+`cntrsn_hsh` (el hash de la contraseña) está en una lista de exclusión explícita
+(`COLUMNAS_SENSIBLES_EXCLUIDAS` en `app/security/auditoria.py`), verificada por
+`TestExclusionDeColumnasSensibles` en los tests. No es la contraseña en claro, pero
+seguiría siendo material sensible en una tabla que cualquier Administrador puede leer
+por `GET /auditoria` (CA2), sin aportar nada al propósito de la auditoría.
+
+### Módulo elegido para `require_permiso` (CA2)
+
+El CHECK constraint de `prms_usr_sd` (HT-03) no tiene un módulo "Auditoría". Se usa
+`require_permiso("Usuarios", EDICION)`: todo lo auditado hoy (HU20, HU21, accesos
+denegados de HT-09) son operaciones del módulo Usuarios, y "Edición" -no "Lectura"- es
+necesario porque Técnico CENERIS tiene Lectura en Usuarios en el seed (para ver el
+listado de HU03) y el CA2 exige acceso **únicamente** para Administrador. Hoy, edición
+en Usuarios = Administrador, sin hardcodear el nombre del rol.
+
+### Aislamiento por sede y el caso `id_sd IS NULL` (CA4)
+
+Un Administrador con `scope: "global"` (el caso normal del seed real) ve todo el
+histórico, sin restricción de sede — mismo criterio que ya aplica `verificar_sede()`
+para cualquier otro recurso. Un Administrador con `scope: "por_sede"` (el esquema lo
+permite aunque el seed no siembre ninguno así) queda limitado a su propia sede.
+
+**Advertencia heredada de HT-04, no corregida acá:** el flujo de login puede emitir
+`sede_id: null` en el JWT incluso cuando en teoría debería traer una sede. Un registro
+de auditoría generado por ese usuario queda con `id_sd IS NULL`. La decisión explícita
+de HT-11 sobre ese caso:
+
+- Un Administrador `global` **sí** ve esos registros (no hay restricción de sede que
+  aplicarles).
+- Un Administrador `por_sede` **nunca** los ve: su sede propia, sea cual sea, no es
+  "ninguna sede" — `NULL` no matchea ninguna sede concreta, ni siquiera implícitamente.
+- Filtrar explícitamente con `?sede_id=<n>` excluye los `NULL` **incluso** para el
+  Administrador global: pedir una sede concreta es pedir esa sede, no "esa sede o sin
+  sede".
+
+Cubierto por `TestCA4AislamientoPorSede` (6 tests, incluidos los tres casos de arriba).
+No se corrige el bug de HT-04 que produce ese `sede_id: null` — queda fuera de alcance
+de esta HT.
+
+### Por qué NO se particiona `lg_adtr` (punto 5, decisión explícita)
+
+`lg_adtr` **no está particionada** y esta HT no la particiona. Mismo criterio que el
+TTL largo sin uso de HT-10 (arriba): se documenta la decisión en vez de construir algo
+sin caso de uso real todavía.
+
+El particionamiento mensual de HT-08 (`tlmtr`) se justifica por **volumen y cadencia**:
+telemetría entra por cada lectura de cada parámetro de cada dispositivo, cada pocos
+minutos, del orden de miles de filas por día incluso con pocos dispositivos. Auditoría
+(`lg_adtr`) solo crece con **acciones administrativas humanas** — ediciones de usuario,
+cambios de permisos, intentos de acceso denegados — que ocurren en un orden de
+magnitud completamente distinto (decenas o cientos por día en el peor caso, no miles
+por hora). Los dos índices ya existentes (`idx_lgadtr_sd_fch`, `idx_lgadtr_usr_fch`,
+ambos sobre `id_sd`/`id_usr` + `fch_evnt`) alcanzan de sobra para el volumen esperado;
+particionar sin ese volumen agrega complejidad operativa (mantenimiento de particiones,
+igual que ya hace `app/tasks/particiones.py` para `tlmtr`) sin ninguna mejora medible.
+
+Si el volumen real de auditoría llegara a acercarse al de telemetría -escenario que no
+se anticipa con el modelo de negocio actual-, particionar sería una migración de
+`lg_adtr`, no un cambio de aplicación; se avisaría antes de intentarlo, no se haría por
+iniciativa propia.
+
+### Inmutabilidad (CA3): aplicación vs. base de datos
+
+**A nivel de aplicación (lo que exige CA3), ya implementado:** no existe ningún
+endpoint `PUT`/`PATCH`/`DELETE` sobre `/auditoria` -verificado por
+`TestCA3Inmutabilidad::test_openapi_no_declara_escritura_sobre_auditoria` contra el
+propio contrato de OpenAPI-, y ningún router de la aplicación actualiza o borra un
+`LogAuditoria` por ORM.
+
+**A nivel de base de datos, documentado pero NO ejecutado:**
+`backend/scripts_sql/ht11_inmutabilidad_lg_adtr.sql` tiene el `GRANT`/`REVOKE` de un
+rol `pangea_auditoria` de solo-`INSERT` sobre `lg_adtr`. **No se puede aplicar
+todavía**: la aplicación entera usa hoy un único usuario de base de datos (`pangea`,
+ver `DATABASE_URL`) para todas las tablas, así que revocarle `UPDATE`/`DELETE` a nivel
+de rol la dejaría sin poder editar usuarios, ubicaciones, mapeos, nada — no solo
+auditoría. Aplicar esa garantía requiere **separar el usuario de base de datos** en
+al menos dos roles (uno de aplicación general, uno de solo-inserción para auditoría) y
+cablear la app para conectarse con el segundo en las rutas de
+`security/permisos.py`/`security/auditoria.py`. Es trabajo de **infraestructura**,
+fuera de alcance de este commit; el script queda listo y comentado para cuando se haga
+esa separación.

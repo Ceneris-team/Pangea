@@ -170,13 +170,13 @@ class TestVerificarSede:
     def usuario(self, sede_id=1, scope="por_sede", sub="1", rol="Cliente Final"):
         return {"sub": sub, "sede_id": sede_id, "scope": scope, "rol": rol}
 
-    def test_misma_sede_no_lanza(self):
-        verificar_sede(self.usuario(sede_id=1), sede_id_recurso=1)
+    def test_misma_sede_no_lanza(self, db_session):
+        verificar_sede(self.usuario(sede_id=1), sede_id_recurso=1, db=db_session)
 
-    def test_sede_distinta_lanza_403(self):
+    def test_sede_distinta_lanza_403(self, db_session):
         # CA3: usuario de la Sede A no accede a recursos de la Sede B.
         with pytest.raises(HTTPException) as exc:
-            verificar_sede(self.usuario(sede_id=1), sede_id_recurso=2)
+            verificar_sede(self.usuario(sede_id=1), sede_id_recurso=2, db=db_session)
         assert exc.value.status_code == 403
 
     def test_permiso_de_edicion_no_evita_el_aislamiento_de_sede(self, db_session, fabrica):
@@ -190,11 +190,11 @@ class TestVerificarSede:
 
         u = self.usuario(sede_id=sede.id_sd, sub=str(usuario_db.id_usr), rol=rol.nmbr)
         with pytest.raises(HTTPException):
-            verificar_sede(u, sede_id_recurso=sede.id_sd + 1000)
+            verificar_sede(u, sede_id_recurso=sede.id_sd + 1000, db=db_session)
 
-    def test_scope_global_ignora_la_sede(self):
+    def test_scope_global_ignora_la_sede(self, db_session):
         # CA4: scope='global' puede operar sobre cualquier sede sin
         # asignación previa -esto es solo el filtro de sede; el de
         # módulo/nivel lo sigue exigiendo tiene_permiso() (ver arriba).
         u = self.usuario(sede_id=None, scope="global", rol="Administrador")
-        verificar_sede(u, sede_id_recurso=99)  # no debe lanzar
+        verificar_sede(u, sede_id_recurso=99, db=db_session)  # no debe lanzar
