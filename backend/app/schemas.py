@@ -45,6 +45,102 @@ class UsuarioCreado(BaseModel):
     estd: str
 
 
+class UsuarioActualizar(BaseModel):
+    """HU20 CA1/CA2: los cuatro campos que el formulario de edición
+    precarga y permite modificar -Nombre completo, Correo electrónico, Rol
+    y Teléfono-.
+
+    Todos opcionales, mismo patrón parcial que UbicacionActualizar y
+    DispositivoUpdate: solo se actualiza lo que venga en el body
+    (exclude_unset lo filtra en el router). Un null explícito significa
+    "no lo toques" salvo en tlfn, la única columna nullable del conjunto.
+
+    El estado (Activo/Inactivo) NO está acá: dar de baja a un usuario es
+    otra historia, y HU20 fija sus campos editables en esos cuatro. Al no
+    declararse, Pydantic lo descarta del body en vez de aplicarlo en
+    silencio.
+    """
+
+    nmbr_cmplt: str | None = Field(default=None, min_length=1, max_length=150)
+    crr: EmailStr | None = None
+    rol_nombre: str | None = None
+    tlfn: str | None = Field(default=None, max_length=20)
+
+
+class UsuarioDetalle(BaseModel):
+    """HU20 CA1: los datos actuales con los que se precarga el formulario
+    de edición. A diferencia de UsuarioListItem incluye el teléfono, que
+    es editable pero no se muestra como columna del listado (HU03)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id_usr: int
+    nmbr_cmplt: str
+    crr: str
+    rol_nombre: str
+    tlfn: str | None
+    estd: str
+
+
+class UsuarioActualizado(BaseModel):
+    """HU20 CA2: el usuario ya actualizado, con el mensaje EXACTO que pide
+    el CA. Mismo patrón de respuesta que UsuarioCreado (HU04)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    mensaje: str = "Usuario actualizado correctamente"
+    id_usr: int
+    nmbr_cmplt: str
+    crr: str
+    rol_nombre: str
+    tlfn: str | None
+    estd: str
+
+
+class UbicacionPermisoItem(BaseModel):
+    """HU21 CA1: una ubicación registrada junto al estado de acceso ACTUAL
+    del usuario que se está gestionando. El panel las lista TODAS -no solo
+    las concedidas-, con `tiene_acceso` marcando cuáles están habilitadas,
+    que es justo lo que el CA pide mostrar."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id_ubccn: int
+    nmbr: str
+    tiene_acceso: bool
+
+
+class PermisosUbicacionPanel(BaseModel):
+    """HU21 CA1: respuesta del GET del panel de permisos."""
+
+    id_usr: int
+    nmbr_cmplt: str
+    rol_nombre: str
+    items: list[UbicacionPermisoItem]
+
+
+class PermisosUbicacionActualizar(BaseModel):
+    """HU21 CA2: el conjunto COMPLETO de ubicaciones habilitadas tras
+    marcar/desmarcar. Se manda entero y reemplaza al anterior (PUT, no un
+    par de altas/bajas): así el resultado no depende del estado previo ni
+    del orden en que lleguen dos ediciones simultáneas.
+
+    Una lista vacía es válida y significa "quitarle todos los accesos";
+    por eso el campo es obligatorio y no tiene default -un body sin
+    `ubicacion_ids` sería ambiguo entre "ninguna" y "no lo toques"-.
+    """
+
+    ubicacion_ids: list[int]
+
+
+class PermisosUbicacionActualizados(BaseModel):
+    """HU21 CA2: confirmación con el mensaje EXACTO que pide el CA."""
+
+    mensaje: str = "Permisos actualizados correctamente"
+    id_usr: int
+    ubicacion_ids: list[int]
+
+
 class UbicacionListItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
