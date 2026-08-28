@@ -22,6 +22,7 @@ from app.services.ingesta.persistencia import (
     resolver_dispositivo,
 )
 from app.services.ingesta.validador import validar_lecturas
+from app.services.cache.invalidacion import invalidar_por_lectura
 from app.services.mapa.eventos import construir_evento, publicar_lecturas
 from app.services.particiones import ParticionInexistenteError
 
@@ -261,6 +262,18 @@ def procesar_archivo_dat(self, id_archv: int) -> dict:
         # está caído, el archivo sigue siendo 'Exitoso' -los datos están
         # guardados- y solo se pierde la actualización en vivo, que se
         # recupera sola en cuanto el usuario recargue el mapa.
+        # HT-10 CA2: segunda invalidación, ya DESPUES del commit.
+        # guardar_lecturas() ya invalidó al persistir, pero eso ocurre
+        # antes de que la transacción sea visible; si un request se coló
+        # en esa ventana, repobló la caché con el estado anterior. Repetir
+        # acá cierra la ventana. Es idempotente y cuesta un DEL sobre un
+        # conjunto normalmente vacío.
+        if resultado_persistencia.guardadas:
+            invalidar_por_lectura(
+                id_sd=resultado_persistencia.id_sd,
+                id_ubccn=resultado_persistencia.id_ubccn,
+            )
+
         _publicar_eventos_mapa(db, resultado_persistencia)
 
         logger.info(

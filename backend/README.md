@@ -526,15 +526,187 @@ con filtro.
 Estos dos puntos aparecieron durante la auditoría de HT-08 pero **no** son parte de
 sus 4 CA, así que quedan documentados en vez de implementados aquí:
 
-- **El endpoint de HU12/HU13 (`GET /mediciones` en `app/routers/mediciones.py`) no
+- ~~**El endpoint de HU12/HU13 (`GET /mediciones` en `app/routers/mediciones.py`) no
   filtra por rango de fechas todavía**, ni lo hace el frontend
   (`ConsultaDatos.tsx`). Filtra por ubicación/parámetro, pero sin filtro de fecha la
   consulta toca las 13 particiones (confirmado con `medir_pruning_ht08.py` contra la
   forma real del endpoint). El particionamiento de HT-08 ya deja el terreno listo
   -índice `(id_sd, fch_hr)` e índice BRIN sobre `fch_hr`- para que ese filtro sea
   barato en cuanto HU12 (u HT-16) lo agregue; hoy simplemente no se usa porque nadie
-  lo pide.
+  lo pide.~~
+  **RESUELTO en HT-10** (backend): el filtro de fechas ya se aplica en SQL y la
+  consulta toca 1 de 17 particiones usando el índice `(id_sd, fch_hr)` de HT-08. Ver
+  "Caché de consultas (HT-10)" más abajo. El frontend (`ConsultaDatos.tsx`) sigue sin
+  enviar el rango: eso queda fuera del alcance de HT-10, que es backend.
 - **HT-16** (optimización de índices) debería repetir la medición de CA2 con varias
   sedes y dispositivos y volumen realista -el script de arriba es el punto de partida-,
   y **HT-18** (pruebas de carga con Locust) queda para su propio sprint. Ninguno de los
   dos se tocó en este trabajo.
+
+## Caché de consultas (HT-10)
+
+Capa de caché en Redis para los tres endpoints de lectura que alimentan las vistas
+pesadas, más el filtro de fechas y el downsampling que faltaban en `GET /mediciones`.
+
+| Endpoint | HU | Qué cachea |
+|---|---|---|
+| `GET /mediciones` | HU12/HU13/HU15 | la página de la tabla/gráfica ya paginada |
+| `GET /mapa-cliente` | HU17 | la **carga inicial** del mapa |
+| `GET /ubicaciones/mapa` | HU22 | el listado con polígonos y conteo de dispositivos |
+
+El WebSocket `/mapa-cliente/ws` **no se toca**: sigue empujando cada lectura en vivo
+por pub/sub (DB 4) y no tiene nada que cachear.
+
+### Piezas
+
+- `app/services/cache/consultas.py` — clave, TTL, lectura/escritura e invalidación.
+- `app/services/cache/invalidacion.py` — punto único por el que entran los dos
+  caminos de escritura de telemetría.
+- `app/services/cache/downsampling.py` — muestreo para rangos amplios.
+- `app/scripts/medir_cache_ht10.py` — medición reproducible (mismo patrón que
+  `medir_pruning_ht08.py`).
+
+### DB de Redis: la 5
+
+Las anteriores ya estaban tomadas y **no** se comparten: `1` rate limiting,
+`2` broker de Celery, `3` result backend, `4` pub/sub del mapa (HU17). Configurable
+con `CACHE_REDIS_URL`; por defecto se deriva de `CELERY_BROKER_URL`, igual que
+`MAPA_EVENTOS_REDIS_URL`.
+
+### Aislamiento entre sedes (CA4)
+
+La clave **nunca** se arma solo con la query string. Se arma con el *ámbito de
+visibilidad* del usuario: `sede_id` del JWT **+ hash del conjunto ordenado de
+ubicaciones permitidas** (`prms_ubccn`, HU21).
+
+Los dos parámetros son necesarios y ninguno sobra:
+
+- solo la query string → el Cliente Final de la sede A recibiría los datos de la
+  sede B por pedir la misma URL un segundo después. En `/mapa-cliente` y
+  `/ubicaciones/mapa`, que **no tienen ningún parámetro de consulta**, esa colisión
+  sería universal;
+- solo `sede_id` → dos Clientes Finales de la **misma** sede con asignaciones de
+  HU21 distintas compartirían entrada; y como un usuario con `scope: "global"` trae
+  `sede_id=None` (ver `security/permisos.py`), *todos* los globales caerían en el
+  mismo cubo.
+
+Cubierto por `tests/routers/test_cache_ht10.py::TestCA4AislamientoEntreSedes` sobre
+los tres endpoints, con el orden que rompería una caché mal construida (la sede A
+pide primero y deja la entrada caliente; la sede B pide después con la misma URL).
+
+### TTL
+
+`TTL_CORTO = 45s` (`CACHE_TTL_CORTO`) para los tres endpoints: punto medio del rango
+30-60s que pide la HT, muy por debajo de la cadencia real del dato (~15 min por
+archivo). Es además la red de seguridad si un evento de invalidación se pierde.
+
+`TTL_LARGO = 24h` (`CACHE_TTL_LARGO`) queda **definido pero sin uso**: la HT lo pide
+solo para agregados históricos precalculados, y **hoy no existe ninguno** — no hay
+tabla de rollup ni vista materializada (y la restricción de HT-08 sigue vigente:
+Lightsail Managed Database no admite extensiones, así que tampoco hay agregados
+continuos de TimescaleDB). Caso **no aplica todavía**; cuando exista ese precálculo,
+la constante ya está y el único cambio es pasarla como `ttl` al guardar.
+
+### Invalidación dirigida (CA2)
+
+Se dispara en los **dos** caminos de escritura de telemetría:
+
+1. `services/ingesta/persistencia.py::guardar_lecturas` — pipeline automático;
+   además `tasks/ingesta.py` vuelve a invalidar **después del commit**, para cerrar
+   la ventana en la que un request podría repoblar la caché con el estado anterior.
+2. `routers/dispositivos.py`, `POST /dispositivos/{id}/carga-manual` — escribe
+   directo en `tlmtr` sin pasar por el pipeline, así que necesita su propia llamada.
+
+La invalidación es **filtrada por sede y ubicación**, nunca un flush global: cada
+entrada se registra al guardarse en un índice (`SET` de Redis) por sede y/o
+ubicación, y la escritura borra solo esos índices. Con el pipeline corriendo cada
+minuto sobre varias sedes, un flush global dejaría la caché sin llegar viva al
+segundo request.
+
+### Downsampling (CA3)
+
+`GET /mediciones` acepta `max_puntos` (default 2000, `MEDICIONES_MAX_PUNTOS`). Si el
+rango supera 30 días (`MEDICIONES_DIAS_RANGO_AMPLIO`) y hay más puntos que el máximo,
+se aplica **muestreo uniforme** (cada n-ésimo punto, conservando primero y último) y
+la respuesta lo declara con `downsampling: true` y `total_sin_muestrear`.
+
+Uniforme y no LTTB: es O(n), **determinista** —importa porque la respuesta se
+cachea— y el repo no tiene hoy ninguna implementación de LTTB que reutilizar. La
+limitación asumida está anotada en el módulo: el muestreo puede saltarse un pico
+aislado, aceptable para una vista de tendencia; el dato exacto sigue en la BD y
+aparece al acotar el rango.
+
+Un rango **abierto** (sin `fecha_inicio` o sin `fecha_fin`) cuenta como amplio: pide
+toda la historia disponible, que es el caso más pesado de todos.
+
+### Bug encontrado y corregido: el filtro de fechas de HU12 no llegaba a la consulta
+
+`GET /mediciones` recibía `fecha_inicio`/`fecha_fin` y los documentaba, pero **no los
+aplicaba a la query**: traía todas las filas de las ubicaciones permitidas, las
+ordenaba en Python y recién ahí paginaba. Es justo el pendiente que HT-08 dejó
+anotado más arriba. Ahora el rango, el orden y el filtro van en SQL, que es lo que
+permite el partition pruning:
+
+```
+Bitmap Heap Scan on tlmtr_2026_08
+  Recheck Cond: ((id_sd = 12) AND (fch_hr >= ...) AND (fch_hr <= ...))
+  ->  Bitmap Index Scan on tlmtr_2026_08_id_sd_fch_hr_idx
+Execution Time: 0.177 ms
+```
+
+**1 de 17 particiones tocadas**, resuelto por el índice `(id_sd, fch_hr)` que ya
+existía de HT-08. No se creó ningún índice nuevo.
+
+### Medición de tiempo de respuesta (CA1 / CA5)
+
+```bash
+docker compose up -d db redis
+python -m app.scripts.medir_cache_ht10
+python -m app.scripts.medir_cache_ht10 --meses 6 --minutos 15 --repeticiones 30
+```
+
+Corrida del 2026-08-28 — dataset sintético de **51.843 filas en 3 sedes** (17.281 en
+la sede medida), 1 lectura cada 15 min durante ~6 meses, 20 repeticiones por
+consulta. `ANTES` = cada petición golpea Postgres; `DESPUES` = la capa real de HT-10
+(primera repetición MISS, resto HIT):
+
+| Consulta | Filas | ANTES p95 | DESPUES p95 | HIT medio | Mejora |
+|---|---:|---:|---:|---:|---:|
+| Gráfico 1 día | 96 | 1,3 ms | 0,7 ms | 0,47 ms | 3x |
+| **Gráfico 7 días (CA1)** | **672** | **1,7 ms** | **1,0 ms** | **0,75 ms** | **2x** |
+| Gráfico 30 días | 2.880 | 5,5 ms | 2,3 ms | 1,91 ms | 3x |
+| Gráfico 90 días | 8.640 | 34,8 ms | 6,1 ms | 5,06 ms | 7x |
+
+**CA1 cumplido con margen**: los rangos de hasta 7 días quedan en **1,0 ms p95**,
+tres órdenes de magnitud por debajo del objetivo de 1 s. La mejora relativa crece con
+el tamaño del rango, que es lo esperable: la caché ahorra más cuanto más pesada es la
+consulta que evita.
+
+> **Esta medición es LOCAL, no de staging.** Corre contra `docker compose`
+> (Postgres y Redis en `localhost`) sobre datos sintéticos. Sirve para comparar el
+> antes y el después en igualdad de condiciones, **no** para predecir la latencia real
+> en Lightsail, donde la BD es managed, la red no es localhost y hay otros procesos
+> compitiendo. No hubo entorno de staging disponible para validar el CA tal como está
+> redactado.
+
+#### Detalle encontrado al medir: una conexión a Redis por operación anulaba la caché
+
+La primera versión abría y cerraba la conexión en cada `get`, igual que hace
+`publicar_lectura()` en `services/mapa/eventos.py`. Medido: **16,5 ms** por operación
+contra **0,35 ms** reutilizando el pool (~47x), es decir mucho más de lo que tarda la
+consulta a Postgres que la caché pretende evitar — la caché era **más lenta** que no
+tenerla (los 7 días daban 23,3 ms p95 *con* caché contra 1,7 ms sin ella).
+
+Ahora se reutiliza un cliente por proceso, invalidado si cambia el PID para que el
+prefork de Celery y los workers de uvicorn no compartan un socket heredado. El patrón
+de `eventos.py` se deja como está: ahí se publica un puñado de veces por archivo
+`.dat`, dentro de un job que ya tardó segundos en FTP, no en el camino crítico de cada
+petición HTTP.
+
+### Degradación si Redis se cae
+
+Ninguna función de la caché lanza hacia el llamador: leer devuelve `None` (miss) y
+escribir no hace nada, así que los endpoints responden igual consultando Postgres,
+solo más lento. Los sockets llevan `socket_timeout=2s` para que un Redis colgado no
+bloquee una petición. Los tests que requieren Redis se saltan solos si no está
+levantado.

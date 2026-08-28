@@ -63,6 +63,7 @@ from app.schemas import (
     LogIngestaListItem,
 )
 from app.security.permisos import EDICION, LECTURA, require_permiso, verificar_sede
+from app.services.cache.invalidacion import invalidar_por_lectura
 from app.services.ingesta.mapeo import MapeoNoEncontradoError, resolver_formato
 from app.services.particiones import (
     ParticionInexistenteError,
@@ -594,6 +595,17 @@ def cargar_punto_manual(
                 ),
             ) from exc
         raise
+
+    # HT-10 CA2: la carga manual escribe DIRECTO en tlmtr sin pasar por
+    # services/ingesta/persistencia.py, así que la invalidación del
+    # pipeline no la cubre: hay que dispararla también acá. Sin esto, un
+    # punto cargado a mano no aparecía en la gráfica ni en el mapa hasta
+    # que caducara la entrada cacheada.
+    #
+    # Después del commit de arriba, nunca antes (mismo criterio que
+    # tasks/ingesta.py) y filtrada por la sede y la ubicación de ESTE
+    # dispositivo, no global.
+    invalidar_por_lectura(id_sd=ubicacion.id_sd, id_ubccn=dispositivo.id_ubccn)
 
     return {
         "mensaje": "Medición registrada correctamente",
