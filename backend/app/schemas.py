@@ -438,6 +438,28 @@ class LogIngestaListItem(BaseModel):
     rgstrs_prcsds: int | None
 
 
+class DispositivoEstadisticas(BaseModel):
+    """HU19: panel de estadísticas de un dispositivo, calculado sobre
+    archv_ingst (HU09) dentro del rango de fechas pedido. Los cuatro
+    indicadores son enteros (CA: 'se muestran como valores numéricos
+    enteros').
+
+    id_cnxn/id_ubccn viajan en la respuesta para que el frontend arme los
+    dos botones de redirección (CA3/CA4: 'VER COLA DE PROCESAMIENTO' hacia
+    /cola-ingesta filtrado por conexión, 'VER HISTORIAL DE DATOS' hacia
+    /consulta-datos filtrado por ubicación) sin una segunda llamada a la
+    ficha del dispositivo."""
+
+    total_recibidos: int
+    total_procesados: int
+    total_fallidos: int
+    ultima_fecha_recepcion: datetime | None
+    fecha_inicio: datetime
+    fecha_fin: datetime
+    id_cnxn: int
+    id_ubccn: int
+
+
 class MetricasColaIngesta(BaseModel):
     """HU 09: conteo de archv_ingst agrupado por estado, para el módulo
     de monitoreo de la cola de procesamiento (HT-05, CA3)."""
