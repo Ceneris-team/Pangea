@@ -32,6 +32,7 @@ datos del panel emergente, incluida la cantidad de dispositivos asociados
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.encoders import jsonable_encoder
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -41,6 +42,7 @@ from app.models import (
     Dispositivo, MapeoColumna, MapeoFormato, Parametro, Sede, Ubicacion, PermisoUbicacion,
 )
 from app.security.permisos import require_permiso, verificar_sede, LECTURA, EDICION
+from app.services.cache import consultas as cache
 from app.schemas import (
     ParametroListItem, UbicacionActualizar, UbicacionCrear, UbicacionCreada, UbicacionDetalle,
     UbicacionListItem, UbicacionParaMapa,
@@ -106,7 +108,35 @@ def ubicaciones_para_mapa(
     ubicación por separado. Acá todo sale en una consulta, con el conteo
     de dispositivos (CA2) resuelto por LEFT JOIN + COUNT en vez de una
     consulta por ubicación.
+
+    HT-10: cacheado con TTL corto. Este endpoint no tiene parámetros de
+    consulta ni rango de fechas -devuelve siempre "todas las que este
+    usuario puede ver"-, así que la clave se compone SOLO del ámbito de
+    visibilidad: sede_id del JWT + conjunto de ubicaciones visibles (CA4).
+    Es justamente el endpoint donde una clave sin ámbito sería más
+    peligrosa: al no haber query string, todos los usuarios colisionarían
+    en la misma entrada.
     """
+    # El ámbito se calcula con las ubicaciones que este usuario ve, que
+    # acá son las de la propia consulta. Se resuelven primero, en una
+    # consulta barata (solo ids), para poder armar la clave antes de
+    # ejecutar la consulta pesada con el JOIN y el COUNT.
+    ids_visibles = db.query(Ubicacion.id_ubccn)
+    if usuario.get("rol") not in ROLES_CON_ACCESO_TOTAL:
+        ids_visibles = ids_visibles.join(
+            PermisoUbicacion, PermisoUbicacion.id_ubccn == Ubicacion.id_ubccn
+        ).filter(PermisoUbicacion.id_usr == int(usuario["sub"]))
+    ids_visibles = [fila[0] for fila in ids_visibles.all()]
+
+    ambito = cache.ambito_de_usuario(usuario, ids_visibles)
+    clave_cache = cache.clave("ubicaciones-mapa", ambito)
+    cacheado = cache.obtener(clave_cache)
+    if cacheado is not None:
+        # FastAPI valida esto contra response_model=list[UbicacionParaMapa]
+        # igual que si viniera de la BD, así que la forma de la respuesta
+        # cacheada no puede divergir de la normal sin que el test lo note.
+        return cacheado
+
     filas = (
         db.query(Ubicacion, func.count(Dispositivo.id_dspstv))
         # LEFT JOIN: una ubicación sin dispositivos tiene que aparecer en
@@ -121,7 +151,8 @@ def ubicaciones_para_mapa(
             PermisoUbicacion, PermisoUbicacion.id_ubccn == Ubicacion.id_ubccn
         ).filter(PermisoUbicacion.id_usr == id_usr)
 
-    return [
+    resultado = filas.order_by(Ubicacion.nmbr).all()
+    items = [
         UbicacionParaMapa(
             id_ubccn=ubicacion.id_ubccn,
             nmbr=ubicacion.nmbr,
@@ -132,15 +163,23 @@ def ubicaciones_para_mapa(
             plgn_gjsn=ubicacion.plgn_gjsn,
             dispositivos_count=cantidad,
         )
-        for ubicacion, cantidad in filas.order_by(Ubicacion.nmbr).all()
+        for ubicacion, cantidad in resultado
     ]
+
+    # Indexado por ubicación y por sede: el conteo de dispositivos y el
+    # propio listado cambian con altas/bajas, y la invalidación por
+    # lectura nueva (punto 3) borra ambos índices de la sede afectada.
+    indices = [cache.indice_de_ubicacion(u.id_ubccn) for u, _ in resultado]
+    indices += [cache.indice_de_sede(s) for s in {u.id_sd for u, _ in resultado}]
+    cache.guardar(clave_cache, jsonable_encoder(items), ttl=cache.TTL_CORTO, indices=indices)
+    return items
 
 
 def _verificar_acceso_ubicacion(db: Session, usuario: dict, ubicacion: Ubicacion) -> None:
     """Mismo criterio de listar_ubicaciones: Administrador/Técnico ven
     cualquier ubicación (dentro de su sede, ver verificar_sede);
     Cliente Final solo la suya, vía PermisoUbicacion (HU 21)."""
-    verificar_sede(usuario, ubicacion.id_sd, modulo="Ubicaciones", accion=LECTURA)
+    verificar_sede(usuario, ubicacion.id_sd, db, modulo="Ubicaciones", accion=LECTURA)
     if usuario.get("rol") not in ROLES_CON_ACCESO_TOTAL:
         id_usr = int(usuario["sub"])
         tiene_permiso = (
@@ -242,7 +281,7 @@ def crear_ubicacion(
     # Un usuario 'por_sede' ya opera sobre su sede por _resolver_sede; esto
     # cubre al 'global' que manda un id_sd ajeno y a cualquier cambio futuro
     # que deje pasar id_sd desde el body.
-    verificar_sede(usuario, id_sd, modulo="Ubicaciones", accion=EDICION)
+    verificar_sede(usuario, id_sd, db, modulo="Ubicaciones", accion=EDICION)
 
     # CA: nombre único dentro de la sede. Se chequea antes del insert para
     # devolver el 409 con el mensaje de negocio; el UNIQUE de la BD sigue
@@ -308,7 +347,7 @@ def actualizar_ubicacion(
 
     # Mismo aislamiento por sede que el resto del módulo (HT-09 CA3): un
     # usuario 'por_sede' no edita ubicaciones de otra sede.
-    verificar_sede(usuario, ubicacion.id_sd, modulo="Ubicaciones", accion=EDICION)
+    verificar_sede(usuario, ubicacion.id_sd, db, modulo="Ubicaciones", accion=EDICION)
 
     # CA de HU08: nombre único DENTRO de la sede (uq_ubccn_sd_nombre). Se
     # excluye el propio registro: guardar sin cambiar el nombre no puede

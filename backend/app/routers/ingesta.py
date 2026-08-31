@@ -212,7 +212,7 @@ def detalle_archivo_ingesta(
         raise HTTPException(status_code=404, detail="Archivo no encontrado")
 
     conexion = db.get(ConexionFTP, archivo.id_cnxn)
-    verificar_sede(usuario, conexion.id_sd, modulo="Ingesta", accion=LECTURA)
+    verificar_sede(usuario, conexion.id_sd, db, modulo="Ingesta", accion=LECTURA)
 
     datalogger_nombre = _mapa_dataloggers(db, {archivo.id_cnxn}).get(archivo.id_cnxn, "Desconocido")
 
@@ -254,7 +254,7 @@ def registros_archivo_ingesta(
         raise HTTPException(status_code=404, detail="Archivo no encontrado")
 
     conexion = db.get(ConexionFTP, archivo.id_cnxn)
-    verificar_sede(usuario, conexion.id_sd, modulo="Ingesta", accion=LECTURA)
+    verificar_sede(usuario, conexion.id_sd, db, modulo="Ingesta", accion=LECTURA)
 
     try:
         dispositivo = resolver_dispositivo(db, archivo.id_cnxn)
@@ -312,7 +312,7 @@ def reintentar_archivo_ingesta(
         raise HTTPException(status_code=404, detail="Archivo no encontrado")
 
     conexion = db.get(ConexionFTP, archivo.id_cnxn)
-    verificar_sede(usuario, conexion.id_sd, modulo="Ingesta", accion=EDICION)
+    verificar_sede(usuario, conexion.id_sd, db, modulo="Ingesta", accion=EDICION)
 
     if archivo.estd != "Fallido":
         raise HTTPException(

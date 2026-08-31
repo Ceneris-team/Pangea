@@ -27,6 +27,7 @@ from app.models.evento_texto import EventoTexto
 from app.models.mapeo_dispositivo import Dispositivo, Parametro
 from app.models.telemetria import Telemetria
 from app.models.ubicacion_conexion import Ubicacion
+from app.services.cache.invalidacion import invalidar_por_lectura
 from app.services.particiones import (
     ParticionInexistenteError,
     es_error_de_particion_faltante,
@@ -59,6 +60,12 @@ class ResultadoPersistencia:
     # recuperar un dato que esta función ya tuvo en la mano.
     ultimos_por_parametro: dict = dataclasses.field(default_factory=dict)
     id_ubccn: int | None = None
+    # HT-10 CA2: la sede a la que pertenecen estas lecturas. Se devuelve
+    # junto a id_ubccn porque la invalidación de caché necesita las dos
+    # (una entrada de /mediciones se indexa por sede y una de
+    # /mapa-cliente por ubicación). Sale de la ubicación del dispositivo,
+    # que esta función ya tiene cargada: no cuesta ninguna consulta extra.
+    id_sd: int | None = None
 
 
 def resolver_dispositivo(db: Session, id_cnxn: int) -> Dispositivo:
@@ -173,10 +180,32 @@ def guardar_lecturas(
             sorted(parametros_desconocidos),
         )
 
+    # HT-10 CA2: una lectura nueva invalida la caché de su sede y su
+    # ubicación (invalidación DIRIGIDA, no un flush global: ver
+    # services/cache/invalidacion.py).
+    #
+    # POR QUE ACA Y NO SOLO TRAS EL COMMIT DEL LLAMADOR: esta función no
+    # commitea -la transacción la controla el llamador-, así que en rigor
+    # se invalida un instante antes de que el dato sea visible. Se acepta
+    # a propósito, y es seguro en este sentido: borrar de más solo puede
+    # causar un MISS extra (se relee de Postgres), nunca servir un dato
+    # viejo. El riesgo teórico contrario -que un request se cuele entre
+    # esta invalidación y el commit y repueble con el estado anterior- lo
+    # acota el TTL corto (<=45s, ver consultas.TTL_CORTO), y tasks/
+    # ingesta.py invalida OTRA VEZ después del commit para cerrarlo.
+    #
+    # Va acá igualmente porque es el punto que garantiza que TODO camino
+    # que persista lecturas por el pipeline invalide, incluso si mañana
+    # aparece otro llamador de guardar_lecturas() que no sea la tarea de
+    # Celery actual.
+    if guardadas:
+        invalidar_por_lectura(id_sd=ubicacion.id_sd, id_ubccn=dispositivo.id_ubccn)
+
     return ResultadoPersistencia(
         guardadas=guardadas,
         omitidas_sin_valor=omitidas_sin_valor,
         omitidas_parametro_desconocido=sorted(parametros_desconocidos),
         ultimos_por_parametro=ultimos_por_parametro,
         id_ubccn=dispositivo.id_ubccn,
+        id_sd=ubicacion.id_sd,
     )

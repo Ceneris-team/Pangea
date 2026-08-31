@@ -531,7 +531,7 @@ def obtener_mapeo(
         raise HTTPException(status_code=404, detail="Mapeo no encontrado")
 
     dispositivo, ubicacion = _cargar_contexto(db, formato)
-    verificar_sede(usuario, ubicacion.id_sd, modulo="Ingesta", accion=LECTURA)
+    verificar_sede(usuario, ubicacion.id_sd, db, modulo="Ingesta", accion=LECTURA)
 
     base = _a_list_item(formato, dispositivo, ubicacion, _contar_columnas(db, formato.id_mp))
     return MapeoFormatoDetalle(
@@ -557,7 +557,7 @@ def crear_mapeo(
     # que POST /dispositivos (HU11): un usuario 'por_sede' no puede colgar
     # un mapeo de un dispositivo de otra sede aunque conozca su id.
     dispositivo, ubicacion = _resolver_dispositivo(db, body.id_dspstv)
-    verificar_sede(usuario, ubicacion.id_sd, modulo="Ingesta", accion=EDICION)
+    verificar_sede(usuario, ubicacion.id_sd, db, modulo="Ingesta", accion=EDICION)
 
     _validar_indices_unicos(body.columnas)
     _validar_parametros_existen(db, body.columnas)
@@ -650,7 +650,7 @@ def actualizar_mapeo(
         raise HTTPException(status_code=404, detail="Mapeo no encontrado")
 
     dispositivo, ubicacion = _cargar_contexto(db, formato)
-    verificar_sede(usuario, ubicacion.id_sd, modulo="Ingesta", accion=EDICION)
+    verificar_sede(usuario, ubicacion.id_sd, db, modulo="Ingesta", accion=EDICION)
 
     if body.dlmtdr is not None:
         formato.dlmtdr = _validar_delimitador(body.dlmtdr)
@@ -729,7 +729,7 @@ def eliminar_mapeo(
         raise HTTPException(status_code=404, detail="Mapeo no encontrado")
 
     dispositivo, ubicacion = _cargar_contexto(db, formato)
-    verificar_sede(usuario, ubicacion.id_sd, modulo="Ingesta", accion=EDICION)
+    verificar_sede(usuario, ubicacion.id_sd, db, modulo="Ingesta", accion=EDICION)
 
     if formato.estd == "Inactivo":
         raise HTTPException(status_code=409, detail="Este mapeo ya está inactivo")
@@ -923,7 +923,7 @@ def _conexion_del_dispositivo(db: Session, usuario: dict, id_dspstv: int) -> Con
             status_code=422, detail="Este dispositivo no tiene una conexión FTP configurada"
         )
 
-    verificar_sede(usuario, cnxn.id_sd, modulo="Ingesta", accion=LECTURA)
+    verificar_sede(usuario, cnxn.id_sd, db, modulo="Ingesta", accion=LECTURA)
     return cnxn
 
 

@@ -33,6 +33,7 @@ from app.database import SessionLocal, get_db
 from app.security.jwt_auth import TokenExpirado, TokenInvalido, decode_access_token
 from app.security.permisos import LECTURA, require_permiso, tiene_permiso
 from app.security.ubicaciones_permitidas import ubicaciones_permitidas
+from app.services.cache import consultas as cache
 from app.services.mapa.eventos import canal_de_ubicacion, cliente_asincrono
 from app.services.mapa.semaforo import evaluar_semaforo
 from app.services.mapa.ultimos_valores import (
@@ -79,6 +80,22 @@ def mapa_del_cliente(
     (y aunque el WebSocket falle por completo).
     """
     ids_permitidas = ubicaciones_permitidas(db, usuario)
+
+    # HT-10: caché con TTL corto de la CARGA INICIAL. El WebSocket de
+    # abajo (/mapa-cliente/ws) no se toca: empuja cada lectura en vivo por
+    # pub/sub y no pasa por acá.
+    #
+    # CA4: la clave incluye el ámbito de visibilidad (sede + ubicaciones
+    # permitidas), no solo la URL -que en este endpoint no tiene ningún
+    # parámetro-. Sin eso, TODOS los usuarios compartirían una sola
+    # entrada y el primero en pedir le serviría sus marcadores a los
+    # demás, que es exactamente la fuga entre sedes que CA4 prohíbe.
+    ambito = cache.ambito_de_usuario(usuario, ids_permitidas)
+    clave_cache = cache.clave("mapa-cliente", ambito)
+    cacheado = cache.obtener(clave_cache)
+    if cacheado is not None:
+        return cacheado
+
     ubicaciones = ubicaciones_con_coordenadas(db, ids_permitidas)
     ultimos = ultimos_valores_por_ubicacion(db, ids_permitidas)
 
@@ -121,7 +138,20 @@ def mapa_del_cliente(
             }
         )
 
-    return {"items": items}
+    respuesta = {"items": items}
+    # Invalidación por UBICACION (punto 3): este endpoint es un marcador
+    # por ubicación, así que una lectura nueva de cualquiera de las
+    # ubicaciones visibles cambia esta respuesta. Se indexan las
+    # PERMITIDAS y no solo las que hoy tienen datos: una ubicación sin
+    # lecturas todavía aparece en el mapa (sin valores), y su primera
+    # lectura tiene que tirar esta entrada igual.
+    cache.guardar(
+        clave_cache,
+        respuesta,
+        ttl=cache.TTL_CORTO,
+        indices=[cache.indice_de_ubicacion(i) for i in ids_permitidas],
+    )
+    return respuesta
 
 
 def _autenticar_websocket(token: str | None) -> dict | None:

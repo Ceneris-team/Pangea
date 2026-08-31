@@ -68,6 +68,10 @@ export default function ConsultaDatos() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // HU21: hasta que /ubicaciones responda no se sabe si el usuario tiene
+  // ubicaciones asignadas; sin esto el mensaje parpadearía en cada carga.
+  const [cargandoUbicaciones, setCargandoUbicaciones] = useState(true);
+
   // CA1: carga los parámetros y ubicaciones disponibles para el usuario (HU21/HU06)
   useEffect(() => {
     apiFetch<{ items: ParametroItem[] }>("/mediciones/parametros")
@@ -76,7 +80,8 @@ export default function ConsultaDatos() {
 
     apiFetch<{ items: UbicacionItem[] }>("/ubicaciones", { params: { por_pagina: 100 } })
       .then((res) => setUbicaciones(res.items))
-      .catch(() => setUbicaciones([]));
+      .catch(() => setUbicaciones([]))
+      .finally(() => setCargandoUbicaciones(false));
   }, []);
 
   useEffect(() => {
@@ -104,6 +109,17 @@ export default function ConsultaDatos() {
   const toggleSeleccion = (lista: number[], setLista: (v: number[]) => void, id: number) => {
     setLista(lista.includes(id) ? lista.filter((v) => v !== id) : [...lista, id]);
   };
+
+  /** HU21: "Un Cliente Final sin ninguna ubicación asignada ve el módulo de
+   *  consulta vacío con el mensaje 'No tienes ubicaciones asignadas. Contacta
+   *  al administrador.'"
+   *
+   *  Se deduce de que /ubicaciones -que ya filtra por prms_ubccn- no devuelva
+   *  nada: los roles con acceso total siempre reciben todas las ubicaciones
+   *  registradas, así que una lista vacía solo puede significar o que no hay
+   *  ninguna ubicación en el sistema o que a este usuario no le asignaron
+   *  ninguna. En ambos casos no hay nada que consultar. */
+  const sinUbicacionesAsignadas = !cargandoUbicaciones && ubicaciones.length === 0;
 
   // CA2/CA3: "APLICAR" traslada la selección en curso a los filtros activos
   const handleAplicar = () => {
@@ -152,6 +168,19 @@ export default function ConsultaDatos() {
               </p>
             </header>
 
+            {/* HU21: un Cliente Final sin ninguna ubicación asignada ve el
+                módulo vacío con este mensaje exacto, en lugar de unos filtros
+                y una tabla que nunca podrían devolver nada. */}
+            {sinUbicacionesAsignadas && (
+              <div className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl shadow-sm border border-black/10 dark:border-white/10 p-8 text-center">
+                <p className="text-sm text-gray-600 dark:text-gray-300">
+                  No tienes ubicaciones asignadas. Contacta al administrador.
+                </p>
+              </div>
+            )}
+
+            {!sinUbicacionesAsignadas && (
+            <>
             <div className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl shadow-sm border border-black/10 dark:border-white/10 p-5 mb-6">
               <div className="flex flex-col lg:flex-row gap-6">
                 <fieldset className="flex-1">
@@ -272,6 +301,8 @@ export default function ConsultaDatos() {
                 </table>
               </div>
             </div>
+            </>
+            )}
           </main>
         </div>
       </div>

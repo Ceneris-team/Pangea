@@ -48,7 +48,7 @@ export async function apiFetch<T>(path: string, options: ApiOptions = {}): Promi
     body: options.body ? JSON.stringify(options.body) : undefined,
   });
 
-  return manejarRespuesta<T>(res);
+  return manejarRespuesta<T>(res, path);
 }
 
 /**
@@ -71,8 +71,15 @@ export async function apiUpload<T>(path: string, formData: FormData): Promise<T>
   return manejarRespuesta<T>(res);
 }
 
-async function manejarRespuesta<T>(res: Response): Promise<T> {
-  if (res.status === 401) {
+async function manejarRespuesta<T>(res: Response, path?: string): Promise<T> {
+  // /auth/login nunca lleva token: su propio 401 significa "correo o
+  // contraseña incorrectos" (ver MSG_CREDENCIALES_INVALIDAS en el backend),
+  // no una sesión expirada. Sin esta excepción, cada intento fallido de
+  // login disparaba el mismo interceptor que un token vencido: borraba el
+  // storage y forzaba window.location.href, una recarga dura de la SPA que
+  // se llevaba por delante el mensaje de error que el propio catch de
+  // Login.tsx acababa de mostrar.
+  if (res.status === 401 && path !== "/auth/login") {
     // HU 01 CA: token inválido/expirado -> cerrar sesión y volver a login.
     localStorage.removeItem("pangea_token");
     localStorage.removeItem("pangea_rol");

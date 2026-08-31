@@ -63,6 +63,7 @@ from app.schemas import (
     LogIngestaListItem,
 )
 from app.security.permisos import EDICION, LECTURA, require_permiso, verificar_sede
+from app.services.cache.invalidacion import invalidar_por_lectura
 from app.services.ingesta.mapeo import MapeoNoEncontradoError, resolver_formato
 from app.services.particiones import (
     ParticionInexistenteError,
@@ -195,7 +196,7 @@ def crear_dispositivo(
 
     # Un usuario 'por_sede' no puede crear un dispositivo en una ubicación
     # de otra sede aunque conozca su id_ubccn (HT-09 CA3).
-    verificar_sede(usuario, ubicacion.id_sd, modulo="Dispositivos", accion=EDICION)
+    verificar_sede(usuario, ubicacion.id_sd, db, modulo="Dispositivos", accion=EDICION)
 
     # resolver_dispositivo() en services/ingesta/persistencia.py asume
     # exactamente 1 dispositivo Activo por conexión FTP; un segundo
@@ -251,7 +252,7 @@ def _cargar_ficha(db: Session, id_dspstv: int, usuario: dict, accion: str):
         raise HTTPException(status_code=404, detail="Dispositivo no encontrado")
 
     dispositivo, ubicacion, conexion = fila
-    verificar_sede(usuario, ubicacion.id_sd, modulo="Dispositivos", accion=accion)
+    verificar_sede(usuario, ubicacion.id_sd, db, modulo="Dispositivos", accion=accion)
 
     # Un Cliente Final solo ve dispositivos de ubicaciones que tenga
     # asignadas, mismo criterio que el listado de HU10.
@@ -594,6 +595,17 @@ def cargar_punto_manual(
                 ),
             ) from exc
         raise
+
+    # HT-10 CA2: la carga manual escribe DIRECTO en tlmtr sin pasar por
+    # services/ingesta/persistencia.py, así que la invalidación del
+    # pipeline no la cubre: hay que dispararla también acá. Sin esto, un
+    # punto cargado a mano no aparecía en la gráfica ni en el mapa hasta
+    # que caducara la entrada cacheada.
+    #
+    # Después del commit de arriba, nunca antes (mismo criterio que
+    # tasks/ingesta.py) y filtrada por la sede y la ubicación de ESTE
+    # dispositivo, no global.
+    invalidar_por_lectura(id_sd=ubicacion.id_sd, id_ubccn=dispositivo.id_ubccn)
 
     return {
         "mensaje": "Medición registrada correctamente",
