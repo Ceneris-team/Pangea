@@ -158,11 +158,15 @@ export default function Dispositivos() {
   const [guardandoDispositivo, setGuardandoDispositivo] = useState(false);
   const [errorFormulario, setErrorFormulario] = useState("");
 
-  // Eliminar (desactivar) dispositivo: mismo patrón que Parámetros.tsx,
+  // HU18: desactivar/reactivar dispositivo, mismo patrón que Parámetros.tsx,
   // con el modal de confirmación con cuenta regresiva.
-  const [dispositivoAEliminar, setDispositivoAEliminar] = useState<DispositivoListItem | null>(null);
-  const [eliminandoId, setEliminandoId] = useState<number | null>(null);
-  const [errorEliminar, setErrorEliminar] = useState<string | null>(null);
+  const [dispositivoADesactivar, setDispositivoADesactivar] = useState<DispositivoListItem | null>(null);
+  const [desactivandoId, setDesactivandoId] = useState<number | null>(null);
+  const [errorDesactivar, setErrorDesactivar] = useState<string | null>(null);
+
+  const [dispositivoAReactivar, setDispositivoAReactivar] = useState<DispositivoListItem | null>(null);
+  const [reactivandoId, setReactivandoId] = useState<number | null>(null);
+  const [errorReactivar, setErrorReactivar] = useState<string | null>(null);
 
   // CA1: el selector de Ubicación solo ofrece ubicaciones Activas.
   useEffect(() => {
@@ -242,23 +246,43 @@ export default function Dispositivos() {
     }
   }
 
-  /** Desactiva el dispositivo (el backend hace borrado lógico, no físico:
-   *  ver eliminar_dispositivo en routers/dispositivos.py). */
-  async function confirmarEliminarDispositivo() {
-    if (!dispositivoAEliminar) return;
-    setEliminandoId(dispositivoAEliminar.id_dspstv);
-    setErrorEliminar(null);
+  /** HU18 CA1/CA2: desactiva el dispositivo (el backend hace borrado
+   *  lógico, no físico: ver eliminar_dispositivo en routers/dispositivos.py). */
+  async function confirmarDesactivarDispositivo() {
+    if (!dispositivoADesactivar) return;
+    setDesactivandoId(dispositivoADesactivar.id_dspstv);
+    setErrorDesactivar(null);
     try {
-      await apiFetch<{ mensaje: string }>(`/dispositivos/${dispositivoAEliminar.id_dspstv}`, {
+      await apiFetch<{ mensaje: string }>(`/dispositivos/${dispositivoADesactivar.id_dspstv}`, {
         method: "DELETE",
       });
-      setDispositivoAEliminar(null);
-      setMensajeExito("Dispositivo eliminado correctamente");
+      setDispositivoADesactivar(null);
+      setMensajeExito("Dispositivo desactivado correctamente");
       cargarDispositivos();
     } catch (err) {
-      setErrorEliminar(err instanceof ApiError ? err.message : "No se pudo eliminar el dispositivo");
+      setErrorDesactivar(err instanceof ApiError ? err.message : "No se pudo desactivar el dispositivo");
     } finally {
-      setEliminandoId(null);
+      setDesactivandoId(null);
+    }
+  }
+
+  /** HU18 CA3: reactiva un dispositivo Inactivo desde la misma columna de
+   *  acciones (ver reactivar_dispositivo en routers/dispositivos.py). */
+  async function confirmarReactivarDispositivo() {
+    if (!dispositivoAReactivar) return;
+    setReactivandoId(dispositivoAReactivar.id_dspstv);
+    setErrorReactivar(null);
+    try {
+      await apiFetch<{ mensaje: string }>(`/dispositivos/${dispositivoAReactivar.id_dspstv}/reactivar`, {
+        method: "POST",
+      });
+      setDispositivoAReactivar(null);
+      setMensajeExito("Dispositivo reactivado correctamente");
+      cargarDispositivos();
+    } catch (err) {
+      setErrorReactivar(err instanceof ApiError ? err.message : "No se pudo reactivar el dispositivo");
+    } finally {
+      setReactivandoId(null);
     }
   }
 
@@ -399,9 +423,15 @@ export default function Dispositivos() {
                 </div>
               )}
 
-              {errorEliminar && (
+              {errorDesactivar && (
                 <div className="p-4 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm border-b border-red-200 dark:border-red-800/30">
-                  {errorEliminar}
+                  {errorDesactivar}
+                </div>
+              )}
+
+              {errorReactivar && (
+                <div className="p-4 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm border-b border-red-200 dark:border-red-800/30">
+                  {errorReactivar}
                 </div>
               )}
 
@@ -477,20 +507,37 @@ export default function Dispositivos() {
                               Configurar
                             </button>
 
-                            {/* Solo Administrador/Técnico CENERIS (permiso de
-                                EDICION sobre Dispositivos) pueden eliminar. */}
-                            {ROLES_PUEDEN_AGREGAR.includes(rol ?? "") && (
+                            {/* HU18: solo Administrador/Técnico CENERIS (permiso
+                                de EDICION sobre Dispositivos) pueden
+                                desactivar/reactivar. Desactivar solo aplica a
+                                un dispositivo Activo; Reactivar, a uno Inactivo. */}
+                            {ROLES_PUEDEN_AGREGAR.includes(rol ?? "") && d.estd === "Activo" && (
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  setDispositivoAEliminar(d);
+                                  setDispositivoADesactivar(d);
                                 }}
                                 className="inline-flex items-center justify-center px-3 py-1.5 ml-2 text-sm font-medium text-red-600 dark:text-red-400 bg-transparent border border-red-200 dark:border-red-800/40 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 focus:ring-4 focus:outline-none focus:ring-red-100 dark:focus:ring-red-900/30 transition-all"
                               >
                                 <svg className="w-4 h-4 mr-2" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
                                 </svg>
-                                Eliminar
+                                Desactivar
+                              </button>
+                            )}
+
+                            {ROLES_PUEDEN_AGREGAR.includes(rol ?? "") && d.estd === "Inactivo" && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setDispositivoAReactivar(d);
+                                }}
+                                className="inline-flex items-center justify-center px-3 py-1.5 ml-2 text-sm font-medium text-[#5a7000] dark:text-[#ccff00] bg-transparent border border-[#ccff00]/40 rounded-lg hover:bg-[#ccff00]/10 focus:ring-4 focus:outline-none focus:ring-[#ccff00]/20 transition-all"
+                              >
+                                <svg className="w-4 h-4 mr-2" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+                                </svg>
+                                Reactivar
                               </button>
                             )}
                           </td>
@@ -659,13 +706,28 @@ export default function Dispositivos() {
         </div>
       )}
 
-      {dispositivoAEliminar && (
+      {dispositivoADesactivar && (
         <ConfirmarEliminacionModal
-          titulo={`Eliminar dispositivo '${dispositivoAEliminar.nmbr}'`}
-          mensaje="El dispositivo pasará a estado Inactivo y dejará de recibir nuevos datos. Sus mediciones y mapeos ya registrados no se pierden."
-          confirmando={eliminandoId === dispositivoAEliminar.id_dspstv}
-          onConfirmar={confirmarEliminarDispositivo}
-          onCancelar={() => setDispositivoAEliminar(null)}
+          titulo={`Desactivar dispositivo '${dispositivoADesactivar.nmbr}'`}
+          mensaje="El dispositivo pasará a estado Inactivo y se detendrá la ingesta de sus archivos. Su historial de telemetría no se pierde y puede reactivarse en cualquier momento."
+          confirmando={desactivandoId === dispositivoADesactivar.id_dspstv}
+          textoAccion="Desactivar"
+          textoAccionEnProgreso="Desactivando..."
+          onConfirmar={confirmarDesactivarDispositivo}
+          onCancelar={() => setDispositivoADesactivar(null)}
+        />
+      )}
+
+      {dispositivoAReactivar && (
+        <ConfirmarEliminacionModal
+          titulo={`Reactivar dispositivo '${dispositivoAReactivar.nmbr}'`}
+          mensaje="El dispositivo pasará a estado Activo y volverá a recibir e ingestar datos de su conexión FTP."
+          confirmando={reactivandoId === dispositivoAReactivar.id_dspstv}
+          textoAccion="Reactivar"
+          textoAccionEnProgreso="Reactivando..."
+          variante="neutral"
+          onConfirmar={confirmarReactivarDispositivo}
+          onCancelar={() => setDispositivoAReactivar(null)}
         />
       )}
     </div>
