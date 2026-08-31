@@ -72,6 +72,67 @@ class TestAutenticacionDelCanal:
         assert mensaje["code"] == 1008
 
 
+class TestUsuarioSinUbicaciones:
+    """Regresión: un Cliente Final SIN ubicaciones asignadas (sin filas en
+    prms_ubccn) no debe tumbar la conexión.
+
+    Apareció en producción y no en local: acá los tests siempre creaban el
+    usuario CON una ubicación asignada, así que el camino de
+    "ids_permitidas vacío" nunca se ejecutaba. El bug era que el bucle
+    llamaba a pubsub.get_message() sobre un PubSub sin ningún canal
+    suscrito, y redis lanza RuntimeError("pubsub connection not set: did
+    you forget to call subscribe()?"), cerrando el WebSocket con un 1006
+    (cierre anormal) apenas conectaba.
+
+    Es justo el estado de un cliente recién dado de alta, así que era el
+    primer usuario real el que se lo encontraba.
+    """
+
+    def test_conexion_sobrevive_sin_ubicaciones_asignadas(
+        self, client, db_session, fabrica, monkeypatch
+    ):
+        rol = fabrica.rol("Cliente Final")
+        sede = fabrica.sede()
+        usuario = fabrica.usuario(rol=rol)
+        db_session.add(
+            PermisoUsuarioSede(
+                id_usr=usuario.id_usr,
+                id_sd=sede.id_sd,
+                id_rl=rol.id_rl,
+                mdl="Tableros",
+                nvl="Lectura",
+            )
+        )
+        db_session.flush()
+        # Sin filas en prms_ubccn a propósito: ese es el caso bajo prueba.
+
+        token = create_access_token(
+            user_id=usuario.id_usr, sede_id=sede.id_sd, scope="por_sede", rol="Cliente Final"
+        )
+
+        # El ping normal tarda 25s; se acorta para que el test no espere.
+        monkeypatch.setattr("app.routers.mapa_cliente.SEGUNDOS_ENTRE_PINGS", 0.2)
+
+        # El endpoint WebSocket abre su PROPIA sesión con SessionLocal() (no
+        # usa la dependencia get_db, que es de HTTP), así que no ve las filas
+        # de esta transacción de test -que nunca se confirma-. Se apunta la
+        # consulta de permisos a la sesión del test y se fuerza el caso bajo
+        # prueba: usuario válido, cero ubicaciones asignadas.
+        monkeypatch.setattr(
+            "app.routers.mapa_cliente.tiene_permiso", lambda *a, **k: True
+        )
+        monkeypatch.setattr(
+            "app.routers.mapa_cliente.ubicaciones_permitidas", lambda *a, **k: []
+        )
+
+        with client.websocket_connect(f"/mapa-cliente/ws?token={token}") as ws:
+            # Antes del arreglo esto era un 1006 inmediato; ahora tiene que
+            # llegar un ping y la conexión seguir viva.
+            mensaje = ws.receive_json()
+
+        assert mensaje == {"tipo": "ping"}
+
+
 class TestContratoDelEvento:
     """La forma del mensaje la definen productor (worker de Celery) y
     consumidor (WebSocket) por separado; si se desincroniza, el marcador
