@@ -5,6 +5,7 @@ import { useAuth } from "../context/AuthContext";
 import { ROLES } from "../config/roles";
 import Sidebar from "../components/layout/Sidebar";
 import Topbar from "../components/layout/Topbar";
+import ConfirmarEliminacionModal from "../components/ConfirmarEliminacionModal";
 
 interface DispositivoListItem {
   id_dspstv: number;
@@ -157,6 +158,16 @@ export default function Dispositivos() {
   const [guardandoDispositivo, setGuardandoDispositivo] = useState(false);
   const [errorFormulario, setErrorFormulario] = useState("");
 
+  // HU18: desactivar/reactivar dispositivo, mismo patrón que Parámetros.tsx,
+  // con el modal de confirmación con cuenta regresiva.
+  const [dispositivoADesactivar, setDispositivoADesactivar] = useState<DispositivoListItem | null>(null);
+  const [desactivandoId, setDesactivandoId] = useState<number | null>(null);
+  const [errorDesactivar, setErrorDesactivar] = useState<string | null>(null);
+
+  const [dispositivoAReactivar, setDispositivoAReactivar] = useState<DispositivoListItem | null>(null);
+  const [reactivandoId, setReactivandoId] = useState<number | null>(null);
+  const [errorReactivar, setErrorReactivar] = useState<string | null>(null);
+
   // CA1: el selector de Ubicación solo ofrece ubicaciones Activas.
   useEffect(() => {
     apiFetch<{ items: UbicacionListItem[] }>("/ubicaciones", {
@@ -232,6 +243,46 @@ export default function Dispositivos() {
       setErrorFormulario(err instanceof ApiError ? err.message : "No se pudo registrar el dispositivo");
     } finally {
       setGuardandoDispositivo(false);
+    }
+  }
+
+  /** HU18 CA1/CA2: desactiva el dispositivo (el backend hace borrado
+   *  lógico, no físico: ver eliminar_dispositivo en routers/dispositivos.py). */
+  async function confirmarDesactivarDispositivo() {
+    if (!dispositivoADesactivar) return;
+    setDesactivandoId(dispositivoADesactivar.id_dspstv);
+    setErrorDesactivar(null);
+    try {
+      await apiFetch<{ mensaje: string }>(`/dispositivos/${dispositivoADesactivar.id_dspstv}`, {
+        method: "DELETE",
+      });
+      setDispositivoADesactivar(null);
+      setMensajeExito("Dispositivo desactivado correctamente");
+      cargarDispositivos();
+    } catch (err) {
+      setErrorDesactivar(err instanceof ApiError ? err.message : "No se pudo desactivar el dispositivo");
+    } finally {
+      setDesactivandoId(null);
+    }
+  }
+
+  /** HU18 CA3: reactiva un dispositivo Inactivo desde la misma columna de
+   *  acciones (ver reactivar_dispositivo en routers/dispositivos.py). */
+  async function confirmarReactivarDispositivo() {
+    if (!dispositivoAReactivar) return;
+    setReactivandoId(dispositivoAReactivar.id_dspstv);
+    setErrorReactivar(null);
+    try {
+      await apiFetch<{ mensaje: string }>(`/dispositivos/${dispositivoAReactivar.id_dspstv}/reactivar`, {
+        method: "POST",
+      });
+      setDispositivoAReactivar(null);
+      setMensajeExito("Dispositivo reactivado correctamente");
+      cargarDispositivos();
+    } catch (err) {
+      setErrorReactivar(err instanceof ApiError ? err.message : "No se pudo reactivar el dispositivo");
+    } finally {
+      setReactivandoId(null);
     }
   }
 
@@ -372,6 +423,18 @@ export default function Dispositivos() {
                 </div>
               )}
 
+              {errorDesactivar && (
+                <div className="p-4 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm border-b border-red-200 dark:border-red-800/30">
+                  {errorDesactivar}
+                </div>
+              )}
+
+              {errorReactivar && (
+                <div className="p-4 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm border-b border-red-200 dark:border-red-800/30">
+                  {errorReactivar}
+                </div>
+              )}
+
               {/* Tabla */}
               <div className="overflow-x-auto">
                 <table className="w-full text-sm text-left text-gray-600 dark:text-gray-300">
@@ -430,7 +493,7 @@ export default function Dispositivos() {
                           </td>
                           {/* DEC-09: abre la ficha del dispositivo, donde se
                               configura su formato y su mapeo de columnas. */}
-                          <td className="px-6 py-4 text-right">
+                          <td className="px-6 py-4 text-right whitespace-nowrap">
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -443,6 +506,40 @@ export default function Dispositivos() {
                               </svg>
                               Configurar
                             </button>
+
+                            {/* HU18: solo Administrador/Técnico CENERIS (permiso
+                                de EDICION sobre Dispositivos) pueden
+                                desactivar/reactivar. Desactivar solo aplica a
+                                un dispositivo Activo; Reactivar, a uno Inactivo. */}
+                            {ROLES_PUEDEN_AGREGAR.includes(rol ?? "") && d.estd === "Activo" && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setDispositivoADesactivar(d);
+                                }}
+                                className="inline-flex items-center justify-center px-3 py-1.5 ml-2 text-sm font-medium text-red-600 dark:text-red-400 bg-transparent border border-red-200 dark:border-red-800/40 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 focus:ring-4 focus:outline-none focus:ring-red-100 dark:focus:ring-red-900/30 transition-all"
+                              >
+                                <svg className="w-4 h-4 mr-2" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                                </svg>
+                                Desactivar
+                              </button>
+                            )}
+
+                            {ROLES_PUEDEN_AGREGAR.includes(rol ?? "") && d.estd === "Inactivo" && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setDispositivoAReactivar(d);
+                                }}
+                                className="inline-flex items-center justify-center px-3 py-1.5 ml-2 text-sm font-medium text-[#5a7000] dark:text-[#ccff00] bg-transparent border border-[#ccff00]/40 rounded-lg hover:bg-[#ccff00]/10 focus:ring-4 focus:outline-none focus:ring-[#ccff00]/20 transition-all"
+                              >
+                                <svg className="w-4 h-4 mr-2" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+                                </svg>
+                                Reactivar
+                              </button>
+                            )}
                           </td>
                         </tr>
                       ))}
@@ -607,6 +704,31 @@ export default function Dispositivos() {
             </form>
           </div>
         </div>
+      )}
+
+      {dispositivoADesactivar && (
+        <ConfirmarEliminacionModal
+          titulo={`Desactivar dispositivo '${dispositivoADesactivar.nmbr}'`}
+          mensaje="El dispositivo pasará a estado Inactivo y se detendrá la ingesta de sus archivos. Su historial de telemetría no se pierde y puede reactivarse en cualquier momento."
+          confirmando={desactivandoId === dispositivoADesactivar.id_dspstv}
+          textoAccion="Desactivar"
+          textoAccionEnProgreso="Desactivando..."
+          onConfirmar={confirmarDesactivarDispositivo}
+          onCancelar={() => setDispositivoADesactivar(null)}
+        />
+      )}
+
+      {dispositivoAReactivar && (
+        <ConfirmarEliminacionModal
+          titulo={`Reactivar dispositivo '${dispositivoAReactivar.nmbr}'`}
+          mensaje="El dispositivo pasará a estado Activo y volverá a recibir e ingestar datos de su conexión FTP."
+          confirmando={reactivandoId === dispositivoAReactivar.id_dspstv}
+          textoAccion="Reactivar"
+          textoAccionEnProgreso="Reactivando..."
+          variante="neutral"
+          onConfirmar={confirmarReactivarDispositivo}
+          onCancelar={() => setDispositivoAReactivar(null)}
+        />
       )}
     </div>
   );

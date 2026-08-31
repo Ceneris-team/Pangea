@@ -38,6 +38,25 @@ services/ingesta/persistencia.py asume EXACTAMENTE un dispositivo Activo
 por conexión FTP para poder resolver a qué dispositivo pertenece un
 archivo entrante. Un segundo dispositivo Activo en la misma conexión
 rompería esa resolución en silencio, así que se rechaza con 409.
+
+HU 18 - Desactivar dispositivo
+
+CA1/CA2: desde el listado, "Desactivar" sobre un dispositivo Activo pide
+confirmación y, al confirmar, cambia su estado a Inactivo (eliminar_dispositivo,
+DELETE /dispositivos/{id_dspstv}), detiene la ingesta de esa conexión FTP y
+responde "Dispositivo desactivado correctamente". No hay borrado físico: es
+el mismo criterio de "eliminar" que ya usan conexiones_ftp.py y mapeos.py,
+solo que aquí HU18 lo declara explícitamente como su propio requerimiento.
+
+CA3: el listado ya distingue Activo/Inactivo (HU10) y ahora ofrece
+"Reactivar" (reactivar_dispositivo, POST /dispositivos/{id_dspstv}/reactivar)
+para un dispositivo Inactivo, sujeto al mismo 409 de "un solo Activo por
+ConexionFTP" que crear/actualizar ya exigen.
+
+Detalle de conversación: desactivar NO borra Telemetria ya almacenada (sigue
+consultable); solo detiene el polling FTP de esa conexión. Restringido a
+Administrador/Técnico CENERIS vía el permiso de EDICION sobre 'Dispositivos'
+(HT-03), igual que crear/actualizar/eliminar.
 """
 
 import datetime as dt
@@ -378,6 +397,84 @@ def actualizar_dispositivo(
             conexion_frcnc_mnts=conexion.frcnc_mnts,
         ),
     }
+
+
+@router.delete("/{id_dspstv}")
+def eliminar_dispositivo(
+    id_dspstv: int,
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(require_permiso("Dispositivos", EDICION)),
+):
+    """HU18: 'Desactivar' un dispositivo (estd='Inactivo') en vez de borrar
+    la fila -no hay borrado físico de dispositivos, solo desactivación-.
+
+    Un borrado físico rompería la FK NOT NULL de Telemetria.id_dspstv
+    -y la de MapeoFormato.id_dspstv- si el dispositivo ya generó
+    mediciones o tiene mapeos configurados, y perdería la trazabilidad de
+    qué dispositivo produjo cada lectura histórica. Mismo criterio que
+    eliminar_conexion (routers/conexiones_ftp.py) y eliminar_mapeo
+    (routers/mapeos.py): desactivar lo saca de circulación -deja de
+    poder recibir un mapeo activo nuevo, detiene el polling FTP de esa
+    conexión (resolver_dispositivo ya no encuentra un Activo que resolver)
+    y libera su ConexionFTP para otro dispositivo (ver el 409 de
+    crear_dispositivo)- sin destruir nada: su historial de telemetría
+    sigue existiendo y consultable.
+
+    Restringido a Administrador/Técnico CENERIS igual que crear/actualizar
+    (CA de HU18), vía el mismo permiso de EDICION sobre 'Dispositivos' -no
+    hay rol Cliente Final con ese permiso en la matriz real-.
+    """
+    dispositivo, ubicacion, _conexion = _cargar_ficha(db, id_dspstv, usuario, EDICION)
+
+    if dispositivo.estd == "Inactivo":
+        raise HTTPException(status_code=409, detail="Este dispositivo ya está inactivo")
+
+    dispositivo.estd = "Inactivo"
+    db.commit()
+
+    return {"mensaje": "Dispositivo desactivado correctamente"}
+
+
+@router.post("/{id_dspstv}/reactivar")
+def reactivar_dispositivo(
+    id_dspstv: int,
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(require_permiso("Dispositivos", EDICION)),
+):
+    """HU18 CA3: contraparte de eliminar_dispositivo. Un dispositivo
+    Inactivo puede reactivarse en cualquier momento desde la misma columna
+    de acciones del listado.
+
+    Reaplica el mismo 409 de crear_dispositivo/actualizar_dispositivo (un
+    solo dispositivo Activo por ConexionFTP, exigido por
+    resolver_dispositivo): si mientras este dispositivo estuvo inactivo su
+    ConexionFTP fue reasignada a otro dispositivo que ya está Activo,
+    reactivarlo también rompería esa resolución en silencio.
+    """
+    dispositivo, ubicacion, _conexion = _cargar_ficha(db, id_dspstv, usuario, EDICION)
+
+    if dispositivo.estd == "Activo":
+        raise HTTPException(status_code=409, detail="Este dispositivo ya está activo")
+
+    ya_tiene_activo = (
+        db.query(Dispositivo)
+        .filter(
+            Dispositivo.id_cnxn == dispositivo.id_cnxn,
+            Dispositivo.estd == "Activo",
+            Dispositivo.id_dspstv != id_dspstv,
+        )
+        .first()
+    )
+    if ya_tiene_activo is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="Esta conexión FTP ya tiene un dispositivo activo asociado",
+        )
+
+    dispositivo.estd = "Activo"
+    db.commit()
+
+    return {"mensaje": "Dispositivo reactivado correctamente"}
 
 
 @router.get("/{id_dspstv}/logs", response_model=list[LogIngestaListItem])
