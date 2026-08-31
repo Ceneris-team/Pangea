@@ -5,6 +5,7 @@ import { useAuth } from "../context/AuthContext";
 import { ROLES } from "../config/roles";
 import Sidebar from "../components/layout/Sidebar";
 import Topbar from "../components/layout/Topbar";
+import ConfirmarEliminacionModal from "../components/ConfirmarEliminacionModal";
 
 interface DispositivoListItem {
   id_dspstv: number;
@@ -157,6 +158,12 @@ export default function Dispositivos() {
   const [guardandoDispositivo, setGuardandoDispositivo] = useState(false);
   const [errorFormulario, setErrorFormulario] = useState("");
 
+  // Eliminar (desactivar) dispositivo: mismo patrón que Parámetros.tsx,
+  // con el modal de confirmación con cuenta regresiva.
+  const [dispositivoAEliminar, setDispositivoAEliminar] = useState<DispositivoListItem | null>(null);
+  const [eliminandoId, setEliminandoId] = useState<number | null>(null);
+  const [errorEliminar, setErrorEliminar] = useState<string | null>(null);
+
   // CA1: el selector de Ubicación solo ofrece ubicaciones Activas.
   useEffect(() => {
     apiFetch<{ items: UbicacionListItem[] }>("/ubicaciones", {
@@ -232,6 +239,26 @@ export default function Dispositivos() {
       setErrorFormulario(err instanceof ApiError ? err.message : "No se pudo registrar el dispositivo");
     } finally {
       setGuardandoDispositivo(false);
+    }
+  }
+
+  /** Desactiva el dispositivo (el backend hace borrado lógico, no físico:
+   *  ver eliminar_dispositivo en routers/dispositivos.py). */
+  async function confirmarEliminarDispositivo() {
+    if (!dispositivoAEliminar) return;
+    setEliminandoId(dispositivoAEliminar.id_dspstv);
+    setErrorEliminar(null);
+    try {
+      await apiFetch<{ mensaje: string }>(`/dispositivos/${dispositivoAEliminar.id_dspstv}`, {
+        method: "DELETE",
+      });
+      setDispositivoAEliminar(null);
+      setMensajeExito("Dispositivo eliminado correctamente");
+      cargarDispositivos();
+    } catch (err) {
+      setErrorEliminar(err instanceof ApiError ? err.message : "No se pudo eliminar el dispositivo");
+    } finally {
+      setEliminandoId(null);
     }
   }
 
@@ -372,6 +399,12 @@ export default function Dispositivos() {
                 </div>
               )}
 
+              {errorEliminar && (
+                <div className="p-4 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm border-b border-red-200 dark:border-red-800/30">
+                  {errorEliminar}
+                </div>
+              )}
+
               {/* Tabla */}
               <div className="overflow-x-auto">
                 <table className="w-full text-sm text-left text-gray-600 dark:text-gray-300">
@@ -430,7 +463,7 @@ export default function Dispositivos() {
                           </td>
                           {/* DEC-09: abre la ficha del dispositivo, donde se
                               configura su formato y su mapeo de columnas. */}
-                          <td className="px-6 py-4 text-right">
+                          <td className="px-6 py-4 text-right whitespace-nowrap">
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -443,6 +476,23 @@ export default function Dispositivos() {
                               </svg>
                               Configurar
                             </button>
+
+                            {/* Solo Administrador/Técnico CENERIS (permiso de
+                                EDICION sobre Dispositivos) pueden eliminar. */}
+                            {ROLES_PUEDEN_AGREGAR.includes(rol ?? "") && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setDispositivoAEliminar(d);
+                                }}
+                                className="inline-flex items-center justify-center px-3 py-1.5 ml-2 text-sm font-medium text-red-600 dark:text-red-400 bg-transparent border border-red-200 dark:border-red-800/40 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 focus:ring-4 focus:outline-none focus:ring-red-100 dark:focus:ring-red-900/30 transition-all"
+                              >
+                                <svg className="w-4 h-4 mr-2" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                                </svg>
+                                Eliminar
+                              </button>
+                            )}
                           </td>
                         </tr>
                       ))}
@@ -607,6 +657,16 @@ export default function Dispositivos() {
             </form>
           </div>
         </div>
+      )}
+
+      {dispositivoAEliminar && (
+        <ConfirmarEliminacionModal
+          titulo={`Eliminar dispositivo '${dispositivoAEliminar.nmbr}'`}
+          mensaje="El dispositivo pasará a estado Inactivo y dejará de recibir nuevos datos. Sus mediciones y mapeos ya registrados no se pierden."
+          confirmando={eliminandoId === dispositivoAEliminar.id_dspstv}
+          onConfirmar={confirmarEliminarDispositivo}
+          onCancelar={() => setDispositivoAEliminar(null)}
+        />
       )}
     </div>
   );

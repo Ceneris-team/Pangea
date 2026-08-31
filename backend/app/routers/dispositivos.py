@@ -380,6 +380,34 @@ def actualizar_dispositivo(
     }
 
 
+@router.delete("/{id_dspstv}")
+def eliminar_dispositivo(
+    id_dspstv: int,
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(require_permiso("Dispositivos", EDICION)),
+):
+    """Desactiva el dispositivo (estd='Inactivo') en vez de borrar la fila.
+
+    Un borrado físico rompería la FK NOT NULL de Telemetria.id_dspstv
+    -y la de MapeoFormato.id_dspstv- si el dispositivo ya generó
+    mediciones o tiene mapeos configurados, y perdería la trazabilidad de
+    qué dispositivo produjo cada lectura histórica. Mismo criterio que
+    eliminar_conexion (routers/conexiones_ftp.py) y eliminar_mapeo
+    (routers/mapeos.py): desactivar lo saca de circulación -deja de
+    poder recibir un mapeo activo nuevo y libera su ConexionFTP para otro
+    dispositivo (ver el 409 de crear_dispositivo)- sin destruir nada.
+    """
+    dispositivo, ubicacion, _conexion = _cargar_ficha(db, id_dspstv, usuario, EDICION)
+
+    if dispositivo.estd == "Inactivo":
+        raise HTTPException(status_code=409, detail="Este dispositivo ya está inactivo")
+
+    dispositivo.estd = "Inactivo"
+    db.commit()
+
+    return {"mensaje": "Dispositivo eliminado correctamente"}
+
+
 @router.get("/{id_dspstv}/logs", response_model=list[LogIngestaListItem])
 def listar_logs_dispositivo(
     id_dspstv: int,
