@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { apiFetch } from "../services/api";
 
 /**
  * HU17 CA3 - Telemetría en vivo del mapa del Cliente Final.
@@ -11,6 +12,18 @@ import { useCallback, useEffect, useRef, useState } from "react";
  * usuario (HU21) al suscribirse a los canales de Redis, así que todo lo
  * que llega por acá es legítimo para este usuario: el hook no vuelve a
  * filtrar.
+ *
+ * AUTENTICACIÓN DEL WEBSOCKET (mitigación de R-05 del RAID del proyecto):
+ * la sesión vive en una cookie httpOnly que JavaScript no puede leer, y
+ * la API WebSocket del navegador no permite mandar headers ni participa
+ * del CookieJar de forma utilizable en el handshake -así que ni el
+ * header Authorization ni la cookie son una opción acá, igual que antes
+ * de la migración a cookie-. En vez de exponer el JWT de 8 horas en
+ * storage otra vez, se pide un ticket opaco de un solo uso y vida corta
+ * (POST /auth/ws-ticket, autenticado por la cookie) justo antes de abrir
+ * cada conexión, y ES ESE ticket el que viaja en la URL. Ver
+ * security/ws_tickets.py y _autenticar_websocket en
+ * routers/mapa_cliente.py del backend.
  *
  * RECONEXIÓN (no es un extra, es un requisito de la infraestructura):
  * el balanceador HTTP de Lightsail Container Service no expone un timeout
@@ -52,7 +65,7 @@ const RETARDO_MAXIMO_MS = 30000;
  *  reconectar por una demora puntual de la red. */
 const TIMEOUT_SIN_LATIDO_MS = 70000;
 
-function urlDelWebSocket(token: string): string {
+function urlDelWebSocket(ticket: string): string {
   const base = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
   // http -> ws y https -> wss. Se deriva de la URL de la API en vez de
   // tener su propia variable de entorno: son el mismo servicio, y dos
@@ -60,14 +73,27 @@ function urlDelWebSocket(token: string): string {
   // cosas que se desincronizan en el primer despliegue.
   const url = new URL("/mapa-cliente/ws", base);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
-  url.searchParams.set("token", token);
+  url.searchParams.set("ticket", ticket);
   return url.toString();
 }
 
-function leerToken(): string | null {
-  // Mismo criterio que services/api.ts: la sesión puede estar en
-  // localStorage ("recordarme") o en sessionStorage.
-  return localStorage.getItem("pangea_token") ?? sessionStorage.getItem("pangea_token");
+interface TicketResponse {
+  ticket: string;
+}
+
+/** Cambia la cookie de sesión por un ticket de un solo uso para el WS.
+ *  null si la sesión ya no es válida (401): mismo criterio que
+ *  leerToken() antes -sin sesión no tiene sentido reintentar-, salvo que
+ *  ahora la pregunta es "¿la cookie sigue viva?" en vez de "¿hay algo en
+ *  storage?". apiFetch ya redirige a /login en el 401, así que acá solo
+ *  hace falta no reventar y dejar de insistir. */
+async function pedirTicket(): Promise<string | null> {
+  try {
+    const { ticket } = await apiFetch<TicketResponse>("/auth/ws-ticket", { method: "POST" });
+    return ticket;
+  } catch {
+    return null;
+  }
 }
 
 export function useMapaEnVivo(onLectura: (evento: EventoLectura) => void) {
@@ -101,20 +127,21 @@ export function useMapaEnVivo(onLectura: (evento: EventoLectura) => void) {
     }
   }, []);
 
-  const conectar = useCallback(() => {
+  const conectar = useCallback(async () => {
     if (desmontadoRef.current) return;
 
-    const token = leerToken();
-    if (!token) {
+    const ticket = await pedirTicket();
+    if (desmontadoRef.current) return;
+    if (!ticket) {
       // Sin sesión no tiene sentido reintentar: apiFetch ya redirige al
-      // login cuando el token expira, así que acá solo se deja de
+      // login cuando la cookie expira, así que acá solo se deja de
       // insistir en vez de golpear el backend con handshakes que van a
       // ser rechazados igual.
       setEstado("sin-conexion");
       return;
     }
 
-    const socket = new WebSocket(urlDelWebSocket(token));
+    const socket = new WebSocket(urlDelWebSocket(ticket));
     socketRef.current = socket;
 
     /** Reinicia el vigilante de latido. Se llama con CADA mensaje

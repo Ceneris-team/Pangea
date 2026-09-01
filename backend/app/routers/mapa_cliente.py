@@ -33,6 +33,7 @@ from app.database import SessionLocal, get_db
 from app.security.jwt_auth import TokenExpirado, TokenInvalido, decode_access_token
 from app.security.permisos import LECTURA, require_permiso, tiene_permiso
 from app.security.ubicaciones_permitidas import ubicaciones_permitidas
+from app.security.ws_tickets import canjear_ticket
 from app.services.cache import consultas as cache
 from app.services.mapa.eventos import canal_de_ubicacion, cliente_asincrono
 from app.services.mapa.semaforo import evaluar_semaforo
@@ -154,34 +155,30 @@ def mapa_del_cliente(
     return respuesta
 
 
-def _autenticar_websocket(token: str | None) -> dict | None:
-    """Valida el JWT que llega por query param y devuelve su payload.
+def _autenticar_websocket(ticket: str | None) -> dict | None:
+    """Canjea el ticket de un solo uso que llega por query param y
+    devuelve el payload del JWT que representa.
 
-    POR QUÉ QUERY PARAM Y NO HEADER: la API WebSocket del navegador
-    (`new WebSocket(url)`) no permite agregar headers propios, así que el
-    "Authorization: Bearer ..." que usa el resto de la API (ver
-    security/dependencies.get_current_user) no es una opción acá. Pasar el
-    token por query string es el patrón habitual para autenticar
-    WebSockets desde un navegador.
+    POR QUÉ QUERY PARAM Y NO HEADER/COOKIE: la API WebSocket del
+    navegador (`new WebSocket(url)`) no permite agregar headers propios
+    ni participa del CookieJar en el handshake de forma utilizable acá,
+    así que ni el header Authorization ni la cookie httpOnly de sesión
+    (ver security/dependencies.py) son una opción. Pasar una credencial
+    por query string es el patrón habitual para autenticar WebSockets
+    desde un navegador.
 
-    #########################################################################
-    ##  DEUDA DE SEGURIDAD - RELACIONADA CON R-05 DEL RAID_LOG_PANGEA.md   ##
-    ##                                                                     ##
-    ##  Un token en la URL es más expuesto que uno en un header: queda en  ##
-    ##  los logs de acceso del servidor y del balanceador, y en el         ##
-    ##  historial de cualquier proxy intermedio. Sobre TLS no viaja en     ##
-    ##  claro por la red, pero SÍ queda escrito en disco del lado del      ##
-    ##  servidor.                                                          ##
-    ##                                                                     ##
-    ##  Esto NO está resuelto, está ASUMIDO conscientemente para HU 17.    ##
-    ##  Mitigación recomendada cuando se retome R-05: emitir un ticket de  ##
-    ##  un solo uso y vida corta (30-60s) por HTTP autenticado, y que el   ##
-    ##  WebSocket presente ESE ticket en la URL en vez del JWT de sesión   ##
-    ##  de 8 horas (ver EXPIRATION_MINUTES en security/jwt_auth.py).       ##
-    ##                                                                     ##
-    ##  Anotado para revisión de seguridad, no resuelto silenciosamente.   ##
-    #########################################################################
+    MITIGACIÓN DE R-05 DEL RAID_LOG_PANGEA.md (ya implementada, no
+    pendiente): en vez de pasar el JWT de sesión de 8 horas -que quedaría
+    escrito en los logs de acceso del servidor y de cualquier proxy
+    intermedio-, el frontend cambia su cookie httpOnly por un ticket
+    opaco de un solo uso y vida corta (POST /auth/ws-ticket) y es ESE
+    ticket el que viaja en la URL. canjear_ticket() lo borra de Redis
+    atómicamente al leerlo: un ticket reusado o vencido no autentica
+    nada, y aunque quede en un log, ya no sirve para nada.
     """
+    if not ticket:
+        return None
+    token = canjear_ticket(ticket)
     if not token:
         return None
     try:
@@ -191,7 +188,7 @@ def _autenticar_websocket(token: str | None) -> dict | None:
 
 
 @router.websocket("/ws")
-async def websocket_telemetria(websocket: WebSocket, token: str | None = None):
+async def websocket_telemetria(websocket: WebSocket, ticket: str | None = None):
     """CA3: canal en vivo. El frontend lo abre al entrar a la vista de mapa.
 
     Al conectar, el backend resuelve QUÉ ubicaciones puede ver este
@@ -200,17 +197,17 @@ async def websocket_telemetria(websocket: WebSocket, token: str | None = None):
     queda así en la suscripción: un Cliente Final nunca recibe bytes de
     una ubicación ajena, ni siquiera para descartarlos.
 
-    Códigos de cierre (RFC 6455): 1008 = policy violation, para token
-    ausente/inválido y para falta de permiso sobre el módulo.
+    Códigos de cierre (RFC 6455): 1008 = policy violation, para ticket
+    ausente/inválido/ya usado y para falta de permiso sobre el módulo.
     """
-    usuario = _autenticar_websocket(token)
+    usuario = _autenticar_websocket(ticket)
     if usuario is None:
         # accept() + close() y no un simple close(): sin aceptar primero,
         # el navegador solo ve un error de handshake genérico y no puede
-        # distinguir "token vencido" de "servidor caído" -y por tanto no
+        # distinguir "ticket vencido" de "servidor caído" -y por tanto no
         # sabe si tiene sentido reintentar o hay que volver al login-.
         await websocket.accept()
-        await websocket.close(code=1008, reason="Token ausente o invalido")
+        await websocket.close(code=1008, reason="Ticket ausente, invalido o ya usado")
         return
 
     # El JWT se valida sin tocar la BD, pero el permiso de módulo y las

@@ -1,15 +1,38 @@
 /**
  * Envoltorio único sobre fetch para toda la app.
  *
- * Por qué existe: sin esto, cada página tendría que repetir la URL base y
- * agregar manualmente el header "Authorization: Bearer <token>". Centralizarlo
- * aquí evita que alguien olvide el token en un endpoint nuevo (HT-04/HT-09
- * exigen JWT en cada endpoint protegido).
+ * Por qué existe: sin esto, cada página tendría que repetir la URL base.
+ * Centralizarlo aquí evita que alguien olvide `credentials: "include"` en
+ * un endpoint nuevo (HT-04/HT-09 exigen sesión en cada endpoint
+ * protegido).
+ *
+ * SESIÓN POR COOKIE HTTPONLY (no localStorage/JS): el backend setea la
+ * sesión como cookie httpOnly en el login (ver Set-Cookie en
+ * routers/auth.py). El navegador la adjunta solo en cada request; acá no
+ * hay ningún token que leer ni mandar a mano. `credentials: "include"` es
+ * el único requisito, y es obligatorio porque pangea-api vive en un
+ * dominio DISTINTO al del frontend (Container Service o CloudFront):
+ * sin esto, el navegador no manda cookies en requests cross-origin aunque
+ * la cookie exista.
  */
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
 
-function getToken(): string | null {
-  return localStorage.getItem("pangea_token") ?? sessionStorage.getItem("pangea_token");
+/** Claves de UI que AuthContext guarda junto a la sesión (rol, nombre,
+ *  etc. - nunca el JWT, que vive solo en la cookie httpOnly). Un solo
+ *  lugar para la lista: AuthContext.logout() y el interceptor de 401 de
+ *  acá abajo tienen que borrar exactamente las mismas. */
+export const CLAVES_SESION_UI = [
+  "pangea_rol",
+  "pangea_nombre",
+  "pangea_debe_cambiar",
+  "pangea_zona_horaria",
+] as const;
+
+export function limpiarDatosDeSesion(): void {
+  CLAVES_SESION_UI.forEach((key) => {
+    localStorage.removeItem(key);
+    sessionStorage.removeItem(key);
+  });
 }
 
 export class ApiError extends Error {
@@ -24,6 +47,15 @@ interface ApiOptions {
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   body?: unknown;
   params?: Record<string, string | number | undefined>;
+  /** true para saltear el interceptor de 401 (limpiar storage + redirect
+   *  a /login) y dejar que el 401 llegue como ApiError normal al
+   *  llamador. Existe por la verificación de sesión al montar la app
+   *  (AuthContext): ahí un 401 de /auth/perfil es el resultado ESPERADO
+   *  de "todavía no hay sesión" -pestaña nueva, primera visita-, no una
+   *  sesión que se cae en medio del uso. Tratarlo como el segundo caso
+   *  dispararía una recarga dura de toda la SPA (window.location.href)
+   *  en el arranque normal de cualquiera que no esté logueado. */
+  sinInterceptor401?: boolean;
 }
 
 export async function apiFetch<T>(path: string, options: ApiOptions = {}): Promise<T> {
@@ -37,18 +69,16 @@ export async function apiFetch<T>(path: string, options: ApiOptions = {}): Promi
     });
   }
 
-  const token = getToken();
-
   const res = await fetch(url.toString(), {
     method: options.method ?? "GET",
+    credentials: "include",
     headers: {
       "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     body: options.body ? JSON.stringify(options.body) : undefined,
   });
 
-  return manejarRespuesta<T>(res, path);
+  return manejarRespuesta<T>(res, path, options.sinInterceptor401);
 }
 
 /**
@@ -56,22 +86,26 @@ export async function apiFetch<T>(path: string, options: ApiOptions = {}): Promi
  * como multipart/form-data y no como JSON. Deliberadamente NO se fija el
  * header Content-Type: el navegador tiene que ponerlo él para incluir el
  * `boundary` que separa las partes; fijarlo a mano rompe el parseo en el
- * backend. Por lo demás comparte el token y el manejo de 401 con apiFetch.
+ * backend. Por lo demás comparte la cookie de sesión y el manejo de 401
+ * con apiFetch.
  */
 export async function apiUpload<T>(path: string, formData: FormData): Promise<T> {
   const url = new URL(path, API_BASE_URL);
-  const token = getToken();
 
   const res = await fetch(url.toString(), {
     method: "POST",
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    credentials: "include",
     body: formData,
   });
 
   return manejarRespuesta<T>(res);
 }
 
-async function manejarRespuesta<T>(res: Response, path?: string): Promise<T> {
+async function manejarRespuesta<T>(
+  res: Response,
+  path?: string,
+  sinInterceptor401?: boolean
+): Promise<T> {
   // /auth/login nunca lleva token: su propio 401 significa "correo o
   // contraseña incorrectos" (ver MSG_CREDENCIALES_INVALIDAS en el backend),
   // no una sesión expirada. Sin esta excepción, cada intento fallido de
@@ -79,12 +113,13 @@ async function manejarRespuesta<T>(res: Response, path?: string): Promise<T> {
   // storage y forzaba window.location.href, una recarga dura de la SPA que
   // se llevaba por delante el mensaje de error que el propio catch de
   // Login.tsx acababa de mostrar.
-  if (res.status === 401 && path !== "/auth/login") {
-    // HU 01 CA: token inválido/expirado -> cerrar sesión y volver a login.
-    localStorage.removeItem("pangea_token");
-    localStorage.removeItem("pangea_rol");
-    sessionStorage.removeItem("pangea_token");
-    sessionStorage.removeItem("pangea_rol");
+  if (res.status === 401 && path !== "/auth/login" && !sinInterceptor401) {
+    // HU 01 CA: cookie de sesión ausente/inválida/expirada -> cerrar
+    // sesión y volver a login. Ya no hay token que borrar del lado del
+    // cliente (vive en una cookie httpOnly que el propio backend
+    // gestiona), pero sí quedan los datos de UI que AuthContext guardó
+    // junto a él (rol, nombre, etc.) y que hay que limpiar igual.
+    limpiarDatosDeSesion();
     window.location.href = "/login";
     throw new ApiError("Tu sesión ha expirado. Por favor, vuelve a iniciar sesión.", 401);
   }

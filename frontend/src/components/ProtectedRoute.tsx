@@ -20,8 +20,26 @@ export default function ProtectedRoute({
   rolRequerido,
   rolesPermitidos,
 }: ProtectedRouteProps) {
-  const { isAuthenticated, rol, debeCambiarContrasena } = useAuth();
+  const { isAuthenticated, rol, debeCambiarContrasena, verificandoSesion } = useAuth();
   const location = useLocation();
+
+  // Pestaña nueva, F5, o la primera carga de la app montan AuthProvider
+  // desde cero, y con él arranca la verificación de sesión contra
+  // GET /auth/perfil (ver el useEffect en AuthContext.tsx). Decidir acá
+  // ANTES de que esa respuesta llegue significaría mirar isAuthenticated
+  // en su valor inicial -vacío en una pestaña nueva, aunque la cookie
+  // httpOnly siga viva- y mandar a login a alguien con sesión activa.
+  // Un loading breve es preferible al parpadeo de "login -> dashboard"
+  // que se vería si se dejara pasar y luego se redirigiera.
+  if (verificandoSesion) {
+    return (
+      <div
+        className="flex min-h-screen items-center justify-center bg-white dark:bg-neutral-900"
+        aria-busy="true"
+        aria-live="polite"
+      />
+    );
+  }
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
