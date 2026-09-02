@@ -11,6 +11,7 @@ from app.models.intento_procesamiento import IntentoProcesamiento
 from app.models.mapeo_dispositivo import (
     Dispositivo,
     MapeoColumna,
+    MapeoColumnaPendiente,
     MapeoFormato,
     Parametro,
 )

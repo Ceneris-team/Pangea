@@ -21,7 +21,9 @@ from app.services.ingesta.persistencia import (
     guardar_lecturas,
     resolver_dispositivo,
 )
+from app.services.ingesta.usuario_sistema import resolver_id_usuario_sistema
 from app.services.ingesta.validador import validar_lecturas
+from app.security.auditoria import limpiar_contexto_auditoria, marcar_contexto_auditoria
 from app.services.cache.invalidacion import invalidar_por_lectura
 from app.services.mapa.eventos import construir_evento, publicar_lecturas
 from app.services.particiones import ParticionInexistenteError
@@ -87,7 +89,18 @@ def interpretar_y_guardar(
 
     # mp_clmn referencia las columnas por índice, así que el mapeo se
     # arma con el header ya leído.
-    mapeo = construir_mapeo(db, formato.id_mp, resultado_parseo.columnas)
+    # HU51: filas y delimitador decimal se pasan para que el auto-alta de
+    # parámetros pueda inferir tipo_dato mirando los valores reales de la
+    # columna (numerico -> tlmtr / texto -> evnt_txt); sin ellos el
+    # auto-creado caería siempre a 'texto'.
+    mapeo = construir_mapeo(
+        db,
+        formato.id_mp,
+        resultado_parseo.columnas,
+        filas_archivo=resultado_parseo.filas,
+        delimitador_decimal=formato.delimitador_decimal,
+        columna_fecha=formato.config.columna_fecha,
+    )
     if not mapeo:
         raise ErrorDatosNoRecuperable(
             f"El formato mp_frmt id={formato.id_mp} (trama '{formato.tipo_trama}') "
@@ -219,10 +232,24 @@ def procesar_archivo_dat(self, id_archv: int) -> dict:
         # hacía que dos dataloggers de la misma marca en la misma sede
         # compartieran mapeo. Se resuelve ANTES de descargar: si no hay
         # mapeo cargado, no tiene sentido bajar el archivo.
+        #
+        # HU49 CA5: si acá se crea automáticamente una trama nueva
+        # (prefijo nunca visto para este dispositivo), tiene que quedar
+        # en el log de auditoría. Como esto corre dentro de una tarea de
+        # Celery -sin JWT ni request HTTP-, se marca el contexto a mano
+        # con el usuario Sistema en vez de la dependencia auditar_cambios
+        # (que exige un usuario autenticado por HTTP). Se limpia en el
+        # finally para no dejar esta atribución "prendida" en el resto
+        # del pipeline, que sigue usando la MISMA sesión hasta su propio
+        # commit final más abajo.
         try:
+            id_usr_sistema = resolver_id_usuario_sistema(db)
+            marcar_contexto_auditoria(db, id_usr_sistema)
             formato = resolver_formato(db, dispositivo.id_dspstv, archivo.nmbr_archv)
         except MapeoNoEncontradoError as exc:
             raise ErrorDatosNoRecuperable(str(exc)) from exc
+        finally:
+            limpiar_contexto_auditoria(db)
 
         contenido = descargar_archivo_dat(cnxn, archivo.nmbr_archv)
 
