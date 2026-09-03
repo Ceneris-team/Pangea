@@ -25,6 +25,7 @@ import Graficos from "../pages/Graficos";
 import DispositivoDetalle from "../pages/DispositivoDetalle";
 import Parametros from "../pages/Parametros";
 import ColaIngesta from "../pages/ColaIngesta";
+import Alarmas from "../pages/Alarmas";
 
 // HU06: "Solo los roles Técnico CENERIS y Administrador tienen acceso a
 // este módulo." El backend lo exige igual vía require_permiso('Ingesta').
@@ -193,6 +194,19 @@ export default function AppRouter() {
             element={
               <ProtectedRoute rolesPermitidos={ROLES_CONEXIONES_FTP}>
                 <ConexionesFTP />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* HU27: listado de alarmas. Sin restricción de rol adicional en
+              el frontend -el backend ya exige permiso de Lectura sobre
+              'Alarmas' y, dentro de eso, cada usuario solo ve las suyas
+              (Alarma.id_usr)-, mismo criterio que /dispositivos. */}
+          <Route
+            path="/alarmas"
+            element={
+              <ProtectedRoute>
+                <Alarmas />
               </ProtectedRoute>
             }
           />

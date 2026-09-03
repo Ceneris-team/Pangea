@@ -4,7 +4,7 @@ import pangeaIconLight from "../../assets/pangea-icon-light.png";
 import { ROLES, rutaPorRol } from "../../config/roles";
 import { useTheme } from "../../context/ThemeContext";
 
-export type SeccionActiva = "panel" | "usuarios" | "ubicaciones" | "dispositivos" | "conexiones-ftp" | "dashboard" | "configuracion" | "consulta-datos"| "mapeos" | "parametros" | "cola-ingesta" | "graficos" | "mapa-estaciones" | "mapa-ubicaciones";
+export type SeccionActiva = "panel" | "usuarios" | "ubicaciones" | "dispositivos" | "conexiones-ftp" | "dashboard" | "configuracion" | "consulta-datos"| "mapeos" | "parametros" | "cola-ingesta" | "graficos" | "mapa-estaciones" | "mapa-ubicaciones" | "alarmas";
 
 interface SidebarProps {
   onLogout: () => void;
@@ -197,6 +197,36 @@ export default function Sidebar({ onLogout, activo, rol }: SidebarProps) {
                 />
               </svg>
               Gráficos
+            </Link>
+          </div>
+        </div>
+
+        {/* ---------------- Notificaciones ----------------
+            HU27: alarmas configuradas sobre los parámetros del usuario.
+            Visible para todos los roles, igual que Ubicaciones/Dispositivos:
+            el backend ya exige permiso de Lectura sobre 'Alarmas' y, dentro
+            de eso, cada usuario solo ve las suyas. */}
+        <div className={grupo}>
+          <p className={tituloGrupo}>Notificaciones</p>
+          <div className="space-y-1">
+            <Link
+              to="/alarmas"
+              className={linkBase + " " + (activo === "alarmas" ? linkActivo : linkInactivo)}
+            >
+              <svg
+                className={"w-5 h-5 " + (activo === "alarmas" ? iconoActivo : "")}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0"
+                />
+              </svg>
+              Alarmas
             </Link>
           </div>
         </div>

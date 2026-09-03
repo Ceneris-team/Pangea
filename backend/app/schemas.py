@@ -847,4 +847,27 @@ class VistaPreviaResponse(BaseModel):
     columnas: list[ColumnaVistaPrevia]
     filas: list[FilaVistaPrevia]
     total_filas_archivo: int
+
+
+# HU27 - Listar alarmas
+
+
+class AlarmaListItem(BaseModel):
+    """Una fila del listado de HU27: 'nombre de la alarma, parámetro
+    asociado, condición, estado y acciones'. 'acciones' no viaja como dato
+    -son los botones que arma el frontend a partir de id_alrm/estd-.
+
+    condicion es None cuando la alarma todavía no tiene una condición
+    configurada (HU29 es un requerimiento aparte): el detalle de HU27 no
+    contempla ese caso, pero el modelo sí lo permite -una alrm puede
+    existir sin fila en cndcn_alrm todavía-, así que el frontend lo
+    muestra como 'Sin condición configurada' en vez de reventar."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id_alrm: int
+    nmbr: str
+    parametro_nombre: str
+    condicion: str | None
+    estd: str
     filas_mostradas: int

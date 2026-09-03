@@ -7,6 +7,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
 from app.routers import (
+    alarmas,
     auth,
     conexiones_ftp,
     dispositivos,
@@ -51,6 +52,8 @@ app.include_router(mapeos.router_parametros)
 app.include_router(mapeos.router_sedes)
 app.include_router(mapeos.router_dispositivos_mapeo)
 app.include_router(dispositivos.router)
+# HU27: listado de alarmas del usuario (Gestión de Alarmas y Notificaciones).
+app.include_router(alarmas.router)
 # HU17: mapa del Cliente Final (REST de carga inicial + WebSocket en vivo).
 # Router propio, separado del de HU22 (/ubicaciones/mapa), que no se toca.
 app.include_router(mapa_cliente.router)
