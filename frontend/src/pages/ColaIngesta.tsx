@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { apiFetch, ApiError } from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import Sidebar from "../components/layout/Sidebar";
@@ -78,9 +79,16 @@ function formatearFecha(iso: string | null): string {
 export default function ColaIngesta() {
   const { nombreCompleto, rol, logout } = useAuth();
 
+  // HU19 CA3: "VER COLA DE PROCESAMIENTO" desde el panel de estadísticas de
+  // un dispositivo llega acá con su conexión FTP preseleccionada. Se lee
+  // con useSearchParams (mismo patrón que ubicacion_id en Graficos.tsx,
+  // HU17 CA4) para que quede sincronizado con la navegación.
+  const [searchParams] = useSearchParams();
+  const idCnxnParam = searchParams.get("id_cnxn");
+
   const [pagina, setPagina] = useState(1);
   const [estadoFiltro, setEstadoFiltro] = useState("");
-  const [dataloggerFiltro, setDataloggerFiltro] = useState("");
+  const [dataloggerFiltro, setDataloggerFiltro] = useState(idCnxnParam ?? "");
   const [dataloggers, setDataloggers] = useState<DataloggerFiltro[]>([]);
   const [data, setData] = useState<ListadoColaIngesta | null>(null);
   const [loading, setLoading] = useState(false);

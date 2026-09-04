@@ -18,6 +18,14 @@ export function rangoUltimas24Horas(): RangoFechas {
   return { inicio: aValorDatetimeLocal(hace24h), fin: aValorDatetimeLocal(ahora) };
 }
 
+/** HU19: el rango por defecto del panel de estadísticas de dispositivo son
+ *  los últimos 7 días. */
+export function rangoUltimos7Dias(): RangoFechas {
+  const ahora = new Date();
+  const hace7dias = new Date(ahora.getTime() - 7 * 24 * 60 * 60 * 1000);
+  return { inicio: aValorDatetimeLocal(hace7dias), fin: aValorDatetimeLocal(ahora) };
+}
+
 /** HU14: los datos se almacenan en UTC; esto los convierte a la zona
  *  horaria configurada por el usuario (America/Lima por defecto) para
  *  mostrarlos en el módulo de consulta. */

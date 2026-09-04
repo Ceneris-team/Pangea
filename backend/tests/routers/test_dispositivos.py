@@ -10,12 +10,14 @@ Cobertura por CA:
   Aislamiento por sede (HT-09 CA3) y restricción por rol (PermisoUbicacion)
 """
 
+import datetime as dt
+
 import pytest
 from fastapi.testclient import TestClient
 
 from app.database import get_db
 from app.main import app
-from app.models import ConexionFTP, Dispositivo, MapeoFormato, Ubicacion
+from app.models import ArchivoIngesta, ConexionFTP, Dispositivo, MapeoFormato, Ubicacion
 from app.models.permiso_ubicacion import PermisoUbicacion
 from app.models.suscripcion import PermisoUsuarioSede
 from app.security.dependencies import get_current_user
@@ -166,6 +168,16 @@ def preparar_dispositivo(
     return crear_dispositivo(
         db_session, ubicacion, conexion, nombre=nombre, marca=marca, estado=estado
     )
+
+
+def crear_archivo(db_session, conexion, nombre="H_ejemplo.dat", estd="Pendiente", **overrides):
+    """Mismo helper que test_ingesta_cola.py: una fila de archv_ingst
+    (HU09) sobre la conexión del dispositivo, para las estadísticas de
+    HU19."""
+    archivo = ArchivoIngesta(id_cnxn=conexion.id_cnxn, nmbr_archv=nombre, estd=estd, **overrides)
+    db_session.add(archivo)
+    db_session.flush()
+    return archivo
 
 
 # ---------------------------------------------------------------------------
@@ -977,3 +989,304 @@ class TestDispositivosParaMapa:
 
         assert respuesta.status_code == 200
         assert isinstance(respuesta.json(), list)
+
+
+# ---------------------------------------------------------------------------
+# Eliminar dispositivo (DELETE /dispositivos/{id_dspstv})
+# ---------------------------------------------------------------------------
+
+
+class TestEliminarDispositivo:
+    """Borrado lógico (estd='Inactivo'), mismo criterio que
+    eliminar_conexion (routers/conexiones_ftp.py): un borrado físico
+    rompería la FK de Telemetria/MapeoFormato apenas el dispositivo tenga
+    historial."""
+
+    def test_desactiva_el_dispositivo(self, client, db_session, tecnico_editor):
+        sede, _ = tecnico_editor
+        dispositivo = preparar_dispositivo(db_session, sede, estado="Activo")
+
+        resp = client.delete(f"/dispositivos/{dispositivo.id_dspstv}")
+
+        assert resp.status_code == 200
+        assert resp.json()["mensaje"] == "Dispositivo desactivado correctamente"
+        db_session.refresh(dispositivo)
+        assert dispositivo.estd == "Inactivo"
+
+    def test_no_lo_borra_fisicamente(self, client, db_session, tecnico_editor):
+        """Sigue existiendo en la BD (a diferencia de eliminar_parametro):
+        Telemetria/MapeoFormato pueden referenciarlo."""
+        sede, _ = tecnico_editor
+        dispositivo = preparar_dispositivo(db_session, sede, estado="Activo")
+        id_dspstv = dispositivo.id_dspstv
+
+        client.delete(f"/dispositivos/{id_dspstv}")
+
+        assert db_session.query(Dispositivo).filter(Dispositivo.id_dspstv == id_dspstv).first() is not None
+
+    def test_ya_inactivo_da_409(self, client, db_session, tecnico_editor):
+        sede, _ = tecnico_editor
+        dispositivo = preparar_dispositivo(db_session, sede, estado="Inactivo")
+
+        resp = client.delete(f"/dispositivos/{dispositivo.id_dspstv}")
+
+        assert resp.status_code == 409
+
+    def test_no_existe_da_404(self, client, tecnico_editor):
+        resp = client.delete("/dispositivos/999999")
+        assert resp.status_code == 404
+
+    def test_denegado_sin_permiso_de_edicion(self, client, db_session, tecnico_lector):
+        """Lectura sola no alcanza: DELETE exige EDICION, igual que POST/PUT."""
+        sede, _ = tecnico_lector
+        dispositivo = preparar_dispositivo(db_session, sede, estado="Activo")
+
+        resp = client.delete(f"/dispositivos/{dispositivo.id_dspstv}")
+
+        assert resp.status_code == 403
+
+    def test_usuario_por_sede_no_puede_eliminar_de_otra_sede(
+        self, client, db_session, tecnico_editor, fabrica
+    ):
+        _sede_propia, _ = tecnico_editor
+        otra_sede = fabrica.sede()
+        dispositivo = preparar_dispositivo(db_session, otra_sede, estado="Activo")
+
+        resp = client.delete(f"/dispositivos/{dispositivo.id_dspstv}")
+
+        assert resp.status_code == 403
+        db_session.refresh(dispositivo)
+        assert dispositivo.estd == "Activo"
+
+
+# ---------------------------------------------------------------------------
+# Reactivar dispositivo (POST /dispositivos/{id_dspstv}/reactivar) - HU18 CA3
+# ---------------------------------------------------------------------------
+
+
+class TestReactivarDispositivo:
+    """Contraparte de TestEliminarDispositivo: un dispositivo Inactivo
+    puede reactivarse, sujeto al mismo 409 de 'un solo Activo por
+    ConexionFTP' que crear/actualizar ya exigen."""
+
+    def test_reactiva_el_dispositivo(self, client, db_session, tecnico_editor):
+        sede, _ = tecnico_editor
+        dispositivo = preparar_dispositivo(db_session, sede, estado="Inactivo")
+
+        resp = client.post(f"/dispositivos/{dispositivo.id_dspstv}/reactivar")
+
+        assert resp.status_code == 200
+        assert resp.json()["mensaje"] == "Dispositivo reactivado correctamente"
+        db_session.refresh(dispositivo)
+        assert dispositivo.estd == "Activo"
+
+    def test_ya_activo_da_409(self, client, db_session, tecnico_editor):
+        sede, _ = tecnico_editor
+        dispositivo = preparar_dispositivo(db_session, sede, estado="Activo")
+
+        resp = client.post(f"/dispositivos/{dispositivo.id_dspstv}/reactivar")
+
+        assert resp.status_code == 409
+
+    def test_no_existe_da_404(self, client, tecnico_editor):
+        resp = client.post("/dispositivos/999999/reactivar")
+        assert resp.status_code == 404
+
+    def test_conexion_con_otro_dispositivo_activo_da_409(self, client, db_session, tecnico_editor):
+        """Mismo criterio 409 de crear_dispositivo: si mientras este estuvo
+        Inactivo su ConexionFTP pasó a otro dispositivo ya Activo,
+        reactivarlo rompería resolver_dispositivo en silencio."""
+        sede, _ = tecnico_editor
+        ubicacion = crear_ubicacion(db_session, sede, nombre="Ubicacion compartida")
+        conexion = crear_conexion(db_session, sede, nombre="Conexion compartida")
+        crear_dispositivo(db_session, ubicacion, conexion, nombre="Ya-Activo", estado="Activo")
+        inactivo = crear_dispositivo(
+            db_session, ubicacion, conexion, nombre="Por-Reactivar", estado="Inactivo"
+        )
+
+        resp = client.post(f"/dispositivos/{inactivo.id_dspstv}/reactivar")
+
+        assert resp.status_code == 409
+        db_session.refresh(inactivo)
+        assert inactivo.estd == "Inactivo"
+
+    def test_denegado_sin_permiso_de_edicion(self, client, db_session, tecnico_lector):
+        sede, _ = tecnico_lector
+        dispositivo = preparar_dispositivo(db_session, sede, estado="Inactivo")
+
+        resp = client.post(f"/dispositivos/{dispositivo.id_dspstv}/reactivar")
+
+        assert resp.status_code == 403
+
+    def test_usuario_por_sede_no_puede_reactivar_de_otra_sede(
+        self, client, db_session, tecnico_editor, fabrica
+    ):
+        _sede_propia, _ = tecnico_editor
+        otra_sede = fabrica.sede()
+        dispositivo = preparar_dispositivo(db_session, otra_sede, estado="Inactivo")
+
+        resp = client.post(f"/dispositivos/{dispositivo.id_dspstv}/reactivar")
+
+        assert resp.status_code == 403
+        db_session.refresh(dispositivo)
+        assert dispositivo.estd == "Inactivo"
+
+
+# ---------------------------------------------------------------------------
+# Ver estadísticas (GET /dispositivos/{id_dspstv}/estadisticas) - HU19
+# ---------------------------------------------------------------------------
+
+
+class TestEstadisticasDispositivo:
+    """CA1/CA2: 4 indicadores calculados sobre archv_ingst (HU09), filtrado
+    por la conexión del dispositivo y por el rango de fechas pedido."""
+
+    def test_calcula_los_cuatro_indicadores(self, client, db_session, tecnico_lector):
+        sede, _ = tecnico_lector
+        ubicacion = crear_ubicacion(db_session, sede)
+        conexion = crear_conexion(db_session, sede)
+        dispositivo = crear_dispositivo(db_session, ubicacion, conexion)
+
+        ahora = dt.datetime.now(dt.timezone.utc)
+        crear_archivo(db_session, conexion, nombre="a.dat", estd="Exitoso", fch_dtccn=ahora)
+        crear_archivo(
+            db_session,
+            conexion,
+            nombre="b.dat",
+            estd="Exitoso",
+            fch_dtccn=ahora - dt.timedelta(hours=1),
+        )
+        crear_archivo(
+            db_session,
+            conexion,
+            nombre="c.dat",
+            estd="Fallido",
+            fch_dtccn=ahora - dt.timedelta(hours=2),
+        )
+        crear_archivo(
+            db_session,
+            conexion,
+            nombre="d.dat",
+            estd="Pendiente",
+            fch_dtccn=ahora - dt.timedelta(hours=3),
+        )
+
+        resp = client.get(f"/dispositivos/{dispositivo.id_dspstv}/estadisticas")
+
+        assert resp.status_code == 200
+        cuerpo = resp.json()
+        assert cuerpo["total_recibidos"] == 4
+        assert cuerpo["total_procesados"] == 2
+        assert cuerpo["total_fallidos"] == 1
+        assert cuerpo["ultima_fecha_recepcion"] is not None
+        assert cuerpo["id_cnxn"] == conexion.id_cnxn
+        assert cuerpo["id_ubccn"] == ubicacion.id_ubccn
+
+    def test_default_son_los_ultimos_7_dias(self, client, db_session, tecnico_lector):
+        sede, _ = tecnico_lector
+        ubicacion = crear_ubicacion(db_session, sede)
+        conexion = crear_conexion(db_session, sede)
+        dispositivo = crear_dispositivo(db_session, ubicacion, conexion)
+
+        ahora = dt.datetime.now(dt.timezone.utc)
+        crear_archivo(db_session, conexion, nombre="reciente.dat", fch_dtccn=ahora)
+        crear_archivo(
+            db_session,
+            conexion,
+            nombre="viejo.dat",
+            fch_dtccn=ahora - dt.timedelta(days=10),
+        )
+
+        resp = client.get(f"/dispositivos/{dispositivo.id_dspstv}/estadisticas")
+
+        assert resp.status_code == 200
+        assert resp.json()["total_recibidos"] == 1
+
+    def test_respeta_rango_de_fechas_explicito(self, client, db_session, tecnico_lector):
+        sede, _ = tecnico_lector
+        ubicacion = crear_ubicacion(db_session, sede)
+        conexion = crear_conexion(db_session, sede)
+        dispositivo = crear_dispositivo(db_session, ubicacion, conexion)
+
+        ahora = dt.datetime.now(dt.timezone.utc)
+        crear_archivo(
+            db_session, conexion, nombre="dentro.dat", fch_dtccn=ahora - dt.timedelta(days=20)
+        )
+        crear_archivo(db_session, conexion, nombre="fuera.dat", fch_dtccn=ahora)
+
+        resp = client.get(
+            f"/dispositivos/{dispositivo.id_dspstv}/estadisticas",
+            params={
+                "fecha_inicio": (ahora - dt.timedelta(days=25)).isoformat(),
+                "fecha_fin": (ahora - dt.timedelta(days=15)).isoformat(),
+            },
+        )
+
+        assert resp.status_code == 200
+        assert resp.json()["total_recibidos"] == 1
+
+    def test_sin_archivos_devuelve_ceros_y_ultima_fecha_null(
+        self, client, db_session, tecnico_lector
+    ):
+        sede, _ = tecnico_lector
+        dispositivo = preparar_dispositivo(db_session, sede)
+
+        resp = client.get(f"/dispositivos/{dispositivo.id_dspstv}/estadisticas")
+
+        assert resp.status_code == 200
+        cuerpo = resp.json()
+        assert cuerpo["total_recibidos"] == 0
+        assert cuerpo["total_procesados"] == 0
+        assert cuerpo["total_fallidos"] == 0
+        assert cuerpo["ultima_fecha_recepcion"] is None
+
+    def test_fecha_inicio_posterior_a_fin_da_422(self, client, db_session, tecnico_lector):
+        sede, _ = tecnico_lector
+        dispositivo = preparar_dispositivo(db_session, sede)
+        ahora = dt.datetime.now(dt.timezone.utc)
+
+        resp = client.get(
+            f"/dispositivos/{dispositivo.id_dspstv}/estadisticas",
+            params={
+                "fecha_inicio": ahora.isoformat(),
+                "fecha_fin": (ahora - dt.timedelta(days=1)).isoformat(),
+            },
+        )
+
+        assert resp.status_code == 422
+
+    def test_no_existe_da_404(self, client, tecnico_lector):
+        resp = client.get("/dispositivos/999999/estadisticas")
+        assert resp.status_code == 404
+
+    def test_denegado_para_cliente_final(self, client, db_session, fabrica):
+        """HU19: 'Solo los roles Técnico CENERIS y Administrador tienen
+        acceso a esta vista' -restricción de rol, no solo de permiso: un
+        Cliente Final con Lectura sobre 'Dispositivos' (como en HU10) sigue
+        sin poder ver las estadísticas."""
+        rol = fabrica.rol("Cliente Final")
+        sede = fabrica.sede()
+        usuario = fabrica.usuario(rol=rol)
+        agregar_permiso(db_session, usuario, sede, "Dispositivos", "Lectura", rol)
+        dispositivo = preparar_dispositivo(db_session, sede)
+        db_session.add(PermisoUbicacion(id_usr=usuario.id_usr, id_ubccn=dispositivo.id_ubccn))
+        db_session.flush()
+
+        app.dependency_overrides[get_current_user] = lambda: usuario_jwt(
+            usuario, rol.nmbr, sede_id=sede.id_sd
+        )
+
+        resp = client.get(f"/dispositivos/{dispositivo.id_dspstv}/estadisticas")
+
+        assert resp.status_code == 403
+
+    def test_usuario_por_sede_no_ve_estadisticas_de_otra_sede(
+        self, client, db_session, tecnico_lector, fabrica
+    ):
+        _sede_propia, _ = tecnico_lector
+        otra_sede = fabrica.sede()
+        dispositivo = preparar_dispositivo(db_session, otra_sede)
+
+        resp = client.get(f"/dispositivos/{dispositivo.id_dspstv}/estadisticas")
+
+        assert resp.status_code == 403

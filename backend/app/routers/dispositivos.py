@@ -38,6 +38,54 @@ services/ingesta/persistencia.py asume EXACTAMENTE un dispositivo Activo
 por conexión FTP para poder resolver a qué dispositivo pertenece un
 archivo entrante. Un segundo dispositivo Activo en la misma conexión
 rompería esa resolución en silencio, así que se rechaza con 409.
+
+HU 18 - Desactivar dispositivo
+
+CA1/CA2: desde el listado, "Desactivar" sobre un dispositivo Activo pide
+confirmación y, al confirmar, cambia su estado a Inactivo (eliminar_dispositivo,
+DELETE /dispositivos/{id_dspstv}), detiene la ingesta de esa conexión FTP y
+responde "Dispositivo desactivado correctamente". No hay borrado físico: es
+el mismo criterio de "eliminar" que ya usan conexiones_ftp.py y mapeos.py,
+solo que aquí HU18 lo declara explícitamente como su propio requerimiento.
+
+CA3: el listado ya distingue Activo/Inactivo (HU10) y ahora ofrece
+"Reactivar" (reactivar_dispositivo, POST /dispositivos/{id_dspstv}/reactivar)
+para un dispositivo Inactivo, sujeto al mismo 409 de "un solo Activo por
+ConexionFTP" que crear/actualizar ya exigen.
+
+Detalle de conversación: desactivar NO borra Telemetria ya almacenada (sigue
+consultable); solo detiene el polling FTP de esa conexión. Restringido a
+Administrador/Técnico CENERIS vía el permiso de EDICION sobre 'Dispositivos'
+(HT-03), igual que crear/actualizar/eliminar.
+
+HU 19 - Ver estadísticas de dispositivo
+
+CA1: desde el listado, "Ver estadísticas" sobre un dispositivo abre su
+panel con 4 indicadores (estadisticas_dispositivo, GET
+/dispositivos/{id_dspstv}/estadisticas): total de archivos recibidos,
+procesados, fallidos y última fecha de recepción, calculados sobre
+archv_ingst (HU09) -mismo criterio de "filtrar por la CONEXIÓN del
+dispositivo" que ya usa listar_logs_dispositivo-.
+
+CA2: un selector de rango de fechas recalcula los 4 indicadores para el
+período elegido (filtro sobre fch_dtccn). Detalle de conversación: sin
+rango explícito, el default son los últimos 7 días; los indicadores son
+enteros.
+
+CA3/CA4: "VER COLA DE PROCESAMIENTO" y "VER HISTORIAL DE DATOS" son
+navegación pura del frontend (Dispositivos.tsx) hacia /cola-ingesta y
+/consulta-datos con el dispositivo preseleccionado -por su id_cnxn en la
+cola (mismo campo que ya filtra ColaIngesta.tsx) y por su id_ubccn en
+Consulta de Datos (que solo filtra por ubicación, no por dispositivo;
+mismo criterio que el filtro que trae HU17 CA4 desde el mapa a Gráficos)-,
+no hay endpoint nuevo para esa parte.
+
+Restringido a Administrador/Técnico CENERIS por ROL explícito
+(_requerir_tecnico_o_admin), no por el permiso de Lectura de
+'Dispositivos' que Cliente Final también tiene para HU10: el detalle de
+la HU dice literalmente "Solo los roles Técnico CENERIS y Administrador
+tienen acceso a esta vista", una restricción más estrecha que la del
+listado/ficha.
 """
 
 import datetime as dt
@@ -57,12 +105,14 @@ from app.schemas import (
     DispositivoCreado,
     DispositivoCrear,
     DispositivoDetalle,
+    DispositivoEstadisticas,
     DispositivoListItem,
     DispositivoParaMapa,
     DispositivoUpdate,
     LogIngestaListItem,
 )
 from app.security.auditoria import limpiar_contexto_auditoria, marcar_contexto_auditoria
+from app.security.dependencies import get_current_user
 from app.security.permisos import EDICION, LECTURA, require_permiso, verificar_sede
 from app.services.cache.invalidacion import invalidar_por_lectura
 from app.services.ingesta.mapeo import MapeoNoEncontradoError, resolver_formato
@@ -76,6 +126,22 @@ from app.tasks.ingesta import ErrorDatosNoRecuperable, interpretar_y_guardar
 router = APIRouter(prefix="/dispositivos", tags=["Dispositivos"])
 
 ROLES_CON_ACCESO_TOTAL = {"Administrador", "Tecnico CENERIS", "Técnico CENERIS"}
+
+
+def _requerir_tecnico_o_admin(usuario: dict = Depends(get_current_user)) -> dict:
+    """HU19: 'Solo los roles Técnico CENERIS y Administrador tienen acceso
+    a esta vista' -una restricción de rol explícita, distinta del permiso
+    de Lectura sobre 'Dispositivos' que también tiene Cliente Final (ve el
+    listado y la ficha de HU10, pero no debe ver las estadísticas). Mismo
+    patrón que _requerir_tecnico_o_admin en routers/conexiones_ftp.py: se
+    valida el rol directo del token en vez de la matriz de prms_usr_sd,
+    porque acá la regla de negocio es por rol, no por permiso asignable."""
+    if usuario.get("rol") not in ROLES_CON_ACCESO_TOTAL:
+        raise HTTPException(
+            status_code=403,
+            detail="Solo Técnico CENERIS o Administrador pueden ver las estadísticas del dispositivo",
+        )
+    return usuario
 
 
 @router.get("")
@@ -383,6 +449,84 @@ def actualizar_dispositivo(
     }
 
 
+@router.delete("/{id_dspstv}")
+def eliminar_dispositivo(
+    id_dspstv: int,
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(require_permiso("Dispositivos", EDICION)),
+):
+    """HU18: 'Desactivar' un dispositivo (estd='Inactivo') en vez de borrar
+    la fila -no hay borrado físico de dispositivos, solo desactivación-.
+
+    Un borrado físico rompería la FK NOT NULL de Telemetria.id_dspstv
+    -y la de MapeoFormato.id_dspstv- si el dispositivo ya generó
+    mediciones o tiene mapeos configurados, y perdería la trazabilidad de
+    qué dispositivo produjo cada lectura histórica. Mismo criterio que
+    eliminar_conexion (routers/conexiones_ftp.py) y eliminar_mapeo
+    (routers/mapeos.py): desactivar lo saca de circulación -deja de
+    poder recibir un mapeo activo nuevo, detiene el polling FTP de esa
+    conexión (resolver_dispositivo ya no encuentra un Activo que resolver)
+    y libera su ConexionFTP para otro dispositivo (ver el 409 de
+    crear_dispositivo)- sin destruir nada: su historial de telemetría
+    sigue existiendo y consultable.
+
+    Restringido a Administrador/Técnico CENERIS igual que crear/actualizar
+    (CA de HU18), vía el mismo permiso de EDICION sobre 'Dispositivos' -no
+    hay rol Cliente Final con ese permiso en la matriz real-.
+    """
+    dispositivo, ubicacion, _conexion = _cargar_ficha(db, id_dspstv, usuario, EDICION)
+
+    if dispositivo.estd == "Inactivo":
+        raise HTTPException(status_code=409, detail="Este dispositivo ya está inactivo")
+
+    dispositivo.estd = "Inactivo"
+    db.commit()
+
+    return {"mensaje": "Dispositivo desactivado correctamente"}
+
+
+@router.post("/{id_dspstv}/reactivar")
+def reactivar_dispositivo(
+    id_dspstv: int,
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(require_permiso("Dispositivos", EDICION)),
+):
+    """HU18 CA3: contraparte de eliminar_dispositivo. Un dispositivo
+    Inactivo puede reactivarse en cualquier momento desde la misma columna
+    de acciones del listado.
+
+    Reaplica el mismo 409 de crear_dispositivo/actualizar_dispositivo (un
+    solo dispositivo Activo por ConexionFTP, exigido por
+    resolver_dispositivo): si mientras este dispositivo estuvo inactivo su
+    ConexionFTP fue reasignada a otro dispositivo que ya está Activo,
+    reactivarlo también rompería esa resolución en silencio.
+    """
+    dispositivo, ubicacion, _conexion = _cargar_ficha(db, id_dspstv, usuario, EDICION)
+
+    if dispositivo.estd == "Activo":
+        raise HTTPException(status_code=409, detail="Este dispositivo ya está activo")
+
+    ya_tiene_activo = (
+        db.query(Dispositivo)
+        .filter(
+            Dispositivo.id_cnxn == dispositivo.id_cnxn,
+            Dispositivo.estd == "Activo",
+            Dispositivo.id_dspstv != id_dspstv,
+        )
+        .first()
+    )
+    if ya_tiene_activo is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="Esta conexión FTP ya tiene un dispositivo activo asociado",
+        )
+
+    dispositivo.estd = "Activo"
+    db.commit()
+
+    return {"mensaje": "Dispositivo reactivado correctamente"}
+
+
 @router.get("/{id_dspstv}/logs", response_model=list[LogIngestaListItem])
 def listar_logs_dispositivo(
     id_dspstv: int,
@@ -409,6 +553,71 @@ def listar_logs_dispositivo(
         .all()
     )
     return [LogIngestaListItem.model_validate(f) for f in filas]
+
+
+@router.get("/{id_dspstv}/estadisticas", response_model=DispositivoEstadisticas)
+def estadisticas_dispositivo(
+    id_dspstv: int,
+    fecha_inicio: dt.datetime | None = Query(
+        default=None, description="Por defecto, hace 7 días (CA de HU19)"
+    ),
+    fecha_fin: dt.datetime | None = Query(default=None, description="Por defecto, ahora"),
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(_requerir_tecnico_o_admin),
+):
+    """HU19: panel de estadísticas de operación del dispositivo.
+
+    CA1: total de archivos recibidos, procesados, fallidos y última fecha
+    de recepción, calculados sobre archv_ingst (HU09) -mismo criterio que
+    listar_logs_dispositivo: como archv_ingst referencia la CONEXIÓN y no
+    el dispositivo, se filtra por dispositivo.id_cnxn, válido porque HU11
+    garantiza un solo dispositivo Activo por conexión.
+
+    CA2: el rango de fechas filtra por fch_dtccn (fecha de recepción del
+    archivo, no de procesamiento); sin rango explícito, el detalle de la
+    HU fija el default en los últimos 7 días. 'Última fecha de recepción'
+    también respeta el rango, igual que los demás indicadores ('el sistema
+    actualiza LOS INDICADORES' -plural- al cambiar el período).
+    """
+    dispositivo, _ubicacion, _conexion = _cargar_ficha(db, id_dspstv, usuario, LECTURA)
+
+    ahora = dt.datetime.now(dt.timezone.utc)
+    inicio = fecha_inicio or (ahora - dt.timedelta(days=7))
+    fin = fecha_fin or ahora
+    if inicio > fin:
+        raise HTTPException(
+            status_code=422, detail="La fecha de inicio no puede ser posterior a la fecha de fin"
+        )
+
+    base = db.query(ArchivoIngesta).filter(
+        ArchivoIngesta.id_cnxn == dispositivo.id_cnxn,
+        ArchivoIngesta.fch_dtccn >= inicio,
+        ArchivoIngesta.fch_dtccn <= fin,
+    )
+
+    total_recibidos = base.count()
+    total_procesados = base.filter(ArchivoIngesta.estd == "Exitoso").count()
+    total_fallidos = base.filter(ArchivoIngesta.estd == "Fallido").count()
+    ultima_fecha_recepcion = (
+        db.query(func.max(ArchivoIngesta.fch_dtccn))
+        .filter(
+            ArchivoIngesta.id_cnxn == dispositivo.id_cnxn,
+            ArchivoIngesta.fch_dtccn >= inicio,
+            ArchivoIngesta.fch_dtccn <= fin,
+        )
+        .scalar()
+    )
+
+    return DispositivoEstadisticas(
+        total_recibidos=total_recibidos,
+        total_procesados=total_procesados,
+        total_fallidos=total_fallidos,
+        ultima_fecha_recepcion=ultima_fecha_recepcion,
+        fecha_inicio=inicio,
+        fecha_fin=fin,
+        id_cnxn=dispositivo.id_cnxn,
+        id_ubccn=dispositivo.id_ubccn,
+    )
 
 
 @router.post("/{id_dspstv}/carga-archivo", status_code=201)
