@@ -1,6 +1,12 @@
 """
+HU 27 - Listar alarmas
 HU 28 - Crear alarma
-HU 27 - Listar alarmas (lo mínimo que HU28 necesita para cerrar sus CA)
+
+HU27 CA1: al cargar el módulo "Gestión de Alarmas y Notificaciones", se
+muestra una tabla con todas las alarmas configuradas por el usuario,
+indicando nombre de la alarma, parámetro asociado, condición, estado y
+acciones (las acciones las arma el frontend a partir de id_alrm/estd, no
+viajan como dato). CA2: filtro por estado. CA3: búsqueda por nombre.
 
 HU28 CA:
   CA1  el formulario de creación ofrece Nombre de la alarma, Parámetro a
@@ -10,21 +16,34 @@ HU28 CA:
        muestra "Alarma creada correctamente"
   CA4  "CANCELAR" descarta el formulario sin crear ningún registro
 
-El alta es un flujo de DOS pasos (datos generales acá, condiciones en
-HU29) pero una sola escritura: el registro recién existe cuando el
+Detalles de la conversación:
+  - Paginado de 10 registros por defecto -mismo criterio y misma forma de
+    respuesta (total/pagina/por_pagina/items) que listar_dispositivos en
+    routers/dispositivos.py-.
+  - "Cada usuario solo puede ver y gestionar sus propias alarmas": a
+    diferencia de Dispositivos/Ubicaciones, acá NO hay una vista
+    "administrador ve todo" -Alarma.id_usr es el dueño, y el listado
+    siempre filtra por el id_usr del token, para cualquier rol-. Por eso
+    tampoco hace falta verificar_sede: el filtro por dueño ya aísla el
+    recurso.
+  - El caso "sin alarmas configuradas" (mensaje + botón 'Crear alarma'
+    visible) es responsabilidad del frontend: el listado solo devuelve
+    total=0 igual que cualquier listado vacío.
+
+El alta (HU28) es un flujo de DOS pasos -datos generales acá, condiciones
+en HU29- pero UNA sola escritura: el registro recién existe cuando el
 usuario pulsa GUARDAR al final del paso 2 (CA3). Por eso el POST recibe
 las condiciones junto con los datos generales en vez de crear la alarma
-al pasar de paso -si HU28 persistiera al pulsar SIGUIENTE, abandonar el
+al pasar de paso: si HU28 persistiera al pulsar SIGUIENTE, abandonar el
 paso 2 dejaría alarmas a medio configurar, y CA4 dice explícitamente que
-salir del alta no crea ningún registro-. HU29 define las reglas de
-negocio de esas condiciones; acá solo se valida lo que ya exige el
-modelo (el operador dentro del CHECK de cndcn_alrm).
+salir del alta no crea ningún registro. HU29 define las reglas de negocio
+de esas condiciones; acá solo se valida lo que ya exige el modelo (el
+operador dentro del CHECK de cndcn_alrm).
 
-Qué ve cada usuario: las ubicaciones asignadas según HU 21
-(security/ubicaciones_permitidas.py), igual que HU13 y HU17. No se llama
-además a verificar_sede(): HU21 es la regla de acceso a ubicaciones en
-esta app, y sumarle un filtro de sede haría que una ubicación asignada
-explícitamente en prms_ubccn quedara igual fuera de alcance.
+Qué ubicaciones y parámetros ofrece el formulario: las asignadas al
+usuario según HU 21 (security/ubicaciones_permitidas.py), igual que HU13
+y HU17. Es un filtro distinto del de "mis alarmas" que usa el listado
+-uno acota lo que se puede monitorear, el otro lo ya creado-.
 
 Los parámetros que se pueden monitorear se restringen a los de tipo
 'numerico'. Una condición de alarma es una comparación contra un umbral
@@ -34,23 +53,17 @@ selector sería dejar armar una alarma que no puede dispararse nunca.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import (
-    Alarma,
-    CondicionAlarma,
-    Dispositivo,
-    MapeoColumna,
-    MapeoFormato,
-    Parametro,
-    Ubicacion,
-)
+from app.models.alarma import Alarma, CondicionAlarma
+from app.models.mapeo_dispositivo import Dispositivo, MapeoColumna, MapeoFormato, Parametro
+from app.models.ubicacion_conexion import Ubicacion
 from app.schemas import (
     AlarmaCreada,
     AlarmaCrear,
     AlarmaListItem,
-    CondicionAlarmaItem,
     ParametroListItem,
     UbicacionParaAlarma,
 )
@@ -60,8 +73,20 @@ from app.security.ubicaciones_permitidas import ubicaciones_permitidas
 router = APIRouter(prefix="/alarmas", tags=["Alarmas"])
 
 
+def _formatear_condicion(condicion: CondicionAlarma | None, unidad: str) -> str | None:
+    """'> 30 °C' a partir de oprdr/vlr_umbrl -la HU29 (configurar
+    condición) es la que arma cndcn_alrm; acá solo se muestra.
+
+    vlr_umbrl es Numeric(14,4): se formatea con 'g' para no arrastrar los
+    ceros de relleno del tipo (30.0000 -> '30', 30.5000 -> '30.5')."""
+    if condicion is None:
+        return None
+    valor = f"{float(condicion.vlr_umbrl):g}"
+    return f"{condicion.oprdr} {valor} {unidad}".strip()
+
+
 def _query_parametros_monitoreables(db: Session, ids_ubicaciones: list[int]):
-    """Parámetros numéricos efectivamente mapeados (HU06) para algún
+    """HU28: parámetros numéricos efectivamente mapeados (HU06) para algún
     dispositivo de esas ubicaciones.
 
     Mismo recorrido que /mediciones/parametros (DEC-09: el mapeo cuelga de
@@ -82,50 +107,12 @@ def _query_parametros_monitoreables(db: Session, ids_ubicaciones: list[int]):
     )
 
 
-def _condiciones_por_alarma(db: Session, ids_alarmas: list[int]) -> dict[int, list]:
-    """Las condiciones de varias alarmas en UNA consulta, agrupadas por
-    alarma. Se resuelve así -y no con un relationship en el modelo- para
-    que el listado no dispare una consulta por fila (N+1)."""
-    agrupadas: dict[int, list] = {id_alrm: [] for id_alrm in ids_alarmas}
-    if not ids_alarmas:
-        return agrupadas
-    condiciones = (
-        db.query(CondicionAlarma)
-        .filter(CondicionAlarma.id_alrm.in_(ids_alarmas))
-        .order_by(CondicionAlarma.id_cndcn)
-        .all()
-    )
-    for condicion in condiciones:
-        agrupadas[condicion.id_alrm].append(condicion)
-    return agrupadas
-
-
-def _a_list_item(
-    alarma: Alarma,
-    parametro: Parametro,
-    ubicacion: Ubicacion,
-    condiciones: list,
-) -> AlarmaListItem:
-    return AlarmaListItem(
-        id_alrm=alarma.id_alrm,
-        nmbr=alarma.nmbr,
-        id_prmtr=parametro.id_prmtr,
-        parametro_nombre=parametro.nmbr,
-        undd=parametro.undd,
-        id_ubccn=ubicacion.id_ubccn,
-        ubicacion_nombre=ubicacion.nmbr,
-        estd=alarma.estd,
-        fch_crcn=alarma.fch_crcn,
-        condiciones=[CondicionAlarmaItem.model_validate(c) for c in condiciones],
-    )
-
-
 @router.get("/ubicaciones")
 def listar_ubicaciones_para_alarma(
     db: Session = Depends(get_db),
     usuario: dict = Depends(require_permiso("Alarmas", LECTURA)),
 ):
-    """CA1: pobla el selector "Ubicación asociada" con las ubicaciones
+    """HU28 CA1: pobla el selector "Ubicación asociada" con las ubicaciones
     asignadas al usuario (HU21)."""
     ids_ubicaciones = ubicaciones_permitidas(db, usuario)
     if not ids_ubicaciones:
@@ -146,7 +133,7 @@ def listar_parametros_para_alarma(
     db: Session = Depends(get_db),
     usuario: dict = Depends(require_permiso("Alarmas", LECTURA)),
 ):
-    """CA1: pobla el selector "Parámetro a monitorear".
+    """HU28 CA1: pobla el selector "Parámetro a monitorear".
 
     Con `ubicacion_id` devuelve los de esa ubicación (es lo que usa el
     formulario, que encadena los dos selectores); sin él, los de todas las
@@ -166,41 +153,56 @@ def listar_parametros_para_alarma(
 
 @router.get("")
 def listar_alarmas(
+    busqueda: str | None = Query(default=None, description="Nombre de la alarma, parcial"),
+    estado: str | None = Query(default=None, description="Activa / Inactiva"),
     pagina: int = Query(default=1, ge=1),
-    por_pagina: int = Query(default=10, ge=1, le=100),
+    por_pagina: int = Query(default=10, ge=1, le=100),  # CA: 10 por defecto
     db: Session = Depends(get_db),
     usuario: dict = Depends(require_permiso("Alarmas", LECTURA)),
 ):
-    """HU27 (mínimo): el listado al que CA3 agrega la alarma recién creada
-    y al que CA4 devuelve al cancelar. Se acota a las ubicaciones
-    asignadas al usuario (HU21), que es lo que aísla las alarmas de un
-    cliente de las de otro."""
-    ids_ubicaciones = ubicaciones_permitidas(db, usuario)
-    if not ids_ubicaciones:
-        return {"total": 0, "pagina": pagina, "por_pagina": por_pagina, "items": []}
+    id_usr = int(usuario["sub"])
 
     query = (
-        db.query(Alarma, Parametro, Ubicacion)
+        db.query(Alarma, Parametro.nmbr, Parametro.undd)
         .join(Parametro, Parametro.id_prmtr == Alarma.id_prmtr)
-        .join(Ubicacion, Ubicacion.id_ubccn == Alarma.id_ubccn)
-        .filter(Alarma.id_ubccn.in_(ids_ubicaciones))
+        .filter(Alarma.id_usr == id_usr)
     )
+
+    if busqueda:
+        query = query.filter(func.lower(Alarma.nmbr).like(f"%{busqueda.lower()}%"))
+    if estado:
+        query = query.filter(Alarma.estd == estado)
+
     total = query.count()
-    filas = (
-        query.order_by(Alarma.fch_crcn.desc(), Alarma.id_alrm.desc())
-        .offset((pagina - 1) * por_pagina)
-        .limit(por_pagina)
-        .all()
-    )
+    filas = query.order_by(Alarma.nmbr).offset((pagina - 1) * por_pagina).limit(por_pagina).all()
 
-    condiciones = _condiciones_por_alarma(db, [a.id_alrm for a, _, _ in filas])
+    # Las condiciones de esta página, en una sola consulta (evita N+1).
+    ids_alarma = [alarma.id_alrm for alarma, _nombre, _undd in filas]
+    condiciones_por_alarma: dict[int, CondicionAlarma] = {}
+    if ids_alarma:
+        for condicion in (
+            db.query(CondicionAlarma)
+            .filter(CondicionAlarma.id_alrm.in_(ids_alarma))
+            .order_by(CondicionAlarma.id_cndcn)
+            .all()
+        ):
+            # Una alarma puede tener más de una condición (HU29); el
+            # listado solo necesita una referencia rápida, así que se
+            # queda con la primera encontrada.
+            condiciones_por_alarma.setdefault(condicion.id_alrm, condicion)
 
-    return {
-        "total": total,
-        "pagina": pagina,
-        "por_pagina": por_pagina,
-        "items": [_a_list_item(a, p, u, condiciones[a.id_alrm]) for a, p, u in filas],
-    }
+    items = [
+        AlarmaListItem(
+            id_alrm=alarma.id_alrm,
+            nmbr=alarma.nmbr,
+            parametro_nombre=nombre_parametro,
+            condicion=_formatear_condicion(condiciones_por_alarma.get(alarma.id_alrm), unidad),
+            estd=alarma.estd,
+        )
+        for alarma, nombre_parametro, unidad in filas
+    ]
+
+    return {"total": total, "pagina": pagina, "por_pagina": por_pagina, "items": items}
 
 
 @router.post("", status_code=201, response_model=AlarmaCreada)
@@ -209,8 +211,9 @@ def crear_alarma(
     db: Session = Depends(get_db),
     usuario: dict = Depends(require_permiso("Alarmas", EDICION)),
 ):
-    """CA3: crea la alarma con estado Activa y devuelve 201 con el mensaje
-    "Alarma creada correctamente" y la fila tal como la muestra el listado.
+    """HU28 CA3: crea la alarma con estado Activa y devuelve 201 con el
+    mensaje "Alarma creada correctamente" y la fila tal como la muestra el
+    listado de HU27.
 
     CA4 no tiene endpoint: cancelar es descartar el formulario en el
     cliente, y como nada se escribió al pasar de paso (ver el módulo), no
@@ -243,6 +246,8 @@ def crear_alarma(
         )
 
     alarma = Alarma(
+        # El dueño de la alarma, que es por quien filtra el listado de
+        # HU27 ("cada usuario solo ve y gestiona las suyas").
         id_usr=int(usuario["sub"]),
         # La sede sale de la ubicación, no del JWT: alrm.id_sd es NOT NULL
         # y tiene que ser la sede DEL RECURSO -un usuario 'global' no
@@ -268,7 +273,14 @@ def crear_alarma(
 
     db.commit()
     db.refresh(alarma)
-    for condicion in condiciones:
-        db.refresh(condicion)
 
-    return AlarmaCreada(alarma=_a_list_item(alarma, parametro, ubicacion, condiciones))
+    return AlarmaCreada(
+        alarma=AlarmaListItem(
+            id_alrm=alarma.id_alrm,
+            nmbr=alarma.nmbr,
+            parametro_nombre=parametro.nmbr,
+            # Misma forma que el listado: la primera condición, formateada.
+            condicion=_formatear_condicion(condiciones[0] if condiciones else None, parametro.undd),
+            estd=alarma.estd,
+        )
+    )

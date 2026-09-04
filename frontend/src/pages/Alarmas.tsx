@@ -1,45 +1,19 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { apiFetch, ApiError } from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import Sidebar from "../components/layout/Sidebar";
 import Topbar from "../components/layout/Topbar";
 
-/**
- * Gestión de Alarmas y Notificaciones - listado.
- *
- * Es el punto de entrada de HU28: "DADO QUE me encuentro en el módulo
- * 'Gestión de Alarmas y Notificaciones', CUANDO selecciono 'Crear
- * alarma'..." (CA1), y el destino al que vuelve el alta tanto al GUARDAR
- * (CA3) como al CANCELAR (CA4).
- *
- * El listado en sí es HU27 y está acá en su versión mínima -las columnas
- * de la ficha, los filtros y las acciones por fila son de esa historia-.
- * Se implementa solo lo que HU28 necesita para poder cerrar sus CA: que
- * la alarma recién creada se vea, con su estado Activa, junto al mensaje
- * de éxito.
- */
-
-interface CondicionAlarma {
-  id_cndcn: number;
-  oprdr: string;
-  vlr_umbrl: number;
-}
-
 interface AlarmaListItem {
   id_alrm: number;
   nmbr: string;
-  id_prmtr: number;
   parametro_nombre: string;
-  undd: string;
-  id_ubccn: number;
-  ubicacion_nombre: string;
+  condicion: string | null;
   estd: string;
-  fch_crcn: string;
-  condiciones: CondicionAlarma[];
 }
 
-interface ListadoAlarmas {
+interface ListadoPaginado {
   total: number;
   pagina: number;
   por_pagina: number;
@@ -48,14 +22,13 @@ interface ListadoAlarmas {
 
 const POR_PAGINA = 10;
 
-/** "> 3.5 m" / "sin condiciones configuradas". Las condiciones son de
- *  HU29; acá solo se muestran para que la alarma recién creada se vea
- *  completa al volver del alta. */
-function resumenCondiciones(alarma: AlarmaListItem): string {
-  if (alarma.condiciones.length === 0) return "Sin condiciones configuradas";
-  return alarma.condiciones
-    .map((c) => `${c.oprdr} ${c.vlr_umbrl} ${alarma.undd}`.trim())
-    .join(" · ");
+function useDebouncedValue<T>(value: T, delayMs: number): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const timeout = setTimeout(() => setDebounced(value), delayMs);
+    return () => clearTimeout(timeout);
+  }, [value, delayMs]);
+  return debounced;
 }
 
 export default function Alarmas() {
@@ -78,25 +51,41 @@ export default function Alarmas() {
     }
   }, [location.pathname, location.state, navigate]);
 
+  // CA3: búsqueda por nombre, insensible a mayúsculas/minúsculas.
+  const [busquedaInput, setBusquedaInput] = useState("");
+  const busqueda = useDebouncedValue(busquedaInput, 400);
+
+  // CA2: filtro por estado.
+  const [estado, setEstado] = useState("");
   const [pagina, setPagina] = useState(1);
-  const [data, setData] = useState<ListadoAlarmas | null>(null);
+
+  const [data, setData] = useState<ListadoPaginado | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const cargar = useCallback(() => {
+  useEffect(() => {
+    setPagina(1);
+  }, [busqueda, estado]);
+
+  function cargarAlarmas() {
     let cancelado = false;
     setLoading(true);
     setError(null);
 
-    apiFetch<ListadoAlarmas>("/alarmas", {
-      params: { pagina, por_pagina: POR_PAGINA },
+    apiFetch<ListadoPaginado>("/alarmas", {
+      params: {
+        busqueda: busqueda || undefined,
+        estado: estado || undefined,
+        pagina,
+        por_pagina: POR_PAGINA,
+      },
     })
       .then((res) => {
         if (!cancelado) setData(res);
       })
       .catch((err) => {
         if (cancelado) return;
-        setError(err instanceof ApiError ? err.message : "No se pudo cargar el listado de alarmas");
+        setError(err instanceof ApiError ? err.message : "No se pudo cargar el listado");
       })
       .finally(() => {
         if (!cancelado) setLoading(false);
@@ -105,11 +94,27 @@ export default function Alarmas() {
     return () => {
       cancelado = true;
     };
-  }, [pagina]);
+  }
 
-  useEffect(cargar, [cargar]);
+  useEffect(cargarAlarmas, [busqueda, estado, pagina]);
 
   const totalPaginas = data ? Math.max(1, Math.ceil(data.total / data.por_pagina)) : 1;
+  const inicioRango = data ? (data.pagina - 1) * data.por_pagina + 1 : 0;
+  const finRango = data ? Math.min(data.pagina * data.por_pagina, data.total) : 0;
+
+  const hayFiltrosActivos = busquedaInput !== "" || estado !== "";
+
+  function limpiarFiltros() {
+    setBusquedaInput("");
+    setEstado("");
+  }
+
+  // Detalle de la HU: el mensaje "Aún no tienes alarmas configuradas" solo
+  // aplica cuando el usuario no tiene NINGUNA alarma -no cuando un filtro
+  // simplemente no encontró resultados-, así que se distingue por si hay
+  // filtros activos.
+  const sinAlarmasConfiguradas = !loading && data?.total === 0 && !hayFiltrosActivos;
+  const sinResultadosPorFiltro = !loading && data?.total === 0 && hayFiltrosActivos;
 
   return (
     <div className="font-sans">
@@ -128,14 +133,13 @@ export default function Alarmas() {
                   Gestión de Alarmas y Notificaciones
                 </h1>
                 <p className="text-sm text-gray-600 dark:text-gray-300">
-                  Alarmas configuradas sobre los parámetros de tus ubicaciones asignadas.
+                  Alarmas configuradas sobre tus parámetros de monitoreo.
                 </p>
               </div>
 
-              {/* HU28 CA1: punto de entrada al formulario de creación. */}
               <button
                 onClick={() => navigate("/alarmas/nueva")}
-                className="inline-flex items-center px-4 py-2 text-sm font-bold rounded-xl bg-[#ccff00] text-[#1a202c] hover:bg-[#b8e600] transition-colors"
+                className="inline-flex items-center px-4 py-2.5 text-sm font-semibold text-[#5a7000] dark:text-[#ccff00] bg-[#ccff00]/10 hover:bg-[#ccff00]/20 border border-[#ccff00]/30 rounded-xl transition-colors"
               >
                 <svg
                   className="w-4 h-4 mr-2"
@@ -155,28 +159,71 @@ export default function Alarmas() {
             {mensajeExito && (
               <div className="mb-4 p-4 rounded-xl bg-[#ccff00]/20 border border-[#ccff00]/40 text-[#5a7000] dark:text-[#ccff00] text-sm flex items-center justify-between">
                 <span>{mensajeExito}</span>
-                <button onClick={() => setMensajeExito(null)} className="text-xs font-medium underline">
+                <button
+                  onClick={() => setMensajeExito(null)}
+                  className="text-xs font-medium underline"
+                >
                   Cerrar
                 </button>
               </div>
             )}
 
             <div className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl shadow-sm border border-black/10 dark:border-white/10">
+              {/* Barra de filtros */}
+              <div className="p-5 flex flex-col lg:flex-row gap-3 items-center justify-between border-b border-black/10 dark:border-white/10">
+                <div className="relative w-full lg:w-80">
+                  <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                    <svg className="w-4 h-4 text-gray-500 dark:text-gray-400" fill="none" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                      <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="m19 19-4-4m0-7A7 7 0 1 1 1 8a7 7 0 0 1 14 0Z" />
+                    </svg>
+                  </div>
+                  <input
+                    type="text"
+                    value={busquedaInput}
+                    onChange={(e) => setBusquedaInput(e.target.value)}
+                    placeholder="Buscar por nombre..."
+                    className="bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block w-full pl-10 p-2.5 transition-all outline-none placeholder-gray-400"
+                  />
+                </div>
+
+                <div className="flex w-full lg:w-auto gap-3">
+                  <select
+                    value={estado}
+                    onChange={(e) => setEstado(e.target.value)}
+                    className="bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block p-2.5 outline-none cursor-pointer"
+                  >
+                    <option value="">Todos los estados</option>
+                    <option value="Activa">Activa</option>
+                    <option value="Inactiva">Inactiva</option>
+                  </select>
+
+                  {hayFiltrosActivos && (
+                    <button
+                      onClick={limpiarFiltros}
+                      className="px-3 py-2.5 text-sm font-medium rounded-xl border border-black/20 dark:border-white/20 text-gray-700 dark:text-gray-200 hover:bg-black/10 dark:hover:bg-white/10 transition-colors whitespace-nowrap"
+                    >
+                      Limpiar filtros
+                    </button>
+                  )}
+                </div>
+              </div>
+
               {error && (
-                <div className="p-4 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm border-b border-red-200 dark:border-red-800/30 rounded-t-2xl">
+                <div className="p-4 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm border-b border-red-200 dark:border-red-800/30">
                   {error}
                 </div>
               )}
 
+              {/* Tabla */}
               <div className="overflow-x-auto">
                 <table className="w-full text-sm text-left text-gray-600 dark:text-gray-300">
                   <thead className="text-xs text-gray-600 dark:text-gray-300 uppercase bg-black/5 dark:bg-white/5 border-b border-black/10 dark:border-white/10">
                     <tr>
                       <th className="px-6 py-4 font-bold tracking-wider">Nombre</th>
                       <th className="px-6 py-4 font-bold tracking-wider">Parámetro</th>
-                      <th className="px-6 py-4 font-bold tracking-wider">Ubicación</th>
-                      <th className="px-6 py-4 font-bold tracking-wider">Condiciones</th>
+                      <th className="px-6 py-4 font-bold tracking-wider">Condición</th>
                       <th className="px-6 py-4 font-bold tracking-wider">Estado</th>
+                      <th className="px-6 py-4 font-bold tracking-wider text-right">Acciones</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -185,16 +232,24 @@ export default function Alarmas() {
                         <td colSpan={5} className="px-6 py-8 text-center text-gray-600 dark:text-gray-300">
                           <div className="flex justify-center items-center gap-2">
                             <div className="w-4 h-4 rounded-full bg-[#ccff00] animate-bounce"></div>
-                            <span>Cargando alarmas...</span>
+                            <span>Cargando datos...</span>
                           </div>
                         </td>
                       </tr>
                     )}
 
-                    {!loading && data?.items.length === 0 && (
+                    {sinAlarmasConfiguradas && (
                       <tr>
                         <td colSpan={5} className="px-6 py-8 text-center text-gray-600 dark:text-gray-300">
-                          Todavía no has creado ninguna alarma.
+                          Aún no tienes alarmas configuradas.
+                        </td>
+                      </tr>
+                    )}
+
+                    {sinResultadosPorFiltro && (
+                      <tr>
+                        <td colSpan={5} className="px-6 py-8 text-center text-gray-600 dark:text-gray-300">
+                          No se encontraron alarmas con ese criterio.
                         </td>
                       </tr>
                     )}
@@ -206,12 +261,8 @@ export default function Alarmas() {
                           className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm border-b border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
                         >
                           <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">{a.nmbr}</td>
-                          <td className="px-6 py-4">
-                            {a.parametro_nombre}
-                            <span className="text-gray-500 dark:text-gray-400"> ({a.undd})</span>
-                          </td>
-                          <td className="px-6 py-4">{a.ubicacion_nombre}</td>
-                          <td className="px-6 py-4 font-mono text-xs">{resumenCondiciones(a)}</td>
+                          <td className="px-6 py-4">{a.parametro_nombre}</td>
+                          <td className="px-6 py-4">{a.condicion ?? "Sin condición configurada"}</td>
                           <td className="px-6 py-4">
                             <span
                               className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold border ${
@@ -226,17 +277,30 @@ export default function Alarmas() {
                               {a.estd}
                             </span>
                           </td>
+                          {/* Editar/eliminar/activar-desactivar son HUs
+                              aparte (HU28+): acá solo se deja el punto de
+                              entrada visual, sin funcionalidad todavía. */}
+                          <td className="px-6 py-4 text-right whitespace-nowrap">
+                            <span
+                              title="Disponible próximamente"
+                              className="inline-flex items-center justify-center px-3 py-1.5 text-sm font-medium text-gray-400 dark:text-gray-500 bg-transparent border border-black/10 dark:border-white/10 rounded-lg cursor-not-allowed"
+                            >
+                              Gestionar
+                            </span>
+                          </td>
                         </tr>
                       ))}
                   </tbody>
                 </table>
               </div>
 
-              {data && data.total > data.por_pagina && (
+              {/* Paginación */}
+              {data && data.total > 0 && (
                 <div className="p-5 border-t border-black/10 dark:border-white/10 flex items-center justify-between">
                   <span className="text-sm text-gray-600 dark:text-gray-300">
-                    Página <span className="font-semibold text-gray-900 dark:text-white">{data.pagina}</span> de{" "}
-                    <span className="font-semibold text-gray-900 dark:text-white">{totalPaginas}</span>
+                    Mostrando <span className="font-semibold text-gray-900 dark:text-white">{inicioRango}</span> a{" "}
+                    <span className="font-semibold text-gray-900 dark:text-white">{finRango}</span> de{" "}
+                    <span className="font-semibold text-gray-900 dark:text-white">{data.total}</span> registros
                   </span>
                   <div className="flex gap-2">
                     <button

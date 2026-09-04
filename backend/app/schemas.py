@@ -851,8 +851,31 @@ class VistaPreviaResponse(BaseModel):
     filas_mostradas: int
 
 
+# HU27 - Listar alarmas
+
+
+class AlarmaListItem(BaseModel):
+    """Una fila del listado de HU27: 'nombre de la alarma, parámetro
+    asociado, condición, estado y acciones'. 'acciones' no viaja como dato
+    -son los botones que arma el frontend a partir de id_alrm/estd-.
+
+    condicion es None cuando la alarma todavía no tiene una condición
+    configurada (HU29 es un requerimiento aparte): el detalle de HU27 no
+    contempla ese caso, pero el modelo sí lo permite -una alrm puede
+    existir sin fila en cndcn_alrm todavía-, así que el frontend lo
+    muestra como 'Sin condición configurada' en vez de reventar."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id_alrm: int
+    nmbr: str
+    parametro_nombre: str
+    condicion: str | None
+    estd: str
+
+
 # ---------------------------------------------------------------------------
-# HU27 - Listar alarmas / HU28 - Crear alarma
+# HU28 - Crear alarma (la fila del listado es AlarmaListItem, de HU27)
 # ---------------------------------------------------------------------------
 
 # Mismos operadores que admite el CHECK de cndcn_alrm
@@ -935,38 +958,14 @@ class AlarmaCrear(BaseModel):
         return valor
 
 
-class CondicionAlarmaItem(BaseModel):
-    """Condición ya persistida, tal como la devuelve el listado."""
-
-    model_config = ConfigDict(from_attributes=True)
-
-    id_cndcn: int
-    oprdr: str
-    vlr_umbrl: float
-
-
-class AlarmaListItem(BaseModel):
-    """HU27: una fila del listado de alarmas. Trae resueltos los nombres
-    del parámetro y de la ubicación (y la unidad del parámetro) porque el
-    listado los muestra siempre, y pedirlos con una llamada por fila desde
-    el frontend sería N+1 sobre una pantalla de solo lectura."""
-
-    id_alrm: int
-    nmbr: str
-    id_prmtr: int
-    parametro_nombre: str
-    undd: str
-    id_ubccn: int
-    ubicacion_nombre: str
-    estd: str
-    fch_crcn: datetime
-    condiciones: list[CondicionAlarmaItem]
-
-
 class AlarmaCreada(BaseModel):
     """HU28 CA3: "el sistema crea la alarma con estado Activa (...) y
     muestra el MSG 'Alarma creada correctamente'". Mismo patrón de
-    respuesta que HU04/HU06/HU08 ({"mensaje": ..., <recurso>: ...})."""
+    respuesta que HU04/HU06/HU08 ({"mensaje": ..., <recurso>: ...}).
+
+    La alarma viaja con la MISMA forma que en el listado (AlarmaListItem,
+    HU27): el frontend vuelve al listado tras guardar, así que dos formas
+    distintas para la misma fila solo serían dos tipos que mantener."""
 
     mensaje: str = "Alarma creada correctamente"
     alarma: AlarmaListItem

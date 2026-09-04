@@ -199,6 +199,30 @@ export default function AppRouter() {
             }
           />
 
+          {/* HU27: listado de alarmas. Sin restricción de rol adicional en
+              el frontend -el backend ya exige permiso de Lectura sobre
+              'Alarmas' y, dentro de eso, cada usuario solo ve las suyas
+              (Alarma.id_usr)-, mismo criterio que /dispositivos. */}
+          <Route
+            path="/alarmas"
+            element={
+              <ProtectedRoute>
+                <Alarmas />
+              </ProtectedRoute>
+            }
+          />
+          {/* HU28: alta en dos pasos (datos generales + condiciones de
+              HU29). Va antes de cualquier /alarmas/:id futuro, mismo
+              criterio que /ubicaciones/nueva vs /ubicaciones/:id. */}
+          <Route
+            path="/alarmas/nueva"
+            element={
+              <ProtectedRoute>
+                <CrearAlarma />
+              </ProtectedRoute>
+            }
+          />
+
           {/* HU17: mapa de estaciones del Cliente Final, con telemetría en
               vivo. Es una pantalla DISTINTA de /ubicaciones/mapa (HU22,
               vista de Administrador): esta muestra solo las ubicaciones
@@ -248,30 +272,6 @@ export default function AppRouter() {
             element={
               <ProtectedRoute rolesPermitidos={ROLES_MAPEOS}>
                 <Parametros />
-              </ProtectedRoute>
-            }
-          />
-
-          {/* HU27/HU28: gestión de alarmas y notificaciones. Sin
-              restricción de rol adicional: el backend ya exige Lectura
-              sobre "Alarmas" para el listado y Edición para crear, y
-              filtra por ubicación asignada (HU21). */}
-          <Route
-            path="/alarmas"
-            element={
-              <ProtectedRoute>
-                <Alarmas />
-              </ProtectedRoute>
-            }
-          />
-          {/* HU28: alta en dos pasos (datos generales + condiciones de
-              HU29). Va antes de cualquier /alarmas/:id futuro, mismo
-              criterio que /ubicaciones/nueva. */}
-          <Route
-            path="/alarmas/nueva"
-            element={
-              <ProtectedRoute>
-                <CrearAlarma />
               </ProtectedRoute>
             }
           />

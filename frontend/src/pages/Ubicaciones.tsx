@@ -141,7 +141,7 @@ export default function Ubicaciones() {
                 {/* HU22: entrada a la vista de mapa, solo lectura. */}
                 <button
                   onClick={() => navigate("/ubicaciones/mapa")}
-                  className="inline-flex items-center px-4 py-2.5 text-sm font-semibold text-[#ccff00] bg-[#ccff00]/10 hover:bg-[#ccff00]/20 border border-[#ccff00]/30 rounded-xl transition-colors"
+                  className="inline-flex items-center px-4 py-2.5 text-sm font-semibold text-[#5a7000] dark:text-[#ccff00] bg-[#ccff00]/10 hover:bg-[#ccff00]/20 border border-[#ccff00]/30 rounded-xl transition-colors"
                 >
                   <svg
                     className="w-4 h-4 mr-2"

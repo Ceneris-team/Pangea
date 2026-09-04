@@ -52,11 +52,11 @@ app.include_router(mapeos.router_parametros)
 app.include_router(mapeos.router_sedes)
 app.include_router(mapeos.router_dispositivos_mapeo)
 app.include_router(dispositivos.router)
+# HU27/HU28: módulo "Gestión de Alarmas y Notificaciones" (listado y alta).
+app.include_router(alarmas.router)
 # HU17: mapa del Cliente Final (REST de carga inicial + WebSocket en vivo).
 # Router propio, separado del de HU22 (/ubicaciones/mapa), que no se toca.
 app.include_router(mapa_cliente.router)
-# HU27/HU28: gestión de alarmas y notificaciones.
-app.include_router(alarmas.router)
 
 
 @app.get("/")

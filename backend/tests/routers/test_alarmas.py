@@ -6,8 +6,9 @@ HU 28 - Crear alarma.
        las ubicaciones asignadas al usuario (HU21)
   CA2  "SIGUIENTE" es navegación de UI (paso de condiciones, HU29): no
        toca el backend y por eso no tiene test acá
-  CA3  "GUARDAR" crea la alarma con estado Activa, la agrega al listado y
-       devuelve "Alarma creada correctamente"
+  CA3  "GUARDAR" crea la alarma con estado Activa, la agrega al listado
+       (el de HU27, que filtra por dueño) y devuelve "Alarma creada
+       correctamente"
   CA4  "CANCELAR" no crea ningún registro. Tampoco tiene endpoint -nada se
        escribe hasta el GUARDAR final-, así que lo que se verifica acá es
        la premisa que lo hace cierto: el alta es UNA sola escritura
@@ -22,6 +23,8 @@ from fastapi.testclient import TestClient
 from app.database import get_db
 from app.main import app
 from app.models import (
+    Alarma,
+    CondicionAlarma,
     ConexionFTP,
     Dispositivo,
     MapeoColumna,
@@ -250,7 +253,9 @@ class TestCA3Guardar:
         assert cuerpo["alarma"]["estd"] == "Activa"
         assert cuerpo["alarma"]["nmbr"] == "Crecida del río"
         assert cuerpo["alarma"]["parametro_nombre"] == "Nivel HU28"
-        assert cuerpo["alarma"]["ubicacion_nombre"] == "Estación Asignada"
+        # La alarma vuelve con la misma forma que en el listado de HU27,
+        # condición ya formateada incluida.
+        assert cuerpo["alarma"]["condicion"] == "> 3.5 m"
 
     def test_la_alarma_creada_aparece_en_el_listado(self, client, escenario):
         client.post("/alarmas", json=cuerpo_valido(escenario))
@@ -259,9 +264,13 @@ class TestCA3Guardar:
         assert resp.status_code == 200
         assert [a["nmbr"] for a in resp.json()["items"]] == ["Crecida del río"]
 
-    def test_persiste_las_condiciones_del_paso_2(self, client, escenario):
+    def test_persiste_las_condiciones_del_paso_2(self, client, db_session, escenario):
         """El alta es de dos pasos pero una sola escritura: las
-        condiciones de HU29 llegan en el mismo POST del GUARDAR."""
+        condiciones de HU29 llegan en el mismo POST del GUARDAR.
+
+        Se comprueban en cndcn_alrm y no en la respuesta: la fila de HU27
+        resume la alarma con UNA condición formateada, así que por la
+        respuesta sola no se vería que se guardaron las dos."""
         resp = client.post(
             "/alarmas",
             json=cuerpo_valido(
@@ -269,15 +278,20 @@ class TestCA3Guardar:
                 condiciones=[{"oprdr": ">=", "vlr_umbrl": 3.5}, {"oprdr": "<", "vlr_umbrl": 0.2}],
             ),
         )
+        assert resp.status_code == 201
 
-        condiciones = resp.json()["alarma"]["condiciones"]
-        assert [(c["oprdr"], c["vlr_umbrl"]) for c in condiciones] == [(">=", 3.5), ("<", 0.2)]
+        alarma = db_session.query(Alarma).filter(Alarma.nmbr == "Crecida del río").first()
+        condiciones = (
+            db_session.query(CondicionAlarma)
+            .filter(CondicionAlarma.id_alrm == alarma.id_alrm)
+            .order_by(CondicionAlarma.id_cndcn)
+            .all()
+        )
+        assert [(c.oprdr, float(c.vlr_umbrl)) for c in condiciones] == [(">=", 3.5), ("<", 0.2)]
 
     def test_la_sede_sale_de_la_ubicacion_no_del_jwt(self, client, db_session, escenario):
         """alrm.id_sd es NOT NULL y tiene que ser la sede del recurso: un
         usuario 'global' no tiene sede propia que poner ahí."""
-        from app.models import Alarma
-
         app.dependency_overrides[get_current_user] = lambda: usuario_jwt(
             escenario["usuario"], escenario["rol"].nmbr, sede_id=None, scope="global"
         )
@@ -375,20 +389,25 @@ class TestAislamientoYPermisos:
 
         assert client.get("/alarmas").status_code == 403
 
-    def test_no_se_ven_alarmas_de_ubicaciones_ajenas(self, client, db_session, fabrica, escenario):
-        """Dos clientes distintos: el listado se acota a las ubicaciones
-        asignadas (HU21), que es lo que aísla las alarmas entre cuentas."""
+    def test_la_alarma_creada_queda_a_nombre_de_quien_la_crea(
+        self, client, db_session, fabrica, escenario
+    ):
+        """El listado de HU27 filtra por dueño ("cada usuario solo ve y
+        gestiona sus propias alarmas"), así que el alta tiene que dejar
+        id_usr apuntando a quien guardó: otro usuario, aunque tenga la
+        misma ubicación asignada, no ve esa alarma."""
         client.post("/alarmas", json=cuerpo_valido(escenario))
 
         rol = escenario["rol"]
         otro = fabrica.usuario(rol=rol)
         agregar_permiso(db_session, otro, escenario["sede"], "Alarmas", "Edición", rol)
-        propia = crear_ubicacion(db_session, escenario["sede"], nombre="Estación del Otro")
-        asignar_ubicacion(db_session, otro, propia)
+        asignar_ubicacion(db_session, otro, escenario["ubicacion"])
 
         app.dependency_overrides[get_current_user] = lambda: usuario_jwt(
             otro, rol.nmbr, sede_id=escenario["sede"].id_sd
         )
 
-        resp = client.get("/alarmas")
-        assert resp.json()["total"] == 0
+        assert client.get("/alarmas").json()["total"] == 0
+
+        alarma = db_session.query(Alarma).filter(Alarma.nmbr == "Crecida del río").first()
+        assert alarma.id_usr == escenario["usuario"].id_usr
