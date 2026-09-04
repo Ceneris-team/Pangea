@@ -43,7 +43,11 @@ PERMISOS_POR_ROL = {
         "Ubicaciones": "Lectura",
         "Dispositivos": "Lectura",
         "Tableros": "Lectura",
-        "Alarmas": "Lectura",
+        # HU28 declara al Cliente Final como quien crea las alarmas ("YO
+        # COMO Cliente Final, DESEO crear una nueva alarma"), así que el
+        # nivel sembrado pasa de Lectura a Edición: con Lectura, el rol
+        # dueño de la HU recibía 403 al guardar.
+        "Alarmas": "Edición",
     },
     "Administrador Comercial": {
         "Comercial": "Edición",

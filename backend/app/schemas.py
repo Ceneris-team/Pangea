@@ -1,3 +1,4 @@
+import re
 from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
@@ -848,3 +849,124 @@ class VistaPreviaResponse(BaseModel):
     filas: list[FilaVistaPrevia]
     total_filas_archivo: int
     filas_mostradas: int
+
+
+# ---------------------------------------------------------------------------
+# HU27 - Listar alarmas / HU28 - Crear alarma
+# ---------------------------------------------------------------------------
+
+# Mismos operadores que admite el CHECK de cndcn_alrm
+# (cndcnalrm_oprdr_check, ver app/models/alarma.py). Se declaran acá para
+# que el 422 con el detalle del campo salga de Pydantic y no como un
+# IntegrityError opaco al hacer commit.
+OPERADORES_ALARMA = (">", "<", ">=", "<=", "=")
+
+# HU28 "detalles de la conversación": "El nombre de la alarma acepta texto
+# alfanumérico con un máximo de 100 caracteres". Se lee como "texto", no
+# como "solo [A-Za-z0-9]": un nombre real es "Nivel río Rímac - crecida",
+# con espacios, tilde y guion. Lo que la regla sí descarta es un nombre
+# puramente simbólico ("###"), y eso es lo que se valida: la cadena tiene
+# que empezar por un carácter alfanumérico y no puede traer símbolos
+# fuera del pequeño conjunto de puntuación de abajo.
+_CARACTERES_NOMBRE_ALARMA = r"0-9A-Za-zÁÉÍÓÚÜÑáéíóúüñ"
+_RE_NOMBRE_ALARMA = re.compile(
+    rf"^[{_CARACTERES_NOMBRE_ALARMA}][{_CARACTERES_NOMBRE_ALARMA} .,;:_()\-/]*$"
+)
+
+
+class UbicacionParaAlarma(BaseModel):
+    """HU28 CA1: pobla el selector "Ubicación asociada" del formulario.
+
+    Es una proyección mínima de ubccn -no UbicacionListItem- porque el
+    selector solo necesita id y nombre; arrastrar lat/lng/estado obligaría
+    a serializar los Numeric de cada ubicación en cada carga del
+    formulario sin que nadie los mire.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id_ubccn: int
+    nmbr: str
+
+
+class CondicionAlarmaCrear(BaseModel):
+    """Una condición umbral del paso 2 del alta (HU29).
+
+    HU28 la recibe pero no define sus reglas de negocio: el flujo de alta
+    es de dos pasos ("datos generales en HU 28 y condiciones en HU 29") y
+    el registro recién se persiste al GUARDAR del paso 2 (CA3), así que el
+    POST tiene que poder traerlas. Lo único que valida HU28 es lo que ya
+    exige el modelo: operador dentro del CHECK.
+    """
+
+    oprdr: str
+    vlr_umbrl: float
+
+    @field_validator("oprdr")
+    @classmethod
+    def _operador_valido(cls, valor: str) -> str:
+        valor = valor.strip()
+        if valor not in OPERADORES_ALARMA:
+            raise ValueError(f"El operador debe ser uno de: {', '.join(OPERADORES_ALARMA)}")
+        return valor
+
+
+class AlarmaCrear(BaseModel):
+    """HU28 CA1: los tres campos obligatorios del formulario de creación
+    (Nombre de la alarma, Parámetro a monitorear y Ubicación asociada),
+    más las condiciones del paso 2 (HU29) que llegan en el mismo POST."""
+
+    nmbr: str = Field(..., min_length=1, max_length=100)
+    id_prmtr: int
+    id_ubccn: int
+    condiciones: list[CondicionAlarmaCrear] = Field(default_factory=list)
+
+    @field_validator("nmbr")
+    @classmethod
+    def _nombre_valido(cls, valor: str) -> str:
+        valor = valor.strip()
+        if not valor:
+            raise ValueError("El nombre de la alarma es obligatorio")
+        if not _RE_NOMBRE_ALARMA.match(valor):
+            raise ValueError(
+                "El nombre de la alarma debe ser texto alfanumérico "
+                "(se admiten espacios y los signos . , ; : _ ( ) - /)"
+            )
+        return valor
+
+
+class CondicionAlarmaItem(BaseModel):
+    """Condición ya persistida, tal como la devuelve el listado."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id_cndcn: int
+    oprdr: str
+    vlr_umbrl: float
+
+
+class AlarmaListItem(BaseModel):
+    """HU27: una fila del listado de alarmas. Trae resueltos los nombres
+    del parámetro y de la ubicación (y la unidad del parámetro) porque el
+    listado los muestra siempre, y pedirlos con una llamada por fila desde
+    el frontend sería N+1 sobre una pantalla de solo lectura."""
+
+    id_alrm: int
+    nmbr: str
+    id_prmtr: int
+    parametro_nombre: str
+    undd: str
+    id_ubccn: int
+    ubicacion_nombre: str
+    estd: str
+    fch_crcn: datetime
+    condiciones: list[CondicionAlarmaItem]
+
+
+class AlarmaCreada(BaseModel):
+    """HU28 CA3: "el sistema crea la alarma con estado Activa (...) y
+    muestra el MSG 'Alarma creada correctamente'". Mismo patrón de
+    respuesta que HU04/HU06/HU08 ({"mensaje": ..., <recurso>: ...})."""
+
+    mensaje: str = "Alarma creada correctamente"
+    alarma: AlarmaListItem

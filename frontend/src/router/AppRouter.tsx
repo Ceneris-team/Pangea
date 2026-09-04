@@ -25,6 +25,8 @@ import Graficos from "../pages/Graficos";
 import DispositivoDetalle from "../pages/DispositivoDetalle";
 import Parametros from "../pages/Parametros";
 import ColaIngesta from "../pages/ColaIngesta";
+import Alarmas from "../pages/Alarmas";
+import CrearAlarma from "../pages/CrearAlarma";
 
 // HU06: "Solo los roles Técnico CENERIS y Administrador tienen acceso a
 // este módulo." El backend lo exige igual vía require_permiso('Ingesta').
@@ -246,6 +248,30 @@ export default function AppRouter() {
             element={
               <ProtectedRoute rolesPermitidos={ROLES_MAPEOS}>
                 <Parametros />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* HU27/HU28: gestión de alarmas y notificaciones. Sin
+              restricción de rol adicional: el backend ya exige Lectura
+              sobre "Alarmas" para el listado y Edición para crear, y
+              filtra por ubicación asignada (HU21). */}
+          <Route
+            path="/alarmas"
+            element={
+              <ProtectedRoute>
+                <Alarmas />
+              </ProtectedRoute>
+            }
+          />
+          {/* HU28: alta en dos pasos (datos generales + condiciones de
+              HU29). Va antes de cualquier /alarmas/:id futuro, mismo
+              criterio que /ubicaciones/nueva. */}
+          <Route
+            path="/alarmas/nueva"
+            element={
+              <ProtectedRoute>
+                <CrearAlarma />
               </ProtectedRoute>
             }
           />

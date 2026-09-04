@@ -4,7 +4,7 @@ import pangeaIconLight from "../../assets/pangea-icon-light.png";
 import { ROLES, rutaPorRol } from "../../config/roles";
 import { useTheme } from "../../context/ThemeContext";
 
-export type SeccionActiva = "panel" | "usuarios" | "ubicaciones" | "dispositivos" | "conexiones-ftp" | "dashboard" | "configuracion" | "consulta-datos"| "mapeos" | "parametros" | "cola-ingesta" | "graficos" | "mapa-estaciones" | "mapa-ubicaciones";
+export type SeccionActiva = "panel" | "usuarios" | "ubicaciones" | "dispositivos" | "conexiones-ftp" | "dashboard" | "configuracion" | "consulta-datos"| "mapeos" | "parametros" | "cola-ingesta" | "graficos" | "mapa-estaciones" | "mapa-ubicaciones" | "alarmas";
 
 interface SidebarProps {
   onLogout: () => void;
@@ -197,6 +197,39 @@ export default function Sidebar({ onLogout, activo, rol }: SidebarProps) {
                 />
               </svg>
               Gráficos
+            </Link>
+          </div>
+        </div>
+
+        {/* ---------------- Alarmas ----------------
+            HU27/HU28: el módulo "Gestión de Alarmas y Notificaciones".
+            Va después de Datos y antes de Gestión porque se configura
+            SOBRE lo que se acaba de mirar en Consulta de Datos/Gráficos:
+            se define un umbral para el parámetro que se estaba
+            revisando. Sin filtro de rol acá: el backend ya exige permiso
+            sobre el módulo "Alarmas" y filtra por ubicación asignada
+            (HU21). */}
+        <div className={grupo}>
+          <p className={tituloGrupo}>Alarmas</p>
+          <div className="space-y-1">
+            <Link
+              to="/alarmas"
+              className={linkBase + " " + (activo === "alarmas" ? linkActivo : linkInactivo)}
+            >
+              <svg
+                className={"w-5 h-5 " + (activo === "alarmas" ? iconoActivo : "")}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
+                />
+              </svg>
+              Gestión de Alarmas
             </Link>
           </div>
         </div>
