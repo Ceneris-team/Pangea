@@ -1,0 +1,18 @@
+[tool.black]
+line-length = 100
+target-version = ["py312"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = ["alembic/versions"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+# Reexporta modelos para que Base.metadata los descubra y para `from app.models import X`.
+"app/models/__init__.py" = ["F401"]
+# Boilerplate generado por Alembic: imports después de manipular sys.path es el patrón esperado.
+"alembic/env.py" = ["E402"]

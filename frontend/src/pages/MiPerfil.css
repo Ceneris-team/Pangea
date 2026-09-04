@@ -1,0 +1,227 @@
+.miperfil-page{
+  --deep-01:#0c1712;
+  --deep-02:#122019;
+  --moss-01:#1c2f24;
+  --moss-02:#2a4535;
+  --ink:#eef2ee;
+  --ink-soft:rgba(238,242,238,0.62);
+  --ink-faint:rgba(238,242,238,0.38);
+  --line:rgba(238,242,238,0.18);
+  --accent:#7fd8a3;
+  --warning:#f0c48a;
+  --warning-bg:rgba(240,196,138,0.12);
+  --danger:#ff9b8a;
+  --radius:2px;
+
+  box-sizing:border-box;
+  min-height:100vh;
+  margin:0;
+  padding:48px 24px;
+  display:flex;
+  justify-content:center;
+  background:var(--deep-01);
+  color:var(--ink);
+  font-family:'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif;
+}
+.miperfil-page *{box-sizing:border-box;}
+
+.miperfil-card{
+  width:100%;
+  max-width:520px;
+  height:fit-content;
+}
+
+.miperfil-header{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  margin-bottom:20px;
+}
+.miperfil-header h1{
+  margin:0;
+  font-size:24px;
+  font-weight:600;
+  letter-spacing:.2px;
+}
+
+.miperfil-btn-ghost{
+  background:transparent;
+  border:1px solid var(--line);
+  color:var(--ink-soft);
+  border-radius:var(--radius);
+  padding:8px 14px;
+  font-size:13px;
+  cursor:pointer;
+  transition:border-color .15s ease, color .15s ease;
+}
+.miperfil-btn-ghost:hover{
+  border-color:var(--accent);
+  color:var(--ink);
+}
+
+.miperfil-alert{
+  display:flex;
+  gap:10px;
+  align-items:flex-start;
+  margin-bottom:20px;
+  padding:14px 16px;
+  border-radius:6px;
+  background:var(--warning-bg);
+  border:1px solid rgba(240,196,138,0.35);
+  color:var(--warning);
+  font-size:14px;
+  line-height:1.5;
+}
+.miperfil-alert svg{flex:none; margin-top:2px;}
+
+.miperfil-error{
+  margin-bottom:16px;
+  padding:12px 14px;
+  border-radius:6px;
+  background:rgba(255,155,138,0.1);
+  border:1px solid rgba(255,155,138,0.3);
+  color:var(--danger);
+  font-size:14px;
+}
+
+.miperfil-panel{
+  background:var(--deep-02);
+  border:1px solid var(--line);
+  border-radius:10px;
+  padding:24px;
+  margin-bottom:20px;
+}
+
+.miperfil-info{
+  display:grid;
+  grid-template-columns:auto 1fr;
+  row-gap:12px;
+  column-gap:16px;
+  font-size:14px;
+}
+.miperfil-info dt{
+  color:var(--ink-faint);
+  font-weight:500;
+}
+.miperfil-info dd{
+  margin:0;
+  color:var(--ink);
+}
+
+.miperfil-badge{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  padding:2px 10px;
+  border-radius:999px;
+  font-size:12px;
+  font-weight:600;
+  background:rgba(127,216,163,0.12);
+  color:var(--accent);
+  border:1px solid rgba(127,216,163,0.3);
+}
+.miperfil-badge::before{
+  content:"";
+  width:6px;
+  height:6px;
+  border-radius:50%;
+  background:currentColor;
+}
+
+.miperfil-panel-title{
+  margin:0 0 16px;
+  font-size:15px;
+  font-weight:600;
+  color:var(--ink);
+}
+
+.miperfil-btn-primary{
+  background:var(--accent);
+  color:var(--deep-01);
+  border:none;
+  border-radius:var(--radius);
+  padding:10px 20px;
+  font-size:14px;
+  font-weight:600;
+  cursor:pointer;
+  transition:opacity .15s ease;
+}
+.miperfil-btn-primary:hover{opacity:.9;}
+.miperfil-btn-primary:disabled{opacity:.45; cursor:not-allowed;}
+
+.miperfil-form{
+  display:grid;
+  gap:16px;
+}
+
+.miperfil-field{
+  display:grid;
+  gap:6px;
+}
+.miperfil-field label{
+  font-size:13px;
+  color:var(--ink-soft);
+  font-weight:500;
+}
+.miperfil-field input,
+.miperfil-field select{
+  width:100%;
+  background:var(--moss-01);
+  border:1px solid var(--line);
+  border-radius:6px;
+  padding:10px 12px;
+  font-size:14px;
+  color:var(--ink);
+  outline:none;
+  transition:border-color .15s ease;
+}
+.miperfil-field input:focus,
+.miperfil-field select:focus{
+  border-color:var(--accent);
+}
+.miperfil-field small{
+  color:var(--danger);
+  font-size:12px;
+}
+
+.miperfil-checkbox{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  font-size:13px;
+  color:var(--ink-soft);
+}
+.miperfil-checkbox input{
+  width:15px;
+  height:15px;
+  accent-color:var(--accent);
+}
+
+.miperfil-actions{
+  display:flex;
+  gap:10px;
+  align-items:center;
+}
+
+.miperfil-btn-secondary{
+  background:transparent;
+  border:1px solid var(--line);
+  color:var(--ink-soft);
+  border-radius:var(--radius);
+  padding:10px 18px;
+  font-size:14px;
+  cursor:pointer;
+}
+.miperfil-btn-secondary:hover{
+  border-color:var(--ink-soft);
+  color:var(--ink);
+}
+.miperfil-btn-secondary:disabled{opacity:.45; cursor:not-allowed;}
+
+.miperfil-form-msg{
+  margin:0;
+  font-size:13px;
+  min-height:18px;
+}
+.miperfil-form-msg.ok{color:var(--accent);}
+.miperfil-form-msg.err{color:var(--danger);}

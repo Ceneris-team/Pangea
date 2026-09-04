@@ -1,0 +1,53 @@
+{
+  "_comentario": "Plantilla de deployment Lightsail Container Service (api+redis+worker+beat, y frontend si va en el mismo servicio). AWS no soporta comentarios reales en JSON: borra esta clave antes de usar el archivo con --containers. Con worker (--concurrency=2) + beat sumados a api+redis, usar plan 'small' (0.5 vCPU/1GB) como minimo -en 'nano' (512MB) los deployments con worker fallaron por timeout/OOM, ver docs/incidentes.",
+  "api": {
+    "image": ":pangea-app.api.LATEST",
+    "environment": {
+      "DATABASE_URL": "postgresql+psycopg2://<usuario>:<password>@<host-rds>:5432/pangea",
+      "CELERY_BROKER_URL": "redis://localhost:6379/2",
+      "CELERY_RESULT_BACKEND": "redis://localhost:6379/3",
+      "RATELIMIT_STORAGE_URL": "redis://localhost:6379/1",
+      "JWT_SECRET": "<generar con: python -c \"import secrets; print(secrets.token_hex(32))\">",
+      "FTP_CREDENTIAL_KEY": "<clave Fernet para cifrar credenciales FTP>",
+      "FRONTEND_URL": "https://<dominio-frontend-lightsail>"
+    },
+    "ports": {
+      "8000": "HTTP"
+    }
+  },
+  "worker": {
+    "image": ":pangea-app.worker.LATEST",
+    "command": ["celery", "-A", "app.core.celery_app", "worker", "--loglevel=info", "--concurrency=2"],
+    "environment": {
+      "DATABASE_URL": "postgresql+psycopg2://<usuario>:<password>@<host-rds>:5432/pangea",
+      "CELERY_BROKER_URL": "redis://localhost:6379/2",
+      "CELERY_RESULT_BACKEND": "redis://localhost:6379/3",
+      "JWT_SECRET": "<mismo valor que api>",
+      "FTP_CREDENTIAL_KEY": "<mismo valor que api>",
+      "FRONTEND_URL": "https://<dominio-frontend-lightsail>"
+    }
+  },
+  "beat": {
+    "image": ":pangea-app.beat.LATEST",
+    "command": ["celery", "-A", "app.core.celery_app", "beat", "--loglevel=info"],
+    "environment": {
+      "DATABASE_URL": "postgresql+psycopg2://<usuario>:<password>@<host-rds>:5432/pangea",
+      "CELERY_BROKER_URL": "redis://localhost:6379/2",
+      "CELERY_RESULT_BACKEND": "redis://localhost:6379/3",
+      "JWT_SECRET": "<mismo valor que api>",
+      "FTP_CREDENTIAL_KEY": "<mismo valor que api>"
+    }
+  },
+  "frontend": {
+    "image": ":pangea-app.frontend.LATEST",
+    "ports": {
+      "80": "HTTP"
+    }
+  },
+  "redis": {
+    "image": "redis:7",
+    "ports": {
+      "6379": "TCP"
+    }
+  }
+}
