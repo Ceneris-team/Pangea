@@ -8,8 +8,11 @@ from app.ingesta.ftp_receptor import descargar_archivo_dat, listar_archivos_dat
 from app.models.archivo_ingesta import ArchivoIngesta
 from app.models.mapeo_dispositivo import Parametro
 from app.models.ubicacion_conexion import ConexionFTP
+from app.security.auditoria import limpiar_contexto_auditoria, marcar_contexto_auditoria
+from app.services.cache.invalidacion import invalidar_por_lectura
 from app.services.ingesta.estandarizador import estandarizar_filas
 from app.services.ingesta.mapeo import (
+    HeaderCorruptoError,
     MapeoNoEncontradoError,
     construir_mapeo,
     resolver_formato,
@@ -23,8 +26,6 @@ from app.services.ingesta.persistencia import (
 )
 from app.services.ingesta.usuario_sistema import resolver_id_usuario_sistema
 from app.services.ingesta.validador import validar_lecturas
-from app.security.auditoria import limpiar_contexto_auditoria, marcar_contexto_auditoria
-from app.services.cache.invalidacion import invalidar_por_lectura
 from app.services.mapa.eventos import construir_evento, publicar_lecturas
 from app.services.particiones import ParticionInexistenteError
 
@@ -93,14 +94,21 @@ def interpretar_y_guardar(
     # parámetros pueda inferir tipo_dato mirando los valores reales de la
     # columna (numerico -> tlmtr / texto -> evnt_txt); sin ellos el
     # auto-creado caería siempre a 'texto'.
-    mapeo = construir_mapeo(
-        db,
-        formato.id_mp,
-        resultado_parseo.columnas,
-        filas_archivo=resultado_parseo.filas,
-        delimitador_decimal=formato.delimitador_decimal,
-        columna_fecha=formato.config.columna_fecha,
-    )
+    try:
+        mapeo = construir_mapeo(
+            db,
+            formato.id_mp,
+            resultado_parseo.columnas,
+            filas_archivo=resultado_parseo.filas,
+            delimitador_decimal=formato.delimitador_decimal,
+            columna_fecha=formato.config.columna_fecha,
+        )
+    except HeaderCorruptoError as exc:
+        # I-27: mismo criterio que MapeoNoEncontradoError -no es
+        # transitorio, reintentar el mismo archivo produce el mismo
+        # header, así que se trata como error de datos (Fallido en la
+        # Cola de Ingesta, HU09), no se reintenta solo.
+        raise ErrorDatosNoRecuperable(str(exc)) from exc
     if not mapeo:
         raise ErrorDatosNoRecuperable(
             f"El formato mp_frmt id={formato.id_mp} (trama '{formato.tipo_trama}') "
@@ -161,9 +169,7 @@ def _publicar_eventos_mapa(db, resultado_persistencia) -> None:
         for nombre, (valor, fecha_hora) in ultimos.items()
     ]
     publicar_lecturas(eventos)
-    logger.info(
-        "HU17: publicados %s evento(s) de mapa para ubicacion=%s", len(eventos), id_ubccn
-    )
+    logger.info("HU17: publicados %s evento(s) de mapa para ubicacion=%s", len(eventos), id_ubccn)
 
 
 @celery_app.task(

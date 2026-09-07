@@ -28,6 +28,7 @@ from app.models import (
     Ubicacion,
 )
 from app.services.ingesta.mapeo import (
+    HeaderCorruptoError,
     _inferir_tipo_dato,
     construir_mapeo,
 )
@@ -336,6 +337,117 @@ class TestColumnaConNombreQueParecevaloDeDatos:
             .filter(MapeoColumnaPendiente.id_mp == formato.id_mp)
             .count()
             == 1
+        )
+
+
+class TestHeaderCompletoCorrupto:
+    """I-27 del RAID: cuando la fracción de columnas basura es alta, se
+    rechaza el archivo ENTERO en vez de derivar columna por columna a
+    mp_clmn_pendiente -evita dejar un mp_frmt "válido" con pocas o
+    ninguna columna útil, que contaminaría cada archivo siguiente de esa
+    trama."""
+
+    @staticmethod
+    def _crear_formato_vacio(db, dispositivo, tipo_trama="Z"):
+        formato = MapeoFormato(
+            id_dspstv=dispositivo.id_dspstv,
+            tp_trm=tipo_trama,
+            dlmtdr=",",
+            dlmtdr_dcml=".",
+            fl_inc_dts=1,
+            frmt_fch="%Y-%m-%d %H:%M:%S",
+            estd="Activo",
+        )
+        db.add(formato)
+        db.flush()
+        return formato
+
+    def test_header_mayormente_basura_rechaza_el_archivo_entero(self, db_session, fabrica):
+        """Caso real de producción: una línea con sub-registros
+        concatenados cayó en la posición de header (46+ campos, la
+        mayoría números/fechas)."""
+        sede = fabrica.sede()
+        dispositivo = crear_dispositivo(db_session, sede)
+        formato = self._crear_formato_vacio(db_session, dispositivo)
+
+        header_corrupto = [
+            "2026-08-31 11:15:00",
+            "R",
+            "BattV(V)",
+            "0",
+            "106",
+            "148.4",
+            "1.157021e+09",
+            "0.998",
+        ]
+
+        with pytest.raises(HeaderCorruptoError):
+            construir_mapeo(db_session, formato.id_mp, header_corrupto)
+
+        # No se creó NINGÚN parámetro ni mapeo, ni siquiera para las
+        # columnas que sí calzarían ('R', 'BattV(V)'): el header entero
+        # se rechaza antes de tocar nada.
+        assert (
+            db_session.query(MapeoColumna).filter(MapeoColumna.id_mp == formato.id_mp).count() == 0
+        )
+        assert (
+            db_session.query(MapeoColumnaPendiente)
+            .filter(MapeoColumnaPendiente.id_mp == formato.id_mp)
+            .count()
+            == 0
+        )
+        assert db_session.query(Parametro).filter(Parametro.nmbr == "BattV(V)").count() == 0
+
+    def test_header_normal_con_una_columna_rara_no_se_rechaza(self, db_session, fabrica):
+        """Una sola columna sospechosa entre muchas normales NO alcanza el
+        umbral de fracción: sigue el flujo columna por columna de
+        siempre (esa columna puntual va a mp_clmn_pendiente, el resto se
+        mapea normal)."""
+        sede = fabrica.sede()
+        dispositivo = crear_dispositivo(db_session, sede)
+        formato = self._crear_formato_vacio(db_session, dispositivo)
+
+        header_normal = [
+            "Fecha",
+            "BattV(V)",
+            "Temperatura",
+            "Conductividad",
+            "Salinidad",
+            "42",  # una sola columna rara entre 6
+        ]
+
+        mapa = construir_mapeo(db_session, formato.id_mp, header_normal, columna_fecha="Fecha")
+
+        assert "BattV(V)" in mapa
+        assert "Temperatura" in mapa
+        pendiente = (
+            db_session.query(MapeoColumnaPendiente)
+            .filter(MapeoColumnaPendiente.id_mp == formato.id_mp)
+            .one()
+        )
+        assert pendiente.nmbr_clmn_orgn == "42"
+
+    def test_header_corto_no_activa_el_chequeo_de_fraccion(self, db_session, fabrica):
+        """Con menos de 5 columnas no se evalúa la fracción -un formato
+        angosto por diseño (ej. 2 columnas) no debe rechazarse solo
+        porque una de sus pocas columnas parezca basura."""
+        sede = fabrica.sede()
+        dispositivo = crear_dispositivo(db_session, sede)
+        formato = self._crear_formato_vacio(db_session, dispositivo)
+
+        # 2 de 3 columnas "parecen basura" (fracción 0.66), pero el
+        # header tiene menos de 5 columnas: no se rechaza el archivo.
+        mapa = construir_mapeo(
+            db_session, formato.id_mp, ["Fecha", "0", "106"], columna_fecha="Fecha"
+        )
+
+        # 'Fecha' se excluye del mapeo (columna_fecha), no queda pendiente.
+        assert mapa == {}
+        assert (
+            db_session.query(MapeoColumnaPendiente)
+            .filter(MapeoColumnaPendiente.id_mp == formato.id_mp)
+            .count()
+            == 2
         )
 
 

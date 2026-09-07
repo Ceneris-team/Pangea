@@ -32,6 +32,7 @@ from app.models import (
     Telemetria,
     Ubicacion,
 )
+from app.security.auditoria import limpiar_contexto_auditoria, marcar_contexto_auditoria
 from app.services.ingesta.mapeo import (
     MapeoNoEncontradoError,
     construir_mapeo,
@@ -40,7 +41,6 @@ from app.services.ingesta.mapeo import (
     resolver_formato,
 )
 from app.services.ingesta.usuario_sistema import resolver_id_usuario_sistema
-from app.security.auditoria import limpiar_contexto_auditoria, marcar_contexto_auditoria
 from app.tasks.ingesta import interpretar_y_guardar
 from tests.conftest import Fabrica
 from tests.routers.test_mapeos import crear_dispositivo
@@ -171,13 +171,10 @@ class TestResolverFormatoCreacionAutomatica:
         # HU50 corre después, sobre el header real: al crearse, la trama
         # no tiene ninguna columna mapeada todavía.
         assert (
-            db_session.query(MapeoColumna).filter(MapeoColumna.id_mp == formato.id_mp).count()
-            == 0
+            db_session.query(MapeoColumna).filter(MapeoColumna.id_mp == formato.id_mp).count() == 0
         )
 
-    def test_segunda_llamada_con_mismo_prefijo_reutiliza_la_misma_trama(
-        self, db_session, fabrica
-    ):
+    def test_segunda_llamada_con_mismo_prefijo_reutiliza_la_misma_trama(self, db_session, fabrica):
         sede = fabrica.sede()
         dispositivo = crear_dispositivo(db_session, sede)
 
@@ -483,14 +480,14 @@ class TestConstruirMapeoAutoMapeoDeColumnas:
         parametro = Parametro(nmbr="Temperatura Fuera De Rango", undd="°C")
         db_session.add(parametro)
         db_session.flush()
-        db_session.add(
-            MapeoColumna(id_mp=formato.id_mp, indc_clmn=5, id_prmtr=parametro.id_prmtr)
-        )
+        db_session.add(MapeoColumna(id_mp=formato.id_mp, indc_clmn=5, id_prmtr=parametro.id_prmtr))
         db_session.flush()
 
         mapa = construir_mapeo(db_session, formato.id_mp, ["UnicaColumna"])
 
-        assert "UnicaColumna" not in mapa or mapa.get("UnicaColumna") != "Temperatura Fuera De Rango"
+        assert (
+            "UnicaColumna" not in mapa or mapa.get("UnicaColumna") != "Temperatura Fuera De Rango"
+        )
 
 
 class TestIntegracionEndToEndHU49HU50:
@@ -605,9 +602,7 @@ class TestIntegracionEndToEndHU49HU50:
         db_session.add(Parametro(nmbr="nivel_integracion_una_fila", undd="m"))
         db_session.flush()
 
-        formato_resuelto = resolver_formato(
-            db_session, dispositivo.id_dspstv, "UNAFILA_datos.dat"
-        )
+        formato_resuelto = resolver_formato(db_session, dispositivo.id_dspstv, "UNAFILA_datos.dat")
         contenido = "Fecha,nivel_integracion_una_fila\n2026-09-02 10:00:00,3.2\n"
 
         _resultado_validacion, resultado_persistencia = interpretar_y_guardar(
@@ -621,6 +616,48 @@ class TestIntegracionEndToEndHU49HU50:
         )
 
         assert resultado_persistencia.guardadas == 1
+
+    def test_header_corrupto_falla_como_error_de_datos_sin_crear_nada(self, db_session, fabrica):
+        """I-27 del RAID: reproduce el caso real de producción -una línea
+        con sub-registros concatenados cayó en la posición de header-,
+        pero a través del pipeline público (resolver_formato +
+        interpretar_y_guardar), no llamando a construir_mapeo() directo.
+        El llamador real (tasks/ingesta.py) espera ErrorDatosNoRecuperable,
+        no HeaderCorruptoError -esta última es un detalle interno de
+        mapeo.py-."""
+        from app.tasks.ingesta import ErrorDatosNoRecuperable
+
+        sede = fabrica.sede()
+        dispositivo = crear_dispositivo(db_session, sede, nombre="Integracion header corrupto")
+
+        formato_resuelto = resolver_formato(db_session, dispositivo.id_dspstv, "CORRUPTO_datos.dat")
+        # Header con 8 columnas, 5 de ellas números/fechas puros: supera
+        # el umbral de fracción (0.4) igual que el caso real.
+        contenido = (
+            "2026-08-31 11:15:00,R,BattV(V),0,106,148.4,1.157021e+09,0.998\n"
+            "2026-09-02 10:00:00,1,12.5,1,2,3,4,5\n"
+        )
+
+        with pytest.raises(ErrorDatosNoRecuperable):
+            interpretar_y_guardar(
+                db_session,
+                contenido=contenido,
+                formato=formato_resuelto,
+                dispositivo=dispositivo,
+                id_cnxn=dispositivo.id_cnxn,
+                id_archv=None,
+                nombre_archivo="CORRUPTO_datos.dat",
+            )
+
+        # Nada quedó creado: ni mapeo de columnas ni parámetros basura.
+        assert (
+            db_session.query(MapeoColumna)
+            .filter(MapeoColumna.id_mp == formato_resuelto.id_mp)
+            .count()
+            == 0
+        )
+        assert db_session.query(Parametro).filter(Parametro.nmbr == "BattV(V)").count() == 0
+        assert db_session.query(Parametro).filter(Parametro.nmbr == "106").count() == 0
 
 
 class TestConvergenciaDeHU49TrasArchivoFallido:
@@ -652,7 +689,7 @@ class TestConvergenciaDeHU49TrasArchivoFallido:
         from sqlalchemy import create_engine
         from sqlalchemy.orm import sessionmaker
 
-        from app.services.ingesta.mapeo import MapeoNoEncontradoError, resolver_formato
+        from app.services.ingesta.mapeo import resolver_formato
         from app.tasks.ingesta import ErrorDatosNoRecuperable, interpretar_y_guardar
         from tests.conftest import TEST_DATABASE_URL
 
@@ -675,10 +712,7 @@ class TestConvergenciaDeHU49TrasArchivoFallido:
             # las columnas desconocidas.
             columna_larga_a = "Columna_" + ("A" * 100)
             columna_larga_b = "Columna_" + ("B" * 100)
-            contenido = (
-                f"Fecha,{columna_larga_a},{columna_larga_b}\n"
-                "2026-09-02 10:00:00,1,2\n"
-            )
+            contenido = f"Fecha,{columna_larga_a},{columna_larga_b}\n" "2026-09-02 10:00:00,1,2\n"
 
             formato_resuelto = resolver_formato(db, dispositivo.id_dspstv, "CONV_datos.dat")
             id_mp_creado = formato_resuelto.id_mp
@@ -777,9 +811,7 @@ class TestConvergenciaDeHU49TrasArchivoFallido:
             # Ningún parámetro coincide: los 3 archivos deben fallar
             # individualmente, pero la trama debe converger a un solo id_mp.
             contenido = "Fecha,ColumnaZ\n2026-09-02 10:00:00,1\n"
-            tareas = [
-                (id_dspstv, f"RACE_{i}.dat", contenido) for i in range(4)
-            ]
+            tareas = [(id_dspstv, f"RACE_{i}.dat", contenido) for i in range(4)]
 
             with mp.Pool(4) as pool:
                 ids_mp = pool.map(_procesar_archivo_para_test_concurrencia, tareas)
@@ -834,9 +866,7 @@ def _limpiar_parametros_automaticos(db) -> None:
     test y el siguiente chocaría contra el UNIQUE de prmtr.nmbr."""
     ids = [
         fila[0]
-        for fila in db.execute(
-            sa.text("SELECT id_prmtr FROM prmtr WHERE orgn_crcn = 'Automatico'")
-        )
+        for fila in db.execute(sa.text("SELECT id_prmtr FROM prmtr WHERE orgn_crcn = 'Automatico'"))
     ]
     if not ids:
         return
