@@ -27,7 +27,7 @@ from fastapi.testclient import TestClient
 
 from app.database import get_db
 from app.main import app
-from app.models import MapeoFormato
+from app.models import LogAuditoria, MapeoFormato
 from app.models.archivo_ingesta import ArchivoIngesta
 from app.models.mapeo_dispositivo import MapeoColumna, Parametro
 from app.models.telemetria import Telemetria
@@ -211,8 +211,77 @@ class TestCargaArchivo:
         assert log.estd == "Exitoso"
         assert log.nmbr_archv == "H_manual.dat"
 
-    def test_sin_mapeo_para_ese_tipo_de_trama_devuelve_422(self, client, db_session, tecnico):
-        """Caso de error: el dispositivo tiene mapeo H pero llega un E_."""
+    def test_carga_con_prefijo_nuevo_crea_trama_automatica_y_la_audita(
+        self, client, db_session, tecnico
+    ):
+        """HU49 CA5, regresión de un gap encontrado en la verificación
+        funcional: la carga manual de archivo (IMP-06) comparte
+        resolver_formato con la ingesta automática por FTP, así que
+        también puede disparar la creación automática de una trama -y esa
+        creación debe auditarse igual, sin importar el canal de entrada.
+        Al principio esto NO auditaba nada porque routers/dispositivos.py
+        no marcaba el contexto de auditoría antes de llamar a
+        resolver_formato (sí lo hacía tasks/ingesta.py, pero este endpoint
+        no pasa por ahí).
+
+        La columna del header SÍ tiene que matchear un parámetro real: si
+        el auto-mapeo de HU50 no encuentra ninguna columna mapeable, todo
+        el pipeline aborta con ErrorDatosNoRecuperable y la transacción se
+        revierte ENTERA (ver el except de abajo en este mismo router) -
+        incluida la trama recién creada y su fila de auditoría. Eso es
+        correcto (evita un mp_frmt fantasma de un archivo que ni siquiera
+        pudo interpretarse), pero significa que la auditoría solo se
+        puede observar cuando el archivo SÍ llega a persistir algo."""
+        sede, _ = tecnico
+        dispositivo = preparar_dispositivo(db_session, sede, nombre="CR1000-prefijo-nuevo")
+        temperatura = crear_parametro(db_session, "temperatura", "C")
+
+        fecha = fecha_en_particion()
+        resp = client.post(
+            f"/dispositivos/{dispositivo.id_dspstv}/carga-archivo",
+            files={
+                "archivo": (
+                    "NUEVOCA_datos.dat",
+                    contenido_dat(fecha, "23.5", columna=temperatura.nmbr),
+                    "text/plain",
+                )
+            },
+        )
+
+        assert resp.status_code == 201, resp.text
+        assert resp.json()["guardadas"] == 1
+
+        formato = (
+            db_session.query(MapeoFormato)
+            .filter(
+                MapeoFormato.id_dspstv == dispositivo.id_dspstv,
+                MapeoFormato.tp_trm == "NUEVOCA",
+            )
+            .first()
+        )
+        assert formato is not None
+        assert formato.orgn_crcn == "Automatico"
+
+        auditoria = (
+            db_session.query(LogAuditoria)
+            .filter(LogAuditoria.entdd == f"mapeo_formato:{formato.id_mp}")
+            .first()
+        )
+        assert auditoria is not None
+        assert auditoria.accn == "crear_trama_automatica"
+
+    def test_trama_nueva_con_columna_desconocida_autocrea_parametro_y_guarda(
+        self, client, db_session, tecnico
+    ):
+        """HU49 + HU50 + HU51 end-to-end por HTTP: el dispositivo tiene
+        mapeo H pero llega un E_ nunca visto.
+
+        Antes de HU49 esto era un 422 de "trama no reconocida"; entre
+        HU49 y HU50 pasó a ser un 422 de "ninguna columna mapeada"
+        -la trama se creaba sola pero el archivo igual se perdía-.
+        Con HU51 la carga YA NO FALLA: la columna desconocida ('Temp')
+        genera un parámetro nuevo en 'Pendiente de revision' y su dato se
+        guarda desde este primer archivo (CA1-CA2)."""
         sede, _ = tecnico
         temperatura = crear_parametro(db_session, "temperatura", "C")
         dispositivo = preparar_dispositivo(db_session, sede, nombre="CR1000-soloH")
@@ -224,10 +293,19 @@ class TestCargaArchivo:
             files={"archivo": ("E_eventos.dat", contenido_dat(fecha, "1"), "text/plain")},
         )
 
-        assert resp.status_code == 422
-        assert "tipo de trama" in resp.json()["detail"]
-        # No debe quedar un log 'Procesando' colgado de una carga fallida.
-        assert db_session.query(ArchivoIngesta).count() == 0
+        assert resp.status_code == 201, resp.text
+        # CA2: el dato de la columna desconocida se guardó en esta misma
+        # carga, no quedó pendiente ni se perdió.
+        assert resp.json()["guardadas"] == 1
+
+        # HU51 CA1: se auto-creó el parámetro para la columna 'Temp'.
+        from app.models import Parametro
+
+        auto_creado = db_session.query(Parametro).filter(Parametro.nmbr == "Temp").one()
+        assert auto_creado.estd == "Pendiente de revision"
+        assert auto_creado.orgn_crcn == "Automatico"
+        # El valor "1" es numérico, así que pudo inferirse bien el tipo.
+        assert auto_creado.tipo_dato == "numerico"
 
     def test_nombre_sin_prefijo_conocido_devuelve_422(self, client, db_session, tecnico):
         sede, _ = tecnico

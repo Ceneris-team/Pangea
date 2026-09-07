@@ -258,7 +258,14 @@ def registros_archivo_ingesta(
 
     try:
         dispositivo = resolver_dispositivo(db, archivo.id_cnxn)
-        formato = resolver_formato(db, dispositivo.id_dspstv, archivo.nmbr_archv)
+        # HU49: esta es una vista de SOLO LECTURA (vuelve a resolver el
+        # formato de un archivo ya procesado nada más que para mostrar su
+        # contenido crudo), así que no debe tener el efecto secundario de
+        # crear un mp_frmt nuevo con su entrada de auditoría -eso queda
+        # reservado al pipeline real de ingesta.
+        formato = resolver_formato(
+            db, dispositivo.id_dspstv, archivo.nmbr_archv, permitir_creacion_automatica=False
+        )
     except (DispositivoNoResueltoError, MapeoNoEncontradoError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 

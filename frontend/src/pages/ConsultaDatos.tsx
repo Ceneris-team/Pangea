@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { apiFetch, ApiError } from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import Sidebar from "../components/layout/Sidebar";
@@ -50,14 +51,24 @@ function construirQuery(
 export default function ConsultaDatos() {
   const { nombreCompleto, rol, logout, zonaHoraria } = useAuth();
 
+  // HU19 CA4: "VER HISTORIAL DE DATOS" desde el panel de estadísticas de un
+  // dispositivo llega acá con su ubicación preseleccionada -este módulo
+  // solo filtra por ubicación, no por dispositivo-, mismo patrón que
+  // ubicacion_id en Graficos.tsx (HU17 CA4).
+  const [searchParams] = useSearchParams();
+  const ubicacionIdParam = searchParams.get("ubicacion_id");
+  const ubicacionIdInicial = ubicacionIdParam !== null ? Number(ubicacionIdParam) : null;
+  const ubicacionesIniciales =
+    ubicacionIdInicial !== null && Number.isFinite(ubicacionIdInicial) ? [ubicacionIdInicial] : [];
+
   const [parametros, setParametros] = useState<ParametroItem[]>([]);
   const [ubicaciones, setUbicaciones] = useState<UbicacionItem[]>([]);
 
   // CA: selección en curso vs. filtros aplicados (se aplican al pulsar "APLICAR")
   const [seleccionParametros, setSeleccionParametros] = useState<number[]>([]);
-  const [seleccionUbicaciones, setSeleccionUbicaciones] = useState<number[]>([]);
+  const [seleccionUbicaciones, setSeleccionUbicaciones] = useState<number[]>(ubicacionesIniciales);
   const [filtroParametros, setFiltroParametros] = useState<number[]>([]);
-  const [filtroUbicaciones, setFiltroUbicaciones] = useState<number[]>([]);
+  const [filtroUbicaciones, setFiltroUbicaciones] = useState<number[]>(ubicacionesIniciales);
 
   // HU12: rango de fechas, con su propia selección/filtro aplicado.
   // CA: el rango por defecto al ingresar al módulo son las últimas 24 horas.

@@ -534,6 +534,28 @@ class LogIngestaListItem(BaseModel):
     rgstrs_prcsds: int | None
 
 
+class DispositivoEstadisticas(BaseModel):
+    """HU19: panel de estadísticas de un dispositivo, calculado sobre
+    archv_ingst (HU09) dentro del rango de fechas pedido. Los cuatro
+    indicadores son enteros (CA: 'se muestran como valores numéricos
+    enteros').
+
+    id_cnxn/id_ubccn viajan en la respuesta para que el frontend arme los
+    dos botones de redirección (CA3/CA4: 'VER COLA DE PROCESAMIENTO' hacia
+    /cola-ingesta filtrado por conexión, 'VER HISTORIAL DE DATOS' hacia
+    /consulta-datos filtrado por ubicación) sin una segunda llamada a la
+    ficha del dispositivo."""
+
+    total_recibidos: int
+    total_procesados: int
+    total_fallidos: int
+    ultima_fecha_recepcion: datetime | None
+    fecha_inicio: datetime
+    fecha_fin: datetime
+    id_cnxn: int
+    id_ubccn: int
+
+
 class MetricasColaIngesta(BaseModel):
     """HU 09: conteo de archv_ingst agrupado por estado, para el módulo
     de monitoreo de la cola de procesamiento (HT-05, CA3)."""
@@ -686,6 +708,34 @@ class ParametroListItem(BaseModel):
     undd: str
     dscrpcn: str | None
     tipo_dato: str
+    # HU51: permite a la UI distinguir un parámetro auto-creado por el
+    # motor de ingesta (badge "Auto-detectado" + sección de pendientes de
+    # revisión) de uno del catálogo de siempre.
+    estd: str = "Activo"
+    orgn_crcn: str = "Manual"
+
+
+class ActivarParametroRequest(BaseModel):
+    """HU51 CA4: el Administrador revisa un parámetro auto-creado, le
+    corrige el nombre visible y le asigna una unidad, y al confirmar pasa
+    a 'Activo'.
+
+    orgn_crcn NO se toca acá a propósito: es historial de origen -de
+    dónde salió el parámetro-, no un estado editable; que un humano lo
+    haya revisado no cambia el hecho de que lo creó el motor de ingesta.
+    """
+
+    nmbr: str | None = None
+    undd: str | None = None
+    dscrpcn: str | None = None
+    tipo_dato: str | None = None
+
+
+class FusionarParametroRequest(BaseModel):
+    """HU51 CA5: fusiona un parámetro pendiente contra uno ya existente,
+    reasignando todo su historial."""
+
+    id_prmtr_destino: int
 
 
 class ParametroCrear(BaseModel):
@@ -850,7 +900,32 @@ class MapeoFormatoListItem(BaseModel):
     fl_inc_dts: int
     frmt_fch: str
     estd: str
+    # HU49 CA3: distingue en la UI una trama auto-detectada (el pipeline
+    # la creó sola al ver un prefijo nunca visto) de una creada a mano.
+    orgn_crcn: str
     total_columnas: int
+
+
+class ColumnaPendienteItem(BaseModel):
+    """HU50 CA3-CA5: una columna del header que el auto-mapeo
+    (construir_mapeo, services/ingesta/mapeo.py) no pudo asociar a ningún
+    prmtr.nmbr por coincidencia exacta de nombre, y que sigue esperando
+    que un Técnico/Administrador le asigne un parámetro a mano."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id_mp_cl_pnd: int
+    id_dspstv: int
+    dispositivo_nombre: str
+    id_mp: int
+    tp_trm: str
+    indc_clmn: int
+    nmbr_clmn_orgn: str
+    fch_dtccn: str
+
+
+class ResolverColumnaPendienteRequest(BaseModel):
+    id_prmtr: int
 
 
 class MapeoFormatoDetalle(MapeoFormatoListItem):
@@ -858,6 +933,10 @@ class MapeoFormatoDetalle(MapeoFormatoListItem):
     asignación para poder editarla."""
 
     columnas: list[MapeoColumnaDetalle]
+    # HU50 CA5: columnas de ESTA trama que el auto-mapeo no pudo resolver,
+    # para que la pestaña Datos muestre el nombre real de columna del
+    # header (no solo un índice ciego) junto al selector de parámetro.
+    columnas_pendientes: list[ColumnaPendienteItem] = []
 
 
 class FilaVistaPrevia(BaseModel):

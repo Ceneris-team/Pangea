@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { apiFetch, ApiError } from "../services/api";
 import { useAuth } from "../context/AuthContext";
@@ -425,13 +425,50 @@ function GraficoDeParametro({ parametro, items, tipoGrafico, zonaHoraria, hover,
   const ALTO = 320;
   const PAD = { top: 16, right: 16, bottom: 32, left: 48 };
 
+  // Zoom sobre el eje X (tiempo): un rango activo restringe minT/maxT sin
+  // tocar la escala del eje Y. null = rango completo original. El zoom es
+  // independiente de la pantalla completa y se conserva al salir de ella.
+  const [zoomT, setZoomT] = useState<{ min: number; max: number } | null>(null);
+  const [seleccion, setSeleccion] = useState<{ x1: number; x2: number } | null>(null);
+  const [arrastrando, setArrastrando] = useState(false);
+
+  const [pantallaCompleta, setPantallaCompleta] = useState(false);
+  const contenedorRef = useRef<HTMLDivElement>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
+
+  useEffect(() => {
+    function onFullscreenChange() {
+      setPantallaCompleta(document.fullscreenElement === contenedorRef.current);
+    }
+    document.addEventListener("fullscreenchange", onFullscreenChange);
+    return () => document.removeEventListener("fullscreenchange", onFullscreenChange);
+  }, []);
+
+  async function alternarPantallaCompleta() {
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+      } else {
+        await contenedorRef.current?.requestFullscreen();
+      }
+    } catch {
+      // El navegador puede rechazar la solicitud (falta de gesto del
+      // usuario, política de permisos); no hay nada más que hacer aquí.
+    }
+  }
+
   const todosLosValores = items.map((i) => i.vlr);
   const todosLosTiempos = items.map((i) => new Date(i.fch_hr).getTime());
+  // El eje Y siempre refleja el rango completo de valores: el zoom es
+  // exclusivo del eje X (tiempo), sin alterar esta escala.
   const minVlr = todosLosValores.length ? Math.min(...todosLosValores) : 0;
   const maxVlr = todosLosValores.length ? Math.max(...todosLosValores) : 1;
-  const minT = todosLosTiempos.length ? Math.min(...todosLosTiempos) : 0;
-  const maxT = todosLosTiempos.length ? Math.max(...todosLosTiempos) : 1;
+  const minTOriginal = todosLosTiempos.length ? Math.min(...todosLosTiempos) : 0;
+  const maxTOriginal = todosLosTiempos.length ? Math.max(...todosLosTiempos) : 1;
   const rangoVlr = maxVlr - minVlr || 1;
+
+  const minT = zoomT ? zoomT.min : minTOriginal;
+  const maxT = zoomT ? zoomT.max : maxTOriginal;
   const rangoT = maxT - minT || 1;
 
   function xDe(item: MedicionNumerica) {
@@ -442,29 +479,115 @@ function GraficoDeParametro({ parametro, items, tipoGrafico, zonaHoraria, hover,
     return PAD.top + (1 - (item.vlr - minVlr) / rangoVlr) * (ALTO - PAD.top - PAD.bottom);
   }
 
+  // Solo se dibujan los puntos dentro del rango de zoom actual.
+  function enRangoZoom(item: MedicionNumerica) {
+    const t = new Date(item.fch_hr).getTime();
+    return t >= minT && t <= maxT;
+  }
+
+  function coordenadaSvgX(clientX: number): number {
+    const rect = svgRef.current?.getBoundingClientRect();
+    if (!rect || rect.width === 0) return 0;
+    return ((clientX - rect.left) / rect.width) * ANCHO;
+  }
+
+  function xATiempo(x: number): number {
+    return minT + ((x - PAD.left) / (ANCHO - PAD.left - PAD.right)) * rangoT;
+  }
+
+  function iniciarSeleccion(e: React.MouseEvent<SVGSVGElement>) {
+    const x = coordenadaSvgX(e.clientX);
+    setArrastrando(true);
+    setSeleccion({ x1: x, x2: x });
+  }
+
+  function actualizarSeleccion(e: React.MouseEvent<SVGSVGElement>) {
+    if (!arrastrando) return;
+    const x = coordenadaSvgX(e.clientX);
+    setSeleccion((s) => (s ? { ...s, x2: x } : null));
+  }
+
+  function finalizarSeleccion() {
+    if (!arrastrando) return;
+    setArrastrando(false);
+    setSeleccion((s) => {
+      if (s) {
+        const xMin = Math.min(s.x1, s.x2);
+        const xMax = Math.max(s.x1, s.x2);
+        // Ignorar arrastres insignificantes (clic simple sin selección real).
+        if (xMax - xMin >= 8) {
+          setZoomT({ min: xATiempo(xMin), max: xATiempo(xMax) });
+        }
+      }
+      return null;
+    });
+  }
+
   const yBase = ALTO - PAD.bottom;
   const lineasGrilla = 4;
 
   return (
-    <div className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl border border-black/10 dark:border-white/10 p-5">
+    <div
+      ref={contenedorRef}
+      className={
+        pantallaCompleta
+          ? "bg-[#0b1220] p-6 h-screen w-screen flex flex-col"
+          : "bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl border border-black/10 dark:border-white/10 p-5"
+      }
+    >
       <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
-        <h2 className="text-sm font-bold text-gray-900 dark:text-white">
+        <h2 className={`text-sm font-bold ${pantallaCompleta ? "text-white" : "text-gray-900 dark:text-white"}`}>
           {parametro.nmbr} en el tiempo
         </h2>
 
-        {series.length > 0 && (
-          <div className="flex items-center gap-4 flex-wrap">
-            {series.map((s, i) => (
-              <div key={s.nombre} className="flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-300">
-                <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: COLORES_SERIE[i] }} />
-                {s.nombre}
-              </div>
-            ))}
-            {otrasUbicaciones.length > 0 && (
-              <span className="text-xs text-gray-500">+{otrasUbicaciones.length} más sin graficar</span>
+        <div className="flex items-center gap-4 flex-wrap">
+          {series.length > 0 && (
+            <div className="flex items-center gap-4 flex-wrap">
+              {series.map((s, i) => (
+                <div
+                  key={s.nombre}
+                  className={`flex items-center gap-1.5 text-xs ${pantallaCompleta ? "text-gray-300" : "text-gray-600 dark:text-gray-300"}`}
+                >
+                  <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: COLORES_SERIE[i] }} />
+                  {s.nombre}
+                </div>
+              ))}
+              {otrasUbicaciones.length > 0 && (
+                <span className="text-xs text-gray-500">+{otrasUbicaciones.length} más sin graficar</span>
+              )}
+            </div>
+          )}
+
+          <div className="flex items-center gap-2">
+            {zoomT && (
+              <button
+                type="button"
+                onClick={() => setZoomT(null)}
+                className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-black/20 dark:border-white/20 text-gray-700 dark:text-gray-200 hover:border-[#ccff00] hover:text-[#ccff00] transition-colors"
+              >
+                Restablecer zoom
+              </button>
             )}
+
+            <button
+              type="button"
+              onClick={alternarPantallaCompleta}
+              title={pantallaCompleta ? "Salir de pantalla completa" : "Pantalla completa"}
+              aria-label={pantallaCompleta ? "Salir de pantalla completa" : "Pantalla completa"}
+              className="p-1.5 rounded-lg border border-black/20 dark:border-white/20 text-gray-700 dark:text-gray-200 hover:border-[#ccff00] hover:text-[#ccff00] transition-colors"
+            >
+              {pantallaCompleta ? (
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M8 3v3a2 2 0 0 1-2 2H3M21 8h-3a2 2 0 0 1-2-2V3M3 16h3a2 2 0 0 1 2 2v3M16 21v-3a2 2 0 0 1 2-2h3" />
+                </svg>
+              ) : (
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3" />
+                </svg>
+              )}
+            </button>
           </div>
-        )}
+        </div>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
@@ -486,8 +609,16 @@ function GraficoDeParametro({ parametro, items, tipoGrafico, zonaHoraria, hover,
           No hay mediciones registradas para este parámetro todavía.
         </div>
       ) : (
-        <div className="relative w-full overflow-x-auto">
-          <svg viewBox={`0 0 ${ANCHO} ${ALTO}`} className="w-full h-auto min-w-[600px]">
+        <div className={`relative w-full overflow-x-auto ${pantallaCompleta ? "flex-1 flex items-center" : ""}`}>
+          <svg
+            ref={svgRef}
+            viewBox={`0 0 ${ANCHO} ${ALTO}`}
+            className="w-full h-auto min-w-[600px] cursor-crosshair"
+            onMouseDown={iniciarSeleccion}
+            onMouseMove={actualizarSeleccion}
+            onMouseUp={finalizarSeleccion}
+            onMouseLeave={finalizarSeleccion}
+          >
             {/* Grilla recesiva */}
             {Array.from({ length: lineasGrilla + 1 }).map((_, i) => {
               const y = PAD.top + (i / lineasGrilla) * (ALTO - PAD.top - PAD.bottom);
@@ -512,18 +643,19 @@ function GraficoDeParametro({ parametro, items, tipoGrafico, zonaHoraria, hover,
 
             {series.map((s, i) => {
               const color = COLORES_SERIE[i];
-              const puntos = s.items.map((item) => `${xDe(item)},${yDe(item)}`).join(" ");
+              const itemsVisibles = s.items.filter(enRangoZoom);
+              const puntos = itemsVisibles.map((item) => `${xDe(item)},${yDe(item)}`).join(" ");
               const areaPath =
-                s.items.length > 0
-                  ? `M ${xDe(s.items[0])},${yBase} ` +
-                    s.items.map((item) => `L ${xDe(item)},${yDe(item)}`).join(" ") +
-                    ` L ${xDe(s.items[s.items.length - 1])},${yBase} Z`
+                itemsVisibles.length > 0
+                  ? `M ${xDe(itemsVisibles[0])},${yBase} ` +
+                    itemsVisibles.map((item) => `L ${xDe(item)},${yDe(item)}`).join(" ") +
+                    ` L ${xDe(itemsVisibles[itemsVisibles.length - 1])},${yBase} Z`
                   : "";
               return (
                 <g key={s.nombre}>
                   {tipoGrafico === "area" && areaPath && <path d={areaPath} fill={color} fillOpacity={0.18} stroke="none" />}
                   <polyline points={puntos} fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-                  {s.items.map((item) => (
+                  {itemsVisibles.map((item) => (
                     <circle
                       key={item.id_registro}
                       cx={xDe(item)}
@@ -542,6 +674,19 @@ function GraficoDeParametro({ parametro, items, tipoGrafico, zonaHoraria, hover,
                 </g>
               );
             })}
+
+            {/* Rectángulo de selección mientras se arrastra para hacer zoom */}
+            {seleccion && Math.abs(seleccion.x2 - seleccion.x1) >= 2 && (
+              <rect
+                x={Math.min(seleccion.x1, seleccion.x2)}
+                y={PAD.top}
+                width={Math.abs(seleccion.x2 - seleccion.x1)}
+                height={ALTO - PAD.top - PAD.bottom}
+                fill="rgba(204,255,0,0.15)"
+                stroke="#ccff00"
+                strokeWidth={1}
+              />
+            )}
           </svg>
 
           {hover && (

@@ -733,3 +733,153 @@ def test_usuario_borrado_invalida_su_token(client, db_session, usuario_con_passw
     db_session.flush()
 
     assert client.get("/auth/perfil", headers=auth(token)).status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# Migración a cookie httpOnly (mecanismo de sesión para el navegador)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def client_https(db_session):
+    """Mismo fixture que `client`, pero con base_url https://.
+
+    La cookie de sesión se marca Secure (obligatorio junto a
+    SameSite=None, ver _setear_cookie_sesion en routers/auth.py): un
+    cliente HTTP simulado que conecta por http://, como hace el fixture
+    `client` normal, descarta esa cookie de su jar sin siquiera
+    guardarla -es el comportamiento correcto de cualquier cliente HTTP,
+    no un defecto del test-. Los dos despliegues reales (pangea-app y el
+    ensayo en CloudFront) sirven por HTTPS, así que este es el escenario
+    que corresponde probar para todo lo que dependa de que el jar
+    conserve y reenvíe la cookie solo."""
+    app.dependency_overrides[get_db] = lambda: db_session
+    limiter_app.enabled = False
+    limiter_auth.enabled = False
+    try:
+        yield TestClient(app, base_url="https://testserver")
+    finally:
+        limiter_app.enabled = True
+        limiter_auth.enabled = True
+        app.dependency_overrides.clear()
+
+
+class TestCookieDeSesion:
+    """El JWT sigue viajando en el body de /auth/login (access_token) por
+    retrocompatibilidad -ver test_login_correcto_devuelve_token_y_rol y
+    toda la suite de arriba, que autentica con el header Authorization-,
+    pero el navegador debe además recibir la misma sesión en una cookie
+    httpOnly, para no tener que guardar el JWT en localStorage/JS."""
+
+    def test_login_setea_cookie_httponly_secure_samesite_none(
+        self, client, usuario_con_password
+    ):
+        usuario, _ = usuario_con_password
+
+        resp = client.post(
+            "/auth/login", json={"correo": usuario.crr, "contrasena": PASSWORD_ORIGINAL}
+        )
+
+        assert resp.status_code == 200
+        cookie_header = resp.headers.get("set-cookie", "")
+        assert "pangea_session=" in cookie_header
+        assert "httponly" in cookie_header.lower()
+        assert "secure" in cookie_header.lower()
+        assert "samesite=none" in cookie_header.lower()
+
+    def test_login_fallido_no_setea_cookie(self, client, usuario_con_password):
+        usuario, _ = usuario_con_password
+
+        resp = client.post(
+            "/auth/login", json={"correo": usuario.crr, "contrasena": "NoEsLaClave1"}
+        )
+
+        assert resp.status_code == 401
+        assert "set-cookie" not in resp.headers
+
+    def test_endpoint_protegido_acepta_la_cookie_sin_header_authorization(
+        self, client_https, usuario_con_password
+    ):
+        """El caso real del navegador: sin ningún header Authorization, la
+        cookie que dejó el login alcanza para pasar get_current_user."""
+        usuario, _ = usuario_con_password
+
+        client_https.post(
+            "/auth/login", json={"correo": usuario.crr, "contrasena": PASSWORD_ORIGINAL}
+        )
+
+        # El TestClient de httpx conserva las cookies del login anterior
+        # en su propio jar, igual que un navegador real.
+        resp = client_https.get("/auth/perfil")
+        assert resp.status_code == 200
+        assert resp.json()["correo"] == usuario.crr
+
+    def test_logout_borra_la_cookie(self, client_https, usuario_con_password):
+        usuario, _ = usuario_con_password
+        client_https.post(
+            "/auth/login", json={"correo": usuario.crr, "contrasena": PASSWORD_ORIGINAL}
+        )
+
+        resp = client_https.post("/auth/logout")
+        assert resp.status_code == 200
+
+        cookie_header = resp.headers.get("set-cookie", "")
+        assert "pangea_session=" in cookie_header
+        # Max-Age=0 (o una fecha de expiración en el pasado, según el
+        # motor) es lo que le indica al navegador que borre la cookie ya.
+        assert "max-age=0" in cookie_header.lower()
+
+        # Sin cookie y sin header, el endpoint protegido vuelve a exigir login.
+        assert client_https.get("/auth/perfil").status_code == 401
+
+    def test_header_authorization_sigue_funcionando_sin_cookie(
+        self, client, usuario_con_password
+    ):
+        """Retrocompatibilidad explícita: un cliente que solo mande el
+        header (sin cookie) debe seguir autenticando, tal como antes de
+        esta migración."""
+        usuario, _ = usuario_con_password
+
+        resp = client.get("/auth/perfil", headers=auth(token_de(usuario)))
+        assert resp.status_code == 200
+
+
+class TestTicketWebSocket:
+    """POST /auth/ws-ticket: mitigación de R-05 (ver security/ws_tickets.py
+    y _autenticar_websocket en routers/mapa_cliente.py). Estos tests cubren
+    solo el endpoint HTTP; el canje del ticket contra el WebSocket real se
+    prueba en test_mapa_cliente_ws.py."""
+
+    def test_requiere_sesion_activa(self, client):
+        resp = client.post("/auth/ws-ticket")
+        assert resp.status_code == 401
+
+    def test_devuelve_un_ticket_con_sesion_por_cookie(self, client_https, usuario_con_password):
+        usuario, _ = usuario_con_password
+        client_https.post(
+            "/auth/login", json={"correo": usuario.crr, "contrasena": PASSWORD_ORIGINAL}
+        )
+
+        resp = client_https.post("/auth/ws-ticket")
+        assert resp.status_code == 200
+        ticket = resp.json()["ticket"]
+        assert isinstance(ticket, str) and len(ticket) > 20
+
+    def test_devuelve_un_ticket_con_sesion_por_header(self, client, usuario_con_password):
+        """También funciona autenticado por el header Authorization, mismo
+        criterio de retrocompatibilidad que el resto de la API."""
+        usuario, _ = usuario_con_password
+
+        resp = client.post("/auth/ws-ticket", headers=auth(token_de(usuario)))
+        assert resp.status_code == 200
+        assert resp.json()["ticket"]
+
+    def test_cada_llamada_emite_un_ticket_distinto(self, client_https, usuario_con_password):
+        usuario, _ = usuario_con_password
+        client_https.post(
+            "/auth/login", json={"correo": usuario.crr, "contrasena": PASSWORD_ORIGINAL}
+        )
+
+        primero = client_https.post("/auth/ws-ticket").json()["ticket"]
+        segundo = client_https.post("/auth/ws-ticket").json()["ticket"]
+        assert primero != segundo

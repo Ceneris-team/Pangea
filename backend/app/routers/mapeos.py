@@ -29,23 +29,35 @@ corresponde a la configuración de la ingesta; no existe un módulo
 """
 
 import csv
+import datetime as dt
 import ftplib
 import re
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.ingesta.ftp_receptor import descargar_archivo_dat, listar_archivos_dat
 from app.models import (
-    ConexionFTP, Dispositivo, MapeoColumna, MapeoFormato, Parametro, Sede, Ubicacion,
+    ConexionFTP,
+    Dispositivo,
+    MapeoColumna,
+    MapeoColumnaPendiente,
+    MapeoFormato,
+    Parametro,
+    Sede,
+    Ubicacion,
 )
 from app.schemas import (
+    ActivarParametroRequest,
     ArchivoFtpDisponible,
+    ColumnaPendienteItem,
     ColumnaVistaPrevia,
     DispositivoParaMapeo,
     FilaVistaPrevia,
+    FusionarParametroRequest,
     ListadoParametros,
     MapeoColumnaDetalle,
     MapeoFormatoActualizar,
@@ -55,6 +67,7 @@ from app.schemas import (
     ParametroActualizar,
     ParametroCrear,
     ParametroListItem,
+    ResolverColumnaPendienteRequest,
     SedeListItem,
     VistaPreviaResponse,
 )
@@ -90,12 +103,18 @@ DELIMITADORES_VALIDOS = {
 # HU06/PP-96: el tipo de trama ya no es un catálogo cerrado (antes era un
 # CHECK constraint de mp_frmt con {"H", "E", "P"}) -el equipo de
 # telemetría define el prefijo de archivo de cada dataloger según el
-# proyecto, y exigir una migración por cada letra nueva no escala. Se
-# valida solo el FORMATO acá: una letra A-Z, que es lo que puede preceder
-# a un "_" en un nombre de archivo (H_, E_, P_, X_...). Ver
+# proyecto, y exigir una migración por cada letra nueva no escala. Ver
 # services/ingesta/mapeo.py: detectar_tipo_trama ya no usa un diccionario
 # fijo, resuelve el prefijo contra los mp_frmt activos del dispositivo.
-TIPO_TRAMA_PATRON = re.compile(r"^[A-Z]$")
+#
+# HU49: el prefijo real es "todo el texto antes del PRIMER '_' del
+# nombre de archivo" (ver extraer_prefijo en services/ingesta/mapeo.py),
+# no una sola letra -así que se relaja de ^[A-Z]$ a alfanumérico de 1 a
+# 50 caracteres. Deliberadamente SIN '_' permitido: extraer_prefijo
+# siempre corta en el primer '_', así que un tp_trm que lo contuviera
+# jamás podría matchear ningún archivo real -crearlo a mano sería un
+# valor muerto desde el día uno-.
+TIPO_TRAMA_PATRON = re.compile(r"^[A-Z0-9]{1,50}$")
 
 # Separador decimal del dato numérico (DEC-09). Solo punto o coma: son los
 # dos que produce un datalogger real, y el CHECK de mp_frmt exige lo mismo.
@@ -172,15 +191,20 @@ def _validar_estado_mapeo(estd: str) -> str:
 
 
 def _validar_tipo_trama(tp_trm: str) -> str:
-    """Letra libre (A-Z): define el prefijo de archivo que este mapeo
-    interpreta (p. ej. 'X' -> X_*.dat). Se normaliza a mayúscula porque
-    detectar_tipo_trama compara sobre el nombre de archivo en mayúsculas
-    (los dataloggers no son consistentes con el case)."""
+    """Prefijo libre alfanumérico (HU49): define el prefijo de archivo
+    que este mapeo interpreta (p. ej. 'X' -> X_*.dat, o 'ESTACION01' ->
+    ESTACION01_*.dat). Se normaliza a mayúscula porque detectar_tipo_trama
+    compara sobre el nombre de archivo en mayúsculas (los dataloggers no
+    son consistentes con el case)."""
     tp_trm = tp_trm.strip().upper()
     if not TIPO_TRAMA_PATRON.match(tp_trm):
         raise HTTPException(
             status_code=422,
-            detail="El tipo de trama debe ser una sola letra (A-Z), p. ej. 'H', 'E' o 'P'",
+            detail=(
+                "El tipo de trama debe tener entre 1 y 50 caracteres "
+                "alfanuméricos (A-Z, 0-9), sin espacios ni guiones bajos, "
+                "p. ej. 'H', 'E' o 'ESTACION01'"
+            ),
         )
     return tp_trm
 
@@ -277,6 +301,7 @@ def _a_list_item(
         fl_inc_dts=formato.fl_inc_dts,
         frmt_fch=a_formato_legible(formato.frmt_fch),
         estd=formato.estd,
+        orgn_crcn=formato.orgn_crcn,
         total_columnas=total_columnas,
     )
 
@@ -317,11 +342,48 @@ def _columnas_detalle(db: Session, id_mp: int) -> list[MapeoColumnaDetalle]:
     ]
 
 
+def _columnas_pendientes_detalle(
+    db: Session, formato: MapeoFormato, dispositivo: Dispositivo
+) -> list[ColumnaPendienteItem]:
+    """HU50 CA5: columnas de ESTA trama que el auto-mapeo dejó
+    'Pendiente' (las 'Resuelta'/'Ignorada' no se muestran acá: ya fueron
+    atendidas, mostrarlas de nuevo sería ruido)."""
+    pendientes = (
+        db.query(MapeoColumnaPendiente)
+        .filter(
+            MapeoColumnaPendiente.id_mp == formato.id_mp,
+            MapeoColumnaPendiente.estd == "Pendiente",
+        )
+        .order_by(MapeoColumnaPendiente.indc_clmn)
+        .all()
+    )
+    return [
+        ColumnaPendienteItem(
+            id_mp_cl_pnd=pendiente.id_mp_cl_pnd,
+            id_dspstv=dispositivo.id_dspstv,
+            dispositivo_nombre=dispositivo.nmbr,
+            id_mp=formato.id_mp,
+            tp_trm=formato.tp_trm,
+            indc_clmn=pendiente.indc_clmn,
+            nmbr_clmn_orgn=pendiente.nmbr_clmn_orgn,
+            fch_dtccn=pendiente.fch_dtccn.isoformat(),
+        )
+        for pendiente in pendientes
+    ]
+
+
 @router_parametros.get("", response_model=list[ParametroListItem] | ListadoParametros)
 def listar_parametros(
     pagina: int | None = Query(default=None, ge=1),
     por_pagina: int | None = Query(default=None, ge=1, le=100),
     q: str | None = Query(default=None, description="Filtro por nombre, insensible a mayúsculas"),
+    estd: str | None = Query(
+        default=None,
+        description=(
+            "HU51: filtra por estado ('Activo' / 'Pendiente de revision'). "
+            "Los 'Fusionado' NUNCA se devuelven, se pida lo que se pida."
+        ),
+    ),
     db: Session = Depends(get_db),
     _usuario: dict = Depends(require_permiso("Ingesta", LECTURA)),
 ):
@@ -334,9 +396,17 @@ def listar_parametros(
     la pantalla de catálogo (Parámetros), que sí puede crecer bastante. `q`
     filtra por nombre en el SERVIDOR (no solo en la página cargada): así
     una búsqueda encuentra un parámetro aunque esté en otra página."""
-    query = db.query(Parametro).order_by(Parametro.nmbr)
+    # HU51: un parámetro fusionado (CA5) quedó vacío a propósito y no
+    # debe volver a aparecer en NINGÚN selector -ni el de mapeos, ni el
+    # de destino de otra fusión-, así que se excluye siempre, no solo
+    # cuando se filtra por estado.
+    query = (
+        db.query(Parametro).filter(Parametro.estd != "Fusionado").order_by(Parametro.nmbr)
+    )
     if q:
         query = query.filter(Parametro.nmbr.ilike(f"%{q}%"))
+    if estd:
+        query = query.filter(Parametro.estd == estd)
 
     if pagina is None and por_pagina is None:
         return [ParametroListItem.model_validate(p) for p in query.all()]
@@ -417,6 +487,144 @@ def actualizar_parametro(
         )
     db.refresh(parametro)
     return ParametroListItem.model_validate(parametro)
+
+
+@router_parametros.post("/{id_prmtr}/activar", response_model=ParametroListItem)
+def activar_parametro(
+    id_prmtr: int,
+    body: ActivarParametroRequest,
+    db: Session = Depends(get_db),
+    _usuario: dict = Depends(require_permiso("Ingesta", EDICION)),
+):
+    """HU51 CA4: el Administrador revisa un parámetro auto-creado
+    ('Pendiente de revision'), le corrige el nombre visible y le asigna
+    una unidad, y al confirmar pasa a 'Activo'.
+
+    orgn_crcn se MANTIENE en 'Automatico' deliberadamente: es historial
+    de origen, no un estado editable. Que un humano lo haya revisado no
+    cambia de dónde salió, y perder ese dato haría imposible auditar
+    después qué parte del catálogo nació del motor de ingesta.
+    """
+    parametro = db.query(Parametro).filter(Parametro.id_prmtr == id_prmtr).first()
+    if parametro is None:
+        raise HTTPException(status_code=404, detail="Parámetro no encontrado")
+    if parametro.estd == "Fusionado":
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"El parámetro '{parametro.nmbr}' ya fue fusionado con otro y no se "
+                "puede reactivar."
+            ),
+        )
+
+    if body.nmbr is not None and body.nmbr != parametro.nmbr:
+        nombre_nuevo = body.nmbr.strip()
+        if not nombre_nuevo:
+            raise HTTPException(status_code=422, detail="El nombre no puede quedar vacío")
+        ya_existe = (
+            db.query(Parametro)
+            .filter(Parametro.nmbr == nombre_nuevo, Parametro.id_prmtr != id_prmtr)
+            .first()
+        )
+        if ya_existe is not None:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"Ya existe un parámetro llamado '{nombre_nuevo}'. Si es el mismo "
+                    "parámetro, usá 'Fusionar' en vez de renombrar."
+                ),
+            )
+        parametro.nmbr = nombre_nuevo
+    if body.undd is not None:
+        parametro.undd = body.undd
+    if body.dscrpcn is not None:
+        parametro.dscrpcn = body.dscrpcn.strip() or None
+    if body.tipo_dato is not None:
+        if body.tipo_dato not in ("numerico", "texto"):
+            raise HTTPException(
+                status_code=422, detail="tipo_dato debe ser 'numerico' o 'texto'"
+            )
+        parametro.tipo_dato = body.tipo_dato
+
+    parametro.estd = "Activo"
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Ya existe un parámetro con ese nombre")
+    db.refresh(parametro)
+    return ParametroListItem.model_validate(parametro)
+
+
+@router_parametros.post("/{id_prmtr}/fusionar", response_model=ParametroListItem)
+def fusionar_parametro(
+    id_prmtr: int,
+    body: FusionarParametroRequest,
+    db: Session = Depends(get_db),
+    _usuario: dict = Depends(require_permiso("Ingesta", EDICION)),
+):
+    """HU51 CA5: fusiona el parámetro `id_prmtr` contra
+    `id_prmtr_destino`, reasignando TODO su historial.
+
+    Se reasignan las cinco tablas que referencian prmtr -tlmtr
+    (mediciones), evnt_txt (eventos de texto), mp_clmn (para que los
+    archivos FUTUROS mapeen directo al destino), alrm y wdgt-. Dejar
+    alguna sin reasignar rompería la FK al marcar el origen como
+    Fusionado, o dejaría alarmas/widgets apuntando a un parámetro que ya
+    no recibe datos.
+
+    tlmtr está particionada por RANGE(fch_hr) -no por id_prmtr-, así que
+    un UPDATE del id_prmtr NO mueve filas entre particiones: no hace
+    falta DELETE+INSERT ni tocar el pruning, alcanza con el UPDATE.
+
+    El origen queda en 'Fusionado' (soft delete) en vez de borrarse: se
+    conserva el rastro de qué texto de header existió y qué decidió el
+    Administrador. construir_mapeo excluye los Fusionados del catálogo,
+    así que nunca vuelve a matchear ni a resucitar por un archivo nuevo.
+    """
+    if id_prmtr == body.id_prmtr_destino:
+        raise HTTPException(
+            status_code=422, detail="No se puede fusionar un parámetro consigo mismo"
+        )
+
+    origen = db.query(Parametro).filter(Parametro.id_prmtr == id_prmtr).first()
+    if origen is None:
+        raise HTTPException(status_code=404, detail="Parámetro a fusionar no encontrado")
+    destino = (
+        db.query(Parametro).filter(Parametro.id_prmtr == body.id_prmtr_destino).first()
+    )
+    if destino is None:
+        raise HTTPException(status_code=404, detail="Parámetro destino no encontrado")
+    if origen.estd == "Fusionado":
+        raise HTTPException(
+            status_code=409, detail=f"El parámetro '{origen.nmbr}' ya fue fusionado"
+        )
+    if destino.estd == "Fusionado":
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"El parámetro destino '{destino.nmbr}' fue fusionado con otro; "
+                "elegí el parámetro que quedó activo."
+            ),
+        )
+
+    # mp_clmn tiene UNIQUE(id_mp, indc_clmn) pero no sobre id_prmtr, así
+    # que reasignar no puede chocar salvo que un mismo mapeo tuviera dos
+    # columnas -origen y destino- que tras la fusión quedarían
+    # duplicadas apuntando al mismo parámetro. Es un caso legítimo (dos
+    # columnas del mismo archivo que miden lo mismo) y no rompe nada:
+    # el UNIQUE es por índice de columna, no por parámetro.
+    for tabla in ("tlmtr", "evnt_txt", "mp_clmn", "alrm", "wdgt"):
+        db.execute(
+            text(f"UPDATE {tabla} SET id_prmtr = :destino WHERE id_prmtr = :origen"),
+            {"destino": destino.id_prmtr, "origen": origen.id_prmtr},
+        )
+
+    origen.estd = "Fusionado"
+    origen.id_prmtr_fusionado_en = destino.id_prmtr
+    db.commit()
+    db.refresh(destino)
+    return ParametroListItem.model_validate(destino)
 
 
 @router_parametros.delete("/{id_prmtr}")
@@ -518,6 +726,173 @@ def listar_mapeos(
     return {"total": len(items), "items": items}
 
 
+def _query_columnas_pendientes(db: Session, usuario: dict, id_dspstv: int | None):
+    """Base compartida por los dos endpoints de columnas pendientes (HU50
+    CA4/CA5): mismo aislamiento por sede que listar_mapeos."""
+    query = (
+        db.query(MapeoColumnaPendiente, MapeoFormato, Dispositivo, Ubicacion)
+        .join(MapeoFormato, MapeoFormato.id_mp == MapeoColumnaPendiente.id_mp)
+        .join(Dispositivo, Dispositivo.id_dspstv == MapeoFormato.id_dspstv)
+        .join(Ubicacion, Ubicacion.id_ubccn == Dispositivo.id_ubccn)
+        .filter(MapeoColumnaPendiente.estd == "Pendiente")
+    )
+    if usuario.get("scope") == "por_sede":
+        query = query.filter(Ubicacion.id_sd == usuario["sede_id"])
+    if id_dspstv is not None:
+        query = query.filter(MapeoFormato.id_dspstv == id_dspstv)
+    return query
+
+
+# Rutas LITERALES (columnas-pendientes/...) declaradas ANTES de
+# GET/{id_mp}: FastAPI resuelve por orden de registro, y {id_mp} como
+# path param genérico capturaría "columnas-pendientes" como un intento de
+# id_mp inválido si se declarara después.
+@router.get("/columnas-pendientes", response_model=list[ColumnaPendienteItem])
+def listar_columnas_pendientes(
+    id_dspstv: int | None = Query(default=None, description="Filtrar por dispositivo"),
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(require_permiso("Ingesta", LECTURA)),
+):
+    """HU50 CA4/CA5: columnas de header sin parámetro que las matchee,
+    detectadas por el auto-mapeo (construir_mapeo) y pendientes de
+    asignación manual desde la pestaña Datos de la ficha del dispositivo.
+    Solo 'Pendiente' -las 'Resuelta'/'Ignorada' ya fueron atendidas."""
+    filas = (
+        _query_columnas_pendientes(db, usuario, id_dspstv)
+        .order_by(Dispositivo.nmbr, MapeoFormato.tp_trm, MapeoColumnaPendiente.indc_clmn)
+        .all()
+    )
+    return [
+        ColumnaPendienteItem(
+            id_mp_cl_pnd=pendiente.id_mp_cl_pnd,
+            id_dspstv=dispositivo.id_dspstv,
+            dispositivo_nombre=dispositivo.nmbr,
+            id_mp=formato.id_mp,
+            tp_trm=formato.tp_trm,
+            indc_clmn=pendiente.indc_clmn,
+            nmbr_clmn_orgn=pendiente.nmbr_clmn_orgn,
+            fch_dtccn=pendiente.fch_dtccn.isoformat(),
+        )
+        for pendiente, formato, dispositivo, _ubicacion in filas
+    ]
+
+
+@router.get("/columnas-pendientes/conteo")
+def contar_columnas_pendientes(
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(require_permiso("Ingesta", LECTURA)),
+):
+    """HU50 CA4: versión barata (solo el número) para el badge de
+    notificación del Topbar, que se consulta en cada carga de página -no
+    tiene sentido traer el detalle completo solo para el conteo."""
+    total = _query_columnas_pendientes(db, usuario, id_dspstv=None).count()
+    return {"total": total}
+
+
+@router.post("/columnas-pendientes/{id_mp_cl_pnd}/resolver")
+def resolver_columna_pendiente(
+    id_mp_cl_pnd: int,
+    body: ResolverColumnaPendienteRequest,
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(require_permiso("Ingesta", EDICION)),
+):
+    """HU50 CA5/CA6: asigna manualmente el parámetro a una columna que el
+    auto-mapeo no pudo resolver por nombre. Crea la fila real en mp_clmn
+    (mismo mecanismo que el mapeo manual) y marca la pendiente como
+    'Resuelta' -no se borra, para conservar el rastro de que esa columna
+    alguna vez quedó sin match automático-. No reutiliza el PUT genérico
+    de mapeos (actualizar_mapeo): ese reemplaza el set COMPLETO de
+    columnas de la trama, lo que obligaría al frontend a reenviar todo lo
+    ya mapeado con riesgo de pisar cambios concurrentes de otro usuario;
+    este endpoint resuelve solo esta fila, atómico, sin tocar ese
+    contrato."""
+    pendiente = (
+        db.query(MapeoColumnaPendiente)
+        .filter(MapeoColumnaPendiente.id_mp_cl_pnd == id_mp_cl_pnd)
+        .first()
+    )
+    if pendiente is None:
+        raise HTTPException(status_code=404, detail="Columna pendiente no encontrada")
+    if pendiente.estd != "Pendiente":
+        raise HTTPException(
+            status_code=409, detail="Esta columna ya fue resuelta o ignorada"
+        )
+
+    formato = db.query(MapeoFormato).filter(MapeoFormato.id_mp == pendiente.id_mp).first()
+    if formato is None:
+        raise HTTPException(status_code=404, detail="El mapeo de esta columna ya no existe")
+    dispositivo, ubicacion = _cargar_contexto(db, formato)
+    verificar_sede(usuario, ubicacion.id_sd, db, modulo="Ingesta", accion=EDICION)
+
+    parametro = db.query(Parametro).filter(Parametro.id_prmtr == body.id_prmtr).first()
+    if parametro is None:
+        raise HTTPException(
+            status_code=422, detail=f"El parámetro {body.id_prmtr} no existe"
+        )
+
+    ya_existe_columna = (
+        db.query(MapeoColumna)
+        .filter(
+            MapeoColumna.id_mp == pendiente.id_mp,
+            MapeoColumna.indc_clmn == pendiente.indc_clmn,
+        )
+        .first()
+    )
+    if ya_existe_columna is not None:
+        # Carrera/uso indebido: ese índice ya tiene un parámetro asignado
+        # por otra vía (el PUT genérico de mapeos) mientras esta pendiente
+        # seguía abierta.
+        raise HTTPException(
+            status_code=409, detail="Ese índice de columna ya tiene un parámetro asignado"
+        )
+
+    db.add(
+        MapeoColumna(id_mp=pendiente.id_mp, indc_clmn=pendiente.indc_clmn, id_prmtr=body.id_prmtr)
+    )
+    pendiente.estd = "Resuelta"
+    pendiente.fch_resolucion = dt.datetime.now(dt.timezone.utc)
+    pendiente.id_usr_resolvio = int(usuario["sub"])
+    db.commit()
+
+    return {"mensaje": "Columna asignada correctamente"}
+
+
+@router.post("/columnas-pendientes/{id_mp_cl_pnd}/ignorar")
+def ignorar_columna_pendiente(
+    id_mp_cl_pnd: int,
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(require_permiso("Ingesta", EDICION)),
+):
+    """HU50: el Técnico puede descartar explícitamente una columna que
+    nunca va a tener parámetro (ej. un checksum del datalogger) - sin
+    esto, quedaría 'Pendiente' para siempre y seguiría contando en el
+    badge de notificaciones (CA4) generando ruido perpetuo."""
+    pendiente = (
+        db.query(MapeoColumnaPendiente)
+        .filter(MapeoColumnaPendiente.id_mp_cl_pnd == id_mp_cl_pnd)
+        .first()
+    )
+    if pendiente is None:
+        raise HTTPException(status_code=404, detail="Columna pendiente no encontrada")
+    if pendiente.estd != "Pendiente":
+        raise HTTPException(
+            status_code=409, detail="Esta columna ya fue resuelta o ignorada"
+        )
+
+    formato = db.query(MapeoFormato).filter(MapeoFormato.id_mp == pendiente.id_mp).first()
+    if formato is None:
+        raise HTTPException(status_code=404, detail="El mapeo de esta columna ya no existe")
+    dispositivo, ubicacion = _cargar_contexto(db, formato)
+    verificar_sede(usuario, ubicacion.id_sd, db, modulo="Ingesta", accion=EDICION)
+
+    pendiente.estd = "Ignorada"
+    pendiente.fch_resolucion = dt.datetime.now(dt.timezone.utc)
+    pendiente.id_usr_resolvio = int(usuario["sub"])
+    db.commit()
+
+    return {"mensaje": "Columna marcada como ignorada"}
+
+
 @router.get("/{id_mp}", response_model=MapeoFormatoDetalle)
 def obtener_mapeo(
     id_mp: int,
@@ -537,6 +912,7 @@ def obtener_mapeo(
     return MapeoFormatoDetalle(
         **base.model_dump(),
         columnas=_columnas_detalle(db, formato.id_mp),
+        columnas_pendientes=_columnas_pendientes_detalle(db, formato, dispositivo),
     )
 
 
