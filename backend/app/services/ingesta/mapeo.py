@@ -82,6 +82,15 @@ class MapeoNoEncontradoError(Exception):
     app.tasks.ingesta)."""
 
 
+class HeaderCorruptoError(Exception):
+    """I-27 del RAID: el header del archivo (fila 1) parece en realidad
+    una fila de datos mal ubicada, no un header real -ver
+    _header_parece_corrupto más abajo-. No es un error transitorio
+    (reintentar el mismo archivo produce el mismo header), así que el
+    llamador debe tratarlo como error de datos, igual que
+    MapeoNoEncontradoError (ver app.tasks.ingesta)."""
+
+
 @dataclasses.dataclass
 class FormatoResuelto:
     """El formato aplicable a un archivo, resuelto ANTES de parsearlo.
@@ -370,6 +379,45 @@ def _parece_valor_no_nombre_de_columna(nombre_columna: str) -> bool:
     return bool(_PATRON_FECHA_ISO.match(nombre_columna.strip()))
 
 
+# I-27: si al menos esta fracción de las columnas del header "parecen
+# datos, no nombres" (ver _parece_valor_no_nombre_de_columna), no se
+# trata como un puñado de columnas raras sueltas -se trata como el
+# header ENTERO siendo en realidad una fila de datos. 0.4 es deliberada-
+# mente permisivo (un header real rara vez tiene ni siquiera una columna
+# así): en el caso real de producción la fracción corrupta llegó a ser
+# la mayoría de las columnas del header (línea con sub-registros
+# concatenados), muy por encima de este umbral.
+_FRACCION_MINIMA_HEADER_CORRUPTO = 0.4
+# Por debajo de esta cantidad de columnas no se aplica el chequeo de
+# fracción: con un header de 1-2 columnas, que la única/una de las dos
+# parezca basura no es evidencia de nada -mp_frmt no exige un mínimo de
+# columnas legítimo-, y aplicar la misma fracción ahí produciría falsos
+# positivos frecuentes en formatos angostos por diseño.
+_MINIMO_COLUMNAS_PARA_EVALUAR_HEADER = 5
+
+
+def _header_parece_corrupto(columnas: list[str]) -> bool:
+    """I-27 del RAID: detecta el header ENTERO siendo en realidad una
+    fila de datos mal ubicada (ver _parece_valor_no_nombre_de_columna),
+    no solo columnas sueltas.
+
+    Por qué hace falta además del chequeo por columna: evaluar columna
+    por columna sigue dejando que HU49 dé por buena la trama entera
+    (mp_frmt queda creado, solo con menos columnas mapeadas) aunque el
+    header completo sea basura -el archivo "se procesa" pero no guarda
+    prácticamente nada útil, y el mp_frmt corrupto queda ahí para
+    contaminar cada archivo siguiente de esa trama. Rechazar el archivo
+    ENTERO cuando el header es mayormente basura evita crear ese mp_frmt
+    corrupto desde el principio: el archivo queda 'Fallido' en la Cola de
+    Ingesta (HU09) con motivo claro, y un Técnico decide qué hacer -en
+    vez de que el sistema adivine con un header que no tiene sentido.
+    """
+    if len(columnas) < _MINIMO_COLUMNAS_PARA_EVALUAR_HEADER:
+        return False
+    sospechosas = sum(1 for nombre in columnas if _parece_valor_no_nombre_de_columna(nombre))
+    return sospechosas / len(columnas) >= _FRACCION_MINIMA_HEADER_CORRUPTO
+
+
 def _inferir_tipo_dato(muestras: list, delimitador_decimal: str) -> str:
     """HU51: decide prmtr.tipo_dato mirando los valores REALES que trae la
     columna en el archivo que disparó la creación automática.
@@ -587,7 +635,25 @@ def construir_mapeo(
     da de alta en prmtr un parámetro que ahora coincidiría por nombre.
     Evita reabrir algo ya resuelto o descartado a mano por un cambio
     accidental de texto en el datalogger.
+
+    I-27: si el header COMPLETO parece corrupto (ver
+    _header_parece_corrupto) se rechaza el archivo entero con
+    HeaderCorruptoError, ANTES de tocar mp_clmn/prmtr. Evaluar columna
+    por columna (lo que ya hace _parece_valor_no_nombre_de_columna) no
+    alcanza para este caso: si el header entero es basura, procesarlo
+    columna por columna igual dejaría creado un mp_frmt "válido" con
+    pocas o ninguna columna útil, que después contamina cada archivo
+    siguiente de esa misma trama.
     """
+    if _header_parece_corrupto(columnas):
+        raise HeaderCorruptoError(
+            f"El header de mp_frmt id={id_mp} parece corrupto: una fracción alta "
+            f"de sus {len(columnas)} columnas son valores (números o fechas), no "
+            f"nombres de columna reales -probablemente una fila de datos del "
+            f"datalogger quedó en la posición de header. No se auto-crea ningún "
+            f"parámetro ni se mapea ninguna columna; revisa el archivo de origen."
+        )
+
     filas = (
         db.query(MapeoColumna, Parametro)
         .join(Parametro, Parametro.id_prmtr == MapeoColumna.id_prmtr)
