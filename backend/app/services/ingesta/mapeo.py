@@ -37,6 +37,7 @@ decisiones de negocio la definen:
 import dataclasses
 import logging
 import os
+import re
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -144,9 +145,7 @@ def detectar_tipo_trama(db: Session, id_dspstv: int, nombre_archivo: str) -> str
     return None
 
 
-def _crear_mapeo_formato_automatico(
-    db: Session, id_dspstv: int, prefijo: str
-) -> MapeoFormato:
+def _crear_mapeo_formato_automatico(db: Session, id_dspstv: int, prefijo: str) -> MapeoFormato:
     """HU49 CA1-CA2: crea el mp_frmt para un prefijo nunca visto en este
     dispositivo, con valores de parseo por defecto (ver constantes al
     inicio del módulo) y SIN ninguna columna mapeada -HU50 se encarga de
@@ -342,6 +341,35 @@ class _NombreYaFusionadoError(Exception):
     columna se deriva al flujo de resolución manual de HU50."""
 
 
+_PATRON_FECHA_ISO = re.compile(r"^\d{4}-\d{2}-\d{2}([ T]\d{2}:\d{2}(:\d{2})?)?$")
+
+
+def _parece_valor_no_nombre_de_columna(nombre_columna: str) -> bool:
+    """Heurística de seguridad contra un header corrupto (bug real
+    encontrado en producción, I-27 del RAID): si el datalogger escribe
+    una línea con varios sub-registros concatenados sin separador y esa
+    línea cae en la posición de header, `parsear_dat` la lee igual que un
+    header legítimo -son campos separados por el mismo delimitador-, y
+    HU51 terminaba dando de alta un Parametro por cada valor de esa fila
+    (nombres como '0', '106', '1.157021e+09' o '2026-08-31 11:15:00' en
+    el catálogo real).
+
+    Un nombre de columna real no es, en sí mismo, un número puro ni una
+    fecha/hora completa -son etiquetas como 'BattV(V)' o 'Fecha'-, así
+    que cualquiera de esas dos formas es señal fuerte de que el "header"
+    en realidad es una fila de datos mal ubicada. Deliberadamente NO se
+    intenta reconstruir el header real acá (no hay forma confiable de
+    saber cuál era): la columna se deriva a mp_clmn_pendiente (ver
+    construir_mapeo) para que un Técnico la revise a mano, en vez de
+    ensuciar el catálogo con un alta automática que no significa nada.
+    """
+    from app.services.ingesta.validador import es_valor_numerico
+
+    if es_valor_numerico(nombre_columna, "."):
+        return True
+    return bool(_PATRON_FECHA_ISO.match(nombre_columna.strip()))
+
+
 def _inferir_tipo_dato(muestras: list, delimitador_decimal: str) -> str:
     """HU51: decide prmtr.tipo_dato mirando los valores REALES que trae la
     columna en el archivo que disparó la creación automática.
@@ -381,9 +409,7 @@ def _inferir_tipo_dato(muestras: list, delimitador_decimal: str) -> str:
     return "numerico" if hubo_muestra else "texto"
 
 
-def _crear_parametro_automatico(
-    db: Session, nombre_columna: str, tipo_dato: str
-) -> Parametro:
+def _crear_parametro_automatico(db: Session, nombre_columna: str, tipo_dato: str) -> Parametro:
     """HU51 CA1: da de alta en el catálogo un parámetro para una columna
     que no matcheó ninguno existente.
 
@@ -461,9 +487,7 @@ def _crear_parametro_automatico(
         except IntegrityError:
             sesion_propia.rollback()
             ganador = (
-                sesion_propia.query(Parametro)
-                .filter(Parametro.nmbr == nombre_columna)
-                .first()
+                sesion_propia.query(Parametro).filter(Parametro.nmbr == nombre_columna).first()
             )
             if ganador is None:
                 # Si el INSERT chocó contra el UNIQUE de nmbr, la fila
@@ -527,7 +551,7 @@ def construir_mapeo(
     'texto', que es la opción que no pierde datos (ver
     _inferir_tipo_dato).
 
-    Dos columnas quedan FUERA del auto-alta:
+    Tres tipos de columna quedan FUERA del auto-alta:
     - `columna_fecha` (mp_frmt.columna_fecha): es la marca temporal de la
       lectura, no una medición; crearle un parámetro guardaría la fecha
       como si fuera un dato medido. Se saltea del todo (ni auto-creada ni
@@ -537,6 +561,19 @@ def construir_mapeo(
       colisionar en el mismo nombre y fusionar dos columnas que no son la
       misma-, así que ese caso sí se deriva a mp_clmn_pendiente, que es
       exactamente lo que HU50 ya sabía hacer.
+    - I-27 del RAID (bug real encontrado en producción, ceneris-prod,
+      dispositivo "Datalogger 1"): un "nombre de columna" que en realidad
+      es un número o una fecha/hora completa (ver
+      _parece_valor_no_nombre_de_columna). Pasa cuando el datalogger
+      concatena varios sub-registros en una sola línea física sin
+      separador, y esa línea cae exactamente en la posición de header;
+      `parsear_dat` no tiene forma de distinguirla de un header real -son
+      campos separados por el mismo delimitador-, así que sin este chequeo
+      HU51 daba de alta un Parametro por cada valor de esa fila (se
+      encontraron 32+ parámetros basura con nombres como '0', '106',
+      '1.157021e+09' en el catálogo real). Se deriva a mp_clmn_pendiente
+      en vez de auto-crear: no hay forma confiable de reconstruir cuál
+      era el nombre real, así que un Técnico lo resuelve a mano.
 
     A partir de HU50 esta función puede hacer INSERT (mp_clmn y
     mp_clmn_pendiente) además de leer, y a partir de HU51 también puede
@@ -608,9 +645,7 @@ def construir_mapeo(
                 _normalizar_nombre_columna(nombre_columna)
             )
             if parametro is not None:
-                db.add(
-                    MapeoColumna(id_mp=id_mp, indc_clmn=indice, id_prmtr=parametro.id_prmtr)
-                )
+                db.add(MapeoColumna(id_mp=id_mp, indc_clmn=indice, id_prmtr=parametro.id_prmtr))
                 mapeo[nombre_columna] = parametro.nmbr
                 logger.info(
                     "HU50: columna '%s' (índice %s) de mp_frmt id=%s auto-mapeada "
@@ -658,6 +693,33 @@ def construir_mapeo(
                     id_mp,
                     _LARGO_MAXIMO_NOMBRE_PARAMETRO,
                 )
+            elif _parece_valor_no_nombre_de_columna(nombre_columna):
+                # I-27 del RAID: un "nombre de columna" que en realidad es
+                # un número o una fecha/hora completa es la huella de un
+                # header corrupto -una fila de datos que el datalogger
+                # concatenó sin separador y que terminó leyéndose como si
+                # fuera el header real (ver docstring de
+                # _parece_valor_no_nombre_de_columna). No se auto-crea el
+                # parámetro -ensuciaría el catálogo con basura indistingui-
+                # ble de un parámetro real- y se deriva a resolución manual.
+                db.add(
+                    MapeoColumnaPendiente(
+                        id_mp=id_mp,
+                        indc_clmn=indice,
+                        nmbr_clmn_orgn=nombre_columna[:200],
+                        estd="Pendiente",
+                    )
+                )
+                logger.warning(
+                    "HU51/I-27: columna '%s' (índice %s) de mp_frmt id=%s parece "
+                    "un valor de datos (número o fecha), no un nombre de columna "
+                    "real -probable header corrupto en el archivo de origen-; no "
+                    "se auto-crea el parámetro y queda pendiente de asignación "
+                    "manual.",
+                    nombre_columna,
+                    indice,
+                    id_mp,
+                )
             else:
                 # HU51 CA1-CA2: no hay parámetro que matchee -> se crea uno
                 # nuevo en 'Pendiente de revision' y la columna se mapea
@@ -672,9 +734,7 @@ def construir_mapeo(
                 tipo_dato = _inferir_tipo_dato(muestras, delimitador_decimal)
 
                 try:
-                    parametro_nuevo = _crear_parametro_automatico(
-                        db, nombre_columna, tipo_dato
-                    )
+                    parametro_nuevo = _crear_parametro_automatico(db, nombre_columna, tipo_dato)
                 except _NombreYaFusionadoError:
                     db.add(
                         MapeoColumnaPendiente(
@@ -695,9 +755,7 @@ def construir_mapeo(
                     continue
 
                 db.add(
-                    MapeoColumna(
-                        id_mp=id_mp, indc_clmn=indice, id_prmtr=parametro_nuevo.id_prmtr
-                    )
+                    MapeoColumna(id_mp=id_mp, indc_clmn=indice, id_prmtr=parametro_nuevo.id_prmtr)
                 )
                 mapeo[nombre_columna] = parametro_nuevo.nmbr
                 logger.info(

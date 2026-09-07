@@ -30,7 +30,6 @@ from app.models import (
 from app.services.ingesta.mapeo import (
     _inferir_tipo_dato,
     construir_mapeo,
-    resolver_formato,
 )
 from tests.conftest import Fabrica
 from tests.services.test_mapeo_ingesta import (
@@ -108,8 +107,7 @@ class TestAutoAltaDeParametro:
         assert creado.tipo_dato == "numerico"
         # CA2: la columna quedó mapeada, no pendiente de asignar.
         assert (
-            db_session.query(MapeoColumna).filter(MapeoColumna.id_mp == formato.id_mp).count()
-            == 1
+            db_session.query(MapeoColumna).filter(MapeoColumna.id_mp == formato.id_mp).count() == 1
         )
         assert (
             db_session.query(MapeoColumnaPendiente)
@@ -128,9 +126,7 @@ class TestAutoAltaDeParametro:
         construir_mapeo(db_session, formato.id_mp, ["  Caudal Raro (m3/s)  "])
 
         assert (
-            db_session.query(Parametro)
-            .filter(Parametro.nmbr == "  Caudal Raro (m3/s)  ")
-            .count()
+            db_session.query(Parametro).filter(Parametro.nmbr == "  Caudal Raro (m3/s)  ").count()
             == 1
         )
 
@@ -145,9 +141,7 @@ class TestAutoAltaDeParametro:
             db_session,
             formato.id_mp,
             ["MensajeHU51"],
-            filas_archivo=[
-                type("F", (), {"valores": {"MensajeHU51": "Puerta Abierta"}})()
-            ],
+            filas_archivo=[type("F", (), {"valores": {"MensajeHU51": "Puerta Abierta"}})()],
         )
 
         creado = db_session.query(Parametro).filter(Parametro.nmbr == "MensajeHU51").one()
@@ -163,13 +157,10 @@ class TestAutoAltaDeParametro:
 
         assert db_session.query(Parametro).filter(Parametro.nmbr == "repetida_hu51").count() == 1
         assert (
-            db_session.query(MapeoColumna).filter(MapeoColumna.id_mp == formato.id_mp).count()
-            == 1
+            db_session.query(MapeoColumna).filter(MapeoColumna.id_mp == formato.id_mp).count() == 1
         )
 
-    def test_columna_que_matchea_un_parametro_existente_no_crea_nada(
-        self, db_session, fabrica
-    ):
+    def test_columna_que_matchea_un_parametro_existente_no_crea_nada(self, db_session, fabrica):
         """Regresión de HU50: si YA existe el parámetro, se reutiliza -no
         se auto-crea un duplicado-."""
         sede = fabrica.sede()
@@ -182,9 +173,7 @@ class TestAutoAltaDeParametro:
         construir_mapeo(db_session, formato.id_mp, ["ya_existe_hu51"])
 
         assert db_session.query(Parametro).filter(Parametro.nmbr == "ya_existe_hu51").count() == 1
-        columna = (
-            db_session.query(MapeoColumna).filter(MapeoColumna.id_mp == formato.id_mp).one()
-        )
+        columna = db_session.query(MapeoColumna).filter(MapeoColumna.id_mp == formato.id_mp).one()
         assert columna.id_prmtr == existente.id_prmtr
 
     def test_columna_de_fecha_no_genera_parametro(self, db_session, fabrica):
@@ -209,9 +198,7 @@ class TestAutoAltaDeParametro:
             == 0
         )
 
-    def test_nombre_demasiado_largo_cae_al_flujo_pendiente_de_hu50(
-        self, db_session, fabrica
-    ):
+    def test_nombre_demasiado_largo_cae_al_flujo_pendiente_de_hu50(self, db_session, fabrica):
         """Un header de más de 100 chars no entra en prmtr.nmbr y NO se
         trunca (truncar podría fusionar dos columnas distintas): se
         deriva al flujo manual que HU50 ya sabía manejar."""
@@ -231,9 +218,7 @@ class TestAutoAltaDeParametro:
         )
         assert pendiente.estd == "Pendiente"
 
-    def test_columna_con_nombre_de_parametro_fusionado_queda_pendiente(
-        self, db_session, fabrica
-    ):
+    def test_columna_con_nombre_de_parametro_fusionado_queda_pendiente(self, db_session, fabrica):
         """CA5: un parámetro fusionado quedó vacío a propósito y no debe
         resucitar.
 
@@ -256,9 +241,7 @@ class TestAutoAltaDeParametro:
         assert mapa == {}
         # ...y sigue habiendo UN solo parámetro con ese nombre: el
         # fusionado, intacto.
-        assert (
-            db_session.query(Parametro).filter(Parametro.nmbr == "fusionado_hu51").count() == 1
-        )
+        assert db_session.query(Parametro).filter(Parametro.nmbr == "fusionado_hu51").count() == 1
         assert fusionado.estd == "Fusionado"
         # La columna quedó para resolución manual.
         pendiente = (
@@ -268,6 +251,92 @@ class TestAutoAltaDeParametro:
         )
         assert pendiente.nmbr_clmn_orgn == "fusionado_hu51"
         assert pendiente.estd == "Pendiente"
+
+
+class TestColumnaConNombreQueParecevaloDeDatos:
+    """I-27 del RAID: un header corrupto (el datalogger concatenó varios
+    sub-registros en una línea sin separador, y esa línea cayó en la
+    posición de header) hacía que HU51 diera de alta un Parametro por
+    cada valor de esa fila -encontrado en producción, ceneris-prod,
+    dispositivo "Datalogger 1": 32+ parámetros con nombres como '0',
+    '106', '1.157021e+09', '2026-08-31 11:15:00'."""
+
+    @staticmethod
+    def _crear_formato_vacio(db, dispositivo, tipo_trama="Z"):
+        formato = MapeoFormato(
+            id_dspstv=dispositivo.id_dspstv,
+            tp_trm=tipo_trama,
+            dlmtdr=",",
+            dlmtdr_dcml=".",
+            fl_inc_dts=1,
+            frmt_fch="%Y-%m-%d %H:%M:%S",
+            estd="Activo",
+        )
+        db.add(formato)
+        db.flush()
+        return formato
+
+    @pytest.mark.parametrize(
+        "nombre_columna",
+        [
+            "0",
+            "106",
+            "0.998",
+            "-22.73",
+            "1.157021e+09",
+            "1.157021E+09",
+            "2026-08-31 11:15:00",
+            "2026-08-31",
+            "2026-08-31T11:15:00",
+        ],
+    )
+    def test_columna_cuyo_nombre_es_numero_o_fecha_no_crea_parametro(
+        self, db_session, fabrica, nombre_columna
+    ):
+        sede = fabrica.sede()
+        dispositivo = crear_dispositivo(db_session, sede)
+        formato = self._crear_formato_vacio(db_session, dispositivo)
+
+        mapa = construir_mapeo(db_session, formato.id_mp, [nombre_columna])
+
+        assert mapa == {}
+        assert db_session.query(Parametro).filter(Parametro.nmbr == nombre_columna).count() == 0
+        pendiente = (
+            db_session.query(MapeoColumnaPendiente)
+            .filter(MapeoColumnaPendiente.id_mp == formato.id_mp)
+            .one()
+        )
+        assert pendiente.nmbr_clmn_orgn == nombre_columna
+        assert pendiente.estd == "Pendiente"
+
+    def test_nombre_de_columna_real_con_numeros_intercalados_si_se_crea(self, db_session, fabrica):
+        """Un nombre real puede traer dígitos ('BattV12', 'Canal_3') sin
+        ser él mismo un número puro -no debe caer en el mismo rechazo."""
+        sede = fabrica.sede()
+        dispositivo = crear_dispositivo(db_session, sede)
+        formato = self._crear_formato_vacio(db_session, dispositivo)
+
+        mapa = construir_mapeo(db_session, formato.id_mp, ["Canal_3"])
+
+        assert mapa == {"Canal_3": "Canal_3"}
+        assert db_session.query(Parametro).filter(Parametro.nmbr == "Canal_3").count() == 1
+
+    def test_no_reevalua_en_la_siguiente_corrida(self, db_session, fabrica):
+        """CA6 (ya existente): igual que el resto de los casos derivados a
+        mp_clmn_pendiente, no se reintenta en cada archivo nuevo."""
+        sede = fabrica.sede()
+        dispositivo = crear_dispositivo(db_session, sede)
+        formato = self._crear_formato_vacio(db_session, dispositivo)
+
+        construir_mapeo(db_session, formato.id_mp, ["42"])
+        construir_mapeo(db_session, formato.id_mp, ["42"])
+
+        assert (
+            db_session.query(MapeoColumnaPendiente)
+            .filter(MapeoColumnaPendiente.id_mp == formato.id_mp)
+            .count()
+            == 1
+        )
 
 
 def _procesar_columna_para_test_concurrencia(args):
@@ -325,12 +394,8 @@ class TestConvergenciaDelAutoAlta:
             db.commit()
             id_dspstv = dispositivo.id_dspstv
 
-            contenido = (
-                "Fecha,columna_concurrente_hu51\n2026-09-02 10:00:00,7\n"
-            )
-            tareas = [
-                (id_dspstv, f"CONCHU51_{i}.dat", contenido) for i in range(4)
-            ]
+            contenido = "Fecha,columna_concurrente_hu51\n2026-09-02 10:00:00,7\n"
+            tareas = [(id_dspstv, f"CONCHU51_{i}.dat", contenido) for i in range(4)]
 
             with mp.Pool(4) as pool:
                 ids = pool.map(_procesar_columna_para_test_concurrencia, tareas)
@@ -343,9 +408,7 @@ class TestConvergenciaDelAutoAlta:
             )
             # Y en la base quedó efectivamente uno solo.
             total = db.execute(
-                sa.text(
-                    "SELECT count(*) FROM prmtr WHERE nmbr = 'columna_concurrente_hu51'"
-                )
+                sa.text("SELECT count(*) FROM prmtr WHERE nmbr = 'columna_concurrente_hu51'")
             ).scalar()
             assert total == 1
         finally:
@@ -360,9 +423,7 @@ class TestConvergenciaDelAutoAlta:
                 ),
                 {"d": id_dspstv},
             )
-            db.execute(
-                sa.text("DELETE FROM evnt_txt WHERE id_dspstv = :d"), {"d": id_dspstv}
-            )
+            db.execute(sa.text("DELETE FROM evnt_txt WHERE id_dspstv = :d"), {"d": id_dspstv})
             db.query(MapeoColumnaPendiente).filter(
                 MapeoColumnaPendiente.id_mp.in_(
                     db.query(MapeoFormato.id_mp).filter(MapeoFormato.id_dspstv == id_dspstv)
