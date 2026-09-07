@@ -1,0 +1,56 @@
+{
+  "CallerReference": "pangea-frontend-prod-2026-09-05",
+  "Comment": "Frontend Pangea 4.0 - ceneris-prod",
+  "Enabled": true,
+  "Aliases": {
+    "Quantity": 1,
+    "Items": ["pangea.ceneris.com"]
+  },
+  "Origins": {
+    "Quantity": 1,
+    "Items": [
+      {
+        "Id": "pangea-frontend-s3",
+        "DomainName": "pangea-frontend-prod.s3.us-east-1.amazonaws.com",
+        "OriginAccessControlId": "E1TNVVC4Z7CL8N",
+        "S3OriginConfig": {
+          "OriginAccessIdentity": ""
+        }
+      }
+    ]
+  },
+  "DefaultCacheBehavior": {
+    "TargetOriginId": "pangea-frontend-s3",
+    "ViewerProtocolPolicy": "redirect-to-https",
+    "AllowedMethods": {
+      "Quantity": 2,
+      "Items": ["GET", "HEAD"]
+    },
+    "CachePolicyId": "658327ea-f89d-4fab-a63d-7e88639e58f6",
+    "Compress": true
+  },
+  "CustomErrorResponses": {
+    "Quantity": 2,
+    "Items": [
+      {
+        "ErrorCode": 403,
+        "ResponsePagePath": "/index.html",
+        "ResponseCode": "200",
+        "ErrorCachingMinTTL": 10
+      },
+      {
+        "ErrorCode": 404,
+        "ResponsePagePath": "/index.html",
+        "ResponseCode": "200",
+        "ErrorCachingMinTTL": 10
+      }
+    ]
+  },
+  "DefaultRootObject": "index.html",
+  "ViewerCertificate": {
+    "ACMCertificateArn": "arn:aws:acm:us-east-1:077584547777:certificate/b9af0435-8495-4949-8362-be15ffa7704f",
+    "SSLSupportMethod": "sni-only",
+    "MinimumProtocolVersion": "TLSv1.2_2021"
+  },
+  "PriceClass": "PriceClass_100"
+}
