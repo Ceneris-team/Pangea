@@ -593,6 +593,14 @@ class ArchivoIngestaDetalle(BaseModel):
     mnsj_errr: str | None
 
 
+class ReintentoMasivoResponse(BaseModel):
+    """Reintento masivo de todos los archivos Fallido de la sede del
+    usuario (extensión de HU31 a "en cantidad", ver
+    reintentar_fallidos_ingesta en routers/ingesta.py)."""
+
+    reencolados: int
+
+
 class FilaCrudaIngesta(BaseModel):
     """Una línea del .dat tal como llegó, ANTES del mapeo columna->
     parámetro: permite ver si el datalogger mandó la fila vacía/en cero o

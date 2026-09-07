@@ -26,6 +26,7 @@ from app.schemas import (
     FilaCrudaIngesta,
     MetricasColaIngesta,
     RegistrosIngestaResponse,
+    ReintentoMasivoResponse,
 )
 from app.security.permisos import EDICION, LECTURA, require_permiso, verificar_sede
 from app.services.ingesta.mapeo import MapeoNoEncontradoError, resolver_formato
@@ -137,7 +138,10 @@ def listar_dataloggers_cola(
     dataloggers = _mapa_dataloggers(db, ids_cnxn)
 
     items = sorted(
-        ({"id_cnxn": id_cnxn, "nombre": dataloggers.get(id_cnxn, "Desconocido")} for id_cnxn in ids_cnxn),
+        (
+            {"id_cnxn": id_cnxn, "nombre": dataloggers.get(id_cnxn, "Desconocido")}
+            for id_cnxn in ids_cnxn
+        ),
         key=lambda d: d["nombre"],
     )
     return {"items": items}
@@ -196,6 +200,55 @@ def listar_cola_ingesta(
         for a in archivos
     ]
     return {"total": total, "pagina": pagina, "por_pagina": por_pagina, "items": items}
+
+
+@router.post("/cola/reintentar-fallidos", response_model=ReintentoMasivoResponse)
+def reintentar_fallidos_ingesta(
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(require_permiso("Ingesta", EDICION)),
+):
+    """Extensión de HU31 "en cantidad": reencola TODOS los archivos
+    Fallido visibles para el usuario, no solo uno a la vez.
+
+    Se declara ANTES de GET /cola/{id_archv} (mismo motivo que
+    /dispositivos/mapa en routers/dispositivos.py): si fuera después, esa
+    ruta capturaría "reintentar-fallidos" como si fuera un id_archv y
+    respondería 422.
+
+    Alcance: TODOS los Fallido de la sede del usuario (aislamiento HT-09
+    CA3, igual que listar_cola_ingesta), sin importar qué filtro de
+    estado/datalogger tenga puesta la vista en ese momento -así el botón
+    "Reintentar todos" siempre hace lo mismo, sin depender de qué esté
+    filtrado en pantalla. Un scope 'global' (sin sede_id) toca los
+    Fallido de todas las sedes, igual que el resto de la matriz de
+    permisos para ese scope.
+
+    Reusa exactamente la misma transición que reintentar_archivo_ingesta
+    (Fallido -> Pendiente, limpia mnsj_errr/fch_prcsd/rgstrs_prcsds) y
+    reencola cada uno con procesar_archivo_dat.delay(), uno por archivo:
+    es la misma operación liviana que ya hace HU31, solo repetida en un
+    bucle -no hay nada que paralelizar a mano porque cada .delay() ya es
+    async (Celery encola y devuelve al instante).
+    """
+    query = db.query(ArchivoIngesta).join(
+        ConexionFTP, ConexionFTP.id_cnxn == ArchivoIngesta.id_cnxn
+    )
+    if usuario.get("scope") == "por_sede":
+        query = query.filter(ConexionFTP.id_sd == usuario["sede_id"])
+    query = query.filter(ArchivoIngesta.estd == "Fallido")
+
+    fallidos = query.all()
+    for archivo in fallidos:
+        archivo.estd = "Pendiente"
+        archivo.mnsj_errr = None
+        archivo.fch_prcsd = None
+        archivo.rgstrs_prcsds = None
+    db.commit()
+
+    for archivo in fallidos:
+        procesar_archivo_dat.delay(id_archv=archivo.id_archv)
+
+    return ReintentoMasivoResponse(reencolados=len(fallidos))
 
 
 @router.get("/cola/{id_archv}", response_model=ArchivoIngestaDetalle)
