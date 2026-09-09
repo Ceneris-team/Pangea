@@ -15,6 +15,7 @@ from app.routers import (
     mapa_cliente,
     mapeos,
     mediciones,
+    panel,
     ubicaciones,
     usuarios,
 )
@@ -56,6 +57,8 @@ app.include_router(dispositivos.router)
 # HU17: mapa del Cliente Final (REST de carga inicial + WebSocket en vivo).
 # Router propio, separado del de HU22 (/ubicaciones/mapa), que no se toca.
 app.include_router(mapa_cliente.router)
+# HU23: listar paneles (Tableros Personalizables, E05).
+app.include_router(panel.router)
 
 
 @app.get("/")

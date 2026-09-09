@@ -42,7 +42,11 @@ PERMISOS_POR_ROL = {
     "Cliente Final": {
         "Ubicaciones": "Lectura",
         "Dispositivos": "Lectura",
-        "Tableros": "Lectura",
+        # HU24: crear panel exige Edición sobre "Tableros" (POST
+        # /paneles). Edición ya incluye Lectura en _NIVELES_QUE_PERMITEN
+        # (security/permisos.py), así que GET /paneles y GET
+        # /mapa-cliente (HU17), que piden Lectura, siguen funcionando.
+        "Tableros": "Edición",
         "Alarmas": "Lectura",
     },
     "Administrador Comercial": {

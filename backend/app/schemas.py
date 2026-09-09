@@ -1032,3 +1032,61 @@ class AuditoriaListItem(BaseModel):
     vlrs_antrrs: dict | list | None
     vlrs_nvs: dict | list | None
     fch_evnt: datetime
+
+
+# HU23 - Listar paneles
+
+
+class PanelListItem(BaseModel):
+    """HU23 CA1: nombre, fecha de creación y el id necesario para las
+    acciones del listado (abrir el panel, CA2)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id_pnl: int
+    nmbr: str
+    fch_crcn: datetime
+
+
+class PanelDetalle(PanelListItem):
+    """HU23 CA2: lo que se muestra al abrir un panel desde el listado.
+
+    Hoy son los mismos campos que PanelListItem -las ubicaciones y
+    widgets asociados (HU26/HU34) están fuera de alcance de HU23-, pero
+    es un schema propio porque ese contenido se agregará ACÁ, no en el
+    listado."""
+
+
+# HU24 - Crear panel
+
+
+def _validar_nombre_panel(valor: str) -> str:
+    """Mismo criterio que _validar_nombre_ubicacion: un nombre de solo
+    espacios pasa min_length=1 pero no es un nombre, y el UNIQUE por
+    usuario (uq_pnl_usr_nombre) tiene que comparar siempre el valor ya
+    recortado."""
+    recortado = valor.strip()
+    if not recortado:
+        raise ValueError("El nombre es obligatorio")
+    return recortado
+
+
+class PanelCrear(BaseModel):
+    """HU24 CA1/CA2: único campo del formulario de creación. El panel nace
+    vacío -sin ubicaciones ni widgets- y con id_sd/id_usr resueltos por el
+    router a partir del JWT, igual que hace UbicacionCrear con la sede."""
+
+    nmbr: str = Field(min_length=1, max_length=100)
+
+    @field_validator("nmbr")
+    @classmethod
+    def _nombre_no_vacio(cls, valor: str) -> str:
+        return _validar_nombre_panel(valor)
+
+
+class PanelCreado(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id_pnl: int
+    nmbr: str
+    fch_crcn: datetime

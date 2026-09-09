@@ -4,7 +4,7 @@ import pangeaIconLight from "../../assets/pangea-icon-light.png";
 import { ROLES, rutaPorRol } from "../../config/roles";
 import { useTheme } from "../../context/ThemeContext";
 
-export type SeccionActiva = "panel" | "usuarios" | "ubicaciones" | "dispositivos" | "conexiones-ftp" | "dashboard" | "configuracion" | "consulta-datos"| "mapeos" | "parametros" | "cola-ingesta" | "graficos" | "mapa-estaciones" | "mapa-ubicaciones";
+export type SeccionActiva = "panel" | "usuarios" | "ubicaciones" | "dispositivos" | "conexiones-ftp" | "dashboard" | "configuracion" | "consulta-datos"| "mapeos" | "parametros" | "cola-ingesta" | "graficos" | "mapa-estaciones" | "mapa-ubicaciones" | "paneles";
 
 interface SidebarProps {
   onLogout: () => void;
@@ -75,14 +75,18 @@ export default function Sidebar({ onLogout, activo, rol }: SidebarProps) {
             Panel
           </Link>
 
-          {/* Dashboard: placeholder, aun no implementado */}
-          <a
-            href="#"
-            title="Proximamente"
-            onClick={(e) => e.preventDefault()}
-            className={linkBase + " " + linkDeshabilitado}
+          {/* HU23: Tableros Personalizables (E05). Reemplaza al antiguo
+              placeholder "Dashboard" -deshabilitado, sin ruta real-. */}
+          <Link
+            to="/paneles"
+            className={linkBase + " " + (activo === "paneles" ? linkActivo : linkInactivo)}
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg
+              className={"w-5 h-5 " + (activo === "paneles" ? iconoActivo : "")}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -90,8 +94,8 @@ export default function Sidebar({ onLogout, activo, rol }: SidebarProps) {
                 d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"
               />
             </svg>
-            Dashboard
-          </a>
+            Tableros Personalizables
+          </Link>
         </div>
 
         {/* ---------------- Mapas ----------------
