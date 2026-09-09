@@ -593,6 +593,20 @@ class ArchivoIngestaDetalle(BaseModel):
     mnsj_errr: str | None
 
 
+class IntentoProcesamientoListItem(BaseModel):
+    """HU31: una fila de intnt_prcsmnt -un intento de procesar este
+    archivo, automático o manual (ver _registrar_intento en
+    app/tasks/ingesta.py). usuario_nombre es None cuando el intento fue
+    automático (id_usr NULL); el frontend lo muestra como "Automático"."""
+
+    id_intnt: int
+    fch_intnt: datetime
+    rsltd: str
+    mnsj_errr: str | None
+    id_usr: int | None
+    usuario_nombre: str | None
+
+
 class ReintentoMasivoResponse(BaseModel):
     """Reintento masivo de todos los archivos Fallido de la sede del
     usuario (extensión de HU31 a "en cantidad", ver

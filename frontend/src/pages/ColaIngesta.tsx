@@ -43,6 +43,16 @@ interface RegistrosIngestaResponse {
   filas: FilaCrudaIngesta[];
 }
 
+/** HU31: una fila del historial de reprocesos (GET /ingesta/cola/{id}/intentos). */
+interface IntentoProcesamiento {
+  id_intnt: number;
+  fch_intnt: string;
+  rsltd: string;
+  mnsj_errr: string | null;
+  id_usr: number | null;
+  usuario_nombre: string | null;
+}
+
 function esVacio(valor: string | null): boolean {
   return valor === null || valor.trim() === "";
 }
@@ -107,6 +117,11 @@ export default function ColaIngesta() {
   const [registros, setRegistros] = useState<RegistrosIngestaResponse | null>(null);
   const [registrosError, setRegistrosError] = useState<string | null>(null);
   const [registrosLoading, setRegistrosLoading] = useState(false);
+
+  // HU31: historial de reprocesos del archivo seleccionado.
+  const [intentos, setIntentos] = useState<IntentoProcesamiento[] | null>(null);
+  const [intentosError, setIntentosError] = useState<string | null>(null);
+  const [intentosLoading, setIntentosLoading] = useState(false);
 
   // Total real de Fallido (independiente de pagina/filtro actual): es lo
   // que decide si se muestra "Reintentar todos" y el numero que se le
@@ -206,6 +221,33 @@ export default function ColaIngesta() {
       cancelado = true;
     };
   }, [idSeleccionado, detalle?.estado]);
+
+  // HU31: el historial se carga para cualquier estado -a diferencia de
+  // "registros" (solo Procesado), acá interesa sobre todo un archivo
+  // Fallido con varios reintentos-.
+  useEffect(() => {
+    if (idSeleccionado === null) {
+      setIntentos(null);
+      setIntentosError(null);
+      return;
+    }
+    let cancelado = false;
+    setIntentosLoading(true);
+    setIntentosError(null);
+    apiFetch<IntentoProcesamiento[]>(`/ingesta/cola/${idSeleccionado}/intentos`)
+      .then((res) => {
+        if (!cancelado) setIntentos(res);
+      })
+      .catch((err) => {
+        if (!cancelado) setIntentosError(err instanceof ApiError ? err.message : "No se pudo cargar el historial");
+      })
+      .finally(() => {
+        if (!cancelado) setIntentosLoading(false);
+      });
+    return () => {
+      cancelado = true;
+    };
+  }, [idSeleccionado]);
 
   const totalPaginas = data ? Math.max(1, Math.ceil(data.total / data.por_pagina)) : 1;
 
@@ -549,6 +591,60 @@ export default function ColaIngesta() {
                     </dd>
                   </div>
                 )}
+
+                {/* HU31: historial de reprocesos de este archivo, más
+                    reciente primero. Automático = id_usr null. */}
+                <div className="pt-3 border-t border-gray-100 dark:border-gray-700">
+                  <dt className="text-gray-500 dark:text-gray-400 mb-2">Historial de intentos</dt>
+
+                  {intentosLoading && (
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Cargando historial...</p>
+                  )}
+
+                  {intentosError && (
+                    <p className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 rounded-lg p-3">
+                      {intentosError}
+                    </p>
+                  )}
+
+                  {intentos && intentos.length === 0 && (
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      Este archivo todavía no tiene intentos de procesamiento registrados.
+                    </p>
+                  )}
+
+                  {intentos && intentos.length > 0 && (
+                    <ul className="space-y-2 max-h-48 overflow-y-auto">
+                      {intentos.map((intento) => (
+                        <li
+                          key={intento.id_intnt}
+                          className="flex items-start justify-between gap-3 text-xs bg-black/5 dark:bg-white/5 rounded-lg p-2.5"
+                        >
+                          <div>
+                            <span
+                              className={`inline-flex items-center px-2 py-0.5 rounded-full font-bold border mr-2 ${
+                                intento.rsltd === "Exitoso"
+                                  ? "bg-[#ccff00]/20 text-[#5a7000] dark:text-[#ccff00] border-[#ccff00]/30"
+                                  : "bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 border-red-200 dark:border-red-800/30"
+                              }`}
+                            >
+                              {intento.rsltd}
+                            </span>
+                            <span className="text-gray-600 dark:text-gray-300">
+                              {intento.usuario_nombre ?? "Automático"}
+                            </span>
+                            {intento.mnsj_errr && (
+                              <p className="text-red-600 dark:text-red-400 mt-1">{intento.mnsj_errr}</p>
+                            )}
+                          </div>
+                          <span className="text-gray-400 dark:text-gray-500 whitespace-nowrap">
+                            {formatearFecha(intento.fch_intnt)}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
 
                 {detalle.estado === "Fallido" && (
                   <div className="pt-3 border-t border-gray-100 dark:border-gray-700">

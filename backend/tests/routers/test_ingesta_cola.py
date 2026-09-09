@@ -2,6 +2,12 @@
 HU09 - Monitorear cola de procesamiento: tests de CA1 (listado paginado),
 CA2 (filtro por estado) y CA3 (detalle). No cubre /ingesta/metricas
 (HT-05 CA3), que ya tiene tests propios y no se toca en esta HU.
+
+HU31 - Historial de reprocesos: TestIntentosArchivoIngesta cubre
+GET /ingesta/cola/{id_archv}/intentos (solo el endpoint de lectura; la
+inserción real de cada intento -incluido que dos reprocesos seguidos
+generan dos filas, no una pisando a la otra- se prueba en
+tests/tasks/test_ingesta.py, contra procesar_archivo_dat de verdad).
 """
 
 import datetime as dt
@@ -11,7 +17,14 @@ from fastapi.testclient import TestClient
 
 from app.database import get_db
 from app.main import app
-from app.models import ArchivoIngesta, ConexionFTP, Dispositivo, MapeoFormato, Ubicacion
+from app.models import (
+    ArchivoIngesta,
+    ConexionFTP,
+    Dispositivo,
+    IntentoProcesamiento,
+    MapeoFormato,
+    Ubicacion,
+)
 from app.models.suscripcion import PermisoUsuarioSede
 from app.security.dependencies import get_current_user
 
@@ -307,6 +320,108 @@ class TestDetalleArchivoIngesta:
         assert client.get("/ingesta/cola/1").status_code == 403
 
 
+def crear_intento(db_session, archivo, resultado, id_usr=None, mensaje_error=None, fch_intnt=None):
+    intento = IntentoProcesamiento(
+        id_archv=archivo.id_archv, rsltd=resultado, id_usr=id_usr, mnsj_errr=mensaje_error
+    )
+    if fch_intnt is not None:
+        intento.fch_intnt = fch_intnt
+    db_session.add(intento)
+    db_session.flush()
+    return intento
+
+
+class TestIntentosArchivoIngesta:
+    """HU31: GET /ingesta/cola/{id_archv}/intentos, el historial de
+    reprocesos de un archivo."""
+
+    def test_devuelve_los_intentos_mas_reciente_primero(self, client, db_session, tecnico_lector):
+        sede, _ = tecnico_lector
+        conexion = crear_conexion(db_session, sede)
+        archivo = crear_archivo(db_session, conexion, estd="Fallido")
+        ahora = dt.datetime.now(dt.timezone.utc)
+        crear_intento(
+            db_session, archivo, "Fallido", fch_intnt=ahora - dt.timedelta(hours=2)
+        )
+        crear_intento(db_session, archivo, "Fallido", fch_intnt=ahora)
+
+        resp = client.get(f"/ingesta/cola/{archivo.id_archv}/intentos")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert len(body) == 2
+        # más reciente primero
+        assert body[0]["fch_intnt"] > body[1]["fch_intnt"]
+
+    def test_intento_automatico_expone_id_usr_null_y_usuario_nombre_null(
+        self, client, db_session, tecnico_lector
+    ):
+        sede, _ = tecnico_lector
+        conexion = crear_conexion(db_session, sede)
+        archivo = crear_archivo(db_session, conexion, estd="Fallido")
+        crear_intento(db_session, archivo, "Fallido", id_usr=None, mensaje_error="no resoluble")
+
+        resp = client.get(f"/ingesta/cola/{archivo.id_archv}/intentos")
+        body = resp.json()
+        assert len(body) == 1
+        assert body[0]["id_usr"] is None
+        assert body[0]["usuario_nombre"] is None
+        assert body[0]["rsltd"] == "Fallido"
+        assert body[0]["mnsj_errr"] == "no resoluble"
+
+    def test_intento_manual_expone_el_nombre_de_quien_reintento(
+        self, client, db_session, tecnico_lector, fabrica
+    ):
+        sede, rol = tecnico_lector
+        conexion = crear_conexion(db_session, sede)
+        archivo = crear_archivo(db_session, conexion, estd="Exitoso")
+        quien_reintento = fabrica.usuario(rol=rol)
+        crear_intento(db_session, archivo, "Exitoso", id_usr=quien_reintento.id_usr)
+
+        resp = client.get(f"/ingesta/cola/{archivo.id_archv}/intentos")
+        body = resp.json()
+        assert body[0]["id_usr"] == quien_reintento.id_usr
+        assert body[0]["usuario_nombre"] == quien_reintento.nmbr_cmplt
+
+    def test_archivo_sin_intentos_devuelve_lista_vacia(self, client, db_session, tecnico_lector):
+        sede, _ = tecnico_lector
+        conexion = crear_conexion(db_session, sede)
+        archivo = crear_archivo(db_session, conexion)
+
+        resp = client.get(f"/ingesta/cola/{archivo.id_archv}/intentos")
+        assert resp.status_code == 200
+        assert resp.json() == []
+
+    def test_archivo_inexistente_devuelve_404(self, client, tecnico_lector):
+        assert client.get("/ingesta/cola/999999/intentos").status_code == 404
+
+    def test_usuario_de_otra_sede_no_ve_los_intentos(
+        self, client, db_session, tecnico_lector, fabrica
+    ):
+        sede, _ = tecnico_lector
+        conexion = crear_conexion(db_session, sede)
+        archivo = crear_archivo(db_session, conexion, estd="Fallido")
+        crear_intento(db_session, archivo, "Fallido")
+
+        otro_rol = fabrica.rol("Administrador")
+        otra_sede = fabrica.sede()
+        otro_usuario = fabrica.usuario(rol=otro_rol)
+        agregar_permiso(db_session, otro_usuario, otra_sede, "Ingesta", "Lectura", otro_rol)
+        app.dependency_overrides[get_current_user] = lambda: usuario_jwt(
+            otro_usuario, otro_rol.nmbr, sede_id=otra_sede.id_sd
+        )
+
+        assert client.get(f"/ingesta/cola/{archivo.id_archv}/intentos").status_code == 403
+
+    def test_denegado_sin_permiso(self, client, db_session, fabrica):
+        rol = fabrica.rol("Cliente Final")
+        sede = fabrica.sede()
+        usuario = fabrica.usuario(rol=rol)
+        app.dependency_overrides[get_current_user] = lambda: usuario_jwt(
+            usuario, rol.nmbr, sede_id=sede.id_sd
+        )
+        assert client.get("/ingesta/cola/1/intentos").status_code == 403
+
+
 def crear_mapeo(db_session, dispositivo, tp_trm="H"):
     mapeo = MapeoFormato(
         id_dspstv=dispositivo.id_dspstv,
@@ -421,7 +536,12 @@ class TestRegistrosArchivoIngesta:
 def tecnico_editor(db_session, fabrica):
     """Técnico CENERIS con permiso de Edición sobre Ingesta en su sede -
     nivel que exige POST /ingesta/cola/{id}/reintentar, a diferencia de los
-    GET de este módulo que solo piden Lectura."""
+    GET de este módulo que solo piden Lectura.
+
+    Devuelve (sede, rol, usuario): usuario se agregó para HU31 -los tests
+    de reintentar necesitan su id_usr para verificar que
+    procesar_archivo_dat.delay() recibe id_usr_reintento correcto (ver
+    reintentos_encolados)."""
     rol = fabrica.rol("Técnico CENERIS")
     sede = fabrica.sede()
     usuario = fabrica.usuario(rol=rol)
@@ -429,7 +549,7 @@ def tecnico_editor(db_session, fabrica):
     app.dependency_overrides[get_current_user] = lambda: usuario_jwt(
         usuario, rol.nmbr, sede_id=sede.id_sd
     )
-    return sede, rol
+    return sede, rol, usuario
 
 
 @pytest.fixture()
@@ -455,7 +575,7 @@ class TestReintentarArchivoIngesta:
     def test_reencola_un_archivo_fallido(
         self, client, db_session, tecnico_editor, reintentos_encolados
     ):
-        sede, _ = tecnico_editor
+        sede, _, usuario = tecnico_editor
         conexion = crear_conexion(db_session, sede)
         archivo = crear_archivo(
             db_session,
@@ -471,10 +591,14 @@ class TestReintentarArchivoIngesta:
         assert body["estado"] == "En espera"
         assert body["mnsj_errr"] is None
         assert body["rgstrs_prcsds"] is None
-        assert reintentos_encolados == [{"id_archv": archivo.id_archv}]
+        # HU31: el endpoint identifica quién pidió el reintento -ver
+        # id_usr_reintento en app/tasks/ingesta.py::procesar_archivo_dat-.
+        assert reintentos_encolados == [
+            {"id_archv": archivo.id_archv, "id_usr_reintento": usuario.id_usr}
+        ]
 
     def test_archivo_no_fallido_devuelve_409(self, client, db_session, tecnico_editor):
-        sede, _ = tecnico_editor
+        sede, _, _ = tecnico_editor
         conexion = crear_conexion(db_session, sede)
         archivo = crear_archivo(db_session, conexion, estd="Exitoso")
 
@@ -487,7 +611,7 @@ class TestReintentarArchivoIngesta:
     def test_usuario_de_otra_sede_no_puede_reintentar(
         self, client, db_session, tecnico_editor, fabrica
     ):
-        sede, _ = tecnico_editor
+        sede, _, _ = tecnico_editor
         conexion = crear_conexion(db_session, sede)
         archivo = crear_archivo(db_session, conexion, estd="Fallido")
 
@@ -516,7 +640,7 @@ class TestReintentarFallidosEnCantidad:
     def test_reencola_todos_los_fallidos_de_la_sede(
         self, client, db_session, tecnico_editor, reintentos_encolados
     ):
-        sede, _ = tecnico_editor
+        sede, _, usuario = tecnico_editor
         conexion = crear_conexion(db_session, sede)
         fallido_1 = crear_archivo(db_session, conexion, nombre="H_uno.dat", estd="Fallido")
         fallido_2 = crear_archivo(db_session, conexion, nombre="H_dos.dat", estd="Fallido")
@@ -528,6 +652,11 @@ class TestReintentarFallidosEnCantidad:
 
         ids_reencolados = {llamada["id_archv"] for llamada in reintentos_encolados}
         assert ids_reencolados == {fallido_1.id_archv, fallido_2.id_archv}
+        # HU31: TODAS las llamadas llevan el usuario que pidió el reintento
+        # masivo, no solo la primera.
+        assert all(
+            llamada["id_usr_reintento"] == usuario.id_usr for llamada in reintentos_encolados
+        )
 
         db_session.refresh(fallido_1)
         db_session.refresh(fallido_2)
@@ -537,7 +666,7 @@ class TestReintentarFallidosEnCantidad:
     def test_limpia_mensaje_de_error_y_metadata_de_procesamiento(
         self, client, db_session, tecnico_editor, reintentos_encolados
     ):
-        sede, _ = tecnico_editor
+        sede, _, _ = tecnico_editor
         conexion = crear_conexion(db_session, sede)
         fallido = crear_archivo(
             db_session,
@@ -557,7 +686,7 @@ class TestReintentarFallidosEnCantidad:
     def test_no_toca_archivos_en_otros_estados(
         self, client, db_session, tecnico_editor, reintentos_encolados
     ):
-        sede, _ = tecnico_editor
+        sede, _, _ = tecnico_editor
         conexion = crear_conexion(db_session, sede)
         pendiente = crear_archivo(db_session, conexion, nombre="H_pendiente.dat", estd="Pendiente")
         exitoso = crear_archivo(db_session, conexion, nombre="H_exitoso.dat", estd="Exitoso")
@@ -582,7 +711,7 @@ class TestReintentarFallidosEnCantidad:
     def test_no_reencola_fallidos_de_otra_sede(
         self, client, db_session, tecnico_editor, reintentos_encolados, fabrica
     ):
-        sede, _ = tecnico_editor
+        sede, _, _ = tecnico_editor
         crear_archivo(db_session, crear_conexion(db_session, sede), estd="Fallido")
 
         otra_sede = fabrica.sede()

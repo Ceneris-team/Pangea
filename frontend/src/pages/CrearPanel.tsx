@@ -1,5 +1,5 @@
-import { useEffect, useState, type FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, type FormEvent } from "react";
+import { Navigate, useNavigate } from "react-router-dom";
 import { apiFetch, ApiError } from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import { ROLES } from "../config/roles";
@@ -28,6 +28,10 @@ export default function CrearPanel() {
   const navigate = useNavigate();
   const { nombreCompleto, rol, logout } = useAuth();
 
+  const [nombre, setNombre] = useState("");
+  const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState("");
+
   // HU24 (regla de rol confirmada): "YO COMO Cliente Final..." -crear un
   // panel es exclusivo de ese rol. Paneles.tsx ya oculta el botón que
   // trae hasta acá, pero alguien puede llegar por URL directa/favorito;
@@ -35,15 +39,15 @@ export default function CrearPanel() {
   // el formulario completo a quien nunca podría guardarlo. No hay un
   // ProtectedRoute con rolesPermitidos para esto porque ese mecanismo
   // redirige a /login -acá el destino correcto es /paneles, no login-.
-  useEffect(() => {
-    if (rol !== null && rol !== ROLES.CLIENTE_FINAL) {
-      navigate("/paneles", { replace: true });
-    }
-  }, [rol, navigate]);
-
-  const [nombre, setNombre] = useState("");
-  const [guardando, setGuardando] = useState(false);
-  const [error, setError] = useState("");
+  //
+  // Guard en tiempo de RENDER, no useEffect: un efecto corre DESPUÉS del
+  // primer render, así que el JSX del formulario llegaba a montarse en
+  // el DOM -aunque fuera un instante- antes de que el efecto disparara el
+  // redirect. Devolver <Navigate> acá corta el render ANTES de llegar al
+  // return del formulario, mismo patrón que ya usa ProtectedRoute.tsx.
+  if (rol !== null && rol !== ROLES.CLIENTE_FINAL) {
+    return <Navigate to="/paneles" replace />;
+  }
 
   /** CA4: descarta el formulario y vuelve al listado. No llama al backend. */
   function handleCancelar() {
