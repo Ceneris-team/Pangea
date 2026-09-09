@@ -969,3 +969,45 @@ class AlarmaCreada(BaseModel):
 
     mensaje: str = "Alarma creada correctamente"
     alarma: AlarmaListItem
+
+
+# ---------------------------------------------------------------------------
+# HU30 - Configurar notificaciones
+# ---------------------------------------------------------------------------
+
+
+class DestinatarioNotificacion(BaseModel):
+    """Un destinatario actual del canal de correo (CA1: 'los destinatarios
+    actuales'). En v1.0 el único destinatario posible es el correo de la
+    cuenta del usuario -los correos adicionales de HU35 todavía no
+    existen-, pero se modela como lista porque dstntr_alrm ya admite más
+    de una fila por alarma."""
+
+    crr: str
+
+
+class NotificacionesAlarma(BaseModel):
+    """CA1: panel de configuración de notificaciones de una alarma.
+
+    'canales disponibles' es fijo en v1.0 (solo 'email', ver conversación
+    de la HU); canal_email_activo y destinatarios reflejan lo que ya hay
+    guardado en dstntr_alrm para esa alarma."""
+
+    id_alrm: int
+    nmbr: str
+    canales_disponibles: list[str] = ["email"]
+    canal_email_activo: bool
+    destinatarios: list[DestinatarioNotificacion]
+
+
+class NotificacionesGuardar(BaseModel):
+    """CA2/CA4: activar o desactivar el canal de correo. El único
+    destinatario que HU30 gestiona es el correo de la cuenta -agregar
+    otros correos es HU35-."""
+
+    canal_email_activo: bool
+
+
+class NotificacionesGuardadas(BaseModel):
+    mensaje: str = "Notificaciones configuradas correctamente"
+    notificaciones: NotificacionesAlarma

@@ -20,6 +20,19 @@ interface ListadoPaginado {
   items: AlarmaListItem[];
 }
 
+// HU30: panel de configuración de notificaciones de una alarma.
+interface DestinatarioNotificacion {
+  crr: string;
+}
+
+interface NotificacionesAlarma {
+  id_alrm: number;
+  nmbr: string;
+  canales_disponibles: string[];
+  canal_email_activo: boolean;
+  destinatarios: DestinatarioNotificacion[];
+}
+
 const POR_PAGINA = 10;
 
 function useDebouncedValue<T>(value: T, delayMs: number): T {
@@ -62,6 +75,62 @@ export default function Alarmas() {
   const [data, setData] = useState<ListadoPaginado | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // HU30: panel de configuración de notificaciones, abierto sobre una
+  // alarma del listado.
+  const [alarmaEnPanel, setAlarmaEnPanel] = useState<{ id_alrm: number; nmbr: string } | null>(
+    null
+  );
+  const [notificaciones, setNotificaciones] = useState<NotificacionesAlarma | null>(null);
+  const [cargandoPanel, setCargandoPanel] = useState(false);
+  const [guardandoPanel, setGuardandoPanel] = useState(false);
+  const [errorPanel, setErrorPanel] = useState("");
+  const [mensajePanel, setMensajePanel] = useState("");
+
+  function abrirPanelNotificaciones(alarma: { id_alrm: number; nmbr: string }) {
+    setAlarmaEnPanel(alarma);
+    setNotificaciones(null);
+    setErrorPanel("");
+    setMensajePanel("");
+    setCargandoPanel(true);
+
+    apiFetch<NotificacionesAlarma>(`/alarmas/${alarma.id_alrm}/notificaciones`)
+      .then(setNotificaciones)
+      .catch((err) =>
+        setErrorPanel(
+          err instanceof ApiError ? err.message : "No se pudo cargar la configuración"
+        )
+      )
+      .finally(() => setCargandoPanel(false));
+  }
+
+  function cerrarPanelNotificaciones() {
+    setAlarmaEnPanel(null);
+    setNotificaciones(null);
+  }
+
+  // CA2/CA4: activar o desactivar el canal de correo y GUARDAR.
+  async function guardarNotificaciones(canalEmailActivo: boolean) {
+    if (!alarmaEnPanel) return;
+
+    setGuardandoPanel(true);
+    setErrorPanel("");
+    setMensajePanel("");
+    try {
+      const resp = await apiFetch<{ mensaje: string; notificaciones: NotificacionesAlarma }>(
+        `/alarmas/${alarmaEnPanel.id_alrm}/notificaciones`,
+        { method: "PUT", body: { canal_email_activo: canalEmailActivo } }
+      );
+      setNotificaciones(resp.notificaciones);
+      setMensajePanel(resp.mensaje);
+    } catch (err) {
+      setErrorPanel(
+        err instanceof ApiError ? err.message : "No se pudo guardar la configuración"
+      );
+    } finally {
+      setGuardandoPanel(false);
+    }
+  }
 
   useEffect(() => {
     setPagina(1);
@@ -278,15 +347,15 @@ export default function Alarmas() {
                             </span>
                           </td>
                           {/* Editar/eliminar/activar-desactivar son HUs
-                              aparte (HU28+): acá solo se deja el punto de
-                              entrada visual, sin funcionalidad todavía. */}
+                              aparte (HU28+); "Configurar notificaciones"
+                              es HU30. */}
                           <td className="px-6 py-4 text-right whitespace-nowrap">
-                            <span
-                              title="Disponible próximamente"
-                              className="inline-flex items-center justify-center px-3 py-1.5 text-sm font-medium text-gray-400 dark:text-gray-500 bg-transparent border border-black/10 dark:border-white/10 rounded-lg cursor-not-allowed"
+                            <button
+                              onClick={() => abrirPanelNotificaciones(a)}
+                              className="inline-flex items-center justify-center px-3 py-1.5 text-sm font-medium text-[#5a7000] dark:text-[#ccff00] bg-[#ccff00]/10 hover:bg-[#ccff00]/20 border border-[#ccff00]/30 rounded-lg transition-colors"
                             >
-                              Gestionar
-                            </span>
+                              Configurar notificaciones
+                            </button>
                           </td>
                         </tr>
                       ))}
@@ -324,6 +393,86 @@ export default function Alarmas() {
           </main>
         </div>
       </div>
+
+      {/* HU30 CA1: panel de configuración de notificaciones de una alarma. */}
+      {alarmaEnPanel && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl shadow-xl border border-black/10 dark:border-white/10">
+            <div className="p-6 border-b border-gray-100 dark:border-gray-700">
+              <h2 className="text-lg font-bold text-gray-900 dark:text-white">
+                Configurar notificaciones
+              </h2>
+              <p className="text-sm text-gray-600 dark:text-gray-300">{alarmaEnPanel.nmbr}</p>
+            </div>
+
+            <div className="p-6 space-y-4">
+              {cargandoPanel && (
+                <div className="flex justify-center items-center gap-2 text-sm text-gray-600 dark:text-gray-300 py-4">
+                  <div className="w-4 h-4 rounded-full bg-[#ccff00] animate-bounce"></div>
+                  <span>Cargando configuración...</span>
+                </div>
+              )}
+
+              {errorPanel && (
+                <div className="p-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm rounded-lg">
+                  {errorPanel}
+                </div>
+              )}
+
+              {mensajePanel && (
+                <div className="p-3 bg-[#ccff00]/20 border border-[#ccff00]/40 text-[#5a7000] dark:text-[#ccff00] text-sm rounded-lg">
+                  {mensajePanel}
+                </div>
+              )}
+
+              {notificaciones && (
+                <div className="rounded-xl border border-black/10 dark:border-white/10 p-4 flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                      Correo electrónico
+                    </p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      {notificaciones.canal_email_activo && notificaciones.destinatarios.length > 0
+                        ? `Se notifica a ${notificaciones.destinatarios.map((d) => d.crr).join(", ")}`
+                        : "No se enviarán notificaciones por este canal."}
+                    </p>
+                  </div>
+
+                  {/* CA2/CA4: activar o desactivar el canal de correo. */}
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={notificaciones.canal_email_activo}
+                    disabled={guardandoPanel}
+                    onClick={() => guardarNotificaciones(!notificaciones.canal_email_activo)}
+                    className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors disabled:opacity-50 ${
+                      notificaciones.canal_email_activo
+                        ? "bg-[#ccff00]"
+                        : "bg-black/20 dark:bg-white/20"
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                        notificaciones.canal_email_activo ? "translate-x-6" : "translate-x-1"
+                      }`}
+                    />
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div className="p-6 border-t border-black/10 dark:border-white/10 flex justify-end">
+              <button
+                type="button"
+                onClick={cerrarPanelNotificaciones}
+                className="px-4 py-2 text-sm font-medium rounded-xl border border-black/20 dark:border-white/20 text-gray-700 dark:text-gray-200 hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
