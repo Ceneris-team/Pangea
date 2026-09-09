@@ -8,6 +8,7 @@ from app.ingesta.ftp_receptor import descargar_archivo_dat, listar_archivos_dat
 from app.models.archivo_ingesta import ArchivoIngesta
 from app.models.mapeo_dispositivo import Parametro
 from app.models.ubicacion_conexion import ConexionFTP
+from app.services.alarmas.motor import evaluar_alarmas
 from app.services.ingesta.estandarizador import estandarizar_filas
 from app.services.ingesta.mapeo import (
     MapeoNoEncontradoError,
@@ -147,9 +148,7 @@ def _publicar_eventos_mapa(db, resultado_persistencia) -> None:
         for nombre, (valor, fecha_hora) in ultimos.items()
     ]
     publicar_lecturas(eventos)
-    logger.info(
-        "HU17: publicados %s evento(s) de mapa para ubicacion=%s", len(eventos), id_ubccn
-    )
+    logger.info("HU17: publicados %s evento(s) de mapa para ubicacion=%s", len(eventos), id_ubccn)
 
 
 @celery_app.task(
@@ -262,6 +261,14 @@ def procesar_archivo_dat(self, id_archv: int) -> dict:
         # guardados- y solo se pierde la actualización en vivo, que se
         # recupera sola en cuanto el usuario recargue el mapa.
         _publicar_eventos_mapa(db, resultado_persistencia)
+
+        # HU29 CA3/CA4: evalúa las alarmas de esta ubicación contra los
+        # últimos valores de este lote, YA persistidos y confirmados
+        # (mismo motivo que _publicar_eventos_mapa arriba). Nunca lanza:
+        # ver app/services/alarmas/motor.py.
+        evaluar_alarmas(
+            db, resultado_persistencia.id_ubccn, resultado_persistencia.ultimos_por_parametro
+        )
 
         logger.info(
             "archv_ingst id=%s procesado: %s guardadas, %s sin valor, %s con error de validación",

@@ -531,3 +531,74 @@ class TestHU30AislamientoYPermisos:
 
         resp = client.put(f"/alarmas/{id_alrm}/notificaciones", json={"canal_email_activo": True})
         assert resp.status_code == 404
+
+
+class TestHU29CA5EditarCondicion:
+    """CA5: modifico el operador o el valor umbral y selecciono
+    ACTUALIZAR -> el sistema guarda los nuevos valores y muestra
+    "Condiciones actualizadas correctamente". HU29 fija "únicamente una
+    condición de disparo en v1.0": ACTUALIZAR reemplaza, no agrega."""
+
+    def test_ver_condicion_devuelve_la_actual(self, client, escenario):
+        id_alrm = crear_alarma_de(client, escenario)
+
+        resp = client.get(f"/alarmas/{id_alrm}/condicion")
+        assert resp.status_code == 200
+        cuerpo = resp.json()
+        assert cuerpo["oprdr"] == ">"
+        assert cuerpo["vlr_umbrl"] == 3.5
+        assert cuerpo["unidad"] == "m"
+
+    def test_ver_condicion_de_alarma_sin_condicion_devuelve_null(self, client, escenario):
+        id_alrm = crear_alarma_de(client, escenario, condiciones=[])
+
+        resp = client.get(f"/alarmas/{id_alrm}/condicion")
+        assert resp.status_code == 200
+        assert resp.json()["oprdr"] is None
+        assert resp.json()["vlr_umbrl"] is None
+
+    def test_actualizar_reemplaza_la_condicion_existente(self, client, db_session, escenario):
+        id_alrm = crear_alarma_de(client, escenario)
+
+        resp = client.put(f"/alarmas/{id_alrm}/condicion", json={"oprdr": "<=", "vlr_umbrl": 1.2})
+        assert resp.status_code == 200
+        cuerpo = resp.json()
+        assert cuerpo["mensaje"] == "Condiciones actualizadas correctamente"
+        assert cuerpo["alarma"]["condicion"] == "<= 1.2 m"
+
+        condiciones = (
+            db_session.query(CondicionAlarma).filter(CondicionAlarma.id_alrm == id_alrm).all()
+        )
+        assert len(condiciones) == 1
+        assert condiciones[0].oprdr == "<="
+        assert float(condiciones[0].vlr_umbrl) == 1.2
+
+    def test_actualizar_sin_condicion_previa_la_crea(self, client, db_session, escenario):
+        id_alrm = crear_alarma_de(client, escenario, condiciones=[])
+
+        resp = client.put(f"/alarmas/{id_alrm}/condicion", json={"oprdr": ">", "vlr_umbrl": 5})
+        assert resp.status_code == 200
+
+        condiciones = (
+            db_session.query(CondicionAlarma).filter(CondicionAlarma.id_alrm == id_alrm).all()
+        )
+        assert len(condiciones) == 1
+
+    def test_operador_invalido_es_rechazado(self, client, escenario):
+        id_alrm = crear_alarma_de(client, escenario)
+
+        resp = client.put(f"/alarmas/{id_alrm}/condicion", json={"oprdr": "!=", "vlr_umbrl": 1})
+        assert resp.status_code == 422
+
+    def test_alarma_ajena_no_se_puede_editar(self, client, db_session, fabrica, escenario):
+        id_alrm = crear_alarma_de(client, escenario)
+
+        rol = escenario["rol"]
+        otro = fabrica.usuario(rol=rol)
+        agregar_permiso(db_session, otro, escenario["sede"], "Alarmas", "Edición", rol)
+        app.dependency_overrides[get_current_user] = lambda: usuario_jwt(
+            otro, rol.nmbr, sede_id=escenario["sede"].id_sd
+        )
+
+        resp = client.put(f"/alarmas/{id_alrm}/condicion", json={"oprdr": ">", "vlr_umbrl": 1})
+        assert resp.status_code == 404

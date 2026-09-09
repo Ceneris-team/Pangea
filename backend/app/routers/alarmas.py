@@ -89,6 +89,9 @@ from app.schemas import (
     AlarmaCreada,
     AlarmaCrear,
     AlarmaListItem,
+    CondicionAlarmaActualizada,
+    CondicionAlarmaActualizar,
+    CondicionAlarmaDetalle,
     DestinatarioNotificacion,
     NotificacionesAlarma,
     NotificacionesGuardadas,
@@ -243,6 +246,78 @@ def _alarma_del_usuario(db: Session, id_alrm: int, id_usr: int) -> Alarma:
     if alarma is None:
         raise HTTPException(status_code=404, detail="Alarma no encontrada")
     return alarma
+
+
+def _alarma_como_item(
+    db: Session, alarma: Alarma, condicion: CondicionAlarma | None
+) -> AlarmaListItem:
+    """Misma forma que el listado de HU27 (AlarmaListItem): la respuesta
+    de actualizar_condicion no necesita un tipo propio."""
+    parametro = db.get(Parametro, alarma.id_prmtr)
+    return AlarmaListItem(
+        id_alrm=alarma.id_alrm,
+        nmbr=alarma.nmbr,
+        parametro_nombre=parametro.nmbr if parametro else "",
+        condicion=_formatear_condicion(condicion, parametro.undd if parametro else ""),
+        estd=alarma.estd,
+    )
+
+
+@router.get("/{id_alrm}/condicion", response_model=CondicionAlarmaDetalle)
+def ver_condicion(
+    id_alrm: int,
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(require_permiso("Alarmas", LECTURA)),
+):
+    """HU29 CA5: precarga el formulario de edición con la condición
+    actual de la alarma (o con los campos vacíos si todavía no tiene)."""
+    alarma = _alarma_del_usuario(db, id_alrm, int(usuario["sub"]))
+    parametro = db.get(Parametro, alarma.id_prmtr)
+    condicion = (
+        db.query(CondicionAlarma)
+        .filter(CondicionAlarma.id_alrm == alarma.id_alrm)
+        .order_by(CondicionAlarma.id_cndcn)
+        .first()
+    )
+    return CondicionAlarmaDetalle(
+        id_alrm=alarma.id_alrm,
+        nmbr=alarma.nmbr,
+        unidad=parametro.undd if parametro else "",
+        oprdr=condicion.oprdr if condicion else None,
+        vlr_umbrl=float(condicion.vlr_umbrl) if condicion else None,
+    )
+
+
+@router.put("/{id_alrm}/condicion", response_model=CondicionAlarmaActualizada)
+def actualizar_condicion(
+    id_alrm: int,
+    body: CondicionAlarmaActualizar,
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(require_permiso("Alarmas", EDICION)),
+):
+    """HU29 CA5: 'modifico el operador o el valor umbral y selecciono
+    ACTUALIZAR' -> guarda los nuevos valores y muestra "Condiciones
+    actualizadas correctamente".
+
+    Reemplaza la condición existente en vez de agregar una nueva: 'Una
+    alarma puede tener únicamente una condición de disparo en v1.0'
+    (detalle de conversación de HU29)."""
+    alarma = _alarma_del_usuario(db, id_alrm, int(usuario["sub"]))
+
+    condiciones_previas = (
+        db.query(CondicionAlarma).filter(CondicionAlarma.id_alrm == alarma.id_alrm).all()
+    )
+    for condicion_previa in condiciones_previas:
+        db.delete(condicion_previa)
+    db.flush()
+
+    nueva_condicion = CondicionAlarma(
+        id_alrm=alarma.id_alrm, oprdr=body.oprdr, vlr_umbrl=body.vlr_umbrl
+    )
+    db.add(nueva_condicion)
+    db.commit()
+
+    return CondicionAlarmaActualizada(alarma=_alarma_como_item(db, alarma, nueva_condicion))
 
 
 def usuario_correo(db: Session, usuario: dict) -> str:

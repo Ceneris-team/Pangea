@@ -972,6 +972,45 @@ class AlarmaCreada(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# HU29 - Establecer condiciones de la alarma (CA5: editar)
+# ---------------------------------------------------------------------------
+
+
+class CondicionAlarmaDetalle(BaseModel):
+    """Precarga el formulario de edición de CA5: la condición actual de
+    la alarma, o None si todavía no tiene ninguna configurada."""
+
+    id_alrm: int
+    nmbr: str
+    unidad: str
+    oprdr: str | None
+    vlr_umbrl: float | None
+
+
+class CondicionAlarmaActualizar(BaseModel):
+    """CA5: 'modifico el operador o el valor umbral y selecciono
+    ACTUALIZAR'. Misma validación de operador que CondicionAlarmaCrear;
+    reemplaza la condición de la alarma en vez de agregar una nueva -HU29
+    fija 'únicamente una condición de disparo en v1.0'-."""
+
+    oprdr: str
+    vlr_umbrl: float
+
+    @field_validator("oprdr")
+    @classmethod
+    def _operador_valido(cls, valor: str) -> str:
+        valor = valor.strip()
+        if valor not in OPERADORES_ALARMA:
+            raise ValueError(f"El operador debe ser uno de: {', '.join(OPERADORES_ALARMA)}")
+        return valor
+
+
+class CondicionAlarmaActualizada(BaseModel):
+    mensaje: str = "Condiciones actualizadas correctamente"
+    alarma: AlarmaListItem
+
+
+# ---------------------------------------------------------------------------
 # HU30 - Configurar notificaciones
 # ---------------------------------------------------------------------------
 
