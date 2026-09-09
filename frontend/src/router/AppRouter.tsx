@@ -28,6 +28,7 @@ import ColaIngesta from "../pages/ColaIngesta";
 import Paneles from "../pages/Paneles";
 import DetallePanel from "../pages/DetallePanel";
 import CrearPanel from "../pages/CrearPanel";
+import EditarPanel from "../pages/EditarPanel";
 
 // HU06: "Solo los roles Técnico CENERIS y Administrador tienen acceso a
 // este módulo." El backend lo exige igual vía require_permiso('Ingesta').
@@ -285,6 +286,17 @@ export default function AppRouter() {
             element={
               <ProtectedRoute>
                 <CrearPanel />
+              </ProtectedRoute>
+            }
+          />
+          {/* HU25 CA1/CA2: editar panel. Va antes de /paneles/:id por el
+              mismo motivo que /ubicaciones/:id/editar: el segmento
+              literal "editar" tiene que ganarle al parámetro :id. */}
+          <Route
+            path="/paneles/:id/editar"
+            element={
+              <ProtectedRoute>
+                <EditarPanel />
               </ProtectedRoute>
             }
           />

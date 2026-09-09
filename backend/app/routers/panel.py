@@ -33,6 +33,21 @@ del de permiso de módulo -ver ROL_CREADOR_DE_PANELES en crear_panel-:
 que otro rol tenga Edición sobre "Tableros" no lo habilita a crear
 paneles, son cosas independientes.
 
+HU 25 - Editar / eliminar panel
+
+CA1 (formulario de edición con el nombre precargado) es de frontend: el
+propio GET /paneles/{id_pnl} de HU23 ya trae ese dato. CA2: PUT edita el
+nombre, mismo chequeo de unicidad por usuario que HU24 pero excluyendo
+el propio panel. CA3 (diálogo de confirmación) es de frontend. CA4:
+DELETE borra el panel de forma PERMANENTE, junto con sus
+PanelUbicacion/Widget asociados -que no tienen ON DELETE CASCADE en el
+esquema real, así que se borran a mano en el orden correcto antes que
+el Panel, ver eliminar_panel-. Los datos de telemetría no se tocan.
+
+Mismo control de acceso que HU24 en ambos endpoints: rol Cliente Final
++ dueño del panel (_obtener_panel_propio, reusado también por el GET de
+HU23).
+
 Módulo de permiso: "Tableros" (HT-03), el mismo que ya usan /mapa-cliente
 (HU17) y /mediciones (HU13).
 """
@@ -43,8 +58,15 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import Panel
-from app.schemas import PanelCrear, PanelCreado, PanelDetalle, PanelListItem
+from app.models import Panel, PanelUbicacion, Widget
+from app.schemas import (
+    PanelActualizado,
+    PanelActualizar,
+    PanelCrear,
+    PanelCreado,
+    PanelDetalle,
+    PanelListItem,
+)
 from app.security.permisos import EDICION, LECTURA, require_permiso
 
 router = APIRouter(prefix="/paneles", tags=["Paneles"])
@@ -79,6 +101,25 @@ def listar_paneles(
     return {"items": items}
 
 
+def _obtener_panel_propio(db: Session, id_pnl: int, id_usr: int) -> Panel:
+    """El patrón "no es mío" para un Panel: siempre 404, nunca 403.
+
+    Los paneles no se comparten entre usuarios en v1.0 (HU23), así que
+    el panel de otro usuario responde igual que uno inexistente -no hay
+    que confirmarle a quien pregunta que el recurso existe pero no es
+    suyo-, mismo criterio que _verificar_acceso_ubicacion en HU21.
+
+    Compartido por GET/{id_pnl} (HU23 CA2), PUT/{id_pnl} (HU25 CA2) y
+    DELETE/{id_pnl} (HU25 CA4): las tres operan sobre "el panel de este
+    usuario con este id", así que resuelven el mismo filtro una sola vez
+    acá en vez de repetir el .query(...).filter(...) en cada endpoint.
+    """
+    panel = db.query(Panel).filter(Panel.id_pnl == id_pnl, Panel.id_usr == id_usr).first()
+    if panel is None:
+        raise HTTPException(status_code=404, detail="Panel no encontrado")
+    return panel
+
+
 @router.get("/{id_pnl}", response_model=PanelDetalle)
 def obtener_panel(
     id_pnl: int,
@@ -89,17 +130,10 @@ def obtener_panel(
 
     El contenido con ubicaciones y widgets asociados llega en HU26/HU34;
     por ahora este endpoint solo confirma que el panel existe y es del
-    usuario autenticado. Los paneles no se comparten entre usuarios en
-    v1.0, así que el panel de otro usuario responde 404 -no 403-, igual
-    que _verificar_acceso_ubicacion en HU21: no hay que confirmarle a
-    quien pregunta que el recurso existe pero no es suyo.
+    usuario autenticado.
     """
     id_usr = int(usuario["sub"])
-    panel = (
-        db.query(Panel).filter(Panel.id_pnl == id_pnl, Panel.id_usr == id_usr).first()
-    )
-    if panel is None:
-        raise HTTPException(status_code=404, detail="Panel no encontrado")
+    panel = _obtener_panel_propio(db, id_pnl, id_usr)
 
     return PanelDetalle.model_validate(panel)
 
@@ -183,3 +217,104 @@ def crear_panel(
         "mensaje": "Panel creado correctamente",
         "panel": PanelCreado.model_validate(panel),
     }
+
+
+@router.put("/{id_pnl}")
+def actualizar_panel(
+    id_pnl: int,
+    body: PanelActualizar,
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(require_permiso("Tableros", EDICION)),
+):
+    """HU25 CA1/CA2: edita el nombre de un panel existente y devuelve 200
+    con "Panel actualizado correctamente", mismo patrón de respuesta que
+    crear_panel/actualizar_ubicacion ({"mensaje": ..., <recurso>: ...}).
+
+    Mismo control de acceso que crear_panel: rol Cliente Final (HU25
+    "reusa" la regla de HU24, no es un permiso nuevo) + el panel tiene
+    que ser del usuario autenticado (_obtener_panel_propio, 404 si no).
+    El chequeo de rol va primero, antes de siquiera buscar el panel: un
+    Administrador no debería enterarse ni de si el id existe.
+
+    El nombre se valida único POR USUARIO, EXCLUYENDO el propio panel
+    -guardar sin cambiar el nombre, o cambiarlo por otro texto, no puede
+    chocar consigo mismo-, mismo criterio que actualizar_ubicacion.
+    """
+    if usuario.get("rol") != ROL_CREADOR_DE_PANELES:
+        raise HTTPException(
+            status_code=403, detail=f"Solo {ROL_CREADOR_DE_PANELES} puede editar paneles"
+        )
+
+    id_usr = int(usuario["sub"])
+    panel = _obtener_panel_propio(db, id_pnl, id_usr)
+
+    duplicado = (
+        db.query(Panel)
+        .filter(
+            Panel.id_usr == id_usr,
+            func.lower(Panel.nmbr) == body.nmbr.lower(),
+            Panel.id_pnl != id_pnl,
+        )
+        .first()
+    )
+    if duplicado is not None:
+        raise HTTPException(status_code=409, detail=MSG_NOMBRE_DUPLICADO)
+
+    panel.nmbr = body.nmbr
+
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=MSG_NOMBRE_DUPLICADO)
+    db.refresh(panel)
+
+    return {
+        "mensaje": "Panel actualizado correctamente",
+        "panel": PanelActualizado.model_validate(panel),
+    }
+
+
+@router.delete("/{id_pnl}")
+def eliminar_panel(
+    id_pnl: int,
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(require_permiso("Tableros", EDICION)),
+):
+    """HU25 CA3/CA4: elimina PERMANENTEMENTE un panel y todo su
+    contenido. El mensaje de confirmación (CA3) y el diálogo en sí son
+    de frontend; este endpoint es el "CONFIRMAR" de CA4.
+
+    Mismo control de acceso que actualizar_panel: rol Cliente Final +
+    dueño del panel (_obtener_panel_propio, 404 si no es suyo).
+
+    BORRADO EN CASCADA EXPLÍCITO: las FK de pnl_ubccn.id_pnl y
+    wdgt.id_pnl NO tienen ON DELETE CASCADE a nivel de base de datos
+    (verificado contra el esquema real, no asumido -ver
+    information_schema.referential_constraints, delete_rule=NO ACTION
+    en ambas-), así que un DELETE del Panel con hijos todavía
+    referenciándolo reventaría con IntegrityError. Por eso PanelUbicacion
+    y Widget se borran acá antes que el Panel, en ese orden (Widget
+    también depende de id_ubccn/id_prmtr, pero no de PanelUbicacion, así
+    que el orden entre esos dos no importa entre sí -solo que ambos
+    vayan antes que Panel).
+
+    Los datos de TELEMETRÍA no se tocan (HU25, "Detalles de la
+    conversación"): esto borra únicamente la configuración de
+    visualización (qué ubicaciones/widgets arma ESTE panel), nunca las
+    filas de tlmtr que esos widgets simplemente consultaban.
+    """
+    if usuario.get("rol") != ROL_CREADOR_DE_PANELES:
+        raise HTTPException(
+            status_code=403, detail=f"Solo {ROL_CREADOR_DE_PANELES} puede eliminar paneles"
+        )
+
+    id_usr = int(usuario["sub"])
+    panel = _obtener_panel_propio(db, id_pnl, id_usr)
+
+    db.query(Widget).filter(Widget.id_pnl == id_pnl).delete()
+    db.query(PanelUbicacion).filter(PanelUbicacion.id_pnl == id_pnl).delete()
+    db.delete(panel)
+    db.commit()
+
+    return {"mensaje": "Panel eliminado correctamente"}

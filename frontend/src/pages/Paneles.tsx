@@ -5,6 +5,7 @@ import { useAuth } from "../context/AuthContext";
 import { ROLES } from "../config/roles";
 import Sidebar from "../components/layout/Sidebar";
 import Topbar from "../components/layout/Topbar";
+import ConfirmarEliminacionModal from "../components/ConfirmarEliminacionModal";
 
 interface PanelListItem {
   id_pnl: number;
@@ -16,12 +17,12 @@ interface ListadoPaneles {
   items: PanelListItem[];
 }
 
-// HU24: "YO COMO Cliente Final..." -crear paneles es exclusivo de ese rol.
-// El backend ya lo exige (require_permiso EDICION + chequeo de rol en
-// routers/panel.py::crear_panel, 403 para cualquier otro); esto solo evita
-// mostrar un botón que terminaría en 403, mismo patrón que
+// HU24/HU25: "YO COMO Cliente Final..." -crear, editar y eliminar paneles
+// es exclusivo de ese rol. El backend ya lo exige (require_permiso EDICION
+// + chequeo de rol en routers/panel.py, 403 para cualquier otro); esto
+// solo evita mostrar acciones que terminarían en 403, mismo patrón que
 // ROLES_PUEDEN_AGREGAR en Ubicaciones.tsx.
-const ROLES_PUEDEN_CREAR: readonly string[] = [ROLES.CLIENTE_FINAL];
+const ROLES_PUEDEN_GESTIONAR: readonly string[] = [ROLES.CLIENTE_FINAL];
 
 function useDebouncedValue<T>(value: T, delayMs: number): T {
   const [debounced, setDebounced] = useState(value);
@@ -65,34 +66,56 @@ export default function Paneles() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelado = false;
+  // Extraída como función nombrada (no solo dentro del useEffect) para
+  // poder recargar el listado después de eliminar un panel, mismo patrón
+  // que cargarDispositivos en Dispositivos.tsx.
+  function cargarPaneles() {
     setLoading(true);
     setError(null);
 
     apiFetch<ListadoPaneles>("/paneles", {
       params: { busqueda: busqueda || undefined },
     })
-      .then((res) => {
-        if (!cancelado) setData(res);
-      })
+      .then(setData)
       .catch((err) => {
-        if (cancelado) return;
         setError(err instanceof ApiError ? err.message : "No se pudo cargar el listado");
       })
-      .finally(() => {
-        if (!cancelado) setLoading(false);
-      });
+      .finally(() => setLoading(false));
+  }
 
-    return () => {
-      cancelado = true;
-    };
-  }, [busqueda]);
+  useEffect(cargarPaneles, [busqueda]);
 
   // CA1: "si el usuario no tiene paneles creados" se refiere a que no
   // existe NINGUNO, no a que la búsqueda no encontró nada -por eso el
   // mensaje con el botón "Crear panel" solo aplica sin filtro activo.
   const sinPanelesCreados = !loading && !busqueda && data?.items.length === 0;
+
+  // HU25 CA3/CA4: mismo patrón que Dispositivos.tsx (desactivar/reactivar)
+  // -el item pendiente de confirmar en un state, el id en progreso en
+  // otro, un handler async que llama al backend y recarga el listado-.
+  const [panelAEliminar, setPanelAEliminar] = useState<PanelListItem | null>(null);
+  const [eliminandoId, setEliminandoId] = useState<number | null>(null);
+  const [errorEliminar, setErrorEliminar] = useState<string | null>(null);
+
+  /** HU25 CA4: elimina PERMANENTEMENTE el panel (no hay soft-delete, a
+   *  diferencia de Dispositivos.tsx) y refresca el listado. */
+  async function confirmarEliminarPanel() {
+    if (!panelAEliminar) return;
+    setEliminandoId(panelAEliminar.id_pnl);
+    setErrorEliminar(null);
+    try {
+      await apiFetch<{ mensaje: string }>(`/paneles/${panelAEliminar.id_pnl}`, {
+        method: "DELETE",
+      });
+      setPanelAEliminar(null);
+      setMensajeExito("Panel eliminado correctamente");
+      cargarPaneles();
+    } catch (err) {
+      setErrorEliminar(err instanceof ApiError ? err.message : "No se pudo eliminar el panel");
+    } finally {
+      setEliminandoId(null);
+    }
+  }
 
   return (
     <div className="font-sans">
@@ -113,7 +136,7 @@ export default function Paneles() {
                 </p>
               </div>
 
-              {ROLES_PUEDEN_CREAR.includes(rol ?? "") && (
+              {ROLES_PUEDEN_GESTIONAR.includes(rol ?? "") && (
                 <div className="flex gap-3">
                   <button
                     onClick={() => navigate("/paneles/nuevo")}
@@ -170,10 +193,16 @@ export default function Paneles() {
                 </div>
               )}
 
+              {errorEliminar && (
+                <div className="p-4 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm border-b border-red-200 dark:border-red-800/30">
+                  {errorEliminar}
+                </div>
+              )}
+
               {sinPanelesCreados ? (
                 <div className="flex flex-col items-center justify-center gap-4 py-16 px-6 text-center">
                   <p className="text-gray-600 dark:text-gray-300">Aún no tienes paneles creados</p>
-                  {ROLES_PUEDEN_CREAR.includes(rol ?? "") && (
+                  {ROLES_PUEDEN_GESTIONAR.includes(rol ?? "") && (
                     <button
                       onClick={() => navigate("/paneles/nuevo")}
                       className="inline-flex items-center px-4 py-2 text-sm font-bold rounded-xl bg-[#ccff00] text-[#1a202c] hover:bg-[#b8e600] transition-colors"
@@ -236,6 +265,24 @@ export default function Paneles() {
                                 >
                                   Abrir
                                 </Link>
+                                {ROLES_PUEDEN_GESTIONAR.includes(rol ?? "") && (
+                                  <>
+                                    {/* HU25 CA1: abre el formulario de edición con el nombre precargado. */}
+                                    <Link
+                                      to={`/paneles/${p.id_pnl}/editar`}
+                                      className="inline-flex items-center justify-center px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-200 bg-transparent border border-black/20 dark:border-white/20 rounded-lg hover:bg-black/10 dark:hover:bg-white/10 hover:text-gray-900 dark:hover:text-white transition-all"
+                                    >
+                                      Editar
+                                    </Link>
+                                    {/* HU25 CA3: abre el diálogo de confirmación, no elimina directo. */}
+                                    <button
+                                      onClick={() => setPanelAEliminar(p)}
+                                      className="inline-flex items-center justify-center px-3 py-1.5 text-sm font-medium text-red-600 dark:text-red-400 bg-transparent border border-red-200 dark:border-red-800/40 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-all"
+                                    >
+                                      Eliminar
+                                    </button>
+                                  </>
+                                )}
                               </div>
                             </td>
                           </tr>
@@ -248,6 +295,20 @@ export default function Paneles() {
           </main>
         </div>
       </div>
+
+      {/* HU25 CA3/CA4: "muestra un mensaje de confirmación preguntando si
+          desea eliminar el panel y todo su contenido" -la eliminación es
+          permanente e irreversible (DETALLES DE LA CONVERSACIÓN), así que
+          variante="peligro" (default) es la correcta acá. */}
+      {panelAEliminar && (
+        <ConfirmarEliminacionModal
+          titulo={`Eliminar panel '${panelAEliminar.nmbr}'`}
+          mensaje="Esta acción eliminará el panel junto con todas sus ubicaciones y widgets asociados. Los datos de telemetría no se ven afectados. Esta acción no se puede deshacer."
+          confirmando={eliminandoId === panelAEliminar.id_pnl}
+          onConfirmar={confirmarEliminarPanel}
+          onCancelar={() => setPanelAEliminar(null)}
+        />
+      )}
     </div>
   );
 }

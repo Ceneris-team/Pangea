@@ -29,12 +29,44 @@ from fastapi.testclient import TestClient
 from app.database import get_db
 from app.main import app
 from app.main import limiter as limiter_app
-from app.models import Panel
+from app.models import Panel, PanelUbicacion, Parametro, Ubicacion, Widget
 from app.models.suscripcion import PermisoUsuarioSede
 from app.routers.auth import limiter as limiter_auth
 from app.security.dependencies import get_current_user
 from app.security.hashing import hash_password
 from tests.conftest import Fabrica
+
+# Polígono mínimo válido (mismo formato que test_ubicaciones.py) para poder
+# crear una Ubicacion real -Widget/PanelUbicacion la referencian por FK, y
+# plgn_gjsn es NOT NULL-.
+POLIGONO_VALIDO = {
+    "type": "Polygon",
+    "coordinates": [
+        [
+            [-77.043000, -12.046000],
+            [-77.042000, -12.046200],
+            [-77.042100, -12.047000],
+            [-77.043200, -12.046800],
+            [-77.043000, -12.046000],
+        ]
+    ],
+}
+
+
+def crear_ubicacion(db, sede_db, nombre="Ubicación de prueba"):
+    ubicacion = Ubicacion(
+        id_sd=sede_db.id_sd, nmbr=nombre, lttd=-12.0464, lngtd=-77.0428, plgn_gjsn=POLIGONO_VALIDO
+    )
+    db.add(ubicacion)
+    db.flush()
+    return ubicacion
+
+
+def crear_parametro(db, nombre="Parámetro de prueba"):
+    parametro = Parametro(nmbr=nombre, undd="°C")
+    db.add(parametro)
+    db.flush()
+    return parametro
 
 
 def usuario_jwt(usuario_db, rol_nombre, sede_id=None, scope="por_sede"):
@@ -508,3 +540,282 @@ def test_crear_panel_con_login_real_guarda_la_sede_del_jwt(client_https, db_sess
     )
     assert guardado.id_sd == sede.id_sd
     assert guardado.id_usr == usuario.id_usr
+
+
+# ---------------------------------------------------------------------------
+# HU25 - Editar panel: tests del PUT /paneles/{id_pnl}.
+#
+# CA1 (formulario precargado) es de frontend -GET /paneles/{id_pnl}, ya
+# cubierto arriba, es lo que lo alimenta-. Acá: CA2 (edición exitosa +
+# mensaje), nombre duplicado excluyendo el propio panel, y el mismo control
+# de acceso que HU24 (rol + dueño).
+# ---------------------------------------------------------------------------
+
+
+def test_editar_panel_devuelve_200_y_mensaje(client, db_session, cliente_con_edicion_tableros):
+    usuario, sede = cliente_con_edicion_tableros
+    panel = crear_panel(db_session, usuario, sede, "Nombre original")
+
+    respuesta = client.put(f"/paneles/{panel.id_pnl}", json={"nmbr": "Nombre nuevo"})
+
+    assert respuesta.status_code == 200
+    cuerpo = respuesta.json()
+    assert cuerpo["mensaje"] == "Panel actualizado correctamente"
+    assert cuerpo["panel"]["nmbr"] == "Nombre nuevo"
+
+    db_session.refresh(panel)
+    assert panel.nmbr == "Nombre nuevo"
+
+
+def test_editar_panel_recorta_espacios_del_nombre(client, db_session, cliente_con_edicion_tableros):
+    usuario, sede = cliente_con_edicion_tableros
+    panel = crear_panel(db_session, usuario, sede, "Original")
+
+    respuesta = client.put(f"/paneles/{panel.id_pnl}", json={"nmbr": "  Con espacios  "})
+
+    assert respuesta.status_code == 200
+    assert respuesta.json()["panel"]["nmbr"] == "Con espacios"
+
+
+def test_editar_panel_nombre_vacio_es_rechazado(client, db_session, cliente_con_edicion_tableros):
+    usuario, sede = cliente_con_edicion_tableros
+    panel = crear_panel(db_session, usuario, sede, "Original")
+
+    respuesta = client.put(f"/paneles/{panel.id_pnl}", json={"nmbr": "   "})
+
+    assert respuesta.status_code == 422
+
+
+def test_editar_panel_nombre_duplicado_devuelve_409(client, db_session, cliente_con_edicion_tableros):
+    usuario, sede = cliente_con_edicion_tableros
+    crear_panel(db_session, usuario, sede, "Panel A")
+    panel_b = crear_panel(db_session, usuario, sede, "Panel B")
+
+    respuesta = client.put(f"/paneles/{panel_b.id_pnl}", json={"nmbr": "Panel A"})
+
+    assert respuesta.status_code == 409
+    assert respuesta.json()["detail"] == "Ya tienes un panel con ese nombre"
+
+
+def test_editar_panel_guardar_sin_cambiar_el_nombre_no_choca_consigo_mismo(
+    client, db_session, cliente_con_edicion_tableros
+):
+    """El chequeo de duplicado excluye el propio panel: re-guardar el
+    mismo nombre (o el mismo formulario sin tocar nada) no puede dar 409."""
+    usuario, sede = cliente_con_edicion_tableros
+    panel = crear_panel(db_session, usuario, sede, "Panel sin cambios")
+
+    respuesta = client.put(f"/paneles/{panel.id_pnl}", json={"nmbr": "Panel sin cambios"})
+
+    assert respuesta.status_code == 200
+
+
+def test_editar_panel_duplicado_es_insensible_a_mayusculas(
+    client, db_session, cliente_con_edicion_tableros
+):
+    usuario, sede = cliente_con_edicion_tableros
+    crear_panel(db_session, usuario, sede, "Panel Existente")
+    panel_b = crear_panel(db_session, usuario, sede, "Panel B")
+
+    respuesta = client.put(f"/paneles/{panel_b.id_pnl}", json={"nmbr": "panel existente"})
+
+    assert respuesta.status_code == 409
+
+
+def test_editar_panel_inexistente_devuelve_404(client, cliente_con_edicion_tableros):
+    respuesta = client.put("/paneles/999999", json={"nmbr": "Nuevo nombre"})
+
+    assert respuesta.status_code == 404
+
+
+def test_editar_panel_de_otro_usuario_devuelve_404(client, db_session, cliente_con_edicion_tableros):
+    _, sede = cliente_con_edicion_tableros
+    fabrica_otro = Fabrica(db_session)
+    rol_otro = fabrica_otro.rol("Cliente Final")
+    otro_usuario = fabrica_otro.usuario(rol=rol_otro)
+    panel_ajeno = crear_panel(db_session, otro_usuario, sede, "Panel ajeno")
+
+    respuesta = client.put(f"/paneles/{panel_ajeno.id_pnl}", json={"nmbr": "Intento de edición"})
+
+    assert respuesta.status_code == 404
+
+    db_session.refresh(panel_ajeno)
+    assert panel_ajeno.nmbr == "Panel ajeno"
+
+
+def test_editar_panel_sin_permiso_sobre_tableros_devuelve_403(client, db_session, fabrica):
+    rol = fabrica.rol("Cliente Final")
+    sede = fabrica.sede()
+    usuario = fabrica.usuario(rol=rol)
+    panel = crear_panel(db_session, usuario, sede, "Panel sin permiso")
+    # Sin agregar_permiso: ninguna fila en prms_usr_sd para "Tableros".
+    app.dependency_overrides[get_current_user] = lambda: usuario_jwt(
+        usuario, rol.nmbr, sede_id=sede.id_sd
+    )
+
+    respuesta = client.put(f"/paneles/{panel.id_pnl}", json={"nmbr": "Intento"})
+
+    assert respuesta.status_code == 403
+
+
+def test_editar_panel_administrador_con_edicion_en_tableros_devuelve_403_por_rol(
+    client, db_session, fabrica
+):
+    """Mismo control de acceso que crear_panel: el permiso de módulo no
+    alcanza, hace falta ser Cliente Final. El panel es de OTRO usuario a
+    propósito -si existiera, igual tendría que cortar por rol antes de
+    buscar el panel-."""
+    rol_cliente = fabrica.rol("Cliente Final")
+    sede = fabrica.sede()
+    dueno = fabrica.usuario(rol=rol_cliente)
+    panel = crear_panel(db_session, dueno, sede, "Panel de otro")
+
+    rol_admin = fabrica.rol("Administrador")
+    admin = fabrica.usuario(rol=rol_admin, scp="global")
+    agregar_permiso(db_session, admin, sede, "Tableros", "Edición", rol_admin)
+    app.dependency_overrides[get_current_user] = lambda: usuario_jwt(
+        admin, rol_admin.nmbr, sede_id=None, scope="global"
+    )
+
+    respuesta = client.put(f"/paneles/{panel.id_pnl}", json={"nmbr": "Panel hackeado"})
+
+    assert respuesta.status_code == 403
+    assert respuesta.json()["detail"] == "Solo Cliente Final puede editar paneles"
+
+
+# ---------------------------------------------------------------------------
+# HU25 - Eliminar panel: tests del DELETE /paneles/{id_pnl}.
+#
+# CA3 (diálogo de confirmación) es de frontend. Acá: CA4 (eliminación
+# exitosa + mensaje + cascada real verificada en BD, no solo que el Panel
+# desaparece), mismo control de acceso que HU24, y que la telemetría no se
+# toca (fuera del alcance de estos tests: no hay tabla tlmtr involucrada,
+# la regla de negocio es "no tocar lo que no es de este módulo").
+# ---------------------------------------------------------------------------
+
+
+def test_eliminar_panel_devuelve_200_y_mensaje(client, db_session, cliente_con_edicion_tableros):
+    usuario, sede = cliente_con_edicion_tableros
+    panel = crear_panel(db_session, usuario, sede, "Panel a eliminar")
+
+    respuesta = client.delete(f"/paneles/{panel.id_pnl}")
+
+    assert respuesta.status_code == 200
+    assert respuesta.json()["mensaje"] == "Panel eliminado correctamente"
+
+
+def test_eliminar_panel_lo_retira_del_listado(client, db_session, cliente_con_edicion_tableros):
+    usuario, sede = cliente_con_edicion_tableros
+    panel = crear_panel(db_session, usuario, sede, "Panel a eliminar")
+    crear_panel(db_session, usuario, sede, "Panel que queda")
+
+    client.delete(f"/paneles/{panel.id_pnl}")
+
+    respuesta = client.get("/paneles")
+    nombres = [item["nmbr"] for item in respuesta.json()["items"]]
+    assert nombres == ["Panel que queda"]
+
+
+def test_eliminar_panel_borra_el_registro_de_la_bd(client, db_session, cliente_con_edicion_tableros):
+    usuario, sede = cliente_con_edicion_tableros
+    panel = crear_panel(db_session, usuario, sede, "Panel a eliminar")
+    id_pnl = panel.id_pnl
+
+    client.delete(f"/paneles/{id_pnl}")
+
+    assert db_session.query(Panel).filter(Panel.id_pnl == id_pnl).first() is None
+
+
+def test_eliminar_panel_borra_en_cascada_ubicaciones_y_widgets_asociados(
+    client, db_session, cliente_con_edicion_tableros
+):
+    """CA4: 'elimina el panel junto con sus ubicaciones y widgets
+    asociados'. No hay ON DELETE CASCADE a nivel de FK (verificado contra
+    el esquema real), así que esto prueba que el ROUTER lo hace a mano:
+    ni PanelUbicacion ni Widget deben sobrevivir al panel."""
+    usuario, sede = cliente_con_edicion_tableros
+    panel = crear_panel(db_session, usuario, sede, "Panel con contenido")
+    ubicacion = crear_ubicacion(db_session, sede)
+    parametro = crear_parametro(db_session)
+
+    pnl_ubc = PanelUbicacion(id_pnl=panel.id_pnl, id_ubccn=ubicacion.id_ubccn)
+    db_session.add(pnl_ubc)
+    widget = Widget(
+        id_pnl=panel.id_pnl, tp="grafico", id_prmtr=parametro.id_prmtr, id_ubccn=ubicacion.id_ubccn
+    )
+    db_session.add(widget)
+    db_session.flush()
+    id_pnl_ubc = pnl_ubc.id_pnl_ubc
+    id_wdgt = widget.id_wdgt
+
+    respuesta = client.delete(f"/paneles/{panel.id_pnl}")
+
+    assert respuesta.status_code == 200
+    assert db_session.query(Panel).filter(Panel.id_pnl == panel.id_pnl).first() is None
+    assert (
+        db_session.query(PanelUbicacion).filter(PanelUbicacion.id_pnl_ubc == id_pnl_ubc).first()
+        is None
+    )
+    assert db_session.query(Widget).filter(Widget.id_wdgt == id_wdgt).first() is None
+    # La ubicación y el parámetro NO son del panel -son recursos
+    # compartidos de otros módulos-, así que sobreviven igual.
+    assert db_session.query(Ubicacion).filter(Ubicacion.id_ubccn == ubicacion.id_ubccn).first() is not None
+    assert db_session.query(Parametro).filter(Parametro.id_prmtr == parametro.id_prmtr).first() is not None
+
+
+def test_eliminar_panel_inexistente_devuelve_404(client, cliente_con_edicion_tableros):
+    respuesta = client.delete("/paneles/999999")
+
+    assert respuesta.status_code == 404
+
+
+def test_eliminar_panel_de_otro_usuario_devuelve_404(client, db_session, cliente_con_edicion_tableros):
+    _, sede = cliente_con_edicion_tableros
+    fabrica_otro = Fabrica(db_session)
+    rol_otro = fabrica_otro.rol("Cliente Final")
+    otro_usuario = fabrica_otro.usuario(rol=rol_otro)
+    panel_ajeno = crear_panel(db_session, otro_usuario, sede, "Panel ajeno")
+
+    respuesta = client.delete(f"/paneles/{panel_ajeno.id_pnl}")
+
+    assert respuesta.status_code == 404
+    assert db_session.query(Panel).filter(Panel.id_pnl == panel_ajeno.id_pnl).first() is not None
+
+
+def test_eliminar_panel_sin_permiso_sobre_tableros_devuelve_403(client, db_session, fabrica):
+    rol = fabrica.rol("Cliente Final")
+    sede = fabrica.sede()
+    usuario = fabrica.usuario(rol=rol)
+    panel = crear_panel(db_session, usuario, sede, "Panel sin permiso")
+    # Sin agregar_permiso: ninguna fila en prms_usr_sd para "Tableros".
+    app.dependency_overrides[get_current_user] = lambda: usuario_jwt(
+        usuario, rol.nmbr, sede_id=sede.id_sd
+    )
+
+    respuesta = client.delete(f"/paneles/{panel.id_pnl}")
+
+    assert respuesta.status_code == 403
+    assert db_session.query(Panel).filter(Panel.id_pnl == panel.id_pnl).first() is not None
+
+
+def test_eliminar_panel_administrador_con_edicion_en_tableros_devuelve_403_por_rol(
+    client, db_session, fabrica
+):
+    """Mismo criterio que test_editar_panel_administrador_..._por_rol."""
+    rol_cliente = fabrica.rol("Cliente Final")
+    sede = fabrica.sede()
+    dueno = fabrica.usuario(rol=rol_cliente)
+    panel = crear_panel(db_session, dueno, sede, "Panel de otro")
+
+    rol_admin = fabrica.rol("Administrador")
+    admin = fabrica.usuario(rol=rol_admin, scp="global")
+    agregar_permiso(db_session, admin, sede, "Tableros", "Edición", rol_admin)
+    app.dependency_overrides[get_current_user] = lambda: usuario_jwt(
+        admin, rol_admin.nmbr, sede_id=None, scope="global"
+    )
+
+    respuesta = client.delete(f"/paneles/{panel.id_pnl}")
+
+    assert respuesta.status_code == 403
+    assert respuesta.json()["detail"] == "Solo Cliente Final puede eliminar paneles"
+    assert db_session.query(Panel).filter(Panel.id_pnl == panel.id_pnl).first() is not None

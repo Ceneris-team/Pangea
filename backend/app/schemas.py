@@ -1090,3 +1090,26 @@ class PanelCreado(BaseModel):
     id_pnl: int
     nmbr: str
     fch_crcn: datetime
+
+
+# HU25 - Editar / eliminar panel
+
+
+class PanelActualizar(BaseModel):
+    """HU25 CA1/CA2: único campo editable, mismo criterio que PanelCrear
+    (obligatorio, máximo 100, recortado)."""
+
+    nmbr: str = Field(min_length=1, max_length=100)
+
+    @field_validator("nmbr")
+    @classmethod
+    def _nombre_no_vacio(cls, valor: str) -> str:
+        return _validar_nombre_panel(valor)
+
+
+class PanelActualizado(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id_pnl: int
+    nmbr: str
+    fch_crcn: datetime
