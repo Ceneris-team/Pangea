@@ -30,7 +30,15 @@ class ParametroCalculado(Base):
 
 
 class LogAuditoria(Base):
-    """HT-11: inmutable, sin UPDATE/DELETE a nivel de aplicación."""
+    """HT-11: inmutable, sin UPDATE/DELETE a nivel de aplicación (ver
+    routers/auditoria.py, que solo expone GET, y security/auditoria.py,
+    el único lugar del código que hace INSERT sobre este modelo).
+
+    NO particionada a propósito (a diferencia de Telemetria en HT-08): el
+    volumen esperado -acciones administrativas humanas, no lecturas de
+    sensores- no se acerca al que justificaba particionar tlmtr. Ver
+    "Log de auditoría (HT-11)" en backend/README.md para el detalle y qué
+    haría falta si esa premisa cambiara."""
 
     __tablename__ = "lg_adtr"
     __table_args__ = (

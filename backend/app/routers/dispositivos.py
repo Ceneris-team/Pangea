@@ -111,9 +111,12 @@ from app.schemas import (
     DispositivoUpdate,
     LogIngestaListItem,
 )
+from app.security.auditoria import limpiar_contexto_auditoria, marcar_contexto_auditoria
 from app.security.dependencies import get_current_user
 from app.security.permisos import EDICION, LECTURA, require_permiso, verificar_sede
+from app.services.cache.invalidacion import invalidar_por_lectura
 from app.services.ingesta.mapeo import MapeoNoEncontradoError, resolver_formato
+from app.services.ingesta.usuario_sistema import resolver_id_usuario_sistema
 from app.services.particiones import (
     ParticionInexistenteError,
     es_error_de_particion_faltante,
@@ -261,7 +264,7 @@ def crear_dispositivo(
 
     # Un usuario 'por_sede' no puede crear un dispositivo en una ubicación
     # de otra sede aunque conozca su id_ubccn (HT-09 CA3).
-    verificar_sede(usuario, ubicacion.id_sd, modulo="Dispositivos", accion=EDICION)
+    verificar_sede(usuario, ubicacion.id_sd, db, modulo="Dispositivos", accion=EDICION)
 
     # resolver_dispositivo() en services/ingesta/persistencia.py asume
     # exactamente 1 dispositivo Activo por conexión FTP; un segundo
@@ -317,7 +320,7 @@ def _cargar_ficha(db: Session, id_dspstv: int, usuario: dict, accion: str):
         raise HTTPException(status_code=404, detail="Dispositivo no encontrado")
 
     dispositivo, ubicacion, conexion = fila
-    verificar_sede(usuario, ubicacion.id_sd, modulo="Dispositivos", accion=accion)
+    verificar_sede(usuario, ubicacion.id_sd, db, modulo="Dispositivos", accion=accion)
 
     # Un Cliente Final solo ve dispositivos de ubicaciones que tenga
     # asignadas, mismo criterio que el listado de HU10.
@@ -651,6 +654,16 @@ async def cargar_archivo_dat(
         # Los .dat de campo a veces vienen en latin-1 (grados, ñ).
         contenido = contenido_bytes.decode("latin-1")
 
+    # HU49 CA5: esta carga manual (IMP-06) comparte con la ingesta
+    # automática por FTP el mismo resolver_formato -así que también puede
+    # disparar la creación automática de una trama nueva, y esa creación
+    # tiene que auditarse igual, sin importar el canal de entrada. Se
+    # marca con el usuario Sistema (no con el usuario HTTP que subió el
+    # archivo): quien "crea" la trama es el algoritmo de HU49, no el
+    # técnico que casualmente disparó la corrida -mismo criterio que
+    # tasks/ingesta.py-.
+    id_usr_sistema = resolver_id_usuario_sistema(db)
+    marcar_contexto_auditoria(db, id_usr_sistema)
     try:
         formato = resolver_formato(db, dispositivo.id_dspstv, nombre)
     except MapeoNoEncontradoError as exc:
@@ -659,6 +672,8 @@ async def cargar_archivo_dat(
         # en silencio. Acá se responde 422 en vez de marcar Fallido porque
         # hay un usuario esperando la respuesta.
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    finally:
+        limpiar_contexto_auditoria(db)
 
     registro = ArchivoIngesta(
         id_cnxn=dispositivo.id_cnxn,
@@ -803,6 +818,17 @@ def cargar_punto_manual(
                 ),
             ) from exc
         raise
+
+    # HT-10 CA2: la carga manual escribe DIRECTO en tlmtr sin pasar por
+    # services/ingesta/persistencia.py, así que la invalidación del
+    # pipeline no la cubre: hay que dispararla también acá. Sin esto, un
+    # punto cargado a mano no aparecía en la gráfica ni en el mapa hasta
+    # que caducara la entrada cacheada.
+    #
+    # Después del commit de arriba, nunca antes (mismo criterio que
+    # tasks/ingesta.py) y filtrada por la sede y la ubicación de ESTE
+    # dispositivo, no global.
+    invalidar_por_lectura(id_sd=ubicacion.id_sd, id_ubccn=dispositivo.id_ubccn)
 
     return {
         "mensaje": "Medición registrada correctamente",

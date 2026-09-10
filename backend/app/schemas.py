@@ -46,6 +46,102 @@ class UsuarioCreado(BaseModel):
     estd: str
 
 
+class UsuarioActualizar(BaseModel):
+    """HU20 CA1/CA2: los cuatro campos que el formulario de edición
+    precarga y permite modificar -Nombre completo, Correo electrónico, Rol
+    y Teléfono-.
+
+    Todos opcionales, mismo patrón parcial que UbicacionActualizar y
+    DispositivoUpdate: solo se actualiza lo que venga en el body
+    (exclude_unset lo filtra en el router). Un null explícito significa
+    "no lo toques" salvo en tlfn, la única columna nullable del conjunto.
+
+    El estado (Activo/Inactivo) NO está acá: dar de baja a un usuario es
+    otra historia, y HU20 fija sus campos editables en esos cuatro. Al no
+    declararse, Pydantic lo descarta del body en vez de aplicarlo en
+    silencio.
+    """
+
+    nmbr_cmplt: str | None = Field(default=None, min_length=1, max_length=150)
+    crr: EmailStr | None = None
+    rol_nombre: str | None = None
+    tlfn: str | None = Field(default=None, max_length=20)
+
+
+class UsuarioDetalle(BaseModel):
+    """HU20 CA1: los datos actuales con los que se precarga el formulario
+    de edición. A diferencia de UsuarioListItem incluye el teléfono, que
+    es editable pero no se muestra como columna del listado (HU03)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id_usr: int
+    nmbr_cmplt: str
+    crr: str
+    rol_nombre: str
+    tlfn: str | None
+    estd: str
+
+
+class UsuarioActualizado(BaseModel):
+    """HU20 CA2: el usuario ya actualizado, con el mensaje EXACTO que pide
+    el CA. Mismo patrón de respuesta que UsuarioCreado (HU04)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    mensaje: str = "Usuario actualizado correctamente"
+    id_usr: int
+    nmbr_cmplt: str
+    crr: str
+    rol_nombre: str
+    tlfn: str | None
+    estd: str
+
+
+class UbicacionPermisoItem(BaseModel):
+    """HU21 CA1: una ubicación registrada junto al estado de acceso ACTUAL
+    del usuario que se está gestionando. El panel las lista TODAS -no solo
+    las concedidas-, con `tiene_acceso` marcando cuáles están habilitadas,
+    que es justo lo que el CA pide mostrar."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id_ubccn: int
+    nmbr: str
+    tiene_acceso: bool
+
+
+class PermisosUbicacionPanel(BaseModel):
+    """HU21 CA1: respuesta del GET del panel de permisos."""
+
+    id_usr: int
+    nmbr_cmplt: str
+    rol_nombre: str
+    items: list[UbicacionPermisoItem]
+
+
+class PermisosUbicacionActualizar(BaseModel):
+    """HU21 CA2: el conjunto COMPLETO de ubicaciones habilitadas tras
+    marcar/desmarcar. Se manda entero y reemplaza al anterior (PUT, no un
+    par de altas/bajas): así el resultado no depende del estado previo ni
+    del orden en que lleguen dos ediciones simultáneas.
+
+    Una lista vacía es válida y significa "quitarle todos los accesos";
+    por eso el campo es obligatorio y no tiene default -un body sin
+    `ubicacion_ids` sería ambiguo entre "ninguna" y "no lo toques"-.
+    """
+
+    ubicacion_ids: list[int]
+
+
+class PermisosUbicacionActualizados(BaseModel):
+    """HU21 CA2: confirmación con el mensaje EXACTO que pide el CA."""
+
+    mensaje: str = "Permisos actualizados correctamente"
+    id_usr: int
+    ubicacion_ids: list[int]
+
+
 class UbicacionListItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -498,6 +594,14 @@ class ArchivoIngestaDetalle(BaseModel):
     mnsj_errr: str | None
 
 
+class ReintentoMasivoResponse(BaseModel):
+    """Reintento masivo de todos los archivos Fallido de la sede del
+    usuario (extensión de HU31 a "en cantidad", ver
+    reintentar_fallidos_ingesta en routers/ingesta.py)."""
+
+    reencolados: int
+
+
 class FilaCrudaIngesta(BaseModel):
     """Una línea del .dat tal como llegó, ANTES del mapeo columna->
     parámetro: permite ver si el datalogger mandó la fila vacía/en cero o
@@ -613,6 +717,34 @@ class ParametroListItem(BaseModel):
     undd: str
     dscrpcn: str | None
     tipo_dato: str
+    # HU51: permite a la UI distinguir un parámetro auto-creado por el
+    # motor de ingesta (badge "Auto-detectado" + sección de pendientes de
+    # revisión) de uno del catálogo de siempre.
+    estd: str = "Activo"
+    orgn_crcn: str = "Manual"
+
+
+class ActivarParametroRequest(BaseModel):
+    """HU51 CA4: el Administrador revisa un parámetro auto-creado, le
+    corrige el nombre visible y le asigna una unidad, y al confirmar pasa
+    a 'Activo'.
+
+    orgn_crcn NO se toca acá a propósito: es historial de origen -de
+    dónde salió el parámetro-, no un estado editable; que un humano lo
+    haya revisado no cambia el hecho de que lo creó el motor de ingesta.
+    """
+
+    nmbr: str | None = None
+    undd: str | None = None
+    dscrpcn: str | None = None
+    tipo_dato: str | None = None
+
+
+class FusionarParametroRequest(BaseModel):
+    """HU51 CA5: fusiona un parámetro pendiente contra uno ya existente,
+    reasignando todo su historial."""
+
+    id_prmtr_destino: int
 
 
 class ParametroCrear(BaseModel):
@@ -777,7 +909,32 @@ class MapeoFormatoListItem(BaseModel):
     fl_inc_dts: int
     frmt_fch: str
     estd: str
+    # HU49 CA3: distingue en la UI una trama auto-detectada (el pipeline
+    # la creó sola al ver un prefijo nunca visto) de una creada a mano.
+    orgn_crcn: str
     total_columnas: int
+
+
+class ColumnaPendienteItem(BaseModel):
+    """HU50 CA3-CA5: una columna del header que el auto-mapeo
+    (construir_mapeo, services/ingesta/mapeo.py) no pudo asociar a ningún
+    prmtr.nmbr por coincidencia exacta de nombre, y que sigue esperando
+    que un Técnico/Administrador le asigne un parámetro a mano."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id_mp_cl_pnd: int
+    id_dspstv: int
+    dispositivo_nombre: str
+    id_mp: int
+    tp_trm: str
+    indc_clmn: int
+    nmbr_clmn_orgn: str
+    fch_dtccn: str
+
+
+class ResolverColumnaPendienteRequest(BaseModel):
+    id_prmtr: int
 
 
 class MapeoFormatoDetalle(MapeoFormatoListItem):
@@ -785,6 +942,10 @@ class MapeoFormatoDetalle(MapeoFormatoListItem):
     asignación para poder editarla."""
 
     columnas: list[MapeoColumnaDetalle]
+    # HU50 CA5: columnas de ESTA trama que el auto-mapeo no pudo resolver,
+    # para que la pestaña Datos muestre el nombre real de columna del
+    # header (no solo un índice ciego) junto al selector de parámetro.
+    columnas_pendientes: list[ColumnaPendienteItem] = []
 
 
 class FilaVistaPrevia(BaseModel):
@@ -851,6 +1012,7 @@ class VistaPreviaResponse(BaseModel):
     filas_mostradas: int
 
 
+<<<<<<< HEAD
 # HU27 - Listar alarmas
 
 
@@ -1050,3 +1212,26 @@ class NotificacionesGuardar(BaseModel):
 class NotificacionesGuardadas(BaseModel):
     mensaje: str = "Notificaciones configuradas correctamente"
     notificaciones: NotificacionesAlarma
+=======
+# ---------------------------------------------------------------------------
+# HT-11 - Log de auditoría
+# ---------------------------------------------------------------------------
+
+
+class AuditoriaListItem(BaseModel):
+    """HT-11 CA1/CA5: una fila de lg_adtr, ya con el nombre del usuario
+    ejecutor resuelto -la tabla solo guarda id_usr- para que el panel no
+    tenga que hacer un segundo viaje por cada fila."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id_evnt: int
+    id_usr: int
+    usuario_nombre: str | None
+    id_sd: int | None
+    accn: str
+    entdd: str
+    vlrs_antrrs: dict | list | None
+    vlrs_nvs: dict | list | None
+    fch_evnt: datetime
+>>>>>>> 3d65615966eb981135ac37e86bc93cb1b8856a8a

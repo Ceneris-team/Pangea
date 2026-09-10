@@ -29,6 +29,49 @@ interface ListadoPaginado {
   items: UsuarioListItem[];
 }
 
+/** HU20 CA1: datos actuales con los que se precarga el formulario de edición. */
+interface UsuarioDetalle {
+  id_usr: number;
+  nmbr_cmplt: string;
+  crr: string;
+  rol_nombre: string;
+  tlfn: string | null;
+  estd: string;
+}
+
+/** HU20 CA2: respuesta de PUT /usuarios/{id}, con el mensaje de éxito. */
+interface UsuarioActualizadoResponse {
+  mensaje: string;
+  id_usr: number;
+  nmbr_cmplt: string;
+  crr: string;
+  rol_nombre: string;
+  tlfn: string | null;
+  estd: string;
+}
+
+/** HU21 CA1: una ubicación del panel, con el acceso actual del usuario. */
+interface UbicacionPermisoItem {
+  id_ubccn: number;
+  nmbr: string;
+  tiene_acceso: boolean;
+}
+
+/** HU21 CA1: respuesta de GET /usuarios/{id}/permisos-ubicaciones. */
+interface PermisosPanelResponse {
+  id_usr: number;
+  nmbr_cmplt: string;
+  rol_nombre: string;
+  items: UbicacionPermisoItem[];
+}
+
+/** HU21 CA2: respuesta de PUT /usuarios/{id}/permisos-ubicaciones. */
+interface PermisosActualizadosResponse {
+  mensaje: string;
+  id_usr: number;
+  ubicacion_ids: number[];
+}
+
 const ROLES_DISPONIBLES = [
   "Administrador",
   "Técnico CENERIS",
@@ -37,6 +80,21 @@ const ROLES_DISPONIBLES = [
 ];
 
 const POR_PAGINA = 10;
+
+/** HU21: "La gestión de permisos aplica ÚNICAMENTE a usuarios con rol
+ *  Cliente Final. Administrador y Técnico CENERIS tienen acceso completo por
+ *  defecto y no requieren asignación", así que la acción no se les ofrece.
+ *  Réplica en el cliente de ROLES_CON_ACCESO_TOTAL
+ *  (backend/app/security/ubicaciones_permitidas.py), que es quien decide de
+ *  verdad: esto solo evita ofrecer un botón que el backend rechazaría. */
+const ROLES_CON_ACCESO_TOTAL = ["Administrador", "Técnico CENERIS", "Tecnico CENERIS"];
+
+interface FormEditarUsuario {
+  nmbr_cmplt: string;
+  crr: string;
+  rol_nombre: string;
+  tlfn: string;
+}
 
 interface FormAgregarUsuario {
   nmbr_cmplt: string;
@@ -88,6 +146,29 @@ export default function Usuarios() {
   const [idResaltado, setIdResaltado] = useState<number | null>(null);
   const filaResaltadaRef = useRef<HTMLTableRowElement | null>(null);
 
+  // --- HU20: edición -------------------------------------------------------
+  // El formulario de edición vive en esta misma pantalla, como el de alta:
+  // se abre sobre el listado con los datos ya precargados (CA1) y al guardar
+  // se reemplaza por la confirmación con "VER USUARIOS" (CA2/CA3), el mismo
+  // recorrido que ya hace HU04.
+  const [editandoId, setEditandoId] = useState<number | null>(null);
+  const [formEditar, setFormEditar] = useState<FormEditarUsuario | null>(null);
+  const [cargandoEdicion, setCargandoEdicion] = useState(false);
+  const [guardandoEdicion, setGuardandoEdicion] = useState(false);
+  const [errorEdicion, setErrorEdicion] = useState<string | null>(null);
+  const [editado, setEditado] = useState<UsuarioActualizadoResponse | null>(null);
+
+  // --- HU21: permisos de ubicación ----------------------------------------
+  const [permisosDe, setPermisosDe] = useState<UsuarioListItem | null>(null);
+  const [panelPermisos, setPanelPermisos] = useState<PermisosPanelResponse | null>(null);
+  // Selección en curso: se aplica solo al pulsar "GUARDAR PERMISOS" (CA2).
+  // Mientras tanto "CANCELAR" la descarta sin tocar nada (CA4).
+  const [seleccionUbicaciones, setSeleccionUbicaciones] = useState<number[]>([]);
+  const [cargandoPermisos, setCargandoPermisos] = useState(false);
+  const [guardandoPermisos, setGuardandoPermisos] = useState(false);
+  const [errorPermisos, setErrorPermisos] = useState<string | null>(null);
+  const [permisosGuardados, setPermisosGuardados] = useState<string | null>(null);
+
   function abrirForm() {
     setForm(FORM_VACIO);
     setErrorForm(null);
@@ -111,6 +192,169 @@ export default function Usuarios() {
     setForm(FORM_VACIO);
     setRecargarTick((t) => t + 1);
     setIdResaltado(idNuevo);
+  }
+
+  // -------------------------------------------------------------------------
+  // HU20 - Editar usuario
+  // -------------------------------------------------------------------------
+
+  /** CA1: "CUANDO selecciono 'Editar' sobre un usuario, ENTONCES el sistema
+   *  muestra el formulario de edición con los datos actuales precargados en:
+   *  Nombre completo, Correo electrónico, Rol y Teléfono." */
+  async function abrirEdicion(usuario: UsuarioListItem) {
+    cerrarPermisos();
+    setMostrarForm(false);
+    setCreado(null);
+    setEditado(null);
+    setErrorEdicion(null);
+    setEditandoId(usuario.id_usr);
+    setFormEditar(null);
+    setCargandoEdicion(true);
+
+    try {
+      const detalle = await apiFetch<UsuarioDetalle>(`/usuarios/${usuario.id_usr}`);
+      setFormEditar({
+        nmbr_cmplt: detalle.nmbr_cmplt,
+        crr: detalle.crr,
+        rol_nombre: detalle.rol_nombre,
+        tlfn: detalle.tlfn ?? "",
+      });
+    } catch (err) {
+      setErrorEdicion(
+        err instanceof ApiError ? err.message : "No se pudieron cargar los datos del usuario",
+      );
+    } finally {
+      setCargandoEdicion(false);
+    }
+  }
+
+  function cancelarEdicion() {
+    setEditandoId(null);
+    setFormEditar(null);
+    setErrorEdicion(null);
+    setEditado(null);
+  }
+
+  /** CA3: "CUANDO selecciono 'VER USUARIOS', ENTONCES el sistema redirige al
+   *  listado donde los datos actualizados se reflejan en la tabla." */
+  function verUsuariosTrasEditar() {
+    const idEditado = editado?.id_usr ?? null;
+    setEditandoId(null);
+    setFormEditar(null);
+    setEditado(null);
+    setRecargarTick((t) => t + 1);
+    setIdResaltado(idEditado);
+  }
+
+  /** CA2: "CUANDO selecciono 'GUARDAR', ENTONCES el sistema actualiza los
+   *  datos y muestra el mensaje 'Usuario actualizado correctamente'." */
+  async function guardarEdicion(e: FormEvent) {
+    e.preventDefault();
+    if (editandoId === null || formEditar === null) return;
+    setErrorEdicion(null);
+
+    if (!formEditar.nmbr_cmplt.trim() || !formEditar.crr.trim() || !formEditar.rol_nombre) {
+      setErrorEdicion("Nombre completo, correo y rol son obligatorios.");
+      return;
+    }
+
+    setGuardandoEdicion(true);
+    try {
+      const data = await apiFetch<UsuarioActualizadoResponse>(`/usuarios/${editandoId}`, {
+        method: "PUT",
+        body: {
+          nmbr_cmplt: formEditar.nmbr_cmplt.trim(),
+          crr: formEditar.crr.trim(),
+          rol_nombre: formEditar.rol_nombre,
+          tlfn: formEditar.tlfn.trim(),
+        },
+      });
+      // CA2: el mensaje mostrado es el que devuelve el backend.
+      setEditado(data);
+    } catch (err) {
+      setErrorEdicion(err instanceof ApiError ? err.message : "No se pudo actualizar el usuario");
+    } finally {
+      setGuardandoEdicion(false);
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // HU21 - Conceder permisos
+  // -------------------------------------------------------------------------
+
+  /** CA1: "CUANDO selecciono 'Gestionar permisos' sobre un usuario con rol
+   *  Cliente Final, ENTONCES el sistema muestra el panel de permisos con el
+   *  listado de TODAS las ubicaciones registradas y el estado de acceso
+   *  actual de ese usuario." */
+  async function abrirPermisos(usuario: UsuarioListItem) {
+    cancelarEdicion();
+    setMostrarForm(false);
+    setCreado(null);
+    setErrorPermisos(null);
+    setPermisosGuardados(null);
+    setPermisosDe(usuario);
+    setPanelPermisos(null);
+    setCargandoPermisos(true);
+
+    try {
+      const panel = await apiFetch<PermisosPanelResponse>(
+        `/usuarios/${usuario.id_usr}/permisos-ubicaciones`,
+      );
+      setPanelPermisos(panel);
+      // El estado de acceso actual es el punto de partida de la selección.
+      setSeleccionUbicaciones(panel.items.filter((i) => i.tiene_acceso).map((i) => i.id_ubccn));
+    } catch (err) {
+      setErrorPermisos(
+        err instanceof ApiError ? err.message : "No se pudo cargar el panel de permisos",
+      );
+    } finally {
+      setCargandoPermisos(false);
+    }
+  }
+
+  /** CA4: "CUANDO selecciono 'CANCELAR', ENTONCES el sistema descarta los
+   *  cambios y regresa al listado sin modificar nada." La selección vive solo
+   *  en memoria hasta que se pulsa "GUARDAR PERMISOS", así que descartarla es
+   *  literalmente no mandar nada al backend. */
+  function cerrarPermisos() {
+    setPermisosDe(null);
+    setPanelPermisos(null);
+    setSeleccionUbicaciones([]);
+    setErrorPermisos(null);
+    setPermisosGuardados(null);
+  }
+
+  function alternarUbicacion(idUbicacion: number) {
+    setSeleccionUbicaciones((actual) =>
+      actual.includes(idUbicacion)
+        ? actual.filter((id) => id !== idUbicacion)
+        : [...actual, idUbicacion],
+    );
+  }
+
+  /** CA2: "CUANDO marco/desmarco ubicaciones y selecciono 'GUARDAR PERMISOS',
+   *  ENTONCES el sistema actualiza los permisos y muestra el mensaje
+   *  'Permisos actualizados correctamente'." */
+  async function guardarPermisos() {
+    if (permisosDe === null) return;
+    setErrorPermisos(null);
+    setGuardandoPermisos(true);
+
+    try {
+      const data = await apiFetch<PermisosActualizadosResponse>(
+        `/usuarios/${permisosDe.id_usr}/permisos-ubicaciones`,
+        { method: "PUT", body: { ubicacion_ids: seleccionUbicaciones } },
+      );
+      // CA2: el mensaje mostrado es el que devuelve el backend. Los cambios
+      // ya están vigentes para el usuario afectado sin que cierre sesión
+      // (CA3): el backend resuelve las ubicaciones visibles contra la base
+      // en cada request, no desde el JWT.
+      setPermisosGuardados(data.mensaje);
+    } catch (err) {
+      setErrorPermisos(err instanceof ApiError ? err.message : "No se pudieron guardar los permisos");
+    } finally {
+      setGuardandoPermisos(false);
+    }
   }
 
   async function guardarUsuario(e: FormEvent) {
@@ -212,7 +456,7 @@ export default function Usuarios() {
                   Administra los accesos y roles del sistema.
                 </p>
               </div>
-              {!mostrarForm && (
+              {!mostrarForm && editandoId === null && permisosDe === null && (
                 <button
                   onClick={abrirForm}
                   className="px-4 py-2.5 text-sm font-semibold text-[#5a7000] dark:text-[#ccff00] bg-[#ccff00]/10 hover:bg-[#ccff00]/20 border border-[#ccff00]/30 rounded-xl transition-colors"
@@ -221,6 +465,205 @@ export default function Usuarios() {
                 </button>
               )}
             </header>
+
+            {/* ============================ HU20 ============================ */}
+
+            {/* HU20 CA2/CA3: confirmación tras editar. Reemplaza al formulario
+                y exige un clic explícito en "VER USUARIOS" para ir al listado. */}
+            {editandoId !== null && editado && (
+              <div className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl shadow-sm border border-[#ccff00]/40 p-5 mb-6">
+                <div className="flex items-start gap-3">
+                  <span className="mt-0.5 inline-flex items-center justify-center w-8 h-8 rounded-full bg-[#ccff00]/20 text-[#5a7000] dark:text-[#ccff00]">
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth="2.5" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                    </svg>
+                  </span>
+                  <div className="flex-1">
+                    <h2 className="text-base font-bold text-gray-900 dark:text-white">
+                      {editado.mensaje}
+                    </h2>
+                    <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">
+                      <span className="font-medium text-gray-700 dark:text-gray-200">{editado.nmbr_cmplt}</span>{" "}
+                      ({editado.crr}) · {editado.rol_nombre}
+                      {editado.tlfn ? ` · ${editado.tlfn}` : ""}
+                    </p>
+
+                    <div className="flex gap-3 mt-4">
+                      <button
+                        type="button"
+                        onClick={verUsuariosTrasEditar}
+                        className="px-4 py-2 text-sm font-semibold text-[#0c1712] bg-[#ccff00] hover:bg-[#b8e600] rounded-lg transition-colors"
+                      >
+                        VER USUARIOS
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* HU20 CA1: formulario de edición con los datos precargados. */}
+            {editandoId !== null && !editado && (
+              <div className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl shadow-sm border border-black/10 dark:border-white/10 p-5 mb-6">
+                <h2 className="text-base font-bold text-gray-900 dark:text-white mb-4">Editar usuario</h2>
+
+                {cargandoEdicion && (
+                  <p className="text-sm text-gray-600 dark:text-gray-300">Cargando datos del usuario…</p>
+                )}
+
+                {!cargandoEdicion && errorEdicion && !formEditar && (
+                  <div className="text-sm text-red-600 dark:text-red-400">{errorEdicion}</div>
+                )}
+
+                {formEditar && (
+                  <form onSubmit={guardarEdicion} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm text-gray-700 dark:text-gray-200 mb-1">Nombre completo *</label>
+                      <input
+                        type="text"
+                        value={formEditar.nmbr_cmplt}
+                        onChange={(e) => setFormEditar((f) => (f ? { ...f, nmbr_cmplt: e.target.value } : f))}
+                        className="bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl block w-full p-2.5 outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-gray-700 dark:text-gray-200 mb-1">Correo electrónico *</label>
+                      <input
+                        type="email"
+                        value={formEditar.crr}
+                        onChange={(e) => setFormEditar((f) => (f ? { ...f, crr: e.target.value } : f))}
+                        className="bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl block w-full p-2.5 outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-gray-700 dark:text-gray-200 mb-1">Rol *</label>
+                      <select
+                        value={formEditar.rol_nombre}
+                        onChange={(e) => setFormEditar((f) => (f ? { ...f, rol_nombre: e.target.value } : f))}
+                        className="bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl block w-full p-2.5 outline-none cursor-pointer"
+                      >
+                        <option value="">Selecciona un rol</option>
+                        {ROLES_DISPONIBLES.map((r) => (
+                          <option key={r} value={r}>{r}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm text-gray-700 dark:text-gray-200 mb-1">Teléfono (opcional)</label>
+                      <input
+                        type="text"
+                        value={formEditar.tlfn}
+                        onChange={(e) => setFormEditar((f) => (f ? { ...f, tlfn: e.target.value } : f))}
+                        className="bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl block w-full p-2.5 outline-none"
+                      />
+                    </div>
+
+                    {errorEdicion && (
+                      <div className="md:col-span-2 text-sm text-red-600 dark:text-red-400">{errorEdicion}</div>
+                    )}
+
+                    <div className="md:col-span-2 flex gap-3 justify-end">
+                      <button
+                        type="button"
+                        onClick={cancelarEdicion}
+                        disabled={guardandoEdicion}
+                        className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 rounded-lg hover:bg-black/5 dark:hover:bg-white/5 disabled:opacity-50 transition-colors"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={guardandoEdicion}
+                        className="px-4 py-2 text-sm font-semibold text-[#0c1712] bg-[#ccff00] hover:bg-[#b8e600] rounded-lg disabled:opacity-50 transition-colors"
+                      >
+                        {guardandoEdicion ? "Guardando…" : "GUARDAR"}
+                      </button>
+                    </div>
+                  </form>
+                )}
+              </div>
+            )}
+
+            {/* ============================ HU21 ============================ */}
+
+            {/* HU21 CA1: panel de permisos con TODAS las ubicaciones
+                registradas y el estado de acceso actual del usuario. */}
+            {permisosDe !== null && (
+              <div className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl shadow-sm border border-black/10 dark:border-white/10 p-5 mb-6">
+                <h2 className="text-base font-bold text-gray-900 dark:text-white">
+                  Permisos de ubicación
+                </h2>
+                <p className="text-sm text-gray-600 dark:text-gray-300 mt-1 mb-4">
+                  <span className="font-medium text-gray-700 dark:text-gray-200">{permisosDe.nmbr_cmplt}</span>{" "}
+                  ({permisosDe.crr}) · {permisosDe.rol_nombre}
+                </p>
+
+                {cargandoPermisos && (
+                  <p className="text-sm text-gray-600 dark:text-gray-300">Cargando ubicaciones…</p>
+                )}
+
+                {/* CA2: confirmación con el mensaje que devuelve el backend. */}
+                {permisosGuardados && (
+                  <div className="flex items-start gap-3 mb-4 p-3 rounded-xl border border-[#ccff00]/40 bg-[#ccff00]/10">
+                    <span className="mt-0.5 inline-flex items-center justify-center w-6 h-6 rounded-full bg-[#ccff00]/20 text-[#5a7000] dark:text-[#ccff00]">
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth="2.5" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                      </svg>
+                    </span>
+                    <p className="text-sm font-semibold text-gray-900 dark:text-white">{permisosGuardados}</p>
+                  </div>
+                )}
+
+                {errorPermisos && (
+                  <div className="text-sm text-red-600 dark:text-red-400 mb-4">{errorPermisos}</div>
+                )}
+
+                {panelPermisos && panelPermisos.items.length === 0 && (
+                  <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">
+                    No hay ubicaciones registradas todavía.
+                  </p>
+                )}
+
+                {panelPermisos && panelPermisos.items.length > 0 && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
+                    {panelPermisos.items.map((u) => (
+                      <label
+                        key={u.id_ubccn}
+                        className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200 cursor-pointer"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={seleccionUbicaciones.includes(u.id_ubccn)}
+                          onChange={() => alternarUbicacion(u.id_ubccn)}
+                          className="accent-[#ccff00]"
+                        />
+                        {u.nmbr}
+                      </label>
+                    ))}
+                  </div>
+                )}
+
+                <div className="flex gap-3 justify-end">
+                  {/* CA4: descarta los cambios y regresa al listado. */}
+                  <button
+                    type="button"
+                    onClick={cerrarPermisos}
+                    disabled={guardandoPermisos}
+                    className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 rounded-lg hover:bg-black/5 dark:hover:bg-white/5 disabled:opacity-50 transition-colors"
+                  >
+                    CANCELAR
+                  </button>
+                  <button
+                    type="button"
+                    onClick={guardarPermisos}
+                    disabled={guardandoPermisos || !panelPermisos}
+                    className="px-4 py-2 text-sm font-semibold text-[#0c1712] bg-[#ccff00] hover:bg-[#b8e600] rounded-lg disabled:opacity-50 transition-colors"
+                  >
+                    {guardandoPermisos ? "Guardando…" : "GUARDAR PERMISOS"}
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* HU04 CA2/CA3: confirmación tras crear. Reemplaza al formulario
                 y exige un clic explícito en "VER USUARIOS" para ir al listado. */}
@@ -448,16 +891,35 @@ export default function Usuarios() {
                             </span>
                           </td>
                           <td className="px-6 py-4 text-right">
-                            <button
-                              disabled
-                              title="Próximamente: HU20"
-                              className="inline-flex items-center justify-center px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-200 bg-transparent border border-black/20 dark:border-white/20 rounded-lg hover:bg-black/10 dark:hover:bg-white/10 hover:text-gray-900 dark:hover:text-white focus:ring-4 focus:outline-none focus:ring-black/10 dark:focus:ring-white/10 disabled:opacity-50 disabled:hover:bg-transparent transition-all"
-                            >
-                              <svg className="w-4 h-4 mr-2 text-gray-600 dark:text-gray-300" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                              </svg>
-                              Editar
-                            </button>
+                            <div className="inline-flex gap-2">
+                              {/* HU20 CA1: abre el formulario de edición con los
+                                  datos actuales precargados. */}
+                              <button
+                                onClick={() => abrirEdicion(u)}
+                                className="inline-flex items-center justify-center px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-200 bg-transparent border border-black/20 dark:border-white/20 rounded-lg hover:bg-black/10 dark:hover:bg-white/10 hover:text-gray-900 dark:hover:text-white focus:ring-4 focus:outline-none focus:ring-black/10 dark:focus:ring-white/10 transition-all"
+                              >
+                                <svg className="w-4 h-4 mr-2 text-gray-600 dark:text-gray-300" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                </svg>
+                                Editar
+                              </button>
+
+                              {/* HU21 CA1: "Gestionar permisos" solo sobre un
+                                  usuario con rol Cliente Final. Administrador y
+                                  Técnico CENERIS ya tienen acceso completo por
+                                  defecto, así que la acción NO se les ofrece. */}
+                              {!ROLES_CON_ACCESO_TOTAL.includes(u.rol_nombre) && (
+                                <button
+                                  onClick={() => abrirPermisos(u)}
+                                  className="inline-flex items-center justify-center px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-200 bg-transparent border border-black/20 dark:border-white/20 rounded-lg hover:bg-black/10 dark:hover:bg-white/10 hover:text-gray-900 dark:hover:text-white focus:ring-4 focus:outline-none focus:ring-black/10 dark:focus:ring-white/10 transition-all"
+                                >
+                                  <svg className="w-4 h-4 mr-2 text-gray-600 dark:text-gray-300" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12c0 1.268-.63 2.39-1.593 3.068a3.745 3.745 0 01-1.043 3.296 3.745 3.745 0 01-3.296 1.043A3.745 3.745 0 0112 21c-1.268 0-2.39-.63-3.068-1.593a3.746 3.746 0 01-3.296-1.043 3.745 3.745 0 01-1.043-3.296A3.745 3.745 0 013 12c0-1.268.63-2.39 1.593-3.068a3.745 3.745 0 011.043-3.296 3.746 3.746 0 013.296-1.043A3.746 3.746 0 0112 3c1.268 0 2.39.63 3.068 1.593a3.746 3.746 0 013.296 1.043 3.746 3.746 0 011.043 3.296A3.745 3.745 0 0121 12z" />
+                                  </svg>
+                                  Gestionar permisos
+                                </button>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       ))}

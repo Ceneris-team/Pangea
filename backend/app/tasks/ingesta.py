@@ -8,9 +8,15 @@ from app.ingesta.ftp_receptor import descargar_archivo_dat, listar_archivos_dat
 from app.models.archivo_ingesta import ArchivoIngesta
 from app.models.mapeo_dispositivo import Parametro
 from app.models.ubicacion_conexion import ConexionFTP
+<<<<<<< HEAD
 from app.services.alarmas.motor import evaluar_alarmas
+=======
+from app.security.auditoria import limpiar_contexto_auditoria, marcar_contexto_auditoria
+from app.services.cache.invalidacion import invalidar_por_lectura
+>>>>>>> 3d65615966eb981135ac37e86bc93cb1b8856a8a
 from app.services.ingesta.estandarizador import estandarizar_filas
 from app.services.ingesta.mapeo import (
+    HeaderCorruptoError,
     MapeoNoEncontradoError,
     construir_mapeo,
     resolver_formato,
@@ -22,6 +28,7 @@ from app.services.ingesta.persistencia import (
     guardar_lecturas,
     resolver_dispositivo,
 )
+from app.services.ingesta.usuario_sistema import resolver_id_usuario_sistema
 from app.services.ingesta.validador import validar_lecturas
 from app.services.mapa.eventos import construir_evento, publicar_lecturas
 from app.services.particiones import ParticionInexistenteError
@@ -87,7 +94,25 @@ def interpretar_y_guardar(
 
     # mp_clmn referencia las columnas por índice, así que el mapeo se
     # arma con el header ya leído.
-    mapeo = construir_mapeo(db, formato.id_mp, resultado_parseo.columnas)
+    # HU51: filas y delimitador decimal se pasan para que el auto-alta de
+    # parámetros pueda inferir tipo_dato mirando los valores reales de la
+    # columna (numerico -> tlmtr / texto -> evnt_txt); sin ellos el
+    # auto-creado caería siempre a 'texto'.
+    try:
+        mapeo = construir_mapeo(
+            db,
+            formato.id_mp,
+            resultado_parseo.columnas,
+            filas_archivo=resultado_parseo.filas,
+            delimitador_decimal=formato.delimitador_decimal,
+            columna_fecha=formato.config.columna_fecha,
+        )
+    except HeaderCorruptoError as exc:
+        # I-27: mismo criterio que MapeoNoEncontradoError -no es
+        # transitorio, reintentar el mismo archivo produce el mismo
+        # header, así que se trata como error de datos (Fallido en la
+        # Cola de Ingesta, HU09), no se reintenta solo.
+        raise ErrorDatosNoRecuperable(str(exc)) from exc
     if not mapeo:
         raise ErrorDatosNoRecuperable(
             f"El formato mp_frmt id={formato.id_mp} (trama '{formato.tipo_trama}') "
@@ -217,10 +242,24 @@ def procesar_archivo_dat(self, id_archv: int) -> dict:
         # hacía que dos dataloggers de la misma marca en la misma sede
         # compartieran mapeo. Se resuelve ANTES de descargar: si no hay
         # mapeo cargado, no tiene sentido bajar el archivo.
+        #
+        # HU49 CA5: si acá se crea automáticamente una trama nueva
+        # (prefijo nunca visto para este dispositivo), tiene que quedar
+        # en el log de auditoría. Como esto corre dentro de una tarea de
+        # Celery -sin JWT ni request HTTP-, se marca el contexto a mano
+        # con el usuario Sistema en vez de la dependencia auditar_cambios
+        # (que exige un usuario autenticado por HTTP). Se limpia en el
+        # finally para no dejar esta atribución "prendida" en el resto
+        # del pipeline, que sigue usando la MISMA sesión hasta su propio
+        # commit final más abajo.
         try:
+            id_usr_sistema = resolver_id_usuario_sistema(db)
+            marcar_contexto_auditoria(db, id_usr_sistema)
             formato = resolver_formato(db, dispositivo.id_dspstv, archivo.nmbr_archv)
         except MapeoNoEncontradoError as exc:
             raise ErrorDatosNoRecuperable(str(exc)) from exc
+        finally:
+            limpiar_contexto_auditoria(db)
 
         contenido = descargar_archivo_dat(cnxn, archivo.nmbr_archv)
 
@@ -260,6 +299,18 @@ def procesar_archivo_dat(self, id_archv: int) -> dict:
         # está caído, el archivo sigue siendo 'Exitoso' -los datos están
         # guardados- y solo se pierde la actualización en vivo, que se
         # recupera sola en cuanto el usuario recargue el mapa.
+        # HT-10 CA2: segunda invalidación, ya DESPUES del commit.
+        # guardar_lecturas() ya invalidó al persistir, pero eso ocurre
+        # antes de que la transacción sea visible; si un request se coló
+        # en esa ventana, repobló la caché con el estado anterior. Repetir
+        # acá cierra la ventana. Es idempotente y cuesta un DEL sobre un
+        # conjunto normalmente vacío.
+        if resultado_persistencia.guardadas:
+            invalidar_por_lectura(
+                id_sd=resultado_persistencia.id_sd,
+                id_ubccn=resultado_persistencia.id_ubccn,
+            )
+
         _publicar_eventos_mapa(db, resultado_persistencia)
 
         # HU29 CA3/CA4: evalúa las alarmas de esta ubicación contra los
