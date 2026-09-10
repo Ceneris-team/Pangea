@@ -334,15 +334,18 @@ def test_crear_panel_lo_agrega_al_listado_del_usuario(client, db_session, client
 
 
 def test_crear_panel_queda_sin_ubicaciones_ni_widgets(client, db_session, cliente_con_edicion_tableros):
-    """CA3: el panel nace vacío -HU26/HU34 están fuera de alcance-. Se
-    verifica indirectamente: GET /paneles/{id} (que sí incluiría ese
-    contenido cuando exista) hoy solo trae nombre y fecha."""
+    """CA3: el panel nace vacío -HU34 (widgets) sigue fuera de alcance-.
+    GET /paneles/{id} ahora sí trae `ubicaciones` (HU26 CA3), así que se
+    verifica que nace vacía en vez de comparar la respuesta completa
+    contra la de creación."""
     creado = client.post("/paneles", json={"nmbr": "Panel vacío"}).json()["panel"]
 
     detalle = client.get(f"/paneles/{creado['id_pnl']}")
 
     assert detalle.status_code == 200
-    assert detalle.json() == creado
+    cuerpo = detalle.json()
+    assert cuerpo["ubicaciones"] == []
+    assert {k: v for k, v in cuerpo.items() if k != "ubicaciones"} == creado
 
 
 def test_crear_panel_nombre_duplicado_devuelve_409(client, db_session, cliente_con_edicion_tableros):

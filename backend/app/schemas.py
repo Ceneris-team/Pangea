@@ -1108,7 +1108,6 @@ class VistaPreviaResponse(BaseModel):
     filas_mostradas: int
 
 
-
 # HU27 - Listar alarmas
 
 
@@ -1309,6 +1308,7 @@ class NotificacionesGuardadas(BaseModel):
     mensaje: str = "Notificaciones configuradas correctamente"
     notificaciones: NotificacionesAlarma
 
+
 # ---------------------------------------------------------------------------
 # HT-11 - Log de auditoría
 # ---------------------------------------------------------------------------
@@ -1349,10 +1349,12 @@ class PanelListItem(BaseModel):
 class PanelDetalle(PanelListItem):
     """HU23 CA2: lo que se muestra al abrir un panel desde el listado.
 
-    Hoy son los mismos campos que PanelListItem -las ubicaciones y
-    widgets asociados (HU26/HU34) están fuera de alcance de HU23-, pero
-    es un schema propio porque ese contenido se agregará ACÁ, no en el
-    listado."""
+    `ubicaciones` es el contenido que agrega HU26 (widgets, HU34, siguen
+    fuera de alcance); tiene default_factory para que el propio
+    PanelDetalle.model_validate(panel) de HU23 -que valida directo sobre
+    el ORM y no conoce este campo- siga funcionando sin tocarlo."""
+
+    ubicaciones: list["UbicacionEnPanel"] = Field(default_factory=list)
 
 
 # HU24 - Crear panel
@@ -1412,3 +1414,55 @@ class PanelActualizado(BaseModel):
     nmbr: str
     fch_crcn: datetime
 
+
+# ---------------------------------------------------------------------------
+# HU26 - Añadir ubicaciones al panel
+# ---------------------------------------------------------------------------
+
+
+class UbicacionParaPanel(BaseModel):
+    """CA1: pobla el listado de 'Añadir ubicaciones' -las asignadas al
+    usuario (HU21) que todavía no están en ESTE panel."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id_ubccn: int
+    nmbr: str
+
+
+class ParametroUltimoValor(BaseModel):
+    """Mismo resumen que ya usa /mapa-cliente (HU17): último valor de un
+    parámetro de la ubicación, con su unidad y fecha/hora."""
+
+    parametro: str
+    unidad: str
+    valor: float | str | None
+    fch_hr: str | None
+
+
+class UbicacionEnPanel(BaseModel):
+    """CA3: 'cada ubicación añadida aparece representada con su nombre y
+    los últimos valores de telemetría disponibles'."""
+
+    id_ubccn: int
+    nmbr: str
+    parametros: list[ParametroUltimoValor]
+
+
+class UbicacionesAnadir(BaseModel):
+    """CA2: una o más ubicaciones seleccionadas del listado."""
+
+    ids_ubccn: list[int] = Field(..., min_length=1)
+
+
+class UbicacionesAnadidas(BaseModel):
+    mensaje: str = "Ubicaciones añadidas correctamente"
+    panel: PanelDetalle
+
+
+class UbicacionRetirada(BaseModel):
+    mensaje: str = "Ubicación retirada del panel"
+    panel: PanelDetalle
+
+
+PanelDetalle.model_rebuild()

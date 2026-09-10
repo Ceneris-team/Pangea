@@ -50,6 +50,26 @@ HU23).
 
 Módulo de permiso: "Tableros" (HT-03), el mismo que ya usan /mapa-cliente
 (HU17) y /mediciones (HU13).
+
+HU 26 - Añadir ubicaciones al panel
+
+CA1: GET /{id_pnl}/ubicaciones-disponibles -las asignadas al usuario según
+HU21 que todavía no están en ESTE panel (filtra pnl_ubccn). CA2: POST
+/{id_pnl}/ubicaciones asocia las seleccionadas ("Ubicaciones añadidas
+correctamente"); una misma ubicación no puede añadirse dos veces al mismo
+panel -uq_pnlubccn_pnl_ubccn ya lo garantiza, acá se traduce el
+IntegrityError en un 422 legible-. CA3: GET /{id_pnl} (HU23) ahora
+devuelve cada ubicación con el último valor de cada parámetro -reusa
+services/mapa/ultimos_valores.py, la misma pieza que ya usa /mapa-cliente
+para lo mismo-. CA4: DELETE /{id_pnl}/ubicaciones/{id_ubccn} retira la
+ubicación ("Ubicación retirada del panel"); no borra telemetría ni la
+ubicación misma, solo la fila de pnl_ubccn.
+
+Mismo control de acceso que HU24/HU25: rol Cliente Final (ROL_CREADOR_DE_
+PANELES) + dueño del panel (_obtener_panel_propio) para las dos
+operaciones de escritura. El GET de disponibles no lleva el chequeo de
+rol -ver el mismo criterio en obtener_panel, que tampoco lo lleva-: es
+lectura sobre un panel que ya tiene que ser tuyo para llegar a esta rama.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -58,16 +78,23 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import Panel, PanelUbicacion, Widget
+from app.models import Panel, PanelUbicacion, Ubicacion, Widget
 from app.schemas import (
     PanelActualizado,
     PanelActualizar,
-    PanelCrear,
     PanelCreado,
+    PanelCrear,
     PanelDetalle,
     PanelListItem,
+    UbicacionEnPanel,
+    UbicacionesAnadidas,
+    UbicacionesAnadir,
+    UbicacionParaPanel,
+    UbicacionRetirada,
 )
 from app.security.permisos import EDICION, LECTURA, require_permiso
+from app.security.ubicaciones_permitidas import ubicaciones_permitidas
+from app.services.mapa.ultimos_valores import ultimos_valores_por_ubicacion
 
 router = APIRouter(prefix="/paneles", tags=["Paneles"])
 
@@ -120,22 +147,173 @@ def _obtener_panel_propio(db: Session, id_pnl: int, id_usr: int) -> Panel:
     return panel
 
 
+def _detalle_panel(db: Session, panel: Panel) -> PanelDetalle:
+    """HU26 CA3: el panel con sus ubicaciones ya añadidas, cada una con
+    el último valor de cada parámetro (mismo resumen que /mapa-cliente,
+    ver services/mapa/ultimos_valores.py)."""
+    ubicaciones = (
+        db.query(Ubicacion)
+        .join(PanelUbicacion, PanelUbicacion.id_ubccn == Ubicacion.id_ubccn)
+        .filter(PanelUbicacion.id_pnl == panel.id_pnl)
+        .order_by(Ubicacion.nmbr)
+        .all()
+    )
+    ultimos = ultimos_valores_por_ubicacion(db, [u.id_ubccn for u in ubicaciones])
+
+    items = [
+        UbicacionEnPanel(
+            id_ubccn=ubicacion.id_ubccn,
+            nmbr=ubicacion.nmbr,
+            parametros=[
+                {
+                    "parametro": dato["parametro"],
+                    "unidad": dato["unidad"],
+                    # float() y no Decimal: Decimal no es serializable a
+                    # JSON. Un evento de texto (evnt_txt) llega como str
+                    # y se deja tal cual -mismo criterio que mapa_cliente.
+                    "valor": (
+                        float(dato["valor"])
+                        if not isinstance(dato["valor"], str)
+                        else dato["valor"]
+                    ),
+                    "fch_hr": dato["fch_hr"].isoformat() if dato["fch_hr"] else None,
+                }
+                for dato in sorted(
+                    ultimos.get(ubicacion.id_ubccn, {}).values(), key=lambda d: d["parametro"]
+                )
+            ],
+        )
+        for ubicacion in ubicaciones
+    ]
+    return PanelDetalle(
+        id_pnl=panel.id_pnl, nmbr=panel.nmbr, fch_crcn=panel.fch_crcn, ubicaciones=items
+    )
+
+
 @router.get("/{id_pnl}", response_model=PanelDetalle)
 def obtener_panel(
     id_pnl: int,
     db: Session = Depends(get_db),
     usuario: dict = Depends(require_permiso("Tableros", LECTURA)),
 ):
-    """HU23 CA2: abrir un panel desde el listado.
-
-    El contenido con ubicaciones y widgets asociados llega en HU26/HU34;
-    por ahora este endpoint solo confirma que el panel existe y es del
-    usuario autenticado.
-    """
+    """HU23 CA2: abrir un panel desde el listado. HU26 CA3: ahora incluye
+    las ubicaciones ya añadidas con su telemetría más reciente -antes de
+    HU26 este endpoint solo confirmaba que el panel existía."""
     id_usr = int(usuario["sub"])
     panel = _obtener_panel_propio(db, id_pnl, id_usr)
 
-    return PanelDetalle.model_validate(panel)
+    return _detalle_panel(db, panel)
+
+
+@router.get("/{id_pnl}/ubicaciones-disponibles")
+def listar_ubicaciones_disponibles(
+    id_pnl: int,
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(require_permiso("Tableros", LECTURA)),
+):
+    """HU26 CA1: el listado para 'Añadir ubicaciones' -las asignadas al
+    usuario (HU21) que todavía no están en ESTE panel."""
+    id_usr = int(usuario["sub"])
+    panel = _obtener_panel_propio(db, id_pnl, id_usr)
+
+    ids_permitidas = ubicaciones_permitidas(db, usuario)
+    if not ids_permitidas:
+        return {"items": []}
+
+    ids_ya_en_panel = {
+        id_ubccn
+        for (id_ubccn,) in db.query(PanelUbicacion.id_ubccn).filter(
+            PanelUbicacion.id_pnl == panel.id_pnl
+        )
+    }
+    ids_disponibles = [i for i in ids_permitidas if i not in ids_ya_en_panel]
+    if not ids_disponibles:
+        return {"items": []}
+
+    ubicaciones = (
+        db.query(Ubicacion)
+        .filter(Ubicacion.id_ubccn.in_(ids_disponibles))
+        .order_by(Ubicacion.nmbr)
+        .all()
+    )
+    return {"items": [UbicacionParaPanel.model_validate(u) for u in ubicaciones]}
+
+
+@router.post("/{id_pnl}/ubicaciones", response_model=UbicacionesAnadidas)
+def anadir_ubicaciones(
+    id_pnl: int,
+    body: UbicacionesAnadir,
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(require_permiso("Tableros", EDICION)),
+):
+    """HU26 CA2: 'AGREGAR AL PANEL' -> asocia las ubicaciones
+    seleccionadas y devuelve "Ubicaciones añadidas correctamente".
+
+    Mismo control de acceso que crear_panel/actualizar_panel: rol
+    Cliente Final + dueño del panel."""
+    if usuario.get("rol") != ROL_CREADOR_DE_PANELES:
+        raise HTTPException(
+            status_code=403, detail=f"Solo {ROL_CREADOR_DE_PANELES} puede editar paneles"
+        )
+
+    id_usr = int(usuario["sub"])
+    panel = _obtener_panel_propio(db, id_pnl, id_usr)
+
+    ids_permitidas = set(ubicaciones_permitidas(db, usuario))
+    ids_ajenas = [i for i in body.ids_ubccn if i not in ids_permitidas]
+    if ids_ajenas:
+        raise HTTPException(
+            status_code=403,
+            detail=f"No tienes acceso a la(s) ubicación(es) {sorted(ids_ajenas)}",
+        )
+
+    for id_ubccn in body.ids_ubccn:
+        db.add(PanelUbicacion(id_pnl=panel.id_pnl, id_ubccn=id_ubccn))
+
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        # "Una misma ubicación no puede añadirse dos veces al mismo
+        # panel" -uq_pnlubccn_pnl_ubccn- traducido a un 422 legible en
+        # vez del IntegrityError crudo de Postgres.
+        raise HTTPException(
+            status_code=422,
+            detail="Una o más ubicaciones seleccionadas ya están en este panel",
+        ) from exc
+
+    return UbicacionesAnadidas(panel=_detalle_panel(db, panel))
+
+
+@router.delete("/{id_pnl}/ubicaciones/{id_ubccn}", response_model=UbicacionRetirada)
+def quitar_ubicacion(
+    id_pnl: int,
+    id_ubccn: int,
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(require_permiso("Tableros", EDICION)),
+):
+    """HU26 CA4: 'Quitar' -> retira la ubicación del panel (no borra
+    telemetría ni la ubicación misma, solo la fila de pnl_ubccn)."""
+    if usuario.get("rol") != ROL_CREADOR_DE_PANELES:
+        raise HTTPException(
+            status_code=403, detail=f"Solo {ROL_CREADOR_DE_PANELES} puede editar paneles"
+        )
+
+    id_usr = int(usuario["sub"])
+    panel = _obtener_panel_propio(db, id_pnl, id_usr)
+
+    fila = (
+        db.query(PanelUbicacion)
+        .filter(PanelUbicacion.id_pnl == panel.id_pnl, PanelUbicacion.id_ubccn == id_ubccn)
+        .first()
+    )
+    if fila is None:
+        raise HTTPException(status_code=404, detail="Esa ubicación no está en el panel")
+
+    db.delete(fila)
+    db.commit()
+
+    return UbicacionRetirada(panel=_detalle_panel(db, panel))
 
 
 def _resolver_sede_panel(usuario: dict) -> int:
