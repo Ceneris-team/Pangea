@@ -142,6 +142,102 @@ class PermisosUbicacionActualizados(BaseModel):
     ubicacion_ids: list[int]
 
 
+class UsuarioActualizar(BaseModel):
+    """HU20 CA1/CA2: los cuatro campos que el formulario de edición
+    precarga y permite modificar -Nombre completo, Correo electrónico, Rol
+    y Teléfono-.
+
+    Todos opcionales, mismo patrón parcial que UbicacionActualizar y
+    DispositivoUpdate: solo se actualiza lo que venga en el body
+    (exclude_unset lo filtra en el router). Un null explícito significa
+    "no lo toques" salvo en tlfn, la única columna nullable del conjunto.
+
+    El estado (Activo/Inactivo) NO está acá: dar de baja a un usuario es
+    otra historia, y HU20 fija sus campos editables en esos cuatro. Al no
+    declararse, Pydantic lo descarta del body en vez de aplicarlo en
+    silencio.
+    """
+
+    nmbr_cmplt: str | None = Field(default=None, min_length=1, max_length=150)
+    crr: EmailStr | None = None
+    rol_nombre: str | None = None
+    tlfn: str | None = Field(default=None, max_length=20)
+
+
+class UsuarioDetalle(BaseModel):
+    """HU20 CA1: los datos actuales con los que se precarga el formulario
+    de edición. A diferencia de UsuarioListItem incluye el teléfono, que
+    es editable pero no se muestra como columna del listado (HU03)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id_usr: int
+    nmbr_cmplt: str
+    crr: str
+    rol_nombre: str
+    tlfn: str | None
+    estd: str
+
+
+class UsuarioActualizado(BaseModel):
+    """HU20 CA2: el usuario ya actualizado, con el mensaje EXACTO que pide
+    el CA. Mismo patrón de respuesta que UsuarioCreado (HU04)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    mensaje: str = "Usuario actualizado correctamente"
+    id_usr: int
+    nmbr_cmplt: str
+    crr: str
+    rol_nombre: str
+    tlfn: str | None
+    estd: str
+
+
+class UbicacionPermisoItem(BaseModel):
+    """HU21 CA1: una ubicación registrada junto al estado de acceso ACTUAL
+    del usuario que se está gestionando. El panel las lista TODAS -no solo
+    las concedidas-, con `tiene_acceso` marcando cuáles están habilitadas,
+    que es justo lo que el CA pide mostrar."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id_ubccn: int
+    nmbr: str
+    tiene_acceso: bool
+
+
+class PermisosUbicacionPanel(BaseModel):
+    """HU21 CA1: respuesta del GET del panel de permisos."""
+
+    id_usr: int
+    nmbr_cmplt: str
+    rol_nombre: str
+    items: list[UbicacionPermisoItem]
+
+
+class PermisosUbicacionActualizar(BaseModel):
+    """HU21 CA2: el conjunto COMPLETO de ubicaciones habilitadas tras
+    marcar/desmarcar. Se manda entero y reemplaza al anterior (PUT, no un
+    par de altas/bajas): así el resultado no depende del estado previo ni
+    del orden en que lleguen dos ediciones simultáneas.
+
+    Una lista vacía es válida y significa "quitarle todos los accesos";
+    por eso el campo es obligatorio y no tiene default -un body sin
+    `ubicacion_ids` sería ambiguo entre "ninguna" y "no lo toques"-.
+    """
+
+    ubicacion_ids: list[int]
+
+
+class PermisosUbicacionActualizados(BaseModel):
+    """HU21 CA2: confirmación con el mensaje EXACTO que pide el CA."""
+
+    mensaje: str = "Permisos actualizados correctamente"
+    id_usr: int
+    ubicacion_ids: list[int]
+
+
 class UbicacionListItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -1012,7 +1108,7 @@ class VistaPreviaResponse(BaseModel):
     filas_mostradas: int
 
 
-<<<<<<< HEAD
+
 # HU27 - Listar alarmas
 
 
@@ -1212,7 +1308,7 @@ class NotificacionesGuardar(BaseModel):
 class NotificacionesGuardadas(BaseModel):
     mensaje: str = "Notificaciones configuradas correctamente"
     notificaciones: NotificacionesAlarma
-=======
+
 # ---------------------------------------------------------------------------
 # HT-11 - Log de auditoría
 # ---------------------------------------------------------------------------
@@ -1234,4 +1330,85 @@ class AuditoriaListItem(BaseModel):
     vlrs_antrrs: dict | list | None
     vlrs_nvs: dict | list | None
     fch_evnt: datetime
->>>>>>> 3d65615966eb981135ac37e86bc93cb1b8856a8a
+
+
+# HU23 - Listar paneles
+
+
+class PanelListItem(BaseModel):
+    """HU23 CA1: nombre, fecha de creación y el id necesario para las
+    acciones del listado (abrir el panel, CA2)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id_pnl: int
+    nmbr: str
+    fch_crcn: datetime
+
+
+class PanelDetalle(PanelListItem):
+    """HU23 CA2: lo que se muestra al abrir un panel desde el listado.
+
+    Hoy son los mismos campos que PanelListItem -las ubicaciones y
+    widgets asociados (HU26/HU34) están fuera de alcance de HU23-, pero
+    es un schema propio porque ese contenido se agregará ACÁ, no en el
+    listado."""
+
+
+# HU24 - Crear panel
+
+
+def _validar_nombre_panel(valor: str) -> str:
+    """Mismo criterio que _validar_nombre_ubicacion: un nombre de solo
+    espacios pasa min_length=1 pero no es un nombre, y el UNIQUE por
+    usuario (uq_pnl_usr_nombre) tiene que comparar siempre el valor ya
+    recortado."""
+    recortado = valor.strip()
+    if not recortado:
+        raise ValueError("El nombre es obligatorio")
+    return recortado
+
+
+class PanelCrear(BaseModel):
+    """HU24 CA1/CA2: único campo del formulario de creación. El panel nace
+    vacío -sin ubicaciones ni widgets- y con id_sd/id_usr resueltos por el
+    router a partir del JWT, igual que hace UbicacionCrear con la sede."""
+
+    nmbr: str = Field(min_length=1, max_length=100)
+
+    @field_validator("nmbr")
+    @classmethod
+    def _nombre_no_vacio(cls, valor: str) -> str:
+        return _validar_nombre_panel(valor)
+
+
+class PanelCreado(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id_pnl: int
+    nmbr: str
+    fch_crcn: datetime
+
+
+# HU25 - Editar / eliminar panel
+
+
+class PanelActualizar(BaseModel):
+    """HU25 CA1/CA2: único campo editable, mismo criterio que PanelCrear
+    (obligatorio, máximo 100, recortado)."""
+
+    nmbr: str = Field(min_length=1, max_length=100)
+
+    @field_validator("nmbr")
+    @classmethod
+    def _nombre_no_vacio(cls, valor: str) -> str:
+        return _validar_nombre_panel(valor)
+
+
+class PanelActualizado(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id_pnl: int
+    nmbr: str
+    fch_crcn: datetime
+>>>>>>> dev

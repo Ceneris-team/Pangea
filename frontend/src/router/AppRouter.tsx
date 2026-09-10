@@ -27,6 +27,10 @@ import Parametros from "../pages/Parametros";
 import ColaIngesta from "../pages/ColaIngesta";
 import Alarmas from "../pages/Alarmas";
 import CrearAlarma from "../pages/CrearAlarma";
+import Paneles from "../pages/Paneles";
+import DetallePanel from "../pages/DetallePanel";
+import CrearPanel from "../pages/CrearPanel";
+import EditarPanel from "../pages/EditarPanel";
 
 // HU06: "Solo los roles Técnico CENERIS y Administrador tienen acceso a
 // este módulo." El backend lo exige igual vía require_permiso('Ingesta').
@@ -282,6 +286,52 @@ export default function AppRouter() {
             element={
               <ProtectedRoute rolesPermitidos={ROLES_COLA_INGESTA}>
                 <ColaIngesta />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* HU23: listar paneles (Tableros Personalizables, E05). Sin
+              restricción de rol adicional: el backend ya filtra por
+              dueño (id_usr), no por rol -mismo criterio que Ubicaciones/
+              Dispositivos-. Se declara antes de /paneles/:id para que el
+              parámetro no capture "nuevo" (mismo patrón que
+              /ubicaciones/nueva vs /ubicaciones/:id). */}
+          <Route
+            path="/paneles"
+            element={
+              <ProtectedRoute>
+                <Paneles />
+              </ProtectedRoute>
+            }
+          />
+          {/* HU24: crear panel. Va antes de /paneles/:id por el mismo
+              motivo que /ubicaciones/nueva vs /ubicaciones/:id: el
+              segmento literal "nuevo" tiene que ganarle al parámetro. */}
+          <Route
+            path="/paneles/nuevo"
+            element={
+              <ProtectedRoute>
+                <CrearPanel />
+              </ProtectedRoute>
+            }
+          />
+          {/* HU25 CA1/CA2: editar panel. Va antes de /paneles/:id por el
+              mismo motivo que /ubicaciones/:id/editar: el segmento
+              literal "editar" tiene que ganarle al parámetro :id. */}
+          <Route
+            path="/paneles/:id/editar"
+            element={
+              <ProtectedRoute>
+                <EditarPanel />
+              </ProtectedRoute>
+            }
+          />
+          {/* HU23 CA2: abrir un panel desde el listado. */}
+          <Route
+            path="/paneles/:id"
+            element={
+              <ProtectedRoute>
+                <DetallePanel />
               </ProtectedRoute>
             }
           />
