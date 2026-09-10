@@ -7,11 +7,8 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
 from app.routers import (
-<<<<<<< HEAD
     alarmas,
-=======
     auditoria,
->>>>>>> 3d65615966eb981135ac37e86bc93cb1b8856a8a
     auth,
     conexiones_ftp,
     dispositivos,

@@ -1411,4 +1411,4 @@ class PanelActualizado(BaseModel):
     id_pnl: int
     nmbr: str
     fch_crcn: datetime
->>>>>>> dev
+

@@ -8,12 +8,9 @@ from app.ingesta.ftp_receptor import descargar_archivo_dat, listar_archivos_dat
 from app.models.archivo_ingesta import ArchivoIngesta
 from app.models.mapeo_dispositivo import Parametro
 from app.models.ubicacion_conexion import ConexionFTP
-<<<<<<< HEAD
 from app.services.alarmas.motor import evaluar_alarmas
-=======
 from app.security.auditoria import limpiar_contexto_auditoria, marcar_contexto_auditoria
 from app.services.cache.invalidacion import invalidar_por_lectura
->>>>>>> 3d65615966eb981135ac37e86bc93cb1b8856a8a
 from app.services.ingesta.estandarizador import estandarizar_filas
 from app.services.ingesta.mapeo import (
     HeaderCorruptoError,
@@ -274,9 +271,7 @@ def procesar_archivo_dat(self, id_archv: int) -> dict:
         # finally para no dejar esta atribución "prendida" en el resto
         # del pipeline, que sigue usando la MISMA sesión hasta su propio
         # commit final más abajo.
-        try:
-            id_usr_sistema = resolver_id_usuario_sistema(db)
-            marcar_contexto_auditoria(db, id_usr_sistema)
+        
         #
         # HU49 CA5: si acá se crea automáticamente una trama nueva
         # (prefijo nunca visto para este dispositivo), tiene que quedar
@@ -295,8 +290,7 @@ def procesar_archivo_dat(self, id_archv: int) -> dict:
             raise ErrorDatosNoRecuperable(str(exc)) from exc
         finally:
             limpiar_contexto_auditoria(db)
-        finally:
-            limpiar_contexto_auditoria(db)
+        
 
         contenido = descargar_archivo_dat(cnxn, archivo.nmbr_archv)
 
