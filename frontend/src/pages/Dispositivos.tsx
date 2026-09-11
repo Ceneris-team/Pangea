@@ -447,7 +447,7 @@ export default function Dispositivos() {
               {ROLES_PUEDEN_AGREGAR.includes(rol ?? "") && (
                 <button
                   onClick={abrirFormulario}
-                  className="inline-flex items-center px-4 py-2.5 text-sm font-semibold text-[#ccff00] bg-[#ccff00]/10 hover:bg-[#ccff00]/20 border border-[#ccff00]/30 rounded-xl transition-colors"
+                  className="inline-flex items-center px-4 py-2.5 text-sm font-semibold text-[#5a7000] dark:text-[#ccff00] bg-[#ccff00]/10 hover:bg-[#ccff00]/20 border border-[#8fb300]/40 dark:border-[#ccff00]/30 rounded-xl transition-colors"
                 >
                   <svg
                     className="w-4 h-4 mr-2"
@@ -612,7 +612,7 @@ export default function Dispositivos() {
                                 e.stopPropagation();
                                 navigate(`/dispositivos/${d.id_dspstv}`);
                               }}
-                              className="inline-flex items-center justify-center px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-200 bg-transparent border border-black/20 dark:border-white/20 rounded-lg hover:bg-black/10 dark:hover:bg-white/10 hover:text-gray-900 dark:hover:text-white focus:ring-4 focus:outline-none focus:ring-black/10 dark:focus:ring-white/10 transition-all"
+                              className="inline-flex items-center justify-center px-3 py-1.5 text-xs sm:text-sm font-medium whitespace-nowrap text-gray-700 dark:text-gray-200 bg-transparent border border-black/20 dark:border-white/20 rounded-lg hover:bg-black/10 dark:hover:bg-white/10 hover:text-gray-900 dark:hover:text-white focus:ring-4 focus:outline-none focus:ring-black/10 dark:focus:ring-white/10 transition-all"
                             >
                               <svg className="w-4 h-4 mr-2 text-gray-600 dark:text-gray-300" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
@@ -826,7 +826,7 @@ export default function Dispositivos() {
                 <button
                   type="submit"
                   disabled={guardandoDispositivo}
-                  className="px-4 py-2.5 text-sm font-semibold text-[#5a7000] dark:text-[#ccff00] bg-[#ccff00]/10 hover:bg-[#ccff00]/20 border border-[#ccff00]/30 rounded-xl transition-colors disabled:opacity-50"
+                  className="px-4 py-2.5 text-sm font-semibold text-[#5a7000] dark:text-[#ccff00] bg-[#ccff00]/10 hover:bg-[#ccff00]/20 border border-[#8fb300]/40 dark:border-[#ccff00]/30 rounded-xl transition-colors disabled:opacity-50"
                 >
                   {guardandoDispositivo ? "Guardando..." : "Guardar dispositivo"}
                 </button>
@@ -947,7 +947,7 @@ export default function Dispositivos() {
                     <button
                       type="button"
                       onClick={irAColaDeProcesamiento}
-                      className="flex-1 px-4 py-2.5 text-sm font-semibold text-[#5a7000] dark:text-[#ccff00] bg-[#ccff00]/10 hover:bg-[#ccff00]/20 border border-[#ccff00]/30 rounded-xl transition-colors"
+                      className="flex-1 px-4 py-2.5 text-sm font-semibold text-[#5a7000] dark:text-[#ccff00] bg-[#ccff00]/10 hover:bg-[#ccff00]/20 border border-[#8fb300]/40 dark:border-[#ccff00]/30 rounded-xl transition-colors"
                     >
                       VER COLA DE PROCESAMIENTO
                     </button>

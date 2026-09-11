@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useSearchParams } from "react-router-dom";
 import { apiFetch, ApiError } from "../services/api";
 import { useAuth } from "../context/AuthContext";
+import { useTheme } from "../context/ThemeContext";
 import Sidebar from "../components/layout/Sidebar";
 import Topbar from "../components/layout/Topbar";
 import SelectorRangoFechasTimeline from "../components/SelectorRangoFechasTimeline";
@@ -42,7 +44,13 @@ interface MedicionItem {
 }
 
 interface ListadoMediciones {
+  /** Puntos que existen para la consulta, no los que vinieron en `items`:
+   *  la respuesta está paginada, así que `total > items.length` significa
+   *  que las series se están dibujando incompletas. */
   total: number;
+  /** HT-10 CA3: true si el backend muestreó la serie por rango amplio. */
+  downsampling?: boolean;
+  total_sin_muestrear?: number;
   items: MedicionItem[];
 }
 
@@ -76,6 +84,21 @@ function formatearFechaCorta(iso: string, zonaHoraria: string): string {
   });
 }
 
+// Puntos que se piden POR PARÁMETRO seleccionado. GET /mediciones pagina
+// sobre la UNIÓN de todas las series, no por parámetro: sin pedir un
+// por_pagina acorde, el default del backend (50 filas) se reparte entre
+// todos los gráficos y cada serie queda con una fracción -con 5
+// parámetros, ~8 puntos cada uno, que es el bug de "el gráfico muestra 5
+// mediciones cuando agrego más gráficos"-. Se escala con la cantidad de
+// parámetros para que cada serie conserve su resolución.
+const PUNTOS_POR_PARAMETRO = 500;
+
+// Topes duros del endpoint (mediciones.py): por_pagina <= 5000 y
+// max_puntos <= 50000. Pedir por encima devuelve 422, así que se acotan
+// acá en vez de dejar que la petición falle.
+const TOPE_POR_PAGINA = 5000;
+const TOPE_MAX_PUNTOS = 50000;
+
 function construirQuery(parametroIds: number[], ubicacionIds: number[], rangoFechas: RangoFechas | null): string {
   const params = new URLSearchParams();
   parametroIds.forEach((id) => params.append("parametro_ids", String(id)));
@@ -84,16 +107,99 @@ function construirQuery(parametroIds: number[], ubicacionIds: number[], rangoFec
     params.append("fecha_inicio", new Date(rangoFechas.inicio).toISOString());
     params.append("fecha_fin", new Date(rangoFechas.fin).toISOString());
   }
-  const query = params.toString();
-  return query ? `/mediciones?${query}` : "/mediciones";
+
+  const seriesPedidas = Math.max(parametroIds.length, 1);
+  const puntosDeseados = seriesPedidas * PUNTOS_POR_PARAMETRO;
+  params.append("por_pagina", String(Math.min(puntosDeseados, TOPE_POR_PAGINA)));
+  // El downsampling del backend (rangos >30 días) recorta al mismo tope,
+  // así que se pide explícito: su default (2000) es para la tabla de
+  // HU12, y acá el reparto entre series necesita más margen.
+  params.append("max_puntos", String(Math.min(puntosDeseados, TOPE_MAX_PUNTOS)));
+
+  return `/mediciones?${params.toString()}`;
 }
 
 // CA: 1-3 parámetros seleccionados -> una columna; 4-6 -> dos columnas;
-// 7-8 -> tres columnas en pantallas grandes.
+// 7 o más -> tres columnas en pantallas grandes. El CA original solo
+// contemplaba hasta 8 parámetros, pero el selector no limita cuántos se
+// pueden marcar, así que el último tramo cubre cualquier cantidad.
 function claseColumnasGrilla(cantidad: number): string {
   if (cantidad <= 3) return "grid-cols-1";
   if (cantidad <= 6) return "grid-cols-1 md:grid-cols-2";
   return "grid-cols-1 md:grid-cols-2 lg:grid-cols-3";
+}
+
+/**
+ * Convierte una lista de puntos en un path SVG suavizado con interpolación
+ * cúbica monótona (Fritsch-Carlson, la misma familia que D3 curveMonotoneX
+ * o Chart.js con tensión monótona): a diferencia de un spline Catmull-Rom
+ * -que se probó antes y se descartó-, esta variante limita la tangente en
+ * cada punto para que la curva nunca "overshoot" ni ondule entre dos
+ * mediciones consecutivas. Es decir, entre dos puntos la curva siempre se
+ * mantiene dentro del rango de valores que ellos definen, así que no
+ * dibuja una subida o bajada que el usuario pueda leer como una medición
+ * intermedia inexistente -eso sí pasaba con Catmull-Rom, y también con un
+ * primer intento de redondear solo las esquinas: la asimetría entre
+ * segmentos de pendiente muy distinta metía un quiebre visible junto al
+ * punto en vez de una curva limpia-.
+ */
+function pathDeLinea(puntos: { x: number; y: number }[]): string {
+  const n = puntos.length;
+  if (n === 0) return "";
+  if (n <= 2) {
+    return puntos.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x},${p.y}`).join(" ");
+  }
+
+  // Pendiente de cada segmento consecutivo.
+  const pendientes: number[] = [];
+  for (let i = 0; i < n - 1; i++) {
+    const dx = puntos[i + 1].x - puntos[i].x;
+    pendientes.push(dx === 0 ? 0 : (puntos[i + 1].y - puntos[i].y) / dx);
+  }
+
+  // Tangente en cada punto: promedio de las pendientes vecinas, pero
+  // puesta a cero en cualquier punto donde la serie cambia de dirección
+  // (mínimo o máximo local) -ahí es exactamente donde Catmull-Rom se
+  // pasaba de largo- y limitada (paso de Fritsch-Carlson) para que ningún
+  // segmento se curve más allá del rango [min, max] de sus dos extremos.
+  const tangentes: number[] = new Array(n).fill(0);
+  for (let i = 1; i < n - 1; i++) {
+    const m0 = pendientes[i - 1];
+    const m1 = pendientes[i];
+    tangentes[i] = m0 * m1 <= 0 ? 0 : (m0 + m1) / 2;
+  }
+  tangentes[0] = pendientes[0];
+  tangentes[n - 1] = pendientes[n - 2];
+
+  for (let i = 0; i < n - 1; i++) {
+    const m = pendientes[i];
+    if (m === 0) {
+      tangentes[i] = 0;
+      tangentes[i + 1] = 0;
+      continue;
+    }
+    const a = tangentes[i] / m;
+    const b = tangentes[i + 1] / m;
+    const s = Math.hypot(a, b);
+    if (s > 3) {
+      const factor = 3 / s;
+      tangentes[i] = a * factor * m;
+      tangentes[i + 1] = b * factor * m;
+    }
+  }
+
+  let d = `M ${puntos[0].x},${puntos[0].y}`;
+  for (let i = 0; i < n - 1; i++) {
+    const p0 = puntos[i];
+    const p1 = puntos[i + 1];
+    const dx = (p1.x - p0.x) / 3;
+    const c1x = p0.x + dx;
+    const c1y = p0.y + tangentes[i] * dx;
+    const c2x = p1.x - dx;
+    const c2y = p1.y - tangentes[i + 1] * dx;
+    d += ` C ${c1x},${c1y} ${c2x},${c2y} ${p1.x},${p1.y}`;
+  }
+  return d;
 }
 
 export default function Graficos() {
@@ -184,6 +290,11 @@ export default function Graficos() {
   const toggleParametro = (id: number) => {
     setParametrosSeleccionados((actual) => (actual.includes(id) ? actual.filter((v) => v !== id) : [...actual, id]));
   };
+
+  // GET /mediciones pagina sobre la unión de todas las series, así que
+  // `total` mayor que los items recibidos significa que lo que se dibuja
+  // es un recorte, no la serie entera.
+  const respuestaTruncada = mediciones !== null && mediciones.total > mediciones.items.length;
 
   // El backend devuelve más reciente primero; para la línea de tiempo se
   // necesita orden cronológico ascendente. Solo valores numéricos son
@@ -308,6 +419,19 @@ export default function Graficos() {
               </div>
             )}
 
+            {/* La respuesta viene paginada: si hay más puntos de los que
+                llegaron, las series se están dibujando INCOMPLETAS. Sin
+                este aviso una serie recortada es indistinguible de una con
+                pocos datos reales -que es justo lo que confunde al ver
+                "MEDICIONES 5" al abrir varios gráficos a la vez-. */}
+            {!loading && respuestaTruncada && (
+              <div className="mb-6 p-4 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-300/50 dark:border-amber-800/40 text-amber-800 dark:text-amber-300 text-sm">
+                Mostrando {mediciones?.items.length ?? 0} de {mediciones?.total ?? 0} mediciones del
+                rango. Los gráficos dibujan solo esa parte: reduce el rango de fechas o la cantidad
+                de parámetros seleccionados para verlas completas.
+              </div>
+            )}
+
             {error && (
               <div className="mb-6 p-4 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm border border-red-200 dark:border-red-800/30">
                 {error}
@@ -392,6 +516,8 @@ interface GraficoDeParametroProps {
 }
 
 function GraficoDeParametro({ parametro, items, tipoGrafico, zonaHoraria, hover, onHover }: GraficoDeParametroProps) {
+  const { esOscuro } = useTheme();
+
   // Serie por ubicación, hasta 4 (paleta categórica validada). El resto se
   // agrupa como "Otras" en vez de generar un color nuevo por índice.
   const { series, otrasUbicaciones } = useMemo(() => {
@@ -436,6 +562,34 @@ function GraficoDeParametro({ parametro, items, tipoGrafico, zonaHoraria, hover,
   const contenedorRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
 
+  // Posición en pantalla (no en el viewBox del SVG) del tooltip de hover,
+  // recalculada vía efecto -no durante el render, que es donde React ya
+  // no permite leer refs- cada vez que cambia el punto resaltado o la
+  // página se desplaza/redimensiona mientras el tooltip sigue abierto.
+  const [posicionTooltip, setPosicionTooltip] = useState<{ left: number; top: number } | null>(null);
+  useEffect(() => {
+    if (!hover) {
+      setPosicionTooltip(null);
+      return;
+    }
+    const puntoActivo = hover;
+    function recalcular() {
+      const rect = svgRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      setPosicionTooltip({
+        left: rect.left + (puntoActivo.x / ANCHO) * rect.width,
+        top: rect.top + (puntoActivo.y / ALTO) * rect.height,
+      });
+    }
+    recalcular();
+    window.addEventListener("scroll", recalcular, true);
+    window.addEventListener("resize", recalcular);
+    return () => {
+      window.removeEventListener("scroll", recalcular, true);
+      window.removeEventListener("resize", recalcular);
+    };
+  }, [hover]);
+
   useEffect(() => {
     function onFullscreenChange() {
       setPantallaCompleta(document.fullscreenElement === contenedorRef.current);
@@ -467,6 +621,15 @@ function GraficoDeParametro({ parametro, items, tipoGrafico, zonaHoraria, hover,
   const maxTOriginal = todosLosTiempos.length ? Math.max(...todosLosTiempos) : 1;
   const rangoVlr = maxVlr - minVlr || 1;
 
+  // Decimales para las etiquetas del eje Y: los suficientes para que las
+  // líneas de grilla se lean distintas entre sí. Con .toFixed(1) fijo, un
+  // rango angosto (p. ej. 11.66-11.77) redondeaba varias líneas distintas
+  // al mismo texto ("11.7", "11.7", "11.8"), y aunque el PUNTO se ubicaba
+  // en su posición real, dos etiquetas iguales seguidas hacían parecer
+  // que esa posición no correspondía a la mitad entre ambas -el problema
+  // era de redondeo de la etiqueta, no de dónde se dibuja el punto-.
+  const decimalesEje = rangoVlr < 1 ? 3 : rangoVlr < 10 ? 2 : rangoVlr < 100 ? 1 : 0;
+
   const minT = zoomT ? zoomT.min : minTOriginal;
   const maxT = zoomT ? zoomT.max : maxTOriginal;
   const rangoT = maxT - minT || 1;
@@ -490,6 +653,7 @@ function GraficoDeParametro({ parametro, items, tipoGrafico, zonaHoraria, hover,
     if (!rect || rect.width === 0) return 0;
     return ((clientX - rect.left) / rect.width) * ANCHO;
   }
+
 
   function xATiempo(x: number): number {
     return minT + ((x - PAD.left) / (ANCHO - PAD.left - PAD.right)) * rangoT;
@@ -526,17 +690,24 @@ function GraficoDeParametro({ parametro, items, tipoGrafico, zonaHoraria, hover,
   const yBase = ALTO - PAD.bottom;
   const lineasGrilla = 4;
 
+  // El SVG se dibuja con currentColor no aplica a stroke/fill fijos, así que
+  // la grilla, el texto de los ejes y el borde del punto en hover eligen su
+  // color según el tema activo en vez de asumir siempre fondo oscuro.
+  const colorGrilla = esOscuro ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)";
+  const colorTextoEje = esOscuro ? "rgba(255,255,255,0.4)" : "rgba(0,0,0,0.45)";
+  const colorFondoContraste = esOscuro ? "#0b1220" : "#ffffff";
+
   return (
     <div
       ref={contenedorRef}
       className={
         pantallaCompleta
-          ? "bg-[#0b1220] p-6 h-screen w-screen flex flex-col"
+          ? "bg-white dark:bg-[#0b1220] p-6 h-screen w-screen flex flex-col"
           : "bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl border border-black/10 dark:border-white/10 p-5"
       }
     >
       <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
-        <h2 className={`text-sm font-bold ${pantallaCompleta ? "text-white" : "text-gray-900 dark:text-white"}`}>
+        <h2 className="text-sm font-bold text-gray-900 dark:text-white">
           {parametro.nmbr} en el tiempo
         </h2>
 
@@ -546,7 +717,7 @@ function GraficoDeParametro({ parametro, items, tipoGrafico, zonaHoraria, hover,
               {series.map((s, i) => (
                 <div
                   key={s.nombre}
-                  className={`flex items-center gap-1.5 text-xs ${pantallaCompleta ? "text-gray-300" : "text-gray-600 dark:text-gray-300"}`}
+                  className="flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-300"
                 >
                   <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: COLORES_SERIE[i] }} />
                   {s.nombre}
@@ -619,58 +790,128 @@ function GraficoDeParametro({ parametro, items, tipoGrafico, zonaHoraria, hover,
             onMouseUp={finalizarSeleccion}
             onMouseLeave={finalizarSeleccion}
           >
+            <defs>
+              {/* Resplandor del punto en hover: mismo color de la serie, sin
+                  agregar un color nuevo a la paleta. */}
+              <filter id="glowPuntoHover" x="-200%" y="-200%" width="500%" height="500%">
+                <feGaussianBlur stdDeviation="3" result="blur" />
+                <feMerge>
+                  <feMergeNode in="blur" />
+                  <feMergeNode in="SourceGraphic" />
+                </feMerge>
+              </filter>
+            </defs>
+
             {/* Grilla recesiva */}
             {Array.from({ length: lineasGrilla + 1 }).map((_, i) => {
               const y = PAD.top + (i / lineasGrilla) * (ALTO - PAD.top - PAD.bottom);
               const valor = maxVlr - (i / lineasGrilla) * rangoVlr;
               return (
                 <g key={i}>
-                  <line x1={PAD.left} x2={ANCHO - PAD.right} y1={y} y2={y} stroke="rgba(255,255,255,0.08)" strokeWidth={1} />
-                  <text x={PAD.left - 8} y={y} textAnchor="end" dominantBaseline="middle" fontSize={10} fill="rgba(255,255,255,0.4)">
-                    {valor.toFixed(1)}
+                  <line x1={PAD.left} x2={ANCHO - PAD.right} y1={y} y2={y} stroke={colorGrilla} strokeWidth={1} />
+                  <text x={PAD.left - 8} y={y} textAnchor="end" dominantBaseline="middle" fontSize={10} fill={colorTextoEje}>
+                    {valor.toFixed(decimalesEje)}
                   </text>
                 </g>
               );
             })}
 
             {/* Eje de tiempo: primero y último timestamp */}
-            <text x={PAD.left} y={ALTO - 10} fontSize={10} fill="rgba(255,255,255,0.4)">
+            <text x={PAD.left} y={ALTO - 10} fontSize={10} fill={colorTextoEje}>
               {formatearFechaCorta(new Date(minT).toISOString(), zonaHoraria)}
             </text>
-            <text x={ANCHO - PAD.right} y={ALTO - 10} textAnchor="end" fontSize={10} fill="rgba(255,255,255,0.4)">
+            <text x={ANCHO - PAD.right} y={ALTO - 10} textAnchor="end" fontSize={10} fill={colorTextoEje}>
               {formatearFechaCorta(new Date(maxT).toISOString(), zonaHoraria)}
             </text>
 
             {series.map((s, i) => {
               const color = COLORES_SERIE[i];
               const itemsVisibles = s.items.filter(enRangoZoom);
-              const puntos = itemsVisibles.map((item) => `${xDe(item)},${yDe(item)}`).join(" ");
+              const coords = itemsVisibles.map((item) => ({ x: xDe(item), y: yDe(item) }));
+              const trazo = pathDeLinea(coords);
+              // El punto resaltado solo se dibuja en la serie a la que
+              // pertenece, para que su color coincida con el de su línea.
+              const indiceHover = hover
+                ? itemsVisibles.findIndex((item) => item.id_registro === hover.item.id_registro)
+                : -1;
+              const puntoEnHover = indiceHover >= 0 ? coords[indiceHover] : null;
+              // El área reutiliza el mismo trazo de la línea (reemplazando
+              // su "M" inicial por un "L") y lo cierra contra la base: así
+              // el borde superior del relleno calca exactamente la línea.
               const areaPath =
-                itemsVisibles.length > 0
-                  ? `M ${xDe(itemsVisibles[0])},${yBase} ` +
-                    itemsVisibles.map((item) => `L ${xDe(item)},${yDe(item)}`).join(" ") +
-                    ` L ${xDe(itemsVisibles[itemsVisibles.length - 1])},${yBase} Z`
+                coords.length > 0
+                  ? `M ${coords[0].x},${yBase} L` +
+                    trazo.slice(1) +
+                    ` L ${coords[coords.length - 1].x},${yBase} Z`
                   : "";
               return (
                 <g key={s.nombre}>
                   {tipoGrafico === "area" && areaPath && <path d={areaPath} fill={color} fillOpacity={0.18} stroke="none" />}
-                  <polyline points={puntos} fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-                  {itemsVisibles.map((item) => (
-                    <circle
-                      key={item.id_registro}
-                      cx={xDe(item)}
-                      cy={yDe(item)}
-                      r={hover?.item.id_registro === item.id_registro ? 5 : 3}
-                      fill={color}
-                      stroke="#0b1220"
-                      strokeWidth={1.5}
-                      className="cursor-pointer"
-                      onMouseEnter={() => onHover({ parametroId: parametro.id_prmtr, x: xDe(item), y: yDe(item), item })}
-                      onMouseLeave={() =>
-                        onHover(hover?.item.id_registro === item.id_registro ? null : hover)
-                      }
-                    />
-                  ))}
+                  <path d={trazo} fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+                  {/* Cada medición lleva un punto chico -guía visual de que
+                      ahí hay un dato para pasar el mouse, sin saturar el
+                      trazo- en el color de la serie, más un círculo invisible
+                      más grande encima que amplía el área de captura del
+                      hover sin agrandar lo que se ve. El punto en hover se
+                      resalta aparte, más abajo (línea guía + glow). */}
+                  {itemsVisibles.map((item, indice) => {
+                    const puntoActivo = hover?.item.id_registro === item.id_registro;
+                    return (
+                    <g key={item.id_registro}>
+                      {!puntoActivo && (
+                        <circle cx={coords[indice].x} cy={coords[indice].y} r={3} fill={color} pointerEvents="none" />
+                      )}
+                      <circle
+                        cx={coords[indice].x}
+                        cy={coords[indice].y}
+                        r={6}
+                        fill="transparent"
+                        className="cursor-pointer"
+                        onMouseEnter={() => onHover({ parametroId: parametro.id_prmtr, x: coords[indice].x, y: coords[indice].y, item })}
+                        onMouseLeave={() =>
+                          onHover(hover?.item.id_registro === item.id_registro ? null : hover)
+                        }
+                      />
+                    </g>
+                    );
+                  })}
+                  {puntoEnHover && (
+                    <g pointerEvents="none">
+                      {/* Cruce de líneas guía (vertical al eje de tiempo,
+                          horizontal al eje de valor) + glow chico en el
+                          punto: mismo color de la serie, sin sumar un color
+                          nuevo, para reconocer dónde se está tocando. */}
+                      <line
+                        x1={puntoEnHover.x}
+                        x2={puntoEnHover.x}
+                        y1={puntoEnHover.y}
+                        y2={yBase}
+                        stroke={color}
+                        strokeWidth={1}
+                        strokeDasharray="3 3"
+                        strokeOpacity={0.6}
+                      />
+                      <line
+                        x1={PAD.left}
+                        x2={puntoEnHover.x}
+                        y1={puntoEnHover.y}
+                        y2={puntoEnHover.y}
+                        stroke={color}
+                        strokeWidth={1}
+                        strokeDasharray="3 3"
+                        strokeOpacity={0.6}
+                      />
+                      <circle cx={puntoEnHover.x} cy={puntoEnHover.y} r={9} fill={color} fillOpacity={0.25} filter="url(#glowPuntoHover)" />
+                      <circle
+                        cx={puntoEnHover.x}
+                        cy={puntoEnHover.y}
+                        r={4}
+                        fill={color}
+                        stroke={colorFondoContraste}
+                        strokeWidth={1.5}
+                      />
+                    </g>
+                  )}
                 </g>
               );
             })}
@@ -689,22 +930,41 @@ function GraficoDeParametro({ parametro, items, tipoGrafico, zonaHoraria, hover,
             )}
           </svg>
 
-          {hover && (
-            <div
-              className="absolute pointer-events-none bg-[#0b1220] border border-black/20 dark:border-white/20 rounded-lg px-3 py-2 text-xs text-gray-900 dark:text-white shadow-xl"
-              style={{
-                left: `${(hover.x / ANCHO) * 100}%`,
-                top: `${(hover.y / ALTO) * 100}%`,
-                transform: "translate(-50%, -120%)",
-              }}
-            >
-              <div className="font-semibold">
-                {hover.item.vlr} {hover.item.undd}
-              </div>
-              <div className="text-gray-500 dark:text-gray-400">{hover.item.ubicacion_nombre}</div>
-              <div className="text-gray-500 dark:text-gray-400">{formatearFechaCorta(hover.item.fch_hr, zonaHoraria)}</div>
-            </div>
-          )}
+          {hover &&
+            posicionTooltip &&
+            createPortal(
+              // Portal a document.body con `position: fixed`: el tooltip
+              // vivía dentro de un contenedor con overflow-x-auto (y sin
+              // overflow visible hacia arriba tampoco), así que cerca de
+              // cualquier borde -no solo el horizontal, también pegado al
+              // techo del gráfico- quedaba recortado a la mitad en vez de
+              // mostrarse completo por encima de todo lo demás.
+              <div
+                className="fixed pointer-events-none bg-white dark:bg-[#0b1220] border border-black/20 dark:border-white/20 rounded-lg px-3 py-2 text-xs text-gray-900 dark:text-white shadow-xl z-50"
+                style={{
+                  left: posicionTooltip.left,
+                  top: posicionTooltip.top,
+                  transform: `translate(${
+                    hover.x > ANCHO * 0.85 ? "-100%" : hover.x < ANCHO * 0.15 ? "0%" : "-50%"
+                  }, ${
+                    // Si no hay suficiente espacio arriba del punto en la
+                    // pantalla real (no en el SVG), el tooltip se muestra
+                    // debajo en vez de arriba -mismo problema que el
+                    // horizontal, pero en el eje vertical-.
+                    posicionTooltip.top < 90 ? "20%" : "-120%"
+                  })`,
+                }}
+              >
+                <div className="font-semibold">
+                  {hover.item.vlr} {hover.item.undd}
+                </div>
+                <div className="text-gray-500 dark:text-gray-400">{hover.item.ubicacion_nombre}</div>
+                <div className="text-gray-500 dark:text-gray-400">
+                  {formatearFechaCorta(hover.item.fch_hr, zonaHoraria)}
+                </div>
+              </div>,
+              document.body,
+            )}
         </div>
       )}
     </div>

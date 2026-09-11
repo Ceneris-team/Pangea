@@ -172,13 +172,34 @@ export default function SelectorRangoFechasTimeline({ zonaHoraria, onCambiarRang
         {(["inicio", "fin"] as const).map((cual) => {
           const p = cual === "inicio" ? inicioPct : finPct;
           const t = cual === "inicio" ? inicioMs : finMs;
+          // La manija en sí queda siempre centrada exacto en `left: p%`
+          // (vía el -translate-x-1/2 del contenedor, como antes: su
+          // posición tiene que ser precisa). Solo la ETIQUETA de texto se
+          // desplaza aparte: centrada por defecto, pero cerca de cada
+          // extremo del track (0% o 100%) eso la saca del contenedor -la
+          // mitad queda cortada por la izquierda o casi se sale por la
+          // derecha-, así que ahí se corre hacia el lado de ADENTRO en vez
+          // de quedar centrada, igual que el tooltip del gráfico.
+          const ancladoIzquierda = p < 8;
+          const ancladoDerecha = p > 92;
           return (
-            <div
-              key={cual}
-              className="absolute top-0 h-full -translate-x-1/2 flex flex-col items-center z-10"
-              style={{ left: `${p}%` }}
-            >
-              <span className="mb-1 -mt-7 whitespace-nowrap rounded bg-[#ccff00] text-gray-900 text-[10px] font-bold px-1.5 py-0.5 shadow">
+            <div key={cual} className="absolute top-0 h-full z-10" style={{ left: `${p}%` }}>
+              {/* La etiqueta NO cuelga del mismo contenedor centrado de la
+                  manija -ese contenedor es angosto (se ajusta al ancho del
+                  handle) y aunque se "ancle" dentro de él, sigue quedando
+                  fuera del TRACK cuando p está cerca de 0% o 100%-. Por
+                  eso se posiciona aparte, anclada al track completo (este
+                  div, con `left: p%` pero sin -translate-x-1/2), y solo se
+                  centra sobre la manija en la zona media; cerca de cada
+                  borde se pega hacia adentro para no salirse del track. */}
+              <span
+                className="absolute -top-7 whitespace-nowrap rounded bg-[#ccff00] text-gray-900 text-[10px] font-bold px-1.5 py-0.5 shadow"
+                style={{
+                  left: ancladoIzquierda ? 0 : ancladoDerecha ? undefined : "50%",
+                  right: ancladoDerecha ? 0 : undefined,
+                  transform: ancladoIzquierda || ancladoDerecha ? undefined : "translateX(-50%)",
+                }}
+              >
                 {formatearEtiquetaHandle(new Date(t), zonaHoraria)}
               </span>
               <div
@@ -186,7 +207,7 @@ export default function SelectorRangoFechasTimeline({ zonaHoraria, onCambiarRang
                   e.preventDefault();
                   setArrastrando(cual);
                 }}
-                className="w-2 h-full bg-gray-700 dark:bg-white rounded cursor-ew-resize"
+                className="w-2 h-full -translate-x-1/2 bg-gray-700 dark:bg-white rounded cursor-ew-resize"
               />
             </div>
           );

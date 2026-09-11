@@ -164,7 +164,7 @@ export default function ConsultaDatos() {
         <Sidebar onLogout={logout} activo="consulta-datos" rol={rol} />
 
         <div className="flex-1 flex flex-col overflow-hidden">
-          <div className="flex justify-end p-4 md:p-6 pb-0">
+          <div className="franja-superior flex justify-end p-4 md:p-6 pb-0">
             <Topbar
             nombreCompleto={nombreCompleto}
             rol={rol}

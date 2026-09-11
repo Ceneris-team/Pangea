@@ -6,6 +6,7 @@ import {
   GOOGLE_MAPS_LIBRARIES,
   GOOGLE_MAPS_LOADER_ID,
 } from "../config/googleMaps";
+import { useTheme } from "../context/ThemeContext";
 
 /**
  * HU22 - Ver ubicaciones en mapa.
@@ -157,6 +158,19 @@ type Seleccion =
   | { tipo: "dispositivo"; id: number }
   | null;
 
+/** El InfoWindow lo renderiza Google fuera del árbol de Tailwind del
+ *  <body>, así que las clases dark: no aplican dentro de este contenedor
+ *  y los colores van inline, alternando según el tema activo. */
+function paletaInfoWindow(esOscuro: boolean) {
+  return {
+    texto: esOscuro ? "#e5e7eb" : "#1a202c",
+    textoSecundario: esOscuro ? "#9ca3af" : "#4b5563",
+    badgeInactivoTexto: esOscuro ? "#d1d5db" : "#4b5563",
+    badgeInactivoFondo: esOscuro ? "#374151" : "#f3f4f6",
+    badgeInactivoBorde: esOscuro ? "#4b5563" : "#d1d5db",
+  };
+}
+
 export default function MapaUbicaciones({
   ubicaciones,
   dispositivos,
@@ -164,6 +178,8 @@ export default function MapaUbicaciones({
   volarASecuencia,
 }: Props) {
   const navigate = useNavigate();
+  const { esOscuro } = useTheme();
+  const paleta = paletaInfoWindow(esOscuro);
   const mapaRef = useRef<google.maps.Map | null>(null);
   const { isLoaded, loadError } = useJsApiLoader({
     id: GOOGLE_MAPS_LOADER_ID,
@@ -342,12 +358,13 @@ export default function MapaUbicaciones({
           onCloseClick={() => setSeleccion(null)}
         >
           {/* El InfoWindow lo renderiza Google fuera del árbol de Tailwind
-              del <body>, así que los colores van inline: las clases dark:
-              no aplican dentro de este contenedor. */}
-          <div style={{ minWidth: 200, maxWidth: 260, color: "#1a202c" }}>
+              del <body>, así que los colores van inline y alternan según
+              el tema activo (paletaInfoWindow) en vez de usar clases dark:,
+              que no aplican dentro de este contenedor. */}
+          <div style={{ minWidth: 200, maxWidth: 260, color: paleta.texto }}>
             <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>{seleccionada.nmbr}</h3>
 
-            <p style={{ margin: "6px 0 0", fontSize: 13, color: "#4b5563" }}>
+            <p style={{ margin: "6px 0 0", fontSize: 13, color: paleta.textoSecundario }}>
               {seleccionada.dscrpcn ?? "Sin descripción."}
             </p>
 
@@ -369,9 +386,9 @@ export default function MapaUbicaciones({
                   borderRadius: 999,
                   fontSize: 12,
                   fontWeight: 700,
-                  color: esActiva(seleccionada) ? "#3f5400" : "#4b5563",
-                  backgroundColor: esActiva(seleccionada) ? "#eaffa3" : "#f3f4f6",
-                  border: `1px solid ${esActiva(seleccionada) ? "#c9e86a" : "#d1d5db"}`,
+                  color: esActiva(seleccionada) ? "#3f5400" : paleta.badgeInactivoTexto,
+                  backgroundColor: esActiva(seleccionada) ? "#eaffa3" : paleta.badgeInactivoFondo,
+                  border: `1px solid ${esActiva(seleccionada) ? "#c9e86a" : paleta.badgeInactivoBorde}`,
                 }}
               >
                 <span
@@ -385,7 +402,7 @@ export default function MapaUbicaciones({
                 {seleccionada.estd}
               </span>
 
-              <span style={{ fontSize: 12, color: "#4b5563" }}>
+              <span style={{ fontSize: 12, color: paleta.textoSecundario }}>
                 {seleccionada.dispositivos_count}{" "}
                 {seleccionada.dispositivos_count === 1 ? "dispositivo" : "dispositivos"}
               </span>
@@ -424,12 +441,12 @@ export default function MapaUbicaciones({
           }}
           onCloseClick={() => setSeleccion(null)}
         >
-          <div style={{ minWidth: 200, maxWidth: 260, color: "#1a202c" }}>
+          <div style={{ minWidth: 200, maxWidth: 260, color: paleta.texto }}>
             <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>
               {dispositivoSeleccionado.nmbr}
             </h3>
 
-            <p style={{ margin: "6px 0 0", fontSize: 13, color: "#4b5563" }}>
+            <p style={{ margin: "6px 0 0", fontSize: 13, color: paleta.textoSecundario }}>
               {dispositivoSeleccionado.mrc}
             </p>
 
@@ -443,10 +460,10 @@ export default function MapaUbicaciones({
                   borderRadius: 999,
                   fontSize: 12,
                   fontWeight: 700,
-                  color: esActivo(dispositivoSeleccionado) ? "#1e3a8a" : "#4b5563",
-                  backgroundColor: esActivo(dispositivoSeleccionado) ? "#dbeafe" : "#f3f4f6",
+                  color: esActivo(dispositivoSeleccionado) ? "#1e3a8a" : paleta.badgeInactivoTexto,
+                  backgroundColor: esActivo(dispositivoSeleccionado) ? "#dbeafe" : paleta.badgeInactivoFondo,
                   border: `1px solid ${
-                    esActivo(dispositivoSeleccionado) ? "#bfdbfe" : "#d1d5db"
+                    esActivo(dispositivoSeleccionado) ? "#bfdbfe" : paleta.badgeInactivoBorde
                   }`,
                 }}
               >

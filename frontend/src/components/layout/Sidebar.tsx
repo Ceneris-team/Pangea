@@ -4,7 +4,7 @@ import pangeaIconLight from "../../assets/pangea-icon-light.png";
 import { ROLES, rutaPorRol } from "../../config/roles";
 import { useTheme } from "../../context/ThemeContext";
 
-export type SeccionActiva = "panel" | "usuarios" | "ubicaciones" | "dispositivos" | "conexiones-ftp" | "dashboard" | "configuracion" | "consulta-datos"| "mapeos" | "parametros" | "cola-ingesta" | "graficos" | "mapa-estaciones" | "mapa-ubicaciones" | "paneles";
+export type SeccionActiva = "panel" | "usuarios" | "ubicaciones" | "dispositivos" | "conexiones-ftp" | "dashboard" | "configuracion" | "consulta-datos"| "mapeos" | "parametros" | "cola-ingesta" | "graficos" | "mapa-estaciones" | "mapa-ubicaciones" | "paneles" | "mi-perfil";
 
 interface SidebarProps {
   onLogout: () => void;

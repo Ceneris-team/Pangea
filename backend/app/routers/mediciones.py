@@ -92,7 +92,15 @@ def listar_mediciones(
     fecha_inicio: dt.datetime | None = Query(default=None),
     fecha_fin: dt.datetime | None = Query(default=None),
     pagina: int = Query(default=1, ge=1),
-    por_pagina: int = Query(default=50, ge=1, le=500),
+    # El tope era 500, pensado para la TABLA de HU12 (una página que se
+    # lee de a poco). La vista de gráficos (HU15) consume este mismo
+    # endpoint pero necesita la serie entera de una vez, y como la
+    # paginación es sobre la UNIÓN de todos los parámetros, 500 filas
+    # repartidas entre 10 gráficos dejaban ~3 puntos por serie. El default
+    # sigue en 50 para no cambiar el comportamiento de quien no lo pide;
+    # el tamaño real de la respuesta lo sigue acotando max_puntos, que
+    # aplica el downsampling antes de paginar.
+    por_pagina: int = Query(default=50, ge=1, le=5000),
     # HT-10 CA3: tope de puntos cuando el rango es amplio (>30 días).
     # Configurable por petición para que la gráfica pueda pedir menos
     # puntos que el default según su ancho real en pantalla.

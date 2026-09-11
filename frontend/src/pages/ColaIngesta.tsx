@@ -316,7 +316,7 @@ export default function ColaIngesta() {
         <Sidebar onLogout={logout} activo="cola-ingesta" rol={rol} />
 
         <div className="flex-1 flex flex-col overflow-hidden">
-          <div className="flex justify-end p-4 md:p-6 pb-0">
+          <div className="franja-superior flex justify-end p-4 md:p-6 pb-0">
             <Topbar
             nombreCompleto={nombreCompleto}
             rol={rol}
@@ -462,7 +462,7 @@ export default function ColaIngesta() {
                               e.stopPropagation();
                               setIdSeleccionado(item.id_archv);
                             }}
-                            className="inline-flex items-center justify-center px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-200 bg-transparent border border-black/20 dark:border-white/20 rounded-lg hover:bg-black/10 dark:hover:bg-white/10 hover:text-gray-900 dark:hover:text-white transition-all"
+                            className="inline-flex items-center justify-center px-3 py-1.5 text-xs sm:text-sm font-medium whitespace-nowrap text-gray-700 dark:text-gray-200 bg-transparent border border-black/20 dark:border-white/20 rounded-lg hover:bg-black/10 dark:hover:bg-white/10 hover:text-gray-900 dark:hover:text-white transition-all"
                           >
                             Ver detalle
                           </button>

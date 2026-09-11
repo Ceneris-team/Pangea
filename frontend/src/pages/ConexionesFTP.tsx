@@ -315,7 +315,7 @@ export default function ConexionesFTP() {
               </div>
               <button
                 onClick={abrirFormularioNueva}
-                className="px-4 py-2.5 text-sm font-semibold text-[#5a7000] dark:text-[#ccff00] bg-[#ccff00]/10 hover:bg-[#ccff00]/20 border border-[#ccff00]/30 rounded-xl transition-colors"
+                className="px-4 py-2.5 text-sm font-semibold text-[#5a7000] dark:text-[#ccff00] bg-[#ccff00]/10 hover:bg-[#ccff00]/20 border border-[#8fb300]/40 dark:border-[#ccff00]/30 rounded-xl transition-colors"
               >
                 + Nueva conexión FTP
               </button>
@@ -415,7 +415,7 @@ export default function ConexionesFTP() {
                                 <button
                                   type="button"
                                   onClick={() => abrirFormularioEditar(c)}
-                                  className="inline-flex items-center justify-center px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-200 bg-transparent border border-black/20 dark:border-white/20 rounded-lg hover:bg-black/10 dark:hover:bg-white/10 hover:text-gray-900 dark:hover:text-white transition-all"
+                                  className="inline-flex items-center justify-center px-3 py-1.5 text-xs sm:text-sm font-medium whitespace-nowrap text-gray-700 dark:text-gray-200 bg-transparent border border-black/20 dark:border-white/20 rounded-lg hover:bg-black/10 dark:hover:bg-white/10 hover:text-gray-900 dark:hover:text-white transition-all"
                                 >
                                   <svg
                                     className="w-4 h-4 mr-2 text-gray-600 dark:text-gray-300"
@@ -653,7 +653,7 @@ export default function ConexionesFTP() {
                 <button
                   type="submit"
                   disabled={!conexionValidada || guardando}
-                  className="px-4 py-2.5 text-sm font-semibold text-[#5a7000] dark:text-[#ccff00] bg-[#ccff00]/10 hover:bg-[#ccff00]/20 border border-[#ccff00]/30 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-4 py-2.5 text-sm font-semibold text-[#5a7000] dark:text-[#ccff00] bg-[#ccff00]/10 hover:bg-[#ccff00]/20 border border-[#8fb300]/40 dark:border-[#ccff00]/30 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {guardando ? "Guardando..." : esEdicion ? "Actualizar" : "Guardar"}
                 </button>
