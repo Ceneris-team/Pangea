@@ -3,6 +3,7 @@ import { apiFetch, ApiError } from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import Sidebar from "../components/layout/Sidebar";
 import Topbar from "../components/layout/Topbar";
+import DrawerPanel from "../components/layout/DrawerPanel";
 import ConfirmarEliminacionModal from "../components/ConfirmarEliminacionModal";
 
 /**
@@ -473,127 +474,123 @@ export default function Parametros() {
         </div>
       </div>
 
-      {mostrarFormulario && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-md bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl shadow-xl border border-black/10 dark:border-white/10">
-            <form onSubmit={guardarParametro}>
-              <div className="p-6 border-b border-gray-100 dark:border-gray-700">
-                <h2 className="text-lg font-bold text-gray-900 dark:text-white">
-                  {editandoId !== null ? "Editar parámetro" : "Nuevo parámetro"}
-                </h2>
+      {/* Crear/editar parámetro vive como drawer lateral, mismo patrón
+          unificado que el resto del sistema. */}
+      <DrawerPanel
+        abierto={mostrarFormulario}
+        onCerrar={() => setMostrarFormulario(false)}
+        titulo={editandoId !== null ? "Editar parámetro" : "Nuevo parámetro"}
+      >
+        <form onSubmit={guardarParametro} className="flex flex-col h-full">
+          <div className="space-y-4 flex-1">
+            {errorFormulario && (
+              <div className="p-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm rounded-lg">
+                {errorFormulario}
               </div>
+            )}
 
-              <div className="p-6 space-y-4">
-                {errorFormulario && (
-                  <div className="p-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm rounded-lg">
-                    {errorFormulario}
-                  </div>
-                )}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
+                Nombre *
+              </label>
+              <input
+                type="text"
+                value={nmbr}
+                onChange={(e) => setNmbr(e.target.value)}
+                placeholder="Ej. Caudal"
+                className="bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block w-full p-2.5 outline-none"
+              />
+            </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
-                    Nombre *
-                  </label>
-                  <input
-                    type="text"
-                    value={nmbr}
-                    onChange={(e) => setNmbr(e.target.value)}
-                    placeholder="Ej. Caudal"
-                    className="bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block w-full p-2.5 outline-none"
-                  />
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Tipo de dato *
+              </label>
+              {editandoId !== null ? (
+                <p className="text-sm text-gray-500 dark:text-gray-400 py-2.5">
+                  {tipoDato === "texto" ? "Texto" : "Numérico"} (no se puede cambiar después
+                  de creado)
+                </p>
+              ) : (
+                <div className="inline-flex rounded-xl border border-gray-300 dark:border-gray-600 overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setTipoDato("numerico")}
+                    className={
+                      "px-4 py-2 text-sm font-medium transition-colors " +
+                      (tipoDato === "numerico"
+                        ? "bg-[#ccff00] text-[#1a202c]"
+                        : "bg-white dark:bg-[#2d3748] text-gray-700 dark:text-gray-300")
+                    }
+                  >
+                    Numérico
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTipoDato("texto")}
+                    className={
+                      "px-4 py-2 text-sm font-medium transition-colors " +
+                      (tipoDato === "texto"
+                        ? "bg-[#ccff00] text-[#1a202c]"
+                        : "bg-white dark:bg-[#2d3748] text-gray-700 dark:text-gray-300")
+                    }
+                  >
+                    Texto
+                  </button>
                 </div>
+              )}
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                {tipoDato === "texto"
+                  ? 'Para eventos como mensajes de alarma (ej. "Puerta Abierta"). No admite unidad numérica.'
+                  : "Para mediciones (temperatura, caudal, etc.)."}
+              </p>
+            </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Tipo de dato *
-                  </label>
-                  {editandoId !== null ? (
-                    <p className="text-sm text-gray-500 dark:text-gray-400 py-2.5">
-                      {tipoDato === "texto" ? "Texto" : "Numérico"} (no se puede cambiar después
-                      de creado)
-                    </p>
-                  ) : (
-                    <div className="inline-flex rounded-xl border border-gray-300 dark:border-gray-600 overflow-hidden">
-                      <button
-                        type="button"
-                        onClick={() => setTipoDato("numerico")}
-                        className={
-                          "px-4 py-2 text-sm font-medium transition-colors " +
-                          (tipoDato === "numerico"
-                            ? "bg-[#ccff00] text-[#1a202c]"
-                            : "bg-white dark:bg-[#2d3748] text-gray-700 dark:text-gray-300")
-                        }
-                      >
-                        Numérico
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setTipoDato("texto")}
-                        className={
-                          "px-4 py-2 text-sm font-medium transition-colors " +
-                          (tipoDato === "texto"
-                            ? "bg-[#ccff00] text-[#1a202c]"
-                            : "bg-white dark:bg-[#2d3748] text-gray-700 dark:text-gray-300")
-                        }
-                      >
-                        Texto
-                      </button>
-                    </div>
-                  )}
-                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                    {tipoDato === "texto"
-                      ? 'Para eventos como mensajes de alarma (ej. "Puerta Abierta"). No admite unidad numérica.'
-                      : "Para mediciones (temperatura, caudal, etc.)."}
-                  </p>
-                </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Unidad de medida *
+              </label>
+              <input
+                type="text"
+                value={undd}
+                onChange={(e) => setUndd(e.target.value)}
+                placeholder="Ej. m3/s"
+                className="bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block w-full p-2.5 outline-none"
+              />
+            </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Unidad de medida *
-                  </label>
-                  <input
-                    type="text"
-                    value={undd}
-                    onChange={(e) => setUndd(e.target.value)}
-                    placeholder="Ej. m3/s"
-                    className="bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block w-full p-2.5 outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
-                    Descripción
-                  </label>
-                  <textarea
-                    value={dscrpcn}
-                    onChange={(e) => setDscrpcn(e.target.value)}
-                    placeholder="Opcional: para qué se usa este parámetro"
-                    rows={3}
-                    className="bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block w-full p-2.5 outline-none resize-none"
-                  />
-                </div>
-              </div>
-
-              <div className="p-6 border-t border-black/10 dark:border-white/10 flex justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={() => setMostrarFormulario(false)}
-                  className="px-4 py-2.5 text-sm font-semibold text-gray-700 dark:text-gray-200 bg-transparent border border-black/20 dark:border-white/20 rounded-xl hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={guardando}
-                  className="px-4 py-2.5 text-sm font-semibold text-[#5a7000] dark:text-[#ccff00] bg-[#ccff00]/10 hover:bg-[#ccff00]/20 border border-[#8fb300]/40 dark:border-[#ccff00]/30 rounded-xl transition-colors disabled:opacity-50"
-                >
-                  {guardando ? "Guardando..." : "Guardar"}
-                </button>
-              </div>
-            </form>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
+                Descripción
+              </label>
+              <textarea
+                value={dscrpcn}
+                onChange={(e) => setDscrpcn(e.target.value)}
+                placeholder="Opcional: para qué se usa este parámetro"
+                rows={3}
+                className="bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block w-full p-2.5 outline-none resize-none"
+              />
+            </div>
           </div>
-        </div>
-      )}
+
+          <div className="mt-6 pt-6 border-t border-black/10 dark:border-white/10 flex justify-end gap-3">
+            <button
+              type="button"
+              onClick={() => setMostrarFormulario(false)}
+              className="px-4 py-2.5 text-sm font-semibold text-gray-700 dark:text-gray-200 bg-transparent border border-black/20 dark:border-white/20 rounded-xl hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={guardando}
+              className="px-4 py-2.5 text-sm font-semibold text-[#5a7000] dark:text-[#ccff00] bg-[#ccff00]/10 hover:bg-[#ccff00]/20 border border-[#8fb300]/40 dark:border-[#ccff00]/30 rounded-xl transition-colors disabled:opacity-50"
+            >
+              {guardando ? "Guardando..." : "Guardar"}
+            </button>
+          </div>
+        </form>
+      </DrawerPanel>
 
       {parametroAEliminar && (
         <ConfirmarEliminacionModal
@@ -605,28 +602,27 @@ export default function Parametros() {
         />
       )}
 
-      {/* HU51 CA4/CA5: revisión de un parámetro auto-creado. Las dos
-          salidas posibles conviven en el mismo panel porque son la misma
-          decisión ("¿esto es algo nuevo, o ya lo teníamos con otro
-          nombre?"), y separarlas en dos pantallas obligaría a volver
-          atrás para cambiar de opinión. */}
-      {parametroARevisar && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="w-full max-w-lg bg-white dark:bg-gray-900 border border-black/10 dark:border-white/10 rounded-2xl shadow-2xl overflow-hidden">
-            <div className="px-6 py-4 border-b border-black/10 dark:border-white/10">
-              <h3 className="text-lg font-bold text-gray-900 dark:text-white">
-                Revisar parámetro auto-detectado
-              </h3>
-              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                Detectado en el archivo como{" "}
-                <code className="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200">
-                  {parametroARevisar.nmbr}
-                </code>
-                . Ya está guardando datos; revisalo para que quede prolijo en el catálogo.
-              </p>
-            </div>
+      {/* HU51 CA4/CA5: revisión de un parámetro auto-creado, como drawer
+          lateral. Las dos salidas posibles conviven en el mismo panel
+          porque son la misma decisión ("¿esto es algo nuevo, o ya lo
+          teníamos con otro nombre?"), y separarlas en dos pantallas
+          obligaría a volver atrás para cambiar de opinión. */}
+      <DrawerPanel
+        abierto={parametroARevisar !== null}
+        onCerrar={() => setParametroARevisar(null)}
+        titulo="Revisar parámetro auto-detectado"
+      >
+        {parametroARevisar && (
+          <div className="flex flex-col h-full">
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-5">
+              Detectado en el archivo como{" "}
+              <code className="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200">
+                {parametroARevisar.nmbr}
+              </code>
+              . Ya está guardando datos; revisalo para que quede prolijo en el catálogo.
+            </p>
 
-            <div className="px-6 py-4 space-y-4">
+            <div className="space-y-4 flex-1">
               <div className="flex gap-2">
                 <button
                   type="button"
@@ -728,7 +724,7 @@ export default function Parametros() {
               )}
             </div>
 
-            <div className="px-6 py-4 border-t border-black/10 dark:border-white/10 flex justify-end gap-2">
+            <div className="mt-6 pt-6 border-t border-black/10 dark:border-white/10 flex justify-end gap-2">
               <button
                 type="button"
                 onClick={() => setParametroARevisar(null)}
@@ -750,8 +746,8 @@ export default function Parametros() {
               </button>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </DrawerPanel>
     </div>
   );
 }

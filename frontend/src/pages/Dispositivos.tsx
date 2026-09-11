@@ -5,6 +5,7 @@ import { useAuth } from "../context/AuthContext";
 import { ROLES } from "../config/roles";
 import Sidebar from "../components/layout/Sidebar";
 import Topbar from "../components/layout/Topbar";
+import DrawerPanel from "../components/layout/DrawerPanel";
 import ConfirmarEliminacionModal from "../components/ConfirmarEliminacionModal";
 import SelectorRangoFechas from "../components/SelectorRangoFechas";
 import {
@@ -708,133 +709,124 @@ export default function Dispositivos() {
         </div>
       </div>
 
-      {mostrarFormulario && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl shadow-xl border border-black/10 dark:border-white/10">
-            <form onSubmit={handleSubmitDispositivo}>
-              <div className="p-6 border-b border-black/10 dark:border-white/10">
-                <h2 className="text-lg font-bold text-gray-900 dark:text-white">Agregar dispositivo</h2>
-                <p className="text-sm text-gray-600 dark:text-gray-300 mt-1 font-light">
-                  Registra un nuevo dispositivo de monitoreo y asócialo a una ubicación y conexión FTP.
-                </p>
-              </div>
+      {/* HU11: crear dispositivo vive como drawer lateral, mismo patrón
+          unificado que el resto del sistema para crear/editar. */}
+      <DrawerPanel abierto={mostrarFormulario} onCerrar={cerrarFormulario} titulo="Agregar dispositivo">
+        <form onSubmit={handleSubmitDispositivo} className="flex flex-col h-full">
+          <p className="text-sm text-gray-600 dark:text-gray-300 mb-5">
+            Registra un nuevo dispositivo de monitoreo y asócialo a una ubicación y conexión FTP.
+          </p>
 
-              <div className="p-6 space-y-5">
-                {errorFormulario && (
-                  <div className="p-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm rounded-lg">
-                    {errorFormulario}
-                  </div>
-                )}
+          {errorFormulario && (
+            <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm rounded-lg">
+              {errorFormulario}
+            </div>
+          )}
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                  <div>
-                    <label className={labelClaseDispositivo} htmlFor="nmbr">
-                      Nombre <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      id="nmbr"
-                      type="text"
-                      maxLength={150}
-                      value={form.nmbr}
-                      onChange={(e) => actualizarCampoDispositivo("nmbr", e.target.value)}
-                      placeholder="CR1000-Norte"
-                      className={inputClaseDispositivo}
-                    />
-                  </div>
+          <div className="space-y-5 flex-1">
+            <div>
+              <label className={labelClaseDispositivo} htmlFor="nmbr">
+                Nombre <span className="text-red-500">*</span>
+              </label>
+              <input
+                id="nmbr"
+                type="text"
+                maxLength={150}
+                value={form.nmbr}
+                onChange={(e) => actualizarCampoDispositivo("nmbr", e.target.value)}
+                placeholder="CR1000-Norte"
+                className={inputClaseDispositivo}
+              />
+            </div>
 
-                  <div>
-                    <label className={labelClaseDispositivo} htmlFor="mrc">
-                      Marca <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      id="mrc"
-                      type="text"
-                      maxLength={100}
-                      value={form.mrc}
-                      onChange={(e) => actualizarCampoDispositivo("mrc", e.target.value)}
-                      placeholder="Campbell"
-                      className={inputClaseDispositivo}
-                    />
-                  </div>
-                </div>
+            <div>
+              <label className={labelClaseDispositivo} htmlFor="mrc">
+                Marca <span className="text-red-500">*</span>
+              </label>
+              <input
+                id="mrc"
+                type="text"
+                maxLength={100}
+                value={form.mrc}
+                onChange={(e) => actualizarCampoDispositivo("mrc", e.target.value)}
+                placeholder="Campbell"
+                className={inputClaseDispositivo}
+              />
+            </div>
 
-                <div>
-                  <label className={labelClaseDispositivo} htmlFor="mdl">
-                    Modelo <span className="text-gray-500 dark:text-gray-400 font-normal">(opcional)</span>
-                  </label>
-                  <input
-                    id="mdl"
-                    type="text"
-                    maxLength={100}
-                    value={form.mdl}
-                    onChange={(e) => actualizarCampoDispositivo("mdl", e.target.value)}
-                    placeholder="CR1000X"
-                    className={inputClaseDispositivo}
-                  />
-                </div>
+            <div>
+              <label className={labelClaseDispositivo} htmlFor="mdl">
+                Modelo <span className="text-gray-500 dark:text-gray-400 font-normal">(opcional)</span>
+              </label>
+              <input
+                id="mdl"
+                type="text"
+                maxLength={100}
+                value={form.mdl}
+                onChange={(e) => actualizarCampoDispositivo("mdl", e.target.value)}
+                placeholder="CR1000X"
+                className={inputClaseDispositivo}
+              />
+            </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                  <div>
-                    <label className={labelClaseDispositivo} htmlFor="id_ubccn">
-                      Ubicación <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      id="id_ubccn"
-                      value={form.id_ubccn}
-                      onChange={(e) => actualizarCampoDispositivo("id_ubccn", e.target.value)}
-                      className={inputClaseDispositivo + " cursor-pointer"}
-                    >
-                      <option value="">Selecciona una ubicación...</option>
-                      {ubicacionesActivas.map((u) => (
-                        <option key={u.id_ubccn} value={u.id_ubccn}>
-                          {u.nmbr}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+            <div>
+              <label className={labelClaseDispositivo} htmlFor="id_ubccn">
+                Ubicación <span className="text-red-500">*</span>
+              </label>
+              <select
+                id="id_ubccn"
+                value={form.id_ubccn}
+                onChange={(e) => actualizarCampoDispositivo("id_ubccn", e.target.value)}
+                className={inputClaseDispositivo + " cursor-pointer"}
+              >
+                <option value="">Selecciona una ubicación...</option>
+                {ubicacionesActivas.map((u) => (
+                  <option key={u.id_ubccn} value={u.id_ubccn}>
+                    {u.nmbr}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-                  <div>
-                    <label className={labelClaseDispositivo} htmlFor="id_cnxn">
-                      Conexión FTP <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      id="id_cnxn"
-                      value={form.id_cnxn}
-                      onChange={(e) => actualizarCampoDispositivo("id_cnxn", e.target.value)}
-                      className={inputClaseDispositivo + " cursor-pointer"}
-                    >
-                      <option value="">Selecciona una conexión FTP...</option>
-                      {conexiones.map((c) => (
-                        <option key={c.id_cnxn} value={c.id_cnxn}>
-                          {c.nmbr}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              <div className="p-6 border-t border-black/10 dark:border-white/10 flex justify-end gap-3">
-                {/* CA4: no toca el backend, solo descarta y cierra. */}
-                <button
-                  type="button"
-                  onClick={cerrarFormulario}
-                  className="px-4 py-2.5 text-sm font-semibold text-gray-700 dark:text-gray-200 bg-transparent border border-black/20 dark:border-white/20 rounded-xl hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={guardandoDispositivo}
-                  className="px-4 py-2.5 text-sm font-semibold text-[#5a7000] dark:text-[#ccff00] bg-[#ccff00]/10 hover:bg-[#ccff00]/20 border border-[#8fb300]/40 dark:border-[#ccff00]/30 rounded-xl transition-colors disabled:opacity-50"
-                >
-                  {guardandoDispositivo ? "Guardando..." : "Guardar dispositivo"}
-                </button>
-              </div>
-            </form>
+            <div>
+              <label className={labelClaseDispositivo} htmlFor="id_cnxn">
+                Conexión FTP <span className="text-red-500">*</span>
+              </label>
+              <select
+                id="id_cnxn"
+                value={form.id_cnxn}
+                onChange={(e) => actualizarCampoDispositivo("id_cnxn", e.target.value)}
+                className={inputClaseDispositivo + " cursor-pointer"}
+              >
+                <option value="">Selecciona una conexión FTP...</option>
+                {conexiones.map((c) => (
+                  <option key={c.id_cnxn} value={c.id_cnxn}>
+                    {c.nmbr}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
-        </div>
-      )}
+
+          <div className="mt-6 pt-6 border-t border-black/10 dark:border-white/10 flex justify-end gap-3">
+            {/* CA4: no toca el backend, solo descarta y cierra. */}
+            <button
+              type="button"
+              onClick={cerrarFormulario}
+              className="px-4 py-2.5 text-sm font-semibold text-gray-700 dark:text-gray-200 bg-transparent border border-black/20 dark:border-white/20 rounded-xl hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={guardandoDispositivo}
+              className="px-4 py-2.5 text-sm font-semibold text-[#5a7000] dark:text-[#ccff00] bg-[#ccff00]/10 hover:bg-[#ccff00]/20 border border-[#8fb300]/40 dark:border-[#ccff00]/30 rounded-xl transition-colors disabled:opacity-50"
+            >
+              {guardandoDispositivo ? "Guardando..." : "Guardar dispositivo"}
+            </button>
+          </div>
+        </form>
+      </DrawerPanel>
 
       {dispositivoADesactivar && (
         <ConfirmarEliminacionModal
@@ -864,7 +856,7 @@ export default function Dispositivos() {
       {/* HU19: panel de estadísticas de operación del dispositivo. */}
       {dispositivoEstadisticas && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
           onClick={cerrarEstadisticas}
         >
           <div

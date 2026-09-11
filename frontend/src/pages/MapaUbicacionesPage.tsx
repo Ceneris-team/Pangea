@@ -11,7 +11,7 @@ import MapaUbicaciones, {
 
 /**
  * HU22: ver las Ubicaciones en un mapa. Solo lectura -el editor de
- * dibujo de polígono (HU08) es aparte, en AgregarUbicacion.tsx-.
+ * dibujo de polígono (HU08) es aparte, en el drawer de Ubicaciones.tsx-.
  *
  *   CA1  marcadores verdes (Activa) / grises (Inactiva) sobre el contorno
  *   CA2  clic en un marcador -> panel con nombre, descripción, estado y

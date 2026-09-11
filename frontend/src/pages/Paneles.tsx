@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { apiFetch, ApiError } from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import { ROLES } from "../config/roles";
 import Sidebar from "../components/layout/Sidebar";
 import Topbar from "../components/layout/Topbar";
+import DrawerPanel from "../components/layout/DrawerPanel";
 import ConfirmarEliminacionModal from "../components/ConfirmarEliminacionModal";
 
 interface PanelListItem {
@@ -16,6 +17,18 @@ interface PanelListItem {
 interface ListadoPaneles {
   items: PanelListItem[];
 }
+
+interface PanelCreado {
+  id_pnl: number;
+  nmbr: string;
+  fch_crcn: string;
+}
+
+const NOMBRE_MAX_LARGO = 100;
+
+const INPUT_CLASE =
+  "bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block w-full p-2.5 outline-none";
+const LABEL_CLASE = "block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1";
 
 // HU24/HU25: "YO COMO Cliente Final..." -crear, editar y eliminar paneles
 // es exclusivo de ese rol. El backend ya lo exige (require_permiso EDICION
@@ -117,6 +130,76 @@ export default function Paneles() {
     }
   }
 
+  // HU24/HU25: crear y editar panel viven como drawer lateral, en vez de
+  // rutas propias (/paneles/nuevo, /paneles/:id/editar) -mismo patrón que
+  // el resto del sistema para crear/editar-. `panelEnEdicion` es null al
+  // crear y el panel a editar cuando corresponde: un solo formulario para
+  // ambos casos, igual que ya lo eran CrearPanel.tsx/EditarPanel.tsx entre
+  // sí (comparten el mismo único campo).
+  const [panelEnEdicion, setPanelEnEdicion] = useState<PanelListItem | null>(null);
+  const [panelDrawerAbierto, setPanelDrawerAbierto] = useState(false);
+  const [nombrePanel, setNombrePanel] = useState("");
+  const [guardandoPanel, setGuardandoPanel] = useState(false);
+  const [errorPanel, setErrorPanel] = useState("");
+
+  function abrirCrearPanel() {
+    setPanelEnEdicion(null);
+    setNombrePanel("");
+    setErrorPanel("");
+    setPanelDrawerAbierto(true);
+  }
+
+  function abrirEditarPanel(panel: PanelListItem) {
+    setPanelEnEdicion(panel);
+    setNombrePanel(panel.nmbr);
+    setErrorPanel("");
+    setPanelDrawerAbierto(true);
+  }
+
+  /** CA2 (HU24) / CA2 (HU25). */
+  async function handleSubmitPanel(e: FormEvent) {
+    e.preventDefault();
+
+    if (!nombrePanel.trim()) {
+      setErrorPanel("El nombre del panel es obligatorio");
+      return;
+    }
+
+    setGuardandoPanel(true);
+    setErrorPanel("");
+    try {
+      if (panelEnEdicion) {
+        const respuesta = await apiFetch<{ mensaje: string }>(`/paneles/${panelEnEdicion.id_pnl}`, {
+          method: "PUT",
+          body: { nmbr: nombrePanel.trim() },
+        });
+        setPanelDrawerAbierto(false);
+        setMensajeExito(respuesta.mensaje);
+        cargarPaneles();
+      } else {
+        // HU24 CA3: "tras guardar, redirige al panel recién creado (vacío,
+        // con 'Añadir ubicaciones' visible)" -a diferencia de editar, que
+        // se queda en el listado-.
+        const respuesta = await apiFetch<{ mensaje: string; panel: PanelCreado }>("/paneles", {
+          method: "POST",
+          body: { nmbr: nombrePanel.trim() },
+        });
+        setPanelDrawerAbierto(false);
+        navigate(`/paneles/${respuesta.panel.id_pnl}`, {
+          state: { mensaje: respuesta.mensaje },
+        });
+      }
+    } catch (err) {
+      setErrorPanel(
+        err instanceof ApiError
+          ? err.message
+          : `No se pudo ${panelEnEdicion ? "actualizar" : "crear"} el panel`,
+      );
+    } finally {
+      setGuardandoPanel(false);
+    }
+  }
+
   return (
     <div className="font-sans">
       <div className="flex h-screen bg-transparent transition-colors duration-300 overflow-hidden">
@@ -139,7 +222,7 @@ export default function Paneles() {
               {ROLES_PUEDEN_GESTIONAR.includes(rol ?? "") && (
                 <div className="flex gap-3">
                   <button
-                    onClick={() => navigate("/paneles/nuevo")}
+                    onClick={abrirCrearPanel}
                     className="inline-flex items-center px-4 py-2 text-sm font-bold rounded-xl bg-[#ccff00] text-[#1a202c] hover:bg-[#b8e600] transition-colors"
                   >
                     <svg
@@ -204,7 +287,7 @@ export default function Paneles() {
                   <p className="text-gray-600 dark:text-gray-300">Aún no tienes paneles creados</p>
                   {ROLES_PUEDEN_GESTIONAR.includes(rol ?? "") && (
                     <button
-                      onClick={() => navigate("/paneles/nuevo")}
+                      onClick={abrirCrearPanel}
                       className="inline-flex items-center px-4 py-2 text-sm font-bold rounded-xl bg-[#ccff00] text-[#1a202c] hover:bg-[#b8e600] transition-colors"
                     >
                       Crear panel
@@ -267,13 +350,14 @@ export default function Paneles() {
                                 </Link>
                                 {ROLES_PUEDEN_GESTIONAR.includes(rol ?? "") && (
                                   <>
-                                    {/* HU25 CA1: abre el formulario de edición con el nombre precargado. */}
-                                    <Link
-                                      to={`/paneles/${p.id_pnl}/editar`}
+                                    {/* HU25 CA1: abre el drawer de edición con el nombre precargado. */}
+                                    <button
+                                      type="button"
+                                      onClick={() => abrirEditarPanel(p)}
                                       className="inline-flex items-center justify-center px-3 py-1.5 text-xs sm:text-sm font-medium whitespace-nowrap text-gray-700 dark:text-gray-200 bg-transparent border border-black/20 dark:border-white/20 rounded-lg hover:bg-black/10 dark:hover:bg-white/10 hover:text-gray-900 dark:hover:text-white transition-all"
                                     >
                                       Editar
-                                    </Link>
+                                    </button>
                                     {/* HU25 CA3: abre el diálogo de confirmación, no elimina directo. */}
                                     <button
                                       onClick={() => setPanelAEliminar(p)}
@@ -309,6 +393,64 @@ export default function Paneles() {
           onCancelar={() => setPanelAEliminar(null)}
         />
       )}
+
+      {/* HU24/HU25: drawer de crear/editar panel, un solo formulario de
+          un campo (Nombre) para ambos casos. */}
+      <DrawerPanel
+        abierto={panelDrawerAbierto}
+        onCerrar={() => setPanelDrawerAbierto(false)}
+        titulo={panelEnEdicion ? "Editar panel" : "Crear panel"}
+      >
+        <form onSubmit={handleSubmitPanel} className="flex flex-col h-full">
+          <p className="text-sm text-gray-600 dark:text-gray-300 mb-5">
+            {panelEnEdicion
+              ? "Modifica el nombre de tu tablero personalizado."
+              : "Dale un nombre a tu nuevo tablero personalizado."}
+          </p>
+
+          {errorPanel && (
+            <div className="mb-4 p-3 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm">
+              {errorPanel}
+            </div>
+          )}
+
+          <div>
+            <label className={LABEL_CLASE} htmlFor="nmbr-panel">
+              Nombre del panel <span className="text-red-500">*</span>
+            </label>
+            <input
+              id="nmbr-panel"
+              type="text"
+              maxLength={NOMBRE_MAX_LARGO}
+              value={nombrePanel}
+              onChange={(e) => setNombrePanel(e.target.value)}
+              placeholder="Resumen de estaciones"
+              autoFocus
+              className={INPUT_CLASE}
+            />
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {nombrePanel.length}/{NOMBRE_MAX_LARGO}
+            </p>
+          </div>
+
+          <div className="mt-auto pt-6 flex gap-3">
+            <button
+              type="button"
+              onClick={() => setPanelDrawerAbierto(false)}
+              className="flex-1 px-4 py-2.5 text-sm font-medium rounded-xl border border-black/20 dark:border-white/20 text-gray-700 dark:text-gray-200 hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={guardandoPanel}
+              className="flex-1 px-4 py-2.5 text-sm font-bold rounded-xl bg-[#ccff00] text-[#1a202c] hover:bg-[#b8e600] disabled:opacity-50 transition-colors"
+            >
+              {guardandoPanel ? "Guardando..." : "Guardar"}
+            </button>
+          </div>
+        </form>
+      </DrawerPanel>
     </div>
   );
 }

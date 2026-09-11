@@ -408,10 +408,14 @@ export default function MapaUbicaciones({
               </span>
             </div>
 
-            {/* CA3: al formulario de edición con los datos precargados. */}
+            {/* CA3: al drawer de edición con los datos precargados -vive
+                dentro de Ubicaciones.tsx, ya no es una ruta propia-. El
+                query param ?editar=ID le dice al listado que abra ese
+                drawer apenas monte, mismo patrón que ?ubicacion_id= en
+                Graficos.tsx (HU17 CA4). */}
             <button
               type="button"
-              onClick={() => navigate(`/ubicaciones/${seleccionada.id_ubccn}/editar`)}
+              onClick={() => navigate(`/ubicaciones?editar=${seleccionada.id_ubccn}`)}
               style={{
                 width: "100%",
                 padding: "7px 12px",

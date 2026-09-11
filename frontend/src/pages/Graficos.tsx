@@ -6,7 +6,23 @@ import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 import Sidebar from "../components/layout/Sidebar";
 import Topbar from "../components/layout/Topbar";
+import DrawerPanel from "../components/layout/DrawerPanel";
 import SelectorRangoFechasTimeline from "../components/SelectorRangoFechasTimeline";
+import {
+  claseColumnasGrilla,
+  construirQuery,
+  COLORES_SERIE,
+  formatearFechaCorta,
+  pathDeLinea,
+  type DispositivoItem,
+  type HoverInfo,
+  type ListadoMediciones,
+  type MedicionNumerica,
+  type ParametroItem,
+  type TipoGrafico,
+  type UbicacionItem,
+  type Vista,
+} from "./graficosUtils";
 import type { RangoFechas } from "../utils/fechas";
 
 /**
@@ -18,189 +34,15 @@ import type { RangoFechas } from "../utils/fechas";
  * en tabla ("VER TABLA"). La grilla de gráficos usa 1 columna con 1-3
  * parámetros, 2 columnas con 4-6, y 3 columnas (en pantallas grandes) con
  * 7-8.
+ *
+ * Los tipos, constantes y funciones puras (construirQuery, pathDeLinea,
+ * etc.) viven en graficosUtils.ts y no acá: un módulo que mezcla
+ * componentes React con funciones sueltas rompe el "Fast Refresh
+ * boundary" de Vite/React, y en dev eso puede dejar el navegador
+ * ejecutando una mezcla de código viejo y nuevo entre ediciones en
+ * caliente -se vio en vivo un TypeError en una firma de función que en
+ * el archivo real ya no existía-.
  */
-
-interface ParametroItem {
-  id_prmtr: number;
-  nmbr: string;
-  undd: string;
-  tipo_dato: string;
-}
-
-interface UbicacionItem {
-  id_ubccn: number;
-  nmbr: string;
-}
-
-interface MedicionItem {
-  id_registro: number;
-  fch_hr: string;
-  id_ubccn: number;
-  ubicacion_nombre: string;
-  id_prmtr: number;
-  parametro_nombre: string;
-  undd: string;
-  vlr: number | string;
-}
-
-interface ListadoMediciones {
-  /** Puntos que existen para la consulta, no los que vinieron en `items`:
-   *  la respuesta está paginada, así que `total > items.length` significa
-   *  que las series se están dibujando incompletas. */
-  total: number;
-  /** HT-10 CA3: true si el backend muestreó la serie por rango amplio. */
-  downsampling?: boolean;
-  total_sin_muestrear?: number;
-  items: MedicionItem[];
-}
-
-// Solo los registros con valor numérico son graficables (línea/área); los
-// de tipo texto (evnt_txt) se filtran antes de agrupar por parámetro.
-type MedicionNumerica = MedicionItem & { vlr: number };
-
-type TipoGrafico = "linea" | "area";
-type Vista = "grafico" | "tabla";
-
-interface HoverInfo {
-  parametroId: number;
-  x: number;
-  y: number;
-  item: MedicionNumerica;
-}
-
-// Paleta categórica validada para fondo oscuro (dataviz skill): azul,
-// naranja, aqua, amarillo — en ese orden fijo, nunca por índice aleatorio.
-const COLORES_SERIE = ["#3987e5", "#d95926", "#199e70", "#c98500"];
-
-// HU15/HU14: los datos se almacenan en UTC y se muestran en la zona
-// horaria configurada por el usuario.
-function formatearFechaCorta(iso: string, zonaHoraria: string): string {
-  return new Date(iso).toLocaleString("es", {
-    timeZone: zonaHoraria,
-    day: "2-digit",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-// Puntos que se piden POR PARÁMETRO seleccionado. GET /mediciones pagina
-// sobre la UNIÓN de todas las series, no por parámetro: sin pedir un
-// por_pagina acorde, el default del backend (50 filas) se reparte entre
-// todos los gráficos y cada serie queda con una fracción -con 5
-// parámetros, ~8 puntos cada uno, que es el bug de "el gráfico muestra 5
-// mediciones cuando agrego más gráficos"-. Se escala con la cantidad de
-// parámetros para que cada serie conserve su resolución.
-const PUNTOS_POR_PARAMETRO = 500;
-
-// Topes duros del endpoint (mediciones.py): por_pagina <= 5000 y
-// max_puntos <= 50000. Pedir por encima devuelve 422, así que se acotan
-// acá en vez de dejar que la petición falle.
-const TOPE_POR_PAGINA = 5000;
-const TOPE_MAX_PUNTOS = 50000;
-
-function construirQuery(parametroIds: number[], ubicacionIds: number[], rangoFechas: RangoFechas | null): string {
-  const params = new URLSearchParams();
-  parametroIds.forEach((id) => params.append("parametro_ids", String(id)));
-  ubicacionIds.forEach((id) => params.append("ubicacion_ids", String(id)));
-  if (rangoFechas) {
-    params.append("fecha_inicio", new Date(rangoFechas.inicio).toISOString());
-    params.append("fecha_fin", new Date(rangoFechas.fin).toISOString());
-  }
-
-  const seriesPedidas = Math.max(parametroIds.length, 1);
-  const puntosDeseados = seriesPedidas * PUNTOS_POR_PARAMETRO;
-  params.append("por_pagina", String(Math.min(puntosDeseados, TOPE_POR_PAGINA)));
-  // El downsampling del backend (rangos >30 días) recorta al mismo tope,
-  // así que se pide explícito: su default (2000) es para la tabla de
-  // HU12, y acá el reparto entre series necesita más margen.
-  params.append("max_puntos", String(Math.min(puntosDeseados, TOPE_MAX_PUNTOS)));
-
-  return `/mediciones?${params.toString()}`;
-}
-
-// CA: 1-3 parámetros seleccionados -> una columna; 4-6 -> dos columnas;
-// 7 o más -> tres columnas en pantallas grandes. El CA original solo
-// contemplaba hasta 8 parámetros, pero el selector no limita cuántos se
-// pueden marcar, así que el último tramo cubre cualquier cantidad.
-function claseColumnasGrilla(cantidad: number): string {
-  if (cantidad <= 3) return "grid-cols-1";
-  if (cantidad <= 6) return "grid-cols-1 md:grid-cols-2";
-  return "grid-cols-1 md:grid-cols-2 lg:grid-cols-3";
-}
-
-/**
- * Convierte una lista de puntos en un path SVG suavizado con interpolación
- * cúbica monótona (Fritsch-Carlson, la misma familia que D3 curveMonotoneX
- * o Chart.js con tensión monótona): a diferencia de un spline Catmull-Rom
- * -que se probó antes y se descartó-, esta variante limita la tangente en
- * cada punto para que la curva nunca "overshoot" ni ondule entre dos
- * mediciones consecutivas. Es decir, entre dos puntos la curva siempre se
- * mantiene dentro del rango de valores que ellos definen, así que no
- * dibuja una subida o bajada que el usuario pueda leer como una medición
- * intermedia inexistente -eso sí pasaba con Catmull-Rom, y también con un
- * primer intento de redondear solo las esquinas: la asimetría entre
- * segmentos de pendiente muy distinta metía un quiebre visible junto al
- * punto en vez de una curva limpia-.
- */
-function pathDeLinea(puntos: { x: number; y: number }[]): string {
-  const n = puntos.length;
-  if (n === 0) return "";
-  if (n <= 2) {
-    return puntos.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x},${p.y}`).join(" ");
-  }
-
-  // Pendiente de cada segmento consecutivo.
-  const pendientes: number[] = [];
-  for (let i = 0; i < n - 1; i++) {
-    const dx = puntos[i + 1].x - puntos[i].x;
-    pendientes.push(dx === 0 ? 0 : (puntos[i + 1].y - puntos[i].y) / dx);
-  }
-
-  // Tangente en cada punto: promedio de las pendientes vecinas, pero
-  // puesta a cero en cualquier punto donde la serie cambia de dirección
-  // (mínimo o máximo local) -ahí es exactamente donde Catmull-Rom se
-  // pasaba de largo- y limitada (paso de Fritsch-Carlson) para que ningún
-  // segmento se curve más allá del rango [min, max] de sus dos extremos.
-  const tangentes: number[] = new Array(n).fill(0);
-  for (let i = 1; i < n - 1; i++) {
-    const m0 = pendientes[i - 1];
-    const m1 = pendientes[i];
-    tangentes[i] = m0 * m1 <= 0 ? 0 : (m0 + m1) / 2;
-  }
-  tangentes[0] = pendientes[0];
-  tangentes[n - 1] = pendientes[n - 2];
-
-  for (let i = 0; i < n - 1; i++) {
-    const m = pendientes[i];
-    if (m === 0) {
-      tangentes[i] = 0;
-      tangentes[i + 1] = 0;
-      continue;
-    }
-    const a = tangentes[i] / m;
-    const b = tangentes[i + 1] / m;
-    const s = Math.hypot(a, b);
-    if (s > 3) {
-      const factor = 3 / s;
-      tangentes[i] = a * factor * m;
-      tangentes[i + 1] = b * factor * m;
-    }
-  }
-
-  let d = `M ${puntos[0].x},${puntos[0].y}`;
-  for (let i = 0; i < n - 1; i++) {
-    const p0 = puntos[i];
-    const p1 = puntos[i + 1];
-    const dx = (p1.x - p0.x) / 3;
-    const c1x = p0.x + dx;
-    const c1y = p0.y + tangentes[i] * dx;
-    const c2x = p1.x - dx;
-    const c2y = p1.y - tangentes[i + 1] * dx;
-    d += ` C ${c1x},${c1y} ${c2x},${c2y} ${p1.x},${p1.y}`;
-  }
-  return d;
-}
 
 export default function Graficos() {
   const { nombreCompleto, rol, logout, zonaHoraria } = useAuth();
@@ -209,15 +51,29 @@ export default function Graficos() {
   // useSearchParams (y no de window.location) para que quede sincronizada
   // con la navegación de React Router: volver atrás desde el mapa
   // restaura el filtro anterior sin recargar.
+  //
+  // Ahora la ubicación es un selector SIEMPRE visible (no solo cuando
+  // llega por query param): elegir una es el primer paso para poder
+  // elegir DESPUÉS sus dataloggers, si tiene más de uno. El query param
+  // sigue siendo la fuente de verdad -así el link del mapa sigue
+  // funcionando igual- pero ahora también se escribe desde el <select>.
   const [searchParams, setSearchParams] = useSearchParams();
   const ubicacionIdParam = searchParams.get("ubicacion_id");
   const ubicacionId = ubicacionIdParam !== null ? Number(ubicacionIdParam) : null;
   const ubicacionIdValida = ubicacionId !== null && Number.isFinite(ubicacionId);
 
   const [parametros, setParametros] = useState<ParametroItem[]>([]);
-  // HU17 CA4: solo se usa para mostrar el nombre de la ubicación
-  // preseleccionada en el aviso; no es un filtro visible en la UI.
   const [ubicaciones, setUbicaciones] = useState<UbicacionItem[]>([]);
+
+  // Catálogo de dispositivos (dataloggers) DE LA UBICACIÓN elegida. Sin
+  // ubicación elegida no se listan -elegir la ubicación es el primer
+  // paso-. Sin selección de dispositivos = "todos los de esa ubicación".
+  const [dispositivos, setDispositivos] = useState<DispositivoItem[]>([]);
+  const [dispositivosSeleccionados, setDispositivosSeleccionados] = useState<number[]>([]);
+  // Panel lateral con los checkboxes de dataloggers: colapsado por
+  // defecto para que la pantalla no se sienta lineal/apilada -se abre
+  // como un drawer sobre el contenido, no como una sección fija más-.
+  const [panelDataloggersAbierto, setPanelDataloggersAbierto] = useState(false);
 
   // CA: la selección de parámetros aplica al instante (sin botón "APLICAR");
   // es el único filtro además del rango de fechas.
@@ -252,25 +108,63 @@ export default function Graficos() {
       .catch(() => setParametros([]));
   }, []);
 
-  // HU17 CA4: nombre de la ubicación preseleccionada, para el aviso de
-  // "filtrando por...". Se pide solo cuando hay filtro activo.
+  // Catálogo de ubicaciones para el selector, siempre cargado -ya no
+  // depende de que llegue un ubicacion_id por query param, porque ahora
+  // el selector se ofrece siempre, no solo cuando se llega desde el mapa
+  // (HU17)-.
   useEffect(() => {
-    if (!ubicacionIdValida) return;
     apiFetch<{ items: UbicacionItem[] }>("/ubicaciones", { params: { por_pagina: 100 } })
       .then((res) => setUbicaciones(res.items))
       .catch(() => setUbicaciones([]));
-  }, [ubicacionIdValida]);
+  }, []);
+
+  // Catálogo de dispositivos de la ubicación elegida. Elegir la
+  // ubicación es el primer paso para poder elegir DESPUÉS sus
+  // dataloggers -sin ubicación elegida no se listan ninguno-, y la
+  // selección de dataloggers de la ubicación anterior se descarta al
+  // cambiar: los ids ya no aplican a la ubicación nueva.
+  useEffect(() => {
+    setDispositivosSeleccionados([]);
+    setPanelDataloggersAbierto(false);
+    if (!ubicacionIdValida) {
+      setDispositivos([]);
+      return;
+    }
+    apiFetch<{ items: DispositivoItem[] }>("/dispositivos", {
+      params: { por_pagina: 100, id_ubccn: ubicacionId as number },
+    })
+      .then((res) => setDispositivos(res.items))
+      .catch(() => setDispositivos([]));
+  }, [ubicacionIdValida, ubicacionId]);
 
   useEffect(() => {
-    if (parametrosSeleccionados.length === 0 || rangoFechas === null) {
+    // La ubicación ahora es obligatoria (es el primer paso del flujo:
+    // elegir ubicación antes de poder elegir sus dataloggers), así que
+    // sin una elegida todavía no hay nada que pedir -antes se pedían
+    // "todas las ubicaciones permitidas" a la vez, lo que mezclaba
+    // estaciones distintas en la misma serie por color-.
+    //
+    // Sin este `setMediciones(null)`, quitar la ubicación dejaba
+    // `mediciones` con la última respuesta válida -el efecto solo
+    // hacía `return`- y el gráfico de la ubicación anterior seguía
+    // dibujado en pantalla aunque el selector ya mostrara "Selecciona
+    // una ubicación...", sin pertenecer a ningún filtro activo.
+    if (parametrosSeleccionados.length === 0 || rangoFechas === null || !ubicacionIdValida) {
+      setMediciones(null);
       return;
     }
     let cancelado = false;
     setLoading(true);
     setError(null);
 
-    const ubicacionIds = ubicacionIdValida ? [ubicacionId as number] : [];
-    apiFetch<ListadoMediciones>(construirQuery(parametrosSeleccionados, ubicacionIds, rangoFechas))
+    apiFetch<ListadoMediciones>(
+      construirQuery(
+        parametrosSeleccionados,
+        [ubicacionId as number],
+        dispositivosSeleccionados,
+        rangoFechas,
+      ),
+    )
       .then((res) => {
         if (!cancelado) setMediciones(res);
       })
@@ -285,16 +179,39 @@ export default function Graficos() {
     return () => {
       cancelado = true;
     };
-  }, [parametrosSeleccionados, rangoFechas, ubicacionId, ubicacionIdValida]);
+  }, [parametrosSeleccionados, rangoFechas, ubicacionId, ubicacionIdValida, dispositivosSeleccionados]);
 
   const toggleParametro = (id: number) => {
     setParametrosSeleccionados((actual) => (actual.includes(id) ? actual.filter((v) => v !== id) : [...actual, id]));
   };
 
+  const toggleDispositivo = (id: number) => {
+    setDispositivosSeleccionados((actual) => (actual.includes(id) ? actual.filter((v) => v !== id) : [...actual, id]));
+  };
+
+  function elegirUbicacion(id: string) {
+    const siguiente = new URLSearchParams(searchParams);
+    if (id) siguiente.set("ubicacion_id", id);
+    else siguiente.delete("ubicacion_id");
+    setSearchParams(siguiente, { replace: true });
+  }
+
   // GET /mediciones pagina sobre la unión de todas las series, así que
   // `total` mayor que los items recibidos significa que lo que se dibuja
   // es un recorte, no la serie entera.
   const respuestaTruncada = mediciones !== null && mediciones.total > mediciones.items.length;
+
+  // El auto-refresco de SelectorRangoFechasTimeline (cada 60s, mientras el
+  // rango siga "hasta ahora") pone `loading` en true en cada tick. Antes
+  // eso ocultaba TODA la grilla de gráficos -"!loading && ..."- y la
+  // reemplazaba por un spinner de unos pocos px de alto: el documento se
+  // encogía de golpe cada 60s y el navegador perdía la posición de
+  // scroll, saltando arriba en medio de la lectura. Distinguiendo la
+  // carga inicial (sin datos previos) de un refresco silencioso (ya hay
+  // datos, solo se están actualizando), los refrescos dejan la grilla
+  // anterior en pantalla -sin desmontarla- hasta que llegan los datos
+  // nuevos.
+  const cargandoPrimeraVez = loading && mediciones === null;
 
   // El backend devuelve más reciente primero; para la línea de tiempo se
   // necesita orden cronológico ascendente. Solo valores numéricos son
@@ -332,89 +249,169 @@ export default function Graficos() {
 
           <main className="flex-1 overflow-y-auto p-6 md:p-8">
             <div className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl shadow-sm border border-black/10 dark:border-white/10 p-5 mb-6">
-              <fieldset>
-                <legend className="text-sm font-bold text-gray-700 dark:text-gray-200 mb-2">Parámetros</legend>
-                <div className="flex flex-wrap gap-3">
-                  {parametrosGraficables.length === 0 && (
-                    <span className="text-sm text-gray-500 dark:text-gray-400">No hay parámetros disponibles.</span>
+              {/* Elegir la ubicación es el primer paso: define qué
+                  dataloggers hay disponibles para el paso siguiente
+                  (botón "Dataloggers", que abre el panel lateral solo
+                  si esa ubicación tiene más de uno). */}
+              <div>
+                <label htmlFor="ubicacion-graficos" className="block text-sm font-bold text-gray-700 dark:text-gray-200 mb-2">
+                  Ubicación
+                </label>
+                <div className="flex items-center gap-3 flex-wrap">
+                  <select
+                    id="ubicacion-graficos"
+                    value={ubicacionId ?? ""}
+                    onChange={(e) => elegirUbicacion(e.target.value)}
+                    className="bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl block w-full max-w-xs p-2.5 outline-none cursor-pointer"
+                  >
+                    {/* El <select> cerrado sí hereda el tema (clases
+                        dark: arriba), pero su lista desplegada la pinta
+                        el navegador con SUS colores por defecto -blanco/
+                        negro-, salvo que cada <option> tenga su propio
+                        color explícito: por eso van con bg-white/
+                        dark:bg-[#2d3748] acá mismo y no solo en el
+                        contenedor. */}
+                    <option value="" className="bg-white dark:bg-[#2d3748] text-gray-900 dark:text-white">
+                      Selecciona una ubicación…
+                    </option>
+                    {ubicaciones.map((u) => (
+                      <option
+                        key={u.id_ubccn}
+                        value={u.id_ubccn}
+                        className="bg-white dark:bg-[#2d3748] text-gray-900 dark:text-white"
+                      >
+                        {u.nmbr}
+                      </option>
+                    ))}
+                  </select>
+
+                  {/* Solo se ofrece el panel si la ubicación elegida
+                      tiene más de un datalogger -con uno solo, filtrar
+                      no cambiaría nada y sería un botón sin efecto-. */}
+                  {dispositivos.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => setPanelDataloggersAbierto(true)}
+                      className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-[#5a7000] dark:text-[#ccff00] bg-[#ccff00]/10 hover:bg-[#ccff00]/20 border border-[#8fb300]/40 dark:border-[#ccff00]/30 rounded-xl transition-colors"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 3v2m6-2v2M5 8h14M5 8a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2v-9a2 2 0 00-2-2M5 8V6a2 2 0 012-2h10a2 2 0 012 2v2" />
+                      </svg>
+                      Dataloggers
+                      {dispositivosSeleccionados.length > 0 && (
+                        <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold bg-[#ccff00] text-gray-900">
+                          {dispositivosSeleccionados.length}
+                        </span>
+                      )}
+                    </button>
                   )}
-                  {parametrosGraficables.map((p) => (
-                    <label key={p.id_prmtr} className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={parametrosSeleccionados.includes(p.id_prmtr)}
-                        onChange={() => toggleParametro(p.id_prmtr)}
-                        className="accent-[#ccff00]"
-                      />
-                      {p.nmbr} ({p.undd})
-                    </label>
-                  ))}
                 </div>
-              </fieldset>
-
-              <div className="mt-6 pt-6 border-t border-black/10 dark:border-white/10">
-                <SelectorRangoFechasTimeline zonaHoraria={zonaHoraria} onCambiarRango={setRangoFechas} />
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
-              <div className="flex items-center gap-1 bg-black/5 dark:bg-white/5 rounded-xl p-1">
-                <button
-                  type="button"
-                  onClick={() => setTipoGrafico("linea")}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                    tipoGrafico === "linea" ? "bg-[#ccff00] text-gray-900" : "text-gray-600 dark:text-gray-300"
-                  }`}
-                >
-                  Línea
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setTipoGrafico("area")}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                    tipoGrafico === "area" ? "bg-[#ccff00] text-gray-900" : "text-gray-600 dark:text-gray-300"
-                  }`}
-                >
-                  Área
-                </button>
               </div>
 
-              <button
-                type="button"
-                onClick={() => setVista((v) => (v === "grafico" ? "tabla" : "grafico"))}
-                className="px-4 py-2 rounded-xl border border-black/20 dark:border-white/20 text-gray-700 dark:text-gray-200 text-sm font-bold hover:bg-black/10 dark:hover:bg-white/10 transition-all"
-              >
-                {vista === "grafico" ? "VER TABLA" : "VER GRÁFICOS"}
-              </button>
+              {ubicacionIdValida && (
+                <fieldset className="mt-6 pt-6 border-t border-black/10 dark:border-white/10">
+                  <legend className="text-sm font-bold text-gray-700 dark:text-gray-200 mb-3">Parámetros</legend>
+                  <div className="flex flex-wrap gap-2">
+                    {parametrosGraficables.length === 0 && (
+                      <span className="text-sm text-gray-500 dark:text-gray-400">No hay parámetros disponibles.</span>
+                    )}
+                    {/* Chips tipo toggle en vez de checkboxes nativos: el
+                        checkbox de navegador es minúsculo y sin relación
+                        visual con el resto de la UI -pills, badges- que
+                        ya usa la app para selección de estado. Sigue
+                        siendo un <input type="checkbox"> real (accesible,
+                        con checked/onChange), solo que oculto y con su
+                        estado dibujado por el propio <label>. */}
+                    {parametrosGraficables.map((p) => {
+                      const activo = parametrosSeleccionados.includes(p.id_prmtr);
+                      return (
+                        <label
+                          key={p.id_prmtr}
+                          className={`inline-flex items-center gap-1.5 pl-3 pr-3.5 py-1.5 rounded-full text-sm font-medium cursor-pointer border transition-colors ${
+                            activo
+                              ? "bg-[#ccff00]/20 text-[#5a7000] dark:text-[#ccff00] border-[#8fb300]/40 dark:border-[#ccff00]/30"
+                              : "bg-black/5 dark:bg-white/5 text-gray-600 dark:text-gray-300 border-transparent hover:bg-black/10 dark:hover:bg-white/10"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={activo}
+                            onChange={() => toggleParametro(p.id_prmtr)}
+                            className="sr-only"
+                          />
+                          {activo && (
+                            <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" />
+                            </svg>
+                          )}
+                          {p.nmbr}
+                          <span className={activo ? "text-[#5a7000]/70 dark:text-[#ccff00]/70" : "text-gray-500 dark:text-gray-400"}>
+                            {p.undd}
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </fieldset>
+              )}
+
+              {ubicacionIdValida && (
+                <div className="mt-6 pt-6 border-t border-black/10 dark:border-white/10">
+                  <SelectorRangoFechasTimeline zonaHoraria={zonaHoraria} onCambiarRango={setRangoFechas} />
+                </div>
+              )}
             </div>
 
-            {/* HU17 CA4: aviso de que se está viendo UNA sola ubicación,
-                con salida a la vista completa. Sin esto, alguien que
-                llega desde el mapa podría creer que su cuenta solo tiene
-                datos de esa estación. */}
+            {!ubicacionIdValida && (
+              <div className="py-24 text-center text-gray-500 dark:text-gray-400 text-sm">
+                Selecciona una ubicación para ver sus gráficos.
+              </div>
+            )}
+
             {ubicacionIdValida && (
-              <div className="mb-6 p-4 rounded-xl bg-[#ccff00]/10 border border-[#ccff00]/30 text-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <span className="text-gray-700 dark:text-gray-200">
-                  Mostrando solo la ubicación{" "}
-                  <strong className="font-semibold">
-                    {ubicaciones.find((u) => u.id_ubccn === ubicacionId)?.nmbr ??
-                      `#${ubicacionId}`}
-                  </strong>
-                  , preseleccionada desde el mapa de estaciones.
-                </span>
+              <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+                <div className="flex items-center gap-1 bg-black/5 dark:bg-white/5 rounded-xl p-1">
+                  <button
+                    type="button"
+                    onClick={() => setTipoGrafico("linea")}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                      tipoGrafico === "linea" ? "bg-[#ccff00] text-gray-900" : "text-gray-600 dark:text-gray-300"
+                    }`}
+                  >
+                    Línea
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTipoGrafico("area")}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                      tipoGrafico === "area" ? "bg-[#ccff00] text-gray-900" : "text-gray-600 dark:text-gray-300"
+                    }`}
+                  >
+                    Área
+                  </button>
+
+                  {/* Refresco en segundo plano (auto-actualización cada
+                      60s de SelectorRangoFechasTimeline, mientras siga
+                      "hasta ahora"): antes esto ocultaba toda la grilla
+                      de gráficos y la reemplazaba por un spinner grande,
+                      lo que hacía que el documento se encogiera de golpe
+                      y el navegador perdiera la posición de scroll -acá
+                      solo se avisa sin tapar nada de lo que ya está
+                      dibujado-. */}
+                  {loading && !cargandoPrimeraVez && (
+                    <span className="flex items-center gap-1.5 pl-3 text-xs text-gray-500 dark:text-gray-400">
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#ccff00] animate-pulse" />
+                      Actualizando…
+                    </span>
+                  )}
+                </div>
+
                 <button
                   type="button"
-                  onClick={() => {
-                    // Se quita solo este parámetro y se conservan los
-                    // demás: hoy es el único, pero borrar toda la query
-                    // string sería un bug latente en cuanto se agregue otro.
-                    const siguiente = new URLSearchParams(searchParams);
-                    siguiente.delete("ubicacion_id");
-                    setSearchParams(siguiente, { replace: true });
-                  }}
-                  className="shrink-0 self-start sm:self-auto inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-lg border border-black/20 dark:border-white/20 text-gray-700 dark:text-gray-200 hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+                  onClick={() => setVista((v) => (v === "grafico" ? "tabla" : "grafico"))}
+                  className="px-4 py-2 rounded-xl border border-black/20 dark:border-white/20 text-gray-700 dark:text-gray-200 text-sm font-bold hover:bg-black/10 dark:hover:bg-white/10 transition-all"
                 >
-                  Ver todas las ubicaciones
+                  {vista === "grafico" ? "VER TABLA" : "VER GRÁFICOS"}
                 </button>
               </div>
             )}
@@ -424,7 +421,7 @@ export default function Graficos() {
                 este aviso una serie recortada es indistinguible de una con
                 pocos datos reales -que es justo lo que confunde al ver
                 "MEDICIONES 5" al abrir varios gráficos a la vez-. */}
-            {!loading && respuestaTruncada && (
+            {!cargandoPrimeraVez && respuestaTruncada && (
               <div className="mb-6 p-4 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-300/50 dark:border-amber-800/40 text-amber-800 dark:text-amber-300 text-sm">
                 Mostrando {mediciones?.items.length ?? 0} de {mediciones?.total ?? 0} mediciones del
                 rango. Los gráficos dibujan solo esa parte: reduce el rango de fechas o la cantidad
@@ -438,20 +435,20 @@ export default function Graficos() {
               </div>
             )}
 
-            {loading && (
+            {cargandoPrimeraVez && (
               <div className="flex justify-center items-center gap-2 py-24 text-gray-600 dark:text-gray-300">
                 <div className="w-4 h-4 rounded-full bg-[#ccff00] animate-bounce" />
                 <span>Cargando telemetría...</span>
               </div>
             )}
 
-            {!loading && parametrosSeleccionados.length === 0 && (
+            {!cargandoPrimeraVez && parametrosSeleccionados.length === 0 && (
               <div className="py-24 text-center text-gray-500 dark:text-gray-400 text-sm">
                 Selecciona al menos un parámetro para ver sus gráficos.
               </div>
             )}
 
-            {!loading && vista === "tabla" && itemsOrdenados.length > 0 && (
+            {!cargandoPrimeraVez && vista === "tabla" && itemsOrdenados.length > 0 && (
               <div className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl shadow-sm border border-black/10 dark:border-white/10 overflow-x-auto">
                 <table className="w-full text-sm text-left text-gray-600 dark:text-gray-300">
                   <thead className="text-xs text-gray-600 dark:text-gray-300 uppercase bg-black/5 dark:bg-white/5 border-b border-black/10 dark:border-white/10">
@@ -459,6 +456,13 @@ export default function Graficos() {
                       <th className="px-6 py-4 font-bold tracking-wider">Fecha</th>
                       <th className="px-6 py-4 font-bold tracking-wider">Hora</th>
                       <th className="px-6 py-4 font-bold tracking-wider">Parámetro</th>
+                      {/* Dispositivo: sin esto, dos lecturas del mismo
+                          parámetro en el mismo instante -de dos
+                          dataloggers distintos de la misma ubicación-
+                          eran indistinguibles en la tabla. No hace falta
+                          repetir la ubicación: la vista ya está acotada
+                          a una sola (selector obligatorio). */}
+                      <th className="px-6 py-4 font-bold tracking-wider">Dispositivo</th>
                       <th className="px-6 py-4 font-bold tracking-wider">Valor</th>
                     </tr>
                   </thead>
@@ -473,6 +477,7 @@ export default function Graficos() {
                           <td className="px-6 py-4">{fecha.toLocaleDateString("es", { timeZone: zonaHoraria })}</td>
                           <td className="px-6 py-4">{fecha.toLocaleTimeString("es", { timeZone: zonaHoraria })}</td>
                           <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">{item.parametro_nombre}</td>
+                          <td className="px-6 py-4">{item.dispositivo_nombre}</td>
                           <td className="px-6 py-4">
                             {item.vlr} {item.undd}
                           </td>
@@ -484,7 +489,7 @@ export default function Graficos() {
               </div>
             )}
 
-            {!loading && vista === "grafico" && parametrosARenderizar.length > 0 && (
+            {!cargandoPrimeraVez && vista === "grafico" && parametrosARenderizar.length > 0 && (
               <div className={`grid ${claseColumnasGrilla(parametrosARenderizar.length)} gap-6`}>
                 {parametrosARenderizar.map(({ parametro, items }) => (
                   <GraficoDeParametro
@@ -502,6 +507,48 @@ export default function Graficos() {
           </main>
         </div>
       </div>
+
+      {/* Panel lateral de dataloggers: se pidió explícitamente que no
+          fuera "todo lineal" -una sección más apilada en la pantalla-,
+          así que es un drawer que se desliza desde la derecha por
+          encima del contenido, en vez de ocupar espacio fijo. */}
+      <DrawerPanel
+        abierto={panelDataloggersAbierto}
+        onCerrar={() => setPanelDataloggersAbierto(false)}
+        titulo="Dataloggers"
+        pie={
+          dispositivosSeleccionados.length > 0 ? (
+            <button
+              type="button"
+              onClick={() => setDispositivosSeleccionados([])}
+              className="w-full px-4 py-2.5 rounded-xl border border-black/20 dark:border-white/20 text-gray-700 dark:text-gray-200 text-sm font-bold hover:bg-black/5 dark:hover:bg-white/10 transition-all"
+            >
+              Quitar selección ({dispositivosSeleccionados.length})
+            </button>
+          ) : undefined
+        }
+      >
+        <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
+          {ubicaciones.find((u) => u.id_ubccn === ubicacionId)?.nmbr ?? ""} tiene {dispositivos.length}{" "}
+          dataloggers. Sin ninguno marcado se muestran todos juntos.
+        </p>
+        <div className="flex flex-col gap-1">
+          {dispositivos.map((d) => (
+            <label
+              key={d.id_dspstv}
+              className="flex items-center gap-2.5 text-sm text-gray-700 dark:text-gray-200 cursor-pointer rounded-lg px-2 py-2 hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+            >
+              <input
+                type="checkbox"
+                checked={dispositivosSeleccionados.includes(d.id_dspstv)}
+                onChange={() => toggleDispositivo(d.id_dspstv)}
+                className="accent-[#ccff00]"
+              />
+              {d.nmbr}
+            </label>
+          ))}
+        </div>
+      </DrawerPanel>
     </div>
   );
 }
@@ -518,17 +565,38 @@ interface GraficoDeParametroProps {
 function GraficoDeParametro({ parametro, items, tipoGrafico, zonaHoraria, hover, onHover }: GraficoDeParametroProps) {
   const { esOscuro } = useTheme();
 
-  // Serie por ubicación, hasta 4 (paleta categórica validada). El resto se
-  // agrupa como "Otras" en vez de generar un color nuevo por índice.
-  const { series, otrasUbicaciones } = useMemo(() => {
-    const porUbicacion = new Map<number, { nombre: string; items: MedicionNumerica[] }>();
+  // Serie por DISPOSITIVO (no por ubicación), hasta 4 (paleta categórica
+  // validada). El resto se agrupa como "Otras" en vez de generar un color
+  // nuevo por índice.
+  //
+  // Antes se agrupaba por id_ubccn, pero una Ubicación puede tener más de
+  // un Dispositivo -dos dataloggers midiendo el mismo parámetro en la
+  // misma estación es un caso real ("Estacion Prueba" tiene dos-, no
+  // hipotético-: agrupar por ubicación mezclaba sus lecturas en una sola
+  // línea, así que un sensor con fallas (ceros intercalados) contaminaba
+  // visualmente al otro que medía bien.
+  const { series, otrosDispositivos } = useMemo(() => {
+    const porDispositivo = new Map<number, { nombre: string; items: MedicionNumerica[] }>();
+    // Cuántas ubicaciones distintas hay entre los puntos: si es una sola,
+    // el nombre de la ubicación ya lo dice el título de la tarjeta del
+    // gráfico (fuera de este componente) y repetirlo en cada serie sería
+    // ruido; con más de una, hace falta para no perder de qué estación es
+    // cada dispositivo.
+    const ubicacionesDistintas = new Set(items.map((i) => i.id_ubccn)).size;
     for (const item of items) {
-      const entry = porUbicacion.get(item.id_ubccn);
-      if (entry) entry.items.push(item);
-      else porUbicacion.set(item.id_ubccn, { nombre: item.ubicacion_nombre, items: [item] });
+      const entry = porDispositivo.get(item.id_dspstv);
+      if (entry) {
+        entry.items.push(item);
+      } else {
+        const nombre =
+          ubicacionesDistintas > 1
+            ? `${item.ubicacion_nombre} · ${item.dispositivo_nombre}`
+            : item.dispositivo_nombre;
+        porDispositivo.set(item.id_dspstv, { nombre, items: [item] });
+      }
     }
-    const todas = [...porUbicacion.values()];
-    return { series: todas.slice(0, 4), otrasUbicaciones: todas.slice(4).map((s) => s.nombre) };
+    const todas = [...porDispositivo.values()];
+    return { series: todas.slice(0, 4), otrosDispositivos: todas.slice(4).map((s) => s.nombre) };
   }, [items]);
 
   const resumen = useMemo(() => {
@@ -723,8 +791,8 @@ function GraficoDeParametro({ parametro, items, tipoGrafico, zonaHoraria, hover,
                   {s.nombre}
                 </div>
               ))}
-              {otrasUbicaciones.length > 0 && (
-                <span className="text-xs text-gray-500">+{otrasUbicaciones.length} más sin graficar</span>
+              {otrosDispositivos.length > 0 && (
+                <span className="text-xs text-gray-500">+{otrosDispositivos.length} más sin graficar</span>
               )}
             </div>
           )}
@@ -784,7 +852,12 @@ function GraficoDeParametro({ parametro, items, tipoGrafico, zonaHoraria, hover,
           <svg
             ref={svgRef}
             viewBox={`0 0 ${ANCHO} ${ALTO}`}
-            className="w-full h-auto min-w-[600px] cursor-crosshair"
+            // select-none: el arrastre para hacer zoom (iniciarSeleccion/
+            // actualizarSeleccion) es un mousedown+drag sobre el SVG, y
+            // sin esto el navegador lo interpreta como una selección de
+            // texto normal -resalta en azul las etiquetas del eje Y y
+            // muestra su menú contextual de "copiar/buscar" al soltar-.
+            className="w-full h-auto min-w-[600px] cursor-crosshair select-none"
             onMouseDown={iniciarSeleccion}
             onMouseMove={actualizarSeleccion}
             onMouseUp={finalizarSeleccion}
@@ -829,6 +902,20 @@ function GraficoDeParametro({ parametro, items, tipoGrafico, zonaHoraria, hover,
               const itemsVisibles = s.items.filter(enRangoZoom);
               const coords = itemsVisibles.map((item) => ({ x: xDe(item), y: yDe(item) }));
               const trazo = pathDeLinea(coords);
+              // Radio del punto visible, adaptado a cuánto espacio real
+              // hay entre una medición y la siguiente. Con un radio fijo
+              // (antes 3px siempre), una serie de varios cientos de
+              // puntos en los ~836px útiles del gráfico terminaba con
+              // menos de 2px entre centros -bastante menos que su propio
+              // diámetro-, así que los puntos se solapaban entre sí y
+              // tapaban la línea en vez de solo marcar cada dato. Achicar
+              // el punto (o quitarlo del todo a partir de cierta
+              // densidad, dejando solo la línea) no pierde ningún dato:
+              // el círculo invisible de abajo -que sostiene el hover-
+              // sigue del mismo tamaño siempre.
+              const anchoUtil = ANCHO - PAD.left - PAD.right;
+              const espacioPorPunto = itemsVisibles.length > 1 ? anchoUtil / (itemsVisibles.length - 1) : anchoUtil;
+              const radioPunto = espacioPorPunto > 12 ? 3 : espacioPorPunto > 6 ? 2 : 0;
               // El punto resaltado solo se dibuja en la serie a la que
               // pertenece, para que su color coincida con el de su línea.
               const indiceHover = hover
@@ -858,8 +945,8 @@ function GraficoDeParametro({ parametro, items, tipoGrafico, zonaHoraria, hover,
                     const puntoActivo = hover?.item.id_registro === item.id_registro;
                     return (
                     <g key={item.id_registro}>
-                      {!puntoActivo && (
-                        <circle cx={coords[indice].x} cy={coords[indice].y} r={3} fill={color} pointerEvents="none" />
+                      {!puntoActivo && radioPunto > 0 && (
+                        <circle cx={coords[indice].x} cy={coords[indice].y} r={radioPunto} fill={color} pointerEvents="none" />
                       )}
                       <circle
                         cx={coords[indice].x}
@@ -958,7 +1045,9 @@ function GraficoDeParametro({ parametro, items, tipoGrafico, zonaHoraria, hover,
                 <div className="font-semibold">
                   {hover.item.vlr} {hover.item.undd}
                 </div>
-                <div className="text-gray-500 dark:text-gray-400">{hover.item.ubicacion_nombre}</div>
+                {/* Solo el dispositivo: la ubicación ya está fija por
+                    el selector obligatorio, repetirla sería ruido. */}
+                <div className="text-gray-500 dark:text-gray-400">{hover.item.dispositivo_nombre}</div>
                 <div className="text-gray-500 dark:text-gray-400">
                   {formatearFechaCorta(hover.item.fch_hr, zonaHoraria)}
                 </div>
