@@ -1,8 +1,6 @@
 import { Link } from "react-router-dom";
-import pangeaIconDark from "../../assets/pangea-icon-dark.png";
 import pangeaIconLight from "../../assets/pangea-icon-light.png";
 import { ROLES, rutaPorRol } from "../../config/roles";
-import { useTheme } from "../../context/ThemeContext";
 
 export type SeccionActiva = "panel" | "usuarios" | "ubicaciones" | "dispositivos" | "conexiones-ftp" | "dashboard" | "configuracion" | "consulta-datos"| "mapeos" | "parametros" | "cola-ingesta" | "graficos" | "mapa-estaciones" | "mapa-ubicaciones" | "paneles" | "mi-perfil";
 
@@ -12,29 +10,66 @@ interface SidebarProps {
   rol: string | null;
 }
 
-const linkBase = "flex items-center gap-3 px-3 py-2 rounded-lg transition-colors";
-const linkInactivo = "text-gray-600 dark:text-gray-300 hover:bg-black/5 dark:hover:bg-white/5";
-const linkActivo = "bg-[#ccff00]/10 text-[#5a7000] dark:text-[#ccff00] font-medium";
-const linkDeshabilitado = linkInactivo + " opacity-60 cursor-not-allowed";
-const iconoActivo = "text-[#5a7000] dark:text-[#ccff00]";
+// El sidebar es oscuro en los dos temas (a diferencia del resto de la
+// app): en modo claro un gris oscuro, en modo oscuro un tono aún más
+// oscuro. El item activo, en cambio, es CLARO -toma el color de fondo de
+// la página, no del sidebar- y "muerde" el carril entrando desde la
+// derecha, con las dos esquinas exteriores cóncavas (ver notchArriba/
+// notchAbajo): ese detalle es lo que distingue esto de un simple
+// rounded-r-full -sin las esquinas mordidas, la cápsula se ve pegada al
+// borde en vez de fundida con él-.
+const linkBase = "relative flex items-center gap-3 pl-3 py-2.5 transition-all";
+const linkInactivo = "mr-4 rounded-lg text-gray-300 hover:bg-white/5 hover:text-white";
+const linkActivo =
+  "mr-0 pr-7 rounded-l-lg bg-[#f6f7f8] dark:bg-[#0b1220] text-gray-900 dark:text-white font-semibold";
+const linkDeshabilitado = "mr-4 rounded-lg text-gray-500 opacity-60 cursor-not-allowed";
+const iconoActivo = "text-gray-900 dark:text-white";
+
+/** Las dos "mordidas" cóncavas de la cápsula activa: un cuarto de círculo
+ *  del color del SIDEBAR (no del fondo de página) posicionado justo
+ *  arriba y abajo de la cápsula, en la esquina donde se junta con el
+ *  carril. Es puro CSS -radial-gradient recortado con el propio
+ *  border-radius del pseudo-elemento-, sin SVG ni imagen. */
+const notchArriba =
+  "absolute -top-4 right-0 w-4 h-4 bg-[radial-gradient(circle_at_top_left,transparent_70%,#F6F7F8_71%)] dark:bg-[radial-gradient(circle_at_top_left,transparent_70%,#111827_71%)]";
+const notchAbajo =
+  "absolute -bottom-4 right-0 w-4 h-4 bg-[radial-gradient(circle_at_bottom_left,transparent_70%,#F6F7F8_71%)] dark:bg-[radial-gradient(circle_at_bottom_left,transparent_70%,#111827_71%)]";
 
 /** Encabezado de grupo del menú. En minúscula-versalita y sin borde: la
  *  separación la da el espacio (mt-5), no una línea; con 4 grupos, cuatro
  *  reglas horizontales competirían visualmente con el item activo. */
 const tituloGrupo =
-  "px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 select-none";
+  "pl-3 pr-4 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-500 select-none";
 
 /** Espaciado entre grupos. El primero no lo lleva (va pegado al logo). */
 const grupo = "mt-5 first:mt-0";
 
-export default function Sidebar({ onLogout, activo, rol }: SidebarProps) {
-  const { esOscuro } = useTheme();
-
+/** Un item de menú, con el detalle de las esquinas cóncavas cuando está
+ *  activo. Se centralizó en un componente en vez de repetir el mismo
+ *  bloque de "cápsula + dos mordidas" en los 13 links del menú. */
+function ItemMenu({ to, activo, icono, children }: { to: string; activo: boolean; icono: React.ReactNode; children: React.ReactNode }) {
   return (
-    <aside className="w-64 bg-white/40 dark:bg-white/[0.015] backdrop-blur-sm border-r border-black/5 dark:border-white/5 hidden md:flex flex-col transition-colors duration-300">
-      <div className="h-16 flex items-center gap-2.5 px-5 border-b border-black/5 dark:border-white/5">
-        <img src={esOscuro ? pangeaIconLight : pangeaIconDark} alt="" className="h-10 w-auto" />
-        <span className="text-2xl font-bold text-gray-900 dark:text-white tracking-tight">Pangea</span>
+    <Link to={to} className={linkBase + " " + (activo ? linkActivo : linkInactivo)}>
+      {activo && (
+        <>
+          <span className={notchArriba} aria-hidden="true" />
+          <span className={notchAbajo} aria-hidden="true" />
+        </>
+      )}
+      <svg className={"w-5 h-5 shrink-0 " + (activo ? iconoActivo : "")} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        {icono}
+      </svg>
+      {children}
+    </Link>
+  );
+}
+
+export default function Sidebar({ onLogout, activo, rol }: SidebarProps) {
+  return (
+    <aside className="w-64 bg-gray-800 dark:bg-[#0a0e1a] hidden md:flex flex-col transition-colors duration-300">
+      <div className="h-16 flex items-center gap-2.5 px-5 border-b border-white/10">
+        <img src={pangeaIconLight} alt="" className="h-10 w-auto" />
+        <span className="text-2xl font-bold text-white tracking-tight">Pangea</span>
       </div>
 
       {/* El menú va agrupado por AFINIDAD de tarea, no por orden de
@@ -51,51 +86,39 @@ export default function Sidebar({ onLogout, activo, rol }: SidebarProps) {
           queda como una franja permanente que ensucia el diseño. Se oculta
           solo el indicador; el scroll con rueda, trackpad, teclado y touch
           sigue funcionando. */}
-      <nav className="flex-1 p-4 overflow-y-auto scrollbar-oculta">
+      {/* pl-4 pr-0 py-4 (no p-4): el padding derecho lo pone cada LINK
+          -mr-4 en los inactivos, pr-7 sin margen en el activo-, no el
+          nav, para que el item activo pueda llegar hasta el borde real
+          del <aside> en vez de quedar recortado por el padding del
+          contenedor con scroll. */}
+      <nav className="flex-1 pl-4 pr-0 py-4 overflow-y-auto scrollbar-oculta">
         {/* ---------------- General ---------------- */}
         <div className={grupo + " space-y-1"}>
           {/* Panel: lleva al panel real del rol logueado (panel-admin / panel-tecnico) */}
-          <Link
+          <ItemMenu
             to={rutaPorRol(rol ?? "")}
-            className={linkBase + " " + (activo === "panel" ? linkActivo : linkInactivo)}
+            activo={activo === "panel"}
+            icono={<path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h7" />}
           >
-            <svg
-              className={"w-5 h-5 " + (activo === "panel" ? iconoActivo : "")}
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M4 6h16M4 12h16M4 18h7"
-              />
-            </svg>
             Panel
-          </Link>
+          </ItemMenu>
 
           {/* HU23: Tableros Personalizables (E05). Reemplaza al antiguo
               placeholder "Dashboard" -deshabilitado, sin ruta real-. */}
-          <Link
+          <ItemMenu
             to="/paneles"
-            className={linkBase + " " + (activo === "paneles" ? linkActivo : linkInactivo)}
-          >
-            <svg
-              className={"w-5 h-5 " + (activo === "paneles" ? iconoActivo : "")}
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
+            activo={activo === "paneles"}
+            icono={
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
                 strokeWidth="2"
                 d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"
               />
-            </svg>
+            }
+          >
             Tableros Personalizables
-          </Link>
+          </ItemMenu>
         </div>
 
         {/* ---------------- Mapas ----------------
@@ -107,50 +130,42 @@ export default function Sidebar({ onLogout, activo, rol }: SidebarProps) {
           <p className={tituloGrupo}>Mapas</p>
           <div className="space-y-1">
             {/* HU22: mapa de ubicaciones, solo lectura. */}
-            <Link
+            <ItemMenu
               to="/ubicaciones/mapa"
-              className={linkBase + " " + (activo === "mapa-ubicaciones" ? linkActivo : linkInactivo)}
-            >
-              <svg
-                className={"w-5 h-5 " + (activo === "mapa-ubicaciones" ? iconoActivo : "")}
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
+              activo={activo === "mapa-ubicaciones"}
+              icono={
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   strokeWidth="2"
                   d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"
                 />
-              </svg>
+              }
+            >
               Mapa de Ubicaciones
-            </Link>
+            </ItemMenu>
 
             {/* HU17: mapa de estaciones con datos en vivo. Separado de
                 "Mapa de Ubicaciones" (HU22), que es la vista de gestión:
                 aquella muestra zonas y dispositivos, esta el estado actual
                 de las estaciones asignadas al usuario. */}
-            <Link
+            <ItemMenu
               to="/mapa-estaciones"
-              className={linkBase + " " + (activo === "mapa-estaciones" ? linkActivo : linkInactivo)}
+              activo={activo === "mapa-estaciones"}
+              icono={
+                <>
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2"
+                    d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
+                  />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                </>
+              }
             >
-              <svg
-                className={"w-5 h-5 " + (activo === "mapa-estaciones" ? iconoActivo : "")}
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
-                />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
               Mapa de Estaciones
-            </Link>
+            </ItemMenu>
           </div>
         </div>
 
@@ -162,46 +177,29 @@ export default function Sidebar({ onLogout, activo, rol }: SidebarProps) {
           <p className={tituloGrupo}>Datos</p>
           <div className="space-y-1">
             {/* HU13: consulta de datos de telemetria filtrada por parametros/ubicaciones */}
-            <Link
+            <ItemMenu
               to="/consulta-datos"
-              className={linkBase + " " + (activo === "consulta-datos" ? linkActivo : linkInactivo)}
-            >
-              <svg
-                className={"w-5 h-5 " + (activo === "consulta-datos" ? iconoActivo : "")}
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
+              activo={activo === "consulta-datos"}
+              icono={
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   strokeWidth="2"
                   d="M9 17V7m6 10V11m-9 6h12a2 2 0 002-2V5a2 2 0 00-2-2H6a2 2 0 00-2 2v10a2 2 0 002 2z"
                 />
-              </svg>
+              }
+            >
               Consulta de Datos
-            </Link>
+            </ItemMenu>
 
             {/* Graficos: vista rapida de telemetria en charts (misma fuente que Consulta de Datos) */}
-            <Link
+            <ItemMenu
               to="/graficos"
-              className={linkBase + " " + (activo === "graficos" ? linkActivo : linkInactivo)}
+              activo={activo === "graficos"}
+              icono={<path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 3v18h18M7 15l4-5 3 3 5-7" />}
             >
-              <svg
-                className={"w-5 h-5 " + (activo === "graficos" ? iconoActivo : "")}
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  d="M3 3v18h18M7 15l4-5 3 3 5-7"
-                />
-              </svg>
               Gráficos
-            </Link>
+            </ItemMenu>
           </div>
         </div>
 
@@ -212,70 +210,57 @@ export default function Sidebar({ onLogout, activo, rol }: SidebarProps) {
         <div className={grupo}>
           <p className={tituloGrupo}>Gestión</p>
           <div className="space-y-1">
-            <Link
+            <ItemMenu
               to="/ubicaciones"
-              className={linkBase + " " + (activo === "ubicaciones" ? linkActivo : linkInactivo)}
+              activo={activo === "ubicaciones"}
+              icono={
+                <>
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2"
+                    d="M17.657 16.657L13.414 20.9a2 2 0 01-2.828 0l-4.243-4.243a8 8 0 1111.314 0z"
+                  />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                </>
+              }
             >
-              <svg
-                className={"w-5 h-5 " + (activo === "ubicaciones" ? iconoActivo : "")}
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  d="M17.657 16.657L13.414 20.9a2 2 0 01-2.828 0l-4.243-4.243a8 8 0 1111.314 0z"
-                />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
               Gestion de Ubicaciones
-            </Link>
+            </ItemMenu>
 
             {/* HU10: listar dispositivos. Visible para todos los roles, igual
                 que Ubicaciones: el backend ya filtra qué ve cada uno. */}
-            <Link
+            <ItemMenu
               to="/dispositivos"
-              className={linkBase + " " + (activo === "dispositivos" ? linkActivo : linkInactivo)}
-            >
-              <svg
-                className={"w-5 h-5 " + (activo === "dispositivos" ? iconoActivo : "")}
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
+              activo={activo === "dispositivos"}
+              icono={
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   strokeWidth="2"
                   d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"
                 />
-              </svg>
+              }
+            >
               Gestion de Dispositivos
-            </Link>
+            </ItemMenu>
 
             {/* HU03: Solo el rol Administrador puede acceder a este modulo */}
             {rol === ROLES.ADMINISTRADOR && (
-              <Link
+              <ItemMenu
                 to="/usuarios"
-                className={linkBase + " " + (activo === "usuarios" ? linkActivo : linkInactivo)}
-              >
-                <svg
-                  className={"w-5 h-5 " + (activo === "usuarios" ? iconoActivo : "")}
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
+                activo={activo === "usuarios"}
+                icono={
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
                     strokeWidth="2"
                     d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"
                   />
-                </svg>
+                }
+              >
                 Gestion de Usuarios
-              </Link>
+              </ItemMenu>
             )}
           </div>
         </div>
@@ -294,67 +279,45 @@ export default function Sidebar({ onLogout, activo, rol }: SidebarProps) {
             <p className={tituloGrupo}>Ingesta</p>
             <div className="space-y-1">
               {/* HU05 */}
-              <Link
+              <ItemMenu
                 to="/conexiones-ftp"
-                className={linkBase + " " + (activo === "conexiones-ftp" ? linkActivo : linkInactivo)}
-              >
-                <svg
-                  className={"w-5 h-5 " + (activo === "conexiones-ftp" ? iconoActivo : "")}
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
+                activo={activo === "conexiones-ftp"}
+                icono={
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
                     strokeWidth="2"
                     d="M5 12h14M5 12a2 2 0 01-2-2V7a2 2 0 012-2h14a2 2 0 012 2v3a2 2 0 01-2 2M5 12a2 2 0 00-2 2v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 00-2-2M6 8h.01M6 16h.01"
                   />
-                </svg>
+                }
+              >
                 Conexiones FTP
-              </Link>
+              </ItemMenu>
 
               {/* Catálogo de parámetros estándar que consume HU06. */}
-              <Link
+              <ItemMenu
                 to="/parametros"
-                className={linkBase + " " + (activo === "parametros" ? linkActivo : linkInactivo)}
-              >
-                <svg
-                  className={"w-5 h-5 " + (activo === "parametros" ? iconoActivo : "")}
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
+                activo={activo === "parametros"}
+                icono={
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
                     strokeWidth="2"
                     d="M9 17V7m3 10V11m3 6V9M5 21h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2z"
                   />
-                </svg>
+                }
+              >
                 Parámetros
-              </Link>
+              </ItemMenu>
 
               {/* HU09: monitoreo de la cola de procesamiento. */}
-              <Link
+              <ItemMenu
                 to="/cola-ingesta"
-                className={linkBase + " " + (activo === "cola-ingesta" ? linkActivo : linkInactivo)}
+                activo={activo === "cola-ingesta"}
+                icono={<path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 7h16M4 12h16M4 17h16" />}
               >
-                <svg
-                  className={"w-5 h-5 " + (activo === "cola-ingesta" ? iconoActivo : "")}
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    d="M4 7h16M4 12h16M4 17h16"
-                  />
-                </svg>
                 Cola de Ingesta
-              </Link>
+              </ItemMenu>
             </div>
           </div>
         )}
@@ -392,10 +355,10 @@ export default function Sidebar({ onLogout, activo, rol }: SidebarProps) {
         </div>
       </nav>
 
-      <div className="p-4 border-t border-black/5 dark:border-white/5">
+      <div className="p-4 border-t border-white/10">
         <button
           onClick={onLogout}
-          className="flex items-center gap-3 px-3 py-2 w-full text-left text-gray-600 dark:text-gray-300 hover:bg-red-500/10 hover:text-red-400 rounded-lg transition-colors"
+          className="flex items-center gap-3 px-3 py-2 w-full text-left text-gray-300 hover:bg-red-500/10 hover:text-red-400 rounded-lg transition-colors"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path
