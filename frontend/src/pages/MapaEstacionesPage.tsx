@@ -160,7 +160,7 @@ export default function MapaEstacionesPage() {
         <Sidebar onLogout={logout} activo="mapa-estaciones" rol={rol} />
 
         <div className="flex-1 flex flex-col overflow-hidden">
-          <div className="flex justify-end p-4 md:p-6 pb-0">
+          <div className="franja-superior flex justify-end p-4 md:p-6 pb-0">
             <Topbar nombreCompleto={nombreCompleto} rol={rol} />
           </div>
 

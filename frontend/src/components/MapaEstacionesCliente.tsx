@@ -6,6 +6,7 @@ import {
   GOOGLE_MAPS_LIBRARIES,
   GOOGLE_MAPS_LOADER_ID,
 } from "../config/googleMaps";
+import { useTheme } from "../context/ThemeContext";
 
 /**
  * HU17 - Ver datos en mapa (rol Cliente Final).
@@ -113,6 +114,20 @@ function formatearFechaHora(iso: string | null): string {
   });
 }
 
+/** El InfoWindow lo renderiza Google fuera del árbol de Tailwind del
+ *  <body>, así que las clases dark: no aplican dentro de este contenedor
+ *  y los colores van inline, alternando según el tema activo. */
+function paletaInfoWindow(esOscuro: boolean) {
+  return {
+    texto: esOscuro ? "#e5e7eb" : "#111827",
+    textoSecundario: esOscuro ? "#9ca3af" : "#6b7280",
+    borde: esOscuro ? "#374151" : "#f3f4f6",
+    botonFondo: esOscuro ? "#e5e7eb" : "#111827",
+    botonTexto: esOscuro ? "#111827" : "#ffffff",
+    botonFondoHover: esOscuro ? "#d1d5db" : "#374151",
+  };
+}
+
 function formatearValor(valor: number | string | null): string {
   if (valor === null) return "—";
   // Un evento de texto (evnt_txt, ej. "Puerta Abierta") se muestra tal
@@ -128,6 +143,8 @@ export default function MapaEstacionesCliente({
   destelloSecuencia,
 }: Props) {
   const navigate = useNavigate();
+  const { esOscuro } = useTheme();
+  const paleta = paletaInfoWindow(esOscuro);
   const mapaRef = useRef<google.maps.Map | null>(null);
   const { isLoaded, loadError } = useJsApiLoader({
     id: GOOGLE_MAPS_LOADER_ID,
@@ -250,45 +267,55 @@ export default function MapaEstacionesCliente({
           onCloseClick={() => setSeleccionada(null)}
         >
           {/* Google renderiza el InfoWindow fuera del árbol de Tailwind
-              del resto de la app, así que los estilos van inline o con
-              clases utilitarias simples, igual que en HU22. */}
-          <div className="min-w-[260px] max-w-[320px] p-1">
-            <div className="flex items-start justify-between gap-3 mb-2">
-              <h3 className="text-base font-bold text-gray-900">{estacionSeleccionada.nmbr}</h3>
+              del resto de la app, así que las clases dark: no aplican y
+              los colores van inline, alternando según el tema activo
+              (paletaInfoWindow), igual que en HU22. */}
+          <div style={{ minWidth: 260, maxWidth: 320, padding: 4 }}>
+            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: 8 }}>
+              <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: paleta.texto }}>{estacionSeleccionada.nmbr}</h3>
               <span
-                className="shrink-0 inline-flex items-center gap-1.5 text-xs font-medium px-2 py-0.5 rounded-full"
                 style={{
+                  flexShrink: 0,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  fontSize: 12,
+                  fontWeight: 500,
+                  padding: "2px 8px",
+                  borderRadius: 999,
                   backgroundColor: `${colorDe(estacionSeleccionada.semaforo)}1a`,
                   color: colorDe(estacionSeleccionada.semaforo),
                 }}
               >
                 <span
-                  className="w-2 h-2 rounded-full"
-                  style={{ backgroundColor: colorDe(estacionSeleccionada.semaforo) }}
+                  style={{ width: 8, height: 8, borderRadius: 999, backgroundColor: colorDe(estacionSeleccionada.semaforo) }}
                 />
                 {ETIQUETA_SEMAFORO[estacionSeleccionada.semaforo] ?? estacionSeleccionada.semaforo}
               </span>
             </div>
 
             {estacionSeleccionada.dscrpcn && (
-              <p className="text-xs text-gray-500 mb-2">{estacionSeleccionada.dscrpcn}</p>
+              <p style={{ fontSize: 12, color: paleta.textoSecundario, marginBottom: 8 }}>{estacionSeleccionada.dscrpcn}</p>
             )}
 
             {/* CA2: último valor de CADA parámetro. */}
             {estacionSeleccionada.parametros.length === 0 ? (
-              <p className="text-sm text-gray-500 py-2">
+              <p style={{ fontSize: 13, color: paleta.textoSecundario, padding: "8px 0" }}>
                 Esta estación todavía no tiene lecturas registradas.
               </p>
             ) : (
-              <table className="w-full text-sm mb-2">
+              <table style={{ width: "100%", fontSize: 13, marginBottom: 8, borderCollapse: "collapse" }}>
                 <tbody>
-                  {estacionSeleccionada.parametros.map((p) => (
-                    <tr key={p.parametro} className="border-b border-gray-100 last:border-0">
-                      <td className="py-1 pr-3 text-gray-600">{p.parametro}</td>
-                      <td className="py-1 text-right font-semibold text-gray-900 tabular-nums">
+                  {estacionSeleccionada.parametros.map((p, i) => (
+                    <tr
+                      key={p.parametro}
+                      style={i < estacionSeleccionada.parametros.length - 1 ? { borderBottom: `1px solid ${paleta.borde}` } : undefined}
+                    >
+                      <td style={{ padding: "4px 12px 4px 0", color: paleta.textoSecundario }}>{p.parametro}</td>
+                      <td style={{ padding: "4px 0", textAlign: "right", fontWeight: 600, color: paleta.texto, fontVariantNumeric: "tabular-nums" }}>
                         {formatearValor(p.valor)}
                         {p.unidad && p.unidad !== "-" && (
-                          <span className="font-normal text-gray-500"> {p.unidad}</span>
+                          <span style={{ fontWeight: 400, color: paleta.textoSecundario }}> {p.unidad}</span>
                         )}
                       </td>
                     </tr>
@@ -298,7 +325,7 @@ export default function MapaEstacionesCliente({
             )}
 
             {/* CA2: fecha/hora de la última lectura. */}
-            <p className="text-xs text-gray-500 mb-3">
+            <p style={{ fontSize: 12, color: paleta.textoSecundario, marginBottom: 12 }}>
               Última lectura: {formatearFechaHora(estacionSeleccionada.ultima_lectura)}
             </p>
 
@@ -309,9 +336,26 @@ export default function MapaEstacionesCliente({
               onClick={() =>
                 navigate(`/graficos?ubicacion_id=${estacionSeleccionada.id_ubccn}`)
               }
-              className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-lg bg-gray-900 text-white hover:bg-gray-700 transition-colors"
+              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = paleta.botonFondoHover)}
+              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = paleta.botonFondo)}
+              style={{
+                width: "100%",
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 8,
+                padding: "8px 12px",
+                fontSize: 13,
+                fontWeight: 500,
+                borderRadius: 8,
+                border: "none",
+                cursor: "pointer",
+                backgroundColor: paleta.botonFondo,
+                color: paleta.botonTexto,
+                transition: "background-color 0.15s",
+              }}
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"

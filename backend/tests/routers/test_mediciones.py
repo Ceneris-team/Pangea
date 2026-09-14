@@ -531,6 +531,59 @@ class TestCA3FiltroPorUbicacionYAislamiento:
         assert "Ubicacion Asignada" in nombres  # de escenario_basico, otra sede
 
 
+class TestFiltroPorDispositivo:
+    """Una Ubicación puede tener más de un Dispositivo -dos dataloggers
+    midiendo el mismo parámetro en la misma estación, caso real reportado
+    sobre HU15 (visualización de gráficos): sin este filtro, sus lecturas
+    llegaban mezcladas y no había forma de aislar la serie de uno solo."""
+
+    def test_filtra_por_dispositivo_dentro_de_la_misma_ubicacion(
+        self, client, db_session, escenario_basico
+    ):
+        ubicacion = escenario_basico["ubicacion"]
+        sede = escenario_basico["sede"]
+        parametro = escenario_basico["parametro"]
+
+        # Segundo datalogger de la MISMA ubicación, midiendo el mismo
+        # parámetro -el escenario exacto de "Estacion Prueba" con dos
+        # dataloggers-.
+        conexion_2 = crear_conexion(db_session, sede, nombre="Datalogger 2")
+        dispositivo_2 = crear_dispositivo(
+            db_session, ubicacion, conexion_2, nombre="CR1000-2"
+        )
+        mapear_parametro(db_session, dispositivo_2, parametro, indice=1)
+        crear_medicion(db_session, dispositivo_2, parametro, sede, valor=99.0)
+
+        resp = client.get(
+            "/mediciones",
+            params={"dispositivo_ids": [escenario_basico["dispositivo"].id_dspstv]},
+        )
+        body = resp.json()
+        assert body["total"] == 1
+        assert body["items"][0]["vlr"] == 10.0  # el de escenario_basico, no el 99.0
+
+    def test_dispositivo_de_ubicacion_no_asignada_no_devuelve_nada(
+        self, client, db_session, escenario_basico, fabrica
+    ):
+        # Un id_dspstv de una ubicación fuera de PermisoUbicacion no debe
+        # colarse: el filtro de ubicaciones permitidas sigue aplicando
+        # siempre, así que pedir ese id simplemente no matchea ninguna fila
+        # -no hace falta validar dispositivo_ids contra una whitelist
+        # aparte para que el aislamiento se sostenga-.
+        sede = escenario_basico["sede"]
+        ubicacion_ajena = crear_ubicacion(db_session, sede, nombre="Ubicacion No Asignada")
+        conexion_ajena = crear_conexion(db_session, sede, nombre="Datalogger Ajeno")
+        dispositivo_ajeno = crear_dispositivo(db_session, ubicacion_ajena, conexion_ajena)
+        mapear_parametro(db_session, dispositivo_ajeno, escenario_basico["parametro"], indice=1)
+        crear_medicion(db_session, dispositivo_ajeno, escenario_basico["parametro"], sede, valor=77.0)
+
+        resp = client.get(
+            "/mediciones",
+            params={"dispositivo_ids": [dispositivo_ajeno.id_dspstv]},
+        )
+        assert resp.json()["total"] == 0
+
+
 class TestCA4LimpiarFiltros:
     """CA4 (re-redactado, DEC-11): sin filtros aplicados o tras
     limpiarlos, se muestran todos los datos disponibles para la cuenta,
