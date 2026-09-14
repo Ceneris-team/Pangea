@@ -27,12 +27,8 @@ const CLASE_INPUT =
 const CLASE_LABEL = "block text-sm text-gray-700 dark:text-gray-200 mb-1";
 
 export default function MiPerfil() {
-<<<<<<< HEAD
-  const { logout, marcarContrasenaCambiada, actualizarZonaHoraria } = useAuth();
-=======
   const { nombreCompleto, rol, logout, debeCambiarContrasena, marcarContrasenaCambiada, actualizarZonaHoraria } =
     useAuth();
->>>>>>> afc17d84386efcd1b0c13a37b05d509e1a84c5fc
   const navigate = useNavigate();
 
   const [perfil, setPerfil] = useState<PerfilResponse | null>(null);

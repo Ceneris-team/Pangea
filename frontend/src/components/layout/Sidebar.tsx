@@ -2,11 +2,7 @@ import { Link } from "react-router-dom";
 import pangeaIconLight from "../../assets/pangea-icon-light.png";
 import { ROLES, rutaPorRol } from "../../config/roles";
 
-<<<<<<< HEAD
-export type SeccionActiva = "panel" | "usuarios" | "ubicaciones" | "dispositivos" | "conexiones-ftp" | "dashboard" | "configuracion" | "consulta-datos"| "mapeos" | "parametros" | "cola-ingesta" | "graficos" | "mapa-estaciones" | "mapa-ubicaciones" | "paneles" | "alarmas";
-=======
 export type SeccionActiva = "panel" | "usuarios" | "ubicaciones" | "dispositivos" | "conexiones-ftp" | "dashboard" | "configuracion" | "consulta-datos"| "mapeos" | "parametros" | "cola-ingesta" | "graficos" | "mapa-estaciones" | "mapa-ubicaciones" | "paneles" | "mi-perfil";
->>>>>>> afc17d84386efcd1b0c13a37b05d509e1a84c5fc
 
 interface SidebarProps {
   onLogout: () => void;
