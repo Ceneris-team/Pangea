@@ -22,8 +22,7 @@ function esPasswordValido(password: string): boolean {
 }
 
 export default function MiPerfil() {
-  const { logout, debeCambiarContrasena, marcarContrasenaCambiada, actualizarZonaHoraria } =
-    useAuth();
+  const { logout, marcarContrasenaCambiada, actualizarZonaHoraria } = useAuth();
   const navigate = useNavigate();
 
   const [perfil, setPerfil] = useState<PerfilResponse | null>(null);
@@ -36,10 +35,7 @@ export default function MiPerfil() {
   const [zonaOk, setZonaOk] = useState(false);
   const [guardandoZona, setGuardandoZona] = useState(false);
 
-  // HU04: si viene de un primer login con contraseña temporal, el formulario
-  // de cambio arranca abierto y no se puede cancelar (ProtectedRoute lo
-  // devuelve aquí mientras el flag siga activo).
-  const [mostrarForm, setMostrarForm] = useState(debeCambiarContrasena);
+  const [mostrarForm, setMostrarForm] = useState(false);
   const [contrasenaActual, setContrasenaActual] = useState("");
   const [nuevaContrasena, setNuevaContrasena] = useState("");
   const [confirmarContrasena, setConfirmarContrasena] = useState("");
@@ -135,29 +131,10 @@ export default function MiPerfil() {
       <div className="miperfil-card">
         <header className="miperfil-header">
           <h1>Mi perfil</h1>
-          {/* Con el cambio de contraseña pendiente no hay a dónde volver:
-              ProtectedRoute redirige de vuelta aquí (HU04). */}
-          {!debeCambiarContrasena && (
-            <button className="miperfil-btn-ghost" onClick={() => navigate(-1)}>
-              Volver
-            </button>
-          )}
+          <button className="miperfil-btn-ghost" onClick={() => navigate(-1)}>
+            Volver
+          </button>
         </header>
-
-        {debeCambiarContrasena && (
-          <div className="miperfil-alert" role="alert">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <path
-                d="M12 9v4m0 4h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"
-                stroke="currentColor"
-                strokeWidth="1.6"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-            <span>Estás usando una contraseña temporal. Debes cambiarla antes de continuar.</span>
-          </div>
-        )}
 
         {errorPerfil && <div className="miperfil-error">{errorPerfil}</div>}
 
@@ -282,17 +259,14 @@ export default function MiPerfil() {
                   <button className="miperfil-btn-primary" type="submit" disabled={loading || !puedeGuardar}>
                     {loading ? "Guardando…" : "Guardar"}
                   </button>
-                  {/* Cancelar no se ofrece si el cambio es obligatorio (HU04). */}
-                  {!debeCambiarContrasena && (
-                    <button
-                      className="miperfil-btn-secondary"
-                      type="button"
-                      onClick={() => setMostrarForm(false)}
-                      disabled={loading}
-                    >
-                      Cancelar
-                    </button>
-                  )}
+                  <button
+                    className="miperfil-btn-secondary"
+                    type="button"
+                    onClick={() => setMostrarForm(false)}
+                    disabled={loading}
+                  >
+                    Cancelar
+                  </button>
                 </div>
 
                 {formMsg && <p className={`miperfil-form-msg ${formOk ? "ok" : "err"}`}>{formMsg}</p>}

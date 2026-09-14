@@ -1,10 +1,11 @@
 import { useState, type FormEvent } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, useLocation, Link } from "react-router-dom";
 import "./Login.css";
 import { useAuth } from "../context/AuthContext";
 import { rutaPorRol } from "../config/roles";
 import { ApiError } from "../services/api";
 import loginBg from "../assets/login-bg.jpg";
+import CambiarContrasenaModal from "../components/CambiarContrasenaModal";
 
 function isValidEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
@@ -13,6 +14,7 @@ function isValidEmail(value: string): boolean {
 export default function Login() {
   const { login } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [correo, setCorreo] = useState("");
   const [contrasena, setContrasena] = useState("");
   const [remember, setRemember] = useState(false);
@@ -20,9 +22,16 @@ export default function Login() {
 
   const [emailError, setEmailError] = useState(false);
   const [passwordError, setPasswordError] = useState(false);
-  const [formMsg, setFormMsg] = useState("");
+  const [formMsg, setFormMsg] = useState(
+    (location.state as { contrasenaActualizada?: boolean } | null)?.contrasenaActualizada
+      ? "Contraseña actualizada. Inicia sesión con tu nueva contraseña."
+      : ""
+  );
   const [formOk, setFormOk] = useState(false);
   const [loading, setLoading] = useState(false);
+  // HU04: la contraseña temporal se cambia en una ventana emergente sobre
+  // el propio login, en vez de mandar al usuario a una página aparte.
+  const [mostrarCambioContrasena, setMostrarCambioContrasena] = useState(false);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -43,11 +52,11 @@ export default function Login() {
       setFormOk(true);
 
       // HU04: la contraseña temporal generada al crear el usuario "deberá
-      // cambiarla en su primer inicio de sesión". Se le manda al formulario
-      // de cambio de contraseña (HU02 CA3) en vez de al panel de su rol;
-      // ProtectedRoute mantiene el bloqueo si intenta navegar a otra ruta.
+      // cambiarla en su primer inicio de sesión". Se le muestra el
+      // formulario de cambio de contraseña (HU02 CA3) como ventana
+      // emergente sobre el login en vez de mandarlo al panel de su rol.
       if (data.debe_cambiar_contrasena) {
-        navigate("/mi-perfil", { replace: true });
+        setMostrarCambioContrasena(true);
         return;
       }
 
@@ -157,6 +166,8 @@ export default function Login() {
           </div>
         </div>
       </div>
+
+      {mostrarCambioContrasena && <CambiarContrasenaModal />}
     </div>
   );
 }
