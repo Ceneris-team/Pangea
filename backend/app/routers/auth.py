@@ -44,7 +44,18 @@ VIGENCIA_TOKEN_RECUPERACION_MINUTOS = 30
 # distintos, dejando la cookie inútil-, y el navegador exige Secure como
 # condición para aceptar SameSite=None (ambos despliegues sirven por
 # HTTPS, así que no hay downgrade real).
+#
+# En desarrollo local, en cambio, front y back sirven por HTTP plano
+# (http://localhost:5173 y http://localhost:8000): con Secure=True el
+# navegador descarta la cookie en silencio -el login responde 200 pero la
+# sesión nunca queda guardada, y la siguiente petición vuelve 401-. Como
+# ahí front y back comparten "site" (mismo dominio, solo cambia el
+# puerto), alcanza con SameSite=Lax y Secure=False. COOKIE_SECURE=false
+# en el entorno local activa ese modo; si no está seteada, se asume
+# producción (HTTPS) y se mantiene el comportamiento anterior.
 COOKIE_MAX_AGE_SEGUNDOS = EXPIRATION_MINUTES * 60
+COOKIE_SECURE = os.environ.get("COOKIE_SECURE", "true").strip().lower() != "false"
+COOKIE_SAMESITE = "none" if COOKIE_SECURE else "lax"
 
 
 def _setear_cookie_sesion(response: Response, token: str) -> None:
@@ -53,8 +64,8 @@ def _setear_cookie_sesion(response: Response, token: str) -> None:
         value=token,
         max_age=COOKIE_MAX_AGE_SEGUNDOS,
         httponly=True,
-        secure=True,
-        samesite="none",
+        secure=COOKIE_SECURE,
+        samesite=COOKIE_SAMESITE,
         path="/",
     )
 
@@ -212,8 +223,8 @@ def logout(response: Response):
     response.delete_cookie(
         key=COOKIE_NOMBRE,
         httponly=True,
-        secure=True,
-        samesite="none",
+        secure=COOKIE_SECURE,
+        samesite=COOKIE_SAMESITE,
         path="/",
     )
     return {"mensaje": "Sesión cerrada correctamente"}
