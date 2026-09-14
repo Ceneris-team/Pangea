@@ -690,6 +690,20 @@ class ArchivoIngestaDetalle(BaseModel):
     mnsj_errr: str | None
 
 
+class IntentoProcesamientoListItem(BaseModel):
+    """HU31: una fila de intnt_prcsmnt -un intento de procesar este
+    archivo, automático o manual (ver _registrar_intento en
+    app/tasks/ingesta.py). usuario_nombre es None cuando el intento fue
+    automático (id_usr NULL); el frontend lo muestra como "Automático"."""
+
+    id_intnt: int
+    fch_intnt: datetime
+    rsltd: str
+    mnsj_errr: str | None
+    id_usr: int | None
+    usuario_nombre: str | None
+
+
 class ReintentoMasivoResponse(BaseModel):
     """Reintento masivo de todos los archivos Fallido de la sede del
     usuario (extensión de HU31 a "en cantidad", ver
@@ -745,12 +759,20 @@ class MedicionListItem(BaseModel):
     en evnt_txt, que este endpoint no consultaba). id_registro es
     id_lctr o id_evnt según origen -no se puede usar un solo id_lctr
     porque son secuencias distintas y podrían colisionar como key de
-    React-."""
+    React-.
+
+    id_dspstv/dispositivo_nombre: una Ubicación puede tener más de un
+    Dispositivo (dos dataloggers midiendo el mismo parámetro en la misma
+    estación es un caso real, no hipotético). Sin este dato, HU15 solo
+    podía agrupar series por ubicación y mezclaba las lecturas de
+    dataloggers distintos en una sola línea."""
 
     id_registro: int
     fch_hr: datetime
     id_ubccn: int
     ubicacion_nombre: str
+    id_dspstv: int
+    dispositivo_nombre: str
     id_prmtr: int
     parametro_nombre: str
     undd: str

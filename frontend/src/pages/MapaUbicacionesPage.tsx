@@ -11,7 +11,7 @@ import MapaUbicaciones, {
 
 /**
  * HU22: ver las Ubicaciones en un mapa. Solo lectura -el editor de
- * dibujo de polígono (HU08) es aparte, en AgregarUbicacion.tsx-.
+ * dibujo de polígono (HU08) es aparte, en el drawer de Ubicaciones.tsx-.
  *
  *   CA1  marcadores verdes (Activa) / grises (Inactiva) sobre el contorno
  *   CA2  clic en un marcador -> panel con nombre, descripción, estado y
@@ -96,7 +96,7 @@ export default function MapaUbicacionesPage() {
 
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* TOP NAVBAR */}
-          <div className="flex justify-end p-4 md:p-6 pb-0">
+          <div className="franja-superior flex justify-end p-4 md:p-6 pb-0">
             <Topbar
               nombreCompleto={nombreCompleto}
               rol={rol}

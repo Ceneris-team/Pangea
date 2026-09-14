@@ -19,11 +19,12 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.ingesta.ftp_receptor import descargar_archivo_dat
-from app.models import ArchivoIngesta, ConexionFTP, Dispositivo
+from app.models import ArchivoIngesta, ConexionFTP, Dispositivo, IntentoProcesamiento, Usuario
 from app.schemas import (
     ArchivoIngestaDetalle,
     ArchivoIngestaListItem,
     FilaCrudaIngesta,
+    IntentoProcesamientoListItem,
     MetricasColaIngesta,
     RegistrosIngestaResponse,
     ReintentoMasivoResponse,
@@ -245,8 +246,12 @@ def reintentar_fallidos_ingesta(
         archivo.rgstrs_prcsds = None
     db.commit()
 
+    # HU31: id_usr_reintento identifica en intnt_prcsmnt que este intento
+    # fue pedido a mano por este usuario, no el sondeo automático (que
+    # nunca pasa este argumento, ver app/tasks/ingesta.py).
+    id_usr = int(usuario["sub"])
     for archivo in fallidos:
-        procesar_archivo_dat.delay(id_archv=archivo.id_archv)
+        procesar_archivo_dat.delay(id_archv=archivo.id_archv, id_usr_reintento=id_usr)
 
     return ReintentoMasivoResponse(reencolados=len(fallidos))
 
@@ -279,6 +284,53 @@ def detalle_archivo_ingesta(
         rgstrs_prcsds=archivo.rgstrs_prcsds,
         mnsj_errr=archivo.mnsj_errr,
     )
+
+
+@router.get("/cola/{id_archv}/intentos", response_model=list[IntentoProcesamientoListItem])
+def intentos_archivo_ingesta(
+    id_archv: int,
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(require_permiso("Ingesta", LECTURA)),
+):
+    """HU31: historial de intentos de procesamiento de un archivo -uno por
+    cada vez que procesar_archivo_dat terminó de correr, automático o
+    manual (ver _registrar_intento en app/tasks/ingesta.py)-, más reciente
+    primero.
+
+    rsltd viaja tal cual está en BD ('Exitoso'/'Fallido', mismo vocabulario
+    que archv_ingst.estd) sin pasar por ESTADO_BD_A_NEGOCIO: es un
+    historial técnico de intentos, no el estado actual del archivo que
+    CA1/CA3 de HU09 sí traducen a lenguaje de negocio.
+    """
+    archivo = db.query(ArchivoIngesta).filter(ArchivoIngesta.id_archv == id_archv).first()
+    if archivo is None:
+        raise HTTPException(status_code=404, detail="Archivo no encontrado")
+
+    conexion = db.get(ConexionFTP, archivo.id_cnxn)
+    verificar_sede(usuario, conexion.id_sd, db, modulo="Ingesta", accion=LECTURA)
+
+    # id_usr es NULLABLE (intento automático), así que el nombre se trae
+    # con un LEFT JOIN -un INNER perdería justo esas filas-, mismo patrón
+    # que AuditoriaListItem en routers/auditoria.py.
+    filas = (
+        db.query(IntentoProcesamiento, Usuario.nmbr_cmplt)
+        .outerjoin(Usuario, Usuario.id_usr == IntentoProcesamiento.id_usr)
+        .filter(IntentoProcesamiento.id_archv == id_archv)
+        .order_by(IntentoProcesamiento.fch_intnt.desc(), IntentoProcesamiento.id_intnt.desc())
+        .all()
+    )
+
+    return [
+        IntentoProcesamientoListItem(
+            id_intnt=intento.id_intnt,
+            fch_intnt=intento.fch_intnt,
+            rsltd=intento.rsltd,
+            mnsj_errr=intento.mnsj_errr,
+            id_usr=intento.id_usr,
+            usuario_nombre=nombre,
+        )
+        for intento, nombre in filas
+    ]
 
 
 FILAS_MOSTRADAS_REGISTROS_INGESTA = 50
@@ -386,7 +438,10 @@ def reintentar_archivo_ingesta(
     archivo.rgstrs_prcsds = None
     db.commit()
 
-    procesar_archivo_dat.delay(id_archv=archivo.id_archv)
+    # HU31: mismo motivo que reintentar_fallidos_ingesta -id_usr_reintento
+    # deja constancia en intnt_prcsmnt de que este intento fue manual, con
+    # el usuario que lo pidió.
+    procesar_archivo_dat.delay(id_archv=archivo.id_archv, id_usr_reintento=int(usuario["sub"]))
 
     datalogger_nombre = _mapa_dataloggers(db, {archivo.id_cnxn}).get(archivo.id_cnxn, "Desconocido")
     return ArchivoIngestaDetalle(
