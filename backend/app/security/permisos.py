@@ -5,8 +5,10 @@ Valida, para cada endpoint del PMV, que el usuario autenticado (HT-04) tenga
 permiso sobre el módulo y la acción solicitados según la matriz de HT-03
 (tabla `prms_usr_sd`, Usuario-Sede-Rol-Permiso). Si el permiso es
 insuficiente devuelve 403 (distinto del 401 que ya cubre HT-04 para tokens
-inválidos o expirados), y registra el intento denegado en un log preliminar
-que sirve de base para la auditoría formal de HT-11.
+inválidos o expirados), y registra el intento denegado tanto en el logger
+`auditoria.autorizacion` como en `lg_adtr` (HT-11 CA5: "los accesos
+denegados de HT-09 aparecen en el mismo histórico" que las ediciones de
+HU20/HU21).
 
 Uso en un endpoint:
 
@@ -25,9 +27,10 @@ sedes ajenas aunque tenga permiso de edición en la suya:
     @router.get("/dispositivos")
     def listar_dispositivos(
         sede_id: int,
+        db: Session = Depends(get_db),
         usuario: dict = Depends(require_permiso("Dispositivos", LECTURA)),
     ):
-        verificar_sede(usuario, sede_id, modulo="Dispositivos", accion=LECTURA)
+        verificar_sede(usuario, sede_id, db, modulo="Dispositivos", accion=LECTURA)
         ...
 
 HISTORIAL: la primera versión de este archivo (adda9bb) usaba una matriz
@@ -48,7 +51,7 @@ from fastapi import Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import PermisoUsuarioSede
+from app.models import LogAuditoria, PermisoUsuarioSede
 
 from .dependencies import get_current_user
 
@@ -101,7 +104,26 @@ def tiene_permiso(db: Session, id_usr: int, id_sd: int | None, modulo: str, acci
     return bool(niveles_otorgados & niveles_que_habilitan)
 
 
-def _registrar_acceso_denegado(usuario: dict, modulo: str, accion: str) -> None:
+def _registrar_acceso_denegado(db: Session, usuario: dict, modulo: str, accion: str) -> None:
+    """HT-11 CA5: además del logger de siempre, persiste el intento
+    denegado en `lg_adtr` con el mismo esquema que HU20/HU21 -id_usr =
+    quien intentó, id_sd = su sede (según su JWT, no la del recurso:
+    verificar_sede ya lo bloquea antes de saber si el recurso era de otra
+    sede), accn/entdd = módulo y acción pedidos-. `vlrs_antrrs`/`vlrs_nvs`
+    quedan en NULL: un 403 no cambia ningún dato, no hay "antes" ni
+    "después" que registrar.
+
+    La escritura del log NUNCA debe tumbar el 403 que ya se decidió
+    devolver -perder una fila de auditoría es preferible a que una falla
+    de infraestructura (BD caída, lg_adtr bloqueada) le devuelva un 500 a
+    un usuario que en rigor solo tenía que recibir un "no tienes permiso"-.
+    Por eso el rollback y la excepción se contienen acá: quien llama seguía
+    de largo hacia el HTTPException(403) pase lo que pase con esto. Se deja
+    un rollback() explícito para no arrastrar la sesión rota hacia el resto
+    del request si algo más la reutiliza después (no debería ocurrir, ya
+    que este es el último paso antes del 403, pero es gratis y evita un
+    "InvalidRequestError: session is in 'inactive' state" en cascada).
+    """
     logger.warning(
         "Acceso denegado: usuario=%s sede=%s rol=%s modulo=%s accion=%s",
         usuario.get("sub"),
@@ -110,6 +132,22 @@ def _registrar_acceso_denegado(usuario: dict, modulo: str, accion: str) -> None:
         modulo,
         accion,
     )
+    try:
+        sub = usuario.get("sub")
+        db.add(
+            LogAuditoria(
+                id_usr=int(sub),
+                id_sd=usuario.get("sede_id"),
+                accn=f"acceso_denegado:{accion}",
+                entdd=modulo,
+                vlrs_antrrs=None,
+                vlrs_nvs=None,
+            )
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        logger.exception("No se pudo persistir el acceso denegado en lg_adtr (HT-11 CA5)")
 
 
 def require_permiso(modulo: str, accion: str):
@@ -124,7 +162,7 @@ def require_permiso(modulo: str, accion: str):
         id_usr = int(usuario["sub"])
         id_sd = usuario.get("sede_id")
         if not tiene_permiso(db, id_usr, id_sd, modulo, accion):
-            _registrar_acceso_denegado(usuario, modulo, accion)
+            _registrar_acceso_denegado(db, usuario, modulo, accion)
             raise HTTPException(
                 status_code=403, detail="No tienes permiso para realizar esta acción"
             )
@@ -156,20 +194,28 @@ def require_alguno_permiso(*modulos_acciones: tuple[str, str]):
             if tiene_permiso(db, id_usr, id_sd, modulo, accion):
                 return usuario
         modulos = "/".join(modulo for modulo, _ in modulos_acciones)
-        _registrar_acceso_denegado(usuario, modulos, "|".join(a for _, a in modulos_acciones))
+        _registrar_acceso_denegado(db, usuario, modulos, "|".join(a for _, a in modulos_acciones))
         raise HTTPException(status_code=403, detail="No tienes permiso para realizar esta acción")
 
     return dependencia
 
 
-def verificar_sede(usuario: dict, sede_id_recurso: int, modulo: str = "", accion: str = "") -> None:
+def verificar_sede(
+    usuario: dict, sede_id_recurso: int, db: Session, modulo: str = "", accion: str = ""
+) -> None:
     """Aísla el acceso entre sedes: un usuario con scope 'por_sede' solo
     puede operar sobre recursos de su propia sede, aunque tenga permiso de
     edición sobre el módulo. Los usuarios con scope 'global' no tienen esta
     restricción de sede (pero sí siguen pasando por tiene_permiso() para el
-    chequeo de módulo/nivel, ver el docstring de esa función)."""
+    chequeo de módulo/nivel, ver el docstring de esa función).
+
+    `db` (HT-11 CA5) es obligatorio y no el último parámetro con default:
+    todo caller de este proyecto ya tiene una sesión a mano -es la misma
+    que usó para cargar el recurso cuya sede está verificando-, así que no
+    hay motivo para que un llamado nuevo pueda "olvidarse" de pasarla y
+    dejar ese acceso denegado fuera del histórico de auditoría."""
     if usuario.get("scope") == "global":
         return
     if usuario.get("sede_id") != sede_id_recurso:
-        _registrar_acceso_denegado(usuario, modulo or "(sede)", accion or "acceso_sede")
+        _registrar_acceso_denegado(db, usuario, modulo or "(sede)", accion or "acceso_sede")
         raise HTTPException(status_code=403, detail="No tienes acceso a recursos de esta sede")

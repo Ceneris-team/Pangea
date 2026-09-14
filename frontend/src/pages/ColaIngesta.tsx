@@ -99,9 +99,21 @@ export default function ColaIngesta() {
   const [detalleError, setDetalleError] = useState<string | null>(null);
   const [reintentando, setReintentando] = useState(false);
 
+  const [confirmandoReintentoMasivo, setConfirmandoReintentoMasivo] = useState(false);
+  const [reintentandoMasivo, setReintentandoMasivo] = useState(false);
+  const [mensajeReintentoMasivo, setMensajeReintentoMasivo] = useState<string | null>(null);
+  const [errorReintentoMasivo, setErrorReintentoMasivo] = useState<string | null>(null);
+
   const [registros, setRegistros] = useState<RegistrosIngestaResponse | null>(null);
   const [registrosError, setRegistrosError] = useState<string | null>(null);
   const [registrosLoading, setRegistrosLoading] = useState(false);
+
+  // Total real de Fallido (independiente de pagina/filtro actual): es lo
+  // que decide si se muestra "Reintentar todos" y el numero que se le
+  // muestra al usuario en la confirmacion, via /ingesta/metricas (HT-05
+  // CA3) en vez de contar sobre data.items, que solo trae la pagina
+  // visible y puede estar filtrada por otro estado.
+  const [totalFallidos, setTotalFallidos] = useState(0);
 
   useEffect(() => {
     apiFetch<{ items: DataloggerFiltro[] }>("/ingesta/dataloggers")
@@ -134,6 +146,12 @@ export default function ColaIngesta() {
         .finally(() => {
           if (!cancelado) setLoading(false);
         });
+
+      apiFetch<{ fallidos: number }>("/ingesta/metricas")
+        .then((res) => {
+          if (!cancelado) setTotalFallidos(res.fallidos);
+        })
+        .catch(() => {});
     };
 
     cargar();
@@ -214,6 +232,42 @@ export default function ColaIngesta() {
       .finally(() => setReintentando(false));
   };
 
+  const reintentarTodosLosFallidos = () => {
+    setReintentandoMasivo(true);
+    setErrorReintentoMasivo(null);
+    setMensajeReintentoMasivo(null);
+    apiFetch<{ reencolados: number }>("/ingesta/cola/reintentar-fallidos", { method: "POST" })
+      .then((res) => {
+        setConfirmandoReintentoMasivo(false);
+        setMensajeReintentoMasivo(
+          res.reencolados === 0
+            ? "No había archivos fallidos para reintentar."
+            : `${res.reencolados} archivo(s) fallido(s) puesto(s) en cola de nuevo.`
+        );
+        setTotalFallidos(0);
+        // Refleja el nuevo estado en la página visible sin esperar al
+        // refresco automático de 30s: cualquier fila Fallido en pantalla
+        // pasa a "En espera", igual que hace reintentar() con una sola fila.
+        setData((prev) =>
+          prev
+            ? {
+                ...prev,
+                items: prev.items.map((item) =>
+                  item.estado === "Fallido" ? { ...item, estado: "En espera" } : item
+                ),
+              }
+            : prev
+        );
+      })
+      .catch((err) => {
+        setConfirmandoReintentoMasivo(false);
+        setErrorReintentoMasivo(
+          err instanceof ApiError ? err.message : "No se pudieron reintentar los archivos fallidos"
+        );
+      })
+      .finally(() => setReintentandoMasivo(false));
+  };
+
   return (
     <div className="font-sans">
       <div className="flex h-screen bg-transparent transition-colors duration-300 overflow-hidden">
@@ -277,11 +331,36 @@ export default function ColaIngesta() {
                     </option>
                   ))}
                 </select>
+
+                {totalFallidos > 0 && (
+                  <button
+                    onClick={() => {
+                      setErrorReintentoMasivo(null);
+                      setMensajeReintentoMasivo(null);
+                      setConfirmandoReintentoMasivo(true);
+                    }}
+                    className="ml-auto inline-flex items-center justify-center px-4 py-2.5 text-sm font-semibold text-gray-900 bg-[#ccff00] rounded-xl hover:bg-[#b8e600] transition-all"
+                  >
+                    Reintentar todos los fallidos ({totalFallidos})
+                  </button>
+                )}
               </div>
 
               {error && (
                 <div className="p-4 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm border-b border-red-200 dark:border-red-800/30">
                   {error}
+                </div>
+              )}
+
+              {mensajeReintentoMasivo && (
+                <div className="p-4 bg-[#ccff00]/10 text-[#5a7000] dark:text-[#ccff00] text-sm border-b border-[#ccff00]/30">
+                  {mensajeReintentoMasivo}
+                </div>
+              )}
+
+              {errorReintentoMasivo && (
+                <div className="p-4 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm border-b border-red-200 dark:border-red-800/30">
+                  {errorReintentoMasivo}
                 </div>
               )}
 
@@ -560,6 +639,43 @@ export default function ColaIngesta() {
                 )}
               </dl>
             )}
+          </div>
+        </div>
+      )}
+
+      {confirmandoReintentoMasivo && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          onClick={() => !reintentandoMasivo && setConfirmandoReintentoMasivo(false)}
+        >
+          <div
+            className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl shadow-xl border border-black/10 dark:border-white/10 w-full max-w-md p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-2">
+              Reintentar todos los fallidos
+            </h2>
+            <p className="text-sm text-gray-600 dark:text-gray-300 mb-6">
+              Se van a reencolar <span className="font-semibold text-gray-900 dark:text-white">{totalFallidos}</span>{" "}
+              archivo(s) en estado Fallido para que se procesen de nuevo desde cero. Esta acción no se puede
+              deshacer.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setConfirmandoReintentoMasivo(false)}
+                disabled={reintentandoMasivo}
+                className="px-4 py-2.5 text-sm font-medium text-gray-700 dark:text-gray-200 border border-black/20 dark:border-white/20 rounded-xl hover:bg-black/5 dark:hover:bg-white/5 transition-all disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={reintentarTodosLosFallidos}
+                disabled={reintentandoMasivo}
+                className="px-4 py-2.5 text-sm font-semibold text-gray-900 bg-[#ccff00] rounded-xl hover:bg-[#b8e600] transition-all disabled:opacity-50"
+              >
+                {reintentandoMasivo ? "Reencolando..." : "Sí, reintentar todos"}
+              </button>
+            </div>
           </div>
         </div>
       )}

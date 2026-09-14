@@ -8,6 +8,7 @@ from slowapi.util import get_remote_address
 
 from app.routers import (
     alarmas,
+    auditoria,
     auth,
     conexiones_ftp,
     dispositivos,
@@ -15,6 +16,7 @@ from app.routers import (
     mapa_cliente,
     mapeos,
     mediciones,
+    panel,
     ubicaciones,
     usuarios,
 )
@@ -43,6 +45,7 @@ app.add_middleware(
 
 app.include_router(auth.router)
 app.include_router(usuarios.router)
+app.include_router(auditoria.router)
 app.include_router(ubicaciones.router)
 app.include_router(ingesta.router)
 app.include_router(conexiones_ftp.router)
@@ -57,6 +60,8 @@ app.include_router(alarmas.router)
 # HU17: mapa del Cliente Final (REST de carga inicial + WebSocket en vivo).
 # Router propio, separado del de HU22 (/ubicaciones/mapa), que no se toca.
 app.include_router(mapa_cliente.router)
+# HU23: listar paneles (Tableros Personalizables, E05).
+app.include_router(panel.router)
 
 
 @app.get("/")

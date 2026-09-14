@@ -42,12 +42,12 @@ PERMISOS_POR_ROL = {
     "Cliente Final": {
         "Ubicaciones": "Lectura",
         "Dispositivos": "Lectura",
-        "Tableros": "Lectura",
-        # HU28 declara al Cliente Final como quien crea las alarmas ("YO
-        # COMO Cliente Final, DESEO crear una nueva alarma"), así que el
-        # nivel sembrado pasa de Lectura a Edición: con Lectura, el rol
-        # dueño de la HU recibía 403 al guardar.
-        "Alarmas": "Edición",
+        # HU24: crear panel exige Edición sobre "Tableros" (POST
+        # /paneles). Edición ya incluye Lectura en _NIVELES_QUE_PERMITEN
+        # (security/permisos.py), así que GET /paneles y GET
+        # /mapa-cliente (HU17), que piden Lectura, siguen funcionando.
+        "Tableros": "Edición",
+        "Alarmas": "Lectura",
     },
     "Administrador Comercial": {
         "Comercial": "Edición",

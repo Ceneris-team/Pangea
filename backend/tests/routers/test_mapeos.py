@@ -497,23 +497,55 @@ class TestCrearMapeo:
         )
         assert resp.status_code == 422
 
-    def test_tipo_de_trama_de_mas_de_una_letra_devuelve_422(
+    def test_tipo_de_trama_de_mas_de_una_letra_ahora_es_valido(
         self, client, db_session, tecnico_editor, parametros
     ):
+        """HU49: el prefijo real es "todo antes del primer '_'", no una
+        sola letra -un datalogger puede nombrar sus archivos con un
+        prefijo más largo (ej. "ESTACION01_datos.dat")-."""
         sede, _ = tecnico_editor
         dispositivo = crear_dispositivo(db_session, sede)
         resp = client.post(
-            "/mapeos", json=cuerpo_mapeo(parametros, dispositivo.id_dspstv, tp_trm="HE")
+            "/mapeos", json=cuerpo_mapeo(parametros, dispositivo.id_dspstv, tp_trm="ESTACION01")
         )
-        assert resp.status_code == 422
+        assert resp.status_code == 201
+        assert resp.json()["mapeo"]["tp_trm"] == "ESTACION01"
 
-    def test_tipo_de_trama_no_alfabetico_devuelve_422(
+    def test_tipo_de_trama_alfanumerico_ahora_es_valido(
         self, client, db_session, tecnico_editor, parametros
     ):
+        """HU49: un dígito solo (o mezclado con letras) es un prefijo
+        alfanumérico válido tras extraer_prefijo -antes de HU49 esto no
+        se permitía porque el patrón exigía una letra A-Z exacta."""
         sede, _ = tecnico_editor
         dispositivo = crear_dispositivo(db_session, sede)
         resp = client.post(
             "/mapeos", json=cuerpo_mapeo(parametros, dispositivo.id_dspstv, tp_trm="1")
+        )
+        assert resp.status_code == 201
+        assert resp.json()["mapeo"]["tp_trm"] == "1"
+
+    def test_tipo_de_trama_con_simbolos_sigue_siendo_422(
+        self, client, db_session, tecnico_editor, parametros
+    ):
+        """Sigue rechazado: un '_' en tp_trm sería un valor muerto -
+        extraer_prefijo siempre corta en el primer '_', así que ningún
+        archivo real podría matchear un tp_trm que lo contuviera-."""
+        sede, _ = tecnico_editor
+        dispositivo = crear_dispositivo(db_session, sede)
+        resp = client.post(
+            "/mapeos", json=cuerpo_mapeo(parametros, dispositivo.id_dspstv, tp_trm="H_E")
+        )
+        assert resp.status_code == 422
+
+    def test_tipo_de_trama_de_mas_de_50_caracteres_devuelve_422(
+        self, client, db_session, tecnico_editor, parametros
+    ):
+        sede, _ = tecnico_editor
+        dispositivo = crear_dispositivo(db_session, sede)
+        resp = client.post(
+            "/mapeos",
+            json=cuerpo_mapeo(parametros, dispositivo.id_dspstv, tp_trm="A" * 51),
         )
         assert resp.status_code == 422
 

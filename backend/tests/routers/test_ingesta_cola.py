@@ -341,7 +341,9 @@ class TestRegistrosArchivoIngesta:
     """Vista cruda del .dat (columna->valor tal como llegó), re-descargado
     del FTP de origen para el modal de detalle de HU09."""
 
-    def test_devuelve_las_filas_crudas_del_archivo(self, client, db_session, tecnico_lector, dat_falso):
+    def test_devuelve_las_filas_crudas_del_archivo(
+        self, client, db_session, tecnico_lector, dat_falso
+    ):
         sede, _ = tecnico_lector
         conexion = crear_conexion(db_session, sede)
         dispositivo = crear_dispositivo(db_session, sede, conexion)
@@ -349,9 +351,7 @@ class TestRegistrosArchivoIngesta:
         archivo = crear_archivo(db_session, conexion, nombre="H_ejemplo.dat", estd="Exitoso")
 
         dat_falso["H_ejemplo.dat"] = (
-            "Fecha,Nivel,Bateria\n"
-            "2026-08-21 12:00:00,,0\n"
-            "2026-08-21 12:05:00,12.5,11.8\n"
+            "Fecha,Nivel,Bateria\n" "2026-08-21 12:00:00,,0\n" "2026-08-21 12:05:00,12.5,11.8\n"
         )
 
         resp = client.get(f"/ingesta/cola/{archivo.id_archv}/registros")
@@ -366,7 +366,9 @@ class TestRegistrosArchivoIngesta:
         }
         assert body["filas"][1]["valores"]["Nivel"] == "12.5"
 
-    def test_archivo_ya_no_esta_en_el_ftp_devuelve_404(self, client, db_session, tecnico_lector, dat_falso):
+    def test_archivo_ya_no_esta_en_el_ftp_devuelve_404(
+        self, client, db_session, tecnico_lector, dat_falso
+    ):
         sede, _ = tecnico_lector
         conexion = crear_conexion(db_session, sede)
         dispositivo = crear_dispositivo(db_session, sede, conexion)
@@ -388,7 +390,9 @@ class TestRegistrosArchivoIngesta:
     def test_archivo_inexistente_devuelve_404(self, client, tecnico_lector):
         assert client.get("/ingesta/cola/999999/registros").status_code == 404
 
-    def test_usuario_de_otra_sede_no_ve_los_registros(self, client, db_session, tecnico_lector, fabrica):
+    def test_usuario_de_otra_sede_no_ve_los_registros(
+        self, client, db_session, tecnico_lector, fabrica
+    ):
         sede, _ = tecnico_lector
         conexion = crear_conexion(db_session, sede)
         archivo = crear_archivo(db_session, conexion, estd="Exitoso")
@@ -503,3 +507,105 @@ class TestReintentarArchivoIngesta:
         archivo = crear_archivo(db_session, conexion, estd="Fallido")
 
         assert client.post(f"/ingesta/cola/{archivo.id_archv}/reintentar").status_code == 403
+
+
+class TestReintentarFallidosEnCantidad:
+    """Extensión de HU31 "en cantidad": reencola TODOS los Fallido de la
+    sede del usuario en una sola llamada."""
+
+    def test_reencola_todos_los_fallidos_de_la_sede(
+        self, client, db_session, tecnico_editor, reintentos_encolados
+    ):
+        sede, _ = tecnico_editor
+        conexion = crear_conexion(db_session, sede)
+        fallido_1 = crear_archivo(db_session, conexion, nombre="H_uno.dat", estd="Fallido")
+        fallido_2 = crear_archivo(db_session, conexion, nombre="H_dos.dat", estd="Fallido")
+        crear_archivo(db_session, conexion, nombre="H_exitoso.dat", estd="Exitoso")
+
+        resp = client.post("/ingesta/cola/reintentar-fallidos")
+        assert resp.status_code == 200
+        assert resp.json() == {"reencolados": 2}
+
+        ids_reencolados = {llamada["id_archv"] for llamada in reintentos_encolados}
+        assert ids_reencolados == {fallido_1.id_archv, fallido_2.id_archv}
+
+        db_session.refresh(fallido_1)
+        db_session.refresh(fallido_2)
+        assert fallido_1.estd == "Pendiente"
+        assert fallido_2.estd == "Pendiente"
+
+    def test_limpia_mensaje_de_error_y_metadata_de_procesamiento(
+        self, client, db_session, tecnico_editor, reintentos_encolados
+    ):
+        sede, _ = tecnico_editor
+        conexion = crear_conexion(db_session, sede)
+        fallido = crear_archivo(
+            db_session,
+            conexion,
+            estd="Fallido",
+            mnsj_errr="dispositivo no resoluble",
+            rgstrs_prcsds=0,
+        )
+
+        client.post("/ingesta/cola/reintentar-fallidos")
+
+        db_session.refresh(fallido)
+        assert fallido.estd == "Pendiente"
+        assert fallido.mnsj_errr is None
+        assert fallido.rgstrs_prcsds is None
+
+    def test_no_toca_archivos_en_otros_estados(
+        self, client, db_session, tecnico_editor, reintentos_encolados
+    ):
+        sede, _ = tecnico_editor
+        conexion = crear_conexion(db_session, sede)
+        pendiente = crear_archivo(db_session, conexion, nombre="H_pendiente.dat", estd="Pendiente")
+        exitoso = crear_archivo(db_session, conexion, nombre="H_exitoso.dat", estd="Exitoso")
+
+        resp = client.post("/ingesta/cola/reintentar-fallidos")
+        assert resp.json() == {"reencolados": 0}
+        assert reintentos_encolados == []
+
+        db_session.refresh(pendiente)
+        db_session.refresh(exitoso)
+        assert pendiente.estd == "Pendiente"
+        assert exitoso.estd == "Exitoso"
+
+    def test_sin_fallidos_devuelve_cero_sin_error(
+        self, client, db_session, tecnico_editor, reintentos_encolados
+    ):
+        resp = client.post("/ingesta/cola/reintentar-fallidos")
+        assert resp.status_code == 200
+        assert resp.json() == {"reencolados": 0}
+        assert reintentos_encolados == []
+
+    def test_no_reencola_fallidos_de_otra_sede(
+        self, client, db_session, tecnico_editor, reintentos_encolados, fabrica
+    ):
+        sede, _ = tecnico_editor
+        crear_archivo(db_session, crear_conexion(db_session, sede), estd="Fallido")
+
+        otra_sede = fabrica.sede()
+        ajeno = crear_archivo(
+            db_session,
+            crear_conexion(db_session, otra_sede, nombre="Otra conexion"),
+            estd="Fallido",
+        )
+
+        resp = client.post("/ingesta/cola/reintentar-fallidos")
+        assert resp.json() == {"reencolados": 1}
+
+        db_session.refresh(ajeno)
+        assert ajeno.estd == "Fallido"
+
+    def test_denegado_con_solo_permiso_de_lectura(self, client, db_session, tecnico_lector):
+        assert client.post("/ingesta/cola/reintentar-fallidos").status_code == 403
+
+    def test_denegado_sin_permiso(self, client, db_session, fabrica):
+        rol = fabrica.rol("Cliente Final")
+        sede = fabrica.sede()
+        usuario = fabrica.usuario(rol=rol)
+        app.dependency_overrides[get_current_user] = lambda: usuario_jwt(
+            usuario, rol.nmbr, sede_id=sede.id_sd
+        )
+        assert client.post("/ingesta/cola/reintentar-fallidos").status_code == 403

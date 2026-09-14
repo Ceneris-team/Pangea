@@ -16,25 +16,47 @@ import os
 import secrets
 from zoneinfo import available_timezones
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, EmailStr
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
-from app.models import TokenRecuperacion, Usuario
-from app.security.dependencies import get_current_user
+from app.models import PermisoUsuarioSede, TokenRecuperacion, Usuario
+from app.security.dependencies import COOKIE_NOMBRE, get_current_user, get_token_crudo
 from app.security.hashing import hash_password, verify_password
-from app.security.jwt_auth import create_access_token
+from app.security.jwt_auth import EXPIRATION_MINUTES, create_access_token
 from app.security.mailer import enviar_correo_recuperacion
 from app.security.password_policy import MSG_POLITICA_INVALIDA, es_password_valido
+from app.security.ws_tickets import emitir_ticket
 
 router = APIRouter(prefix="/auth", tags=["Autenticación"])
 RATELIMIT_STORAGE_URL = os.environ.get("RATELIMIT_STORAGE_URL", "redis://localhost:6379/1")
 limiter = Limiter(key_func=get_remote_address, storage_uri=RATELIMIT_STORAGE_URL)
 MAX_INTENTOS = 5
 VIGENCIA_TOKEN_RECUPERACION_MINUTOS = 30
+
+# HT-04 migración a cookie httpOnly: el frontend (pangea-app y el ensayo
+# en CloudFront) vive en un dominio DISTINTO al de pangea-api, así que la
+# cookie tiene que poder viajar cross-site. SameSite=None es el único
+# valor que permite eso -Strict y Lax la bloquean entre dominios
+# distintos, dejando la cookie inútil-, y el navegador exige Secure como
+# condición para aceptar SameSite=None (ambos despliegues sirven por
+# HTTPS, así que no hay downgrade real).
+COOKIE_MAX_AGE_SEGUNDOS = EXPIRATION_MINUTES * 60
+
+
+def _setear_cookie_sesion(response: Response, token: str) -> None:
+    response.set_cookie(
+        key=COOKIE_NOMBRE,
+        value=token,
+        max_age=COOKIE_MAX_AGE_SEGUNDOS,
+        httponly=True,
+        secure=True,
+        samesite="none",
+        path="/",
+    )
 
 
 class LoginRequest(BaseModel):
@@ -56,9 +78,76 @@ class LoginResponse(BaseModel):
 MSG_CREDENCIALES_INVALIDAS = "Correo o contraseña incorrectos"
 
 
+def _resolver_sede_id_login(db: Session, usuario: Usuario) -> int | None:
+    """HT-04: de dónde sale el sede_id que va al JWT.
+
+    Bug corregido acá: el login emitía SIEMPRE sede_id=None, sin
+    importar el scope del usuario -ver el comentario retirado más abajo
+    y el que queda en routers/auditoria.py sobre este mismo bug-. El
+    middleware de HT-09 (security/permisos.py::tiene_permiso) y todos
+    los routers que filtran por sede (Ubicaciones, Dispositivos,
+    ConexionFTP, Ingesta, Mapeos, Auditoría, el caché de HT-10) siempre
+    asumieron que un usuario 'por_sede' trae su sede_id real; con el
+    bug, sus consultas comparaban contra NULL y devolvían listas vacías
+    o 422 en vez de sus propios recursos.
+
+    La fuente real es prms_usr_sd (HT-03): cada fila liga id_usr con una
+    sede concreta. Casos:
+      - scope 'global': no aplica, sede_id va en None (comportamiento
+        correcto, sin cambios -ver create_access_token).
+      - scope 'por_sede' con exactamente una sede distinta en
+        prms_usr_sd: es el caso normal, se usa esa sede.
+      - scope 'por_sede' sin ninguna fila en prms_usr_sd: cuenta mal
+        configurada -un usuario 'por_sede' tiene que estar ligado a
+        alguna sede-. Se rechaza el login con 403 en vez de dejarlo
+        entrar con sede_id=None otra vez, que es exactamente el bug que
+        se está corrigiendo.
+      - scope 'por_sede' con 2+ sedes distintas en prms_usr_sd: el
+        esquema de HT-03 lo permite (la FK es por fila, no hay tope), y
+        REFERENCIA_HU_SPRINTS_PANGEA.md ("Decisión de diseño - scope de
+        acceso") lo contempla como escenario futuro, pero NINGÚN
+        consumidor actual de usuario["sede_id"] soporta una lista -todos
+        hacen `Modelo.id_sd == usuario["sede_id"]", comparación escalar-.
+        Resolver esto de verdad (¿token por sede? ¿selector de sede
+        post-login? ¿sede_id como lista y reescribir cada filtro?) es una
+        decisión de producto/arquitectura que excede este fix, así que
+        se rechaza el login con 403 en vez de elegir una sede al azar y
+        esconder el resto de los recursos del usuario sin que nadie lo
+        haya decidido así.
+    """
+    if usuario.scp == "global":
+        return None
+
+    ids_sd = {
+        fila[0]
+        for fila in db.query(PermisoUsuarioSede.id_sd)
+        .filter(PermisoUsuarioSede.id_usr == usuario.id_usr)
+        .distinct()
+        .all()
+    }
+
+    if len(ids_sd) == 1:
+        return ids_sd.pop()
+
+    if len(ids_sd) == 0:
+        raise HTTPException(
+            status_code=403,
+            detail="Su usuario no tiene ninguna sede asignada. Contacte al administrador.",
+        )
+
+    # len(ids_sd) >= 2: ver el docstring de arriba, caso "2+ sedes distintas".
+    raise HTTPException(
+        status_code=403,
+        detail=(
+            "Su usuario tiene acceso a más de una sede y el sistema todavía no "
+            "soporta ese caso. Contacte al administrador."
+        ),
+    )
+
+
 @router.post("/login", response_model=LoginResponse)
 @limiter.limit("5/5minutes")
-def login(request: Request, body: LoginRequest, db: Session = Depends(get_db)):
+def login(request: Request, response: Response, body: LoginRequest, db: Session = Depends(get_db)):
     usuario = (
         db.query(Usuario)
         .options(joinedload(Usuario.rol))
@@ -89,12 +178,20 @@ def login(request: Request, body: LoginRequest, db: Session = Depends(get_db)):
     usuario.intnts_fllds = 0
     db.commit()
 
+    sede_id = _resolver_sede_id_login(db, usuario)
+
     token = create_access_token(
         user_id=usuario.id_usr,
-        sede_id=None,
+        sede_id=sede_id,
         scope=usuario.scp,
         rol=usuario.rol.nmbr,
     )
+
+    # Cookie httpOnly: mecanismo principal de sesión para el navegador.
+    # El JWT sigue viajando también en el body (access_token) por
+    # retrocompatibilidad con clientes que todavía usan el header
+    # Authorization -ver get_current_user en security/dependencies.py-.
+    _setear_cookie_sesion(response, token)
 
     return LoginResponse(
         access_token=token,
@@ -103,6 +200,39 @@ def login(request: Request, body: LoginRequest, db: Session = Depends(get_db)):
         debe_cambiar_contrasena=usuario.dbe_cmbr_pswrd,
         zona_horaria=usuario.zn_hrr,
     )
+
+
+@router.post("/logout")
+def logout(response: Response):
+    """Borra la cookie de sesión explícitamente (Max-Age=0). Los flags
+    (Secure/SameSite/Path) tienen que coincidir exactamente con los que
+    usó set_cookie en el login: un delete_cookie con distinto Path o
+    SameSite crea una cookie NUEVA en vez de pisar la existente, y el
+    navegador terminaría con dos cookies del mismo nombre."""
+    response.delete_cookie(
+        key=COOKIE_NOMBRE,
+        httponly=True,
+        secure=True,
+        samesite="none",
+        path="/",
+    )
+    return {"mensaje": "Sesión cerrada correctamente"}
+
+
+@router.post("/ws-ticket")
+def crear_ticket_websocket(
+    usuario_token: dict = Depends(get_current_user),
+    token_crudo: str = Depends(get_token_crudo),
+):
+    """Mitigación de R-05 (RAID del proyecto): el WebSocket de HU17 no
+    puede leer la cookie httpOnly ni mandar headers propios -limitación
+    de la API WebSocket del navegador-, así que un cliente ya autenticado
+    por cookie cambia esa identidad por un ticket opaco, de un solo uso y
+    vida corta, para pegarlo en la query string del WS en su lugar. Ver
+    security/ws_tickets.py y _autenticar_websocket en
+    routers/mapa_cliente.py.
+    """
+    return {"ticket": emitir_ticket(token_crudo)}
 
 
 @router.get("/perfil")

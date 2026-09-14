@@ -23,7 +23,7 @@ y migrada una vez:
 import os
 
 import pytest
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from app.models import Cliente, Rol, Sede, Usuario
@@ -45,19 +45,15 @@ def _engine():
 def db_session(_engine):
     conexion = _engine.connect()
     transaccion = conexion.begin()
-    SessionLocalPrueba = sessionmaker(bind=conexion)
-    session = SessionLocalPrueba()
-
     # Los endpoints reales hacen su propio db.commit() (p. ej. crear_usuario
-    # en HU04). Para que eso no termine la transacción externa -y así poder
-    # revertir todo al final del test con un solo rollback()-, se usa un
-    # SAVEPOINT que se reabre automáticamente cada vez que algo lo cierra.
-    session.begin_nested()
-
-    @event.listens_for(session, "after_transaction_end")
-    def _reabrir_savepoint(sess, transaccion_interna):
-        if transaccion_interna.nested and not transaccion_interna._parent.nested:
-            sess.begin_nested()
+    # en HU04) y algunos scripts hacen su propio db.rollback() (p. ej.
+    # rotar_ftp_credential_key.py). Para que eso no termine ni revierta la
+    # transacción externa -y así poder deshacer todo al final del test con
+    # un solo rollback()-, join_transaction_mode="create_savepoint" hace
+    # que cada commit()/rollback() de la sesión opere sobre un SAVEPOINT
+    # interno en vez de la transacción de `conexion`.
+    SessionLocalPrueba = sessionmaker(bind=conexion, join_transaction_mode="create_savepoint")
+    session = SessionLocalPrueba()
 
     try:
         yield session

@@ -98,6 +98,19 @@ interface MapeoColumnaDetalle {
   parametro_unidad: string;
 }
 
+/** HU50 CA5: columna del header que el auto-mapeo no pudo resolver por
+ *  nombre, pendiente de que el técnico le asigne un parámetro a mano. */
+interface ColumnaPendiente {
+  id_mp_cl_pnd: number;
+  id_dspstv: number;
+  dispositivo_nombre: string;
+  id_mp: number;
+  tp_trm: string;
+  indc_clmn: number;
+  nmbr_clmn_orgn: string;
+  fch_dtccn: string;
+}
+
 interface MapeoDetalle {
   id_mp: number;
   id_dspstv: number;
@@ -111,8 +124,21 @@ interface MapeoDetalle {
   fl_inc_dts: number;
   frmt_fch: string;
   estd: string;
+  /** HU49 CA3: 'Automatico' si el pipeline la creó sola al ver un
+   *  prefijo nunca visto; 'Manual' si la configuró un técnico. */
+  orgn_crcn: string;
   total_columnas: number;
   columnas: MapeoColumnaDetalle[];
+  columnas_pendientes: ColumnaPendiente[];
+}
+
+/** Item resumido que trae GET /mapeos (listado), usado para poblar
+ *  tramasExistentes con su origen -no solo la letra-. */
+interface MapeoFormatoListItem {
+  id_mp: number;
+  tp_trm: string;
+  estd: string;
+  orgn_crcn: string;
 }
 
 interface LogIngesta {
@@ -185,10 +211,13 @@ export default function DispositivoDetalle() {
   // Compartido por Formato y Datos: son dos vistas del MISMO registro de
   // mp_frmt, elegido por (este dispositivo, este tipo de trama).
   const [tipoTrama, setTipoTrama] = useState<TipoTrama>("H");
-  // Letras con mapeo ya configurado para este dispositivo (además de las
+  // Tramas ya configuradas para este dispositivo (además de las
   // frecuentes H/E/P), para que el selector muestre lo que el técnico ya
-  // armó y no solo el catálogo sugerido.
-  const [tramasExistentes, setTramasExistentes] = useState<string[]>([]);
+  // armó y no solo el catálogo sugerido. Lleva orgn_crcn (HU49 CA3) para
+  // poder mostrar el badge "Auto-detectada" en el pill correspondiente.
+  const [tramasExistentes, setTramasExistentes] = useState<
+    { valor: string; automatica: boolean }[]
+  >([]);
   const [agregandoTrama, setAgregandoTrama] = useState(false);
   const [nuevaTrama, setNuevaTrama] = useState("");
 
@@ -196,12 +225,19 @@ export default function DispositivoDetalle() {
   // después, así que al fusionar por letra (Map conserva el ÚLTIMO valor
   // por key) una letra frecuente con mapeo ya cargado (p. ej. "H") se
   // queda con su etiqueta completa ("Datos periódicos (H)") en vez de la
-  // etiqueta pelada que le daría tratarla solo como "existente".
+  // etiqueta pelada que le daría tratarla solo como "existente". Una
+  // trama frecuente nunca es automática (viene del catálogo sugerido de
+  // UI, no de HU49), así que fusionar no pierde el flag de las
+  // existentes reales.
   const opcionesTrama = Array.from(
     new Map(
       [
-        ...tramasExistentes.map((t) => ({ valor: t, etiqueta: t })),
-        ...TIPOS_TRAMA_FRECUENTES,
+        ...tramasExistentes.map((t) => ({
+          valor: t.valor,
+          etiqueta: t.valor,
+          automatica: t.automatica,
+        })),
+        ...TIPOS_TRAMA_FRECUENTES.map((t) => ({ ...t, automatica: false })),
       ].map((o) => [o.valor, o])
     ).values()
   );
@@ -327,12 +363,16 @@ export default function DispositivoDetalle() {
   const cargarMapeo = useCallback(() => {
     if (!id) return;
     setCargando(true);
-    apiFetch<{ items: MapeoDetalle[] }>("/mapeos", {
+    apiFetch<{ items: MapeoFormatoListItem[] }>("/mapeos", {
       params: { id_dspstv: id },
     })
       .then(async (res) => {
+        const activos = res.items.filter((m) => m.estd === "Activo");
         setTramasExistentes(
-          Array.from(new Set(res.items.filter((m) => m.estd === "Activo").map((m) => m.tp_trm)))
+          Array.from(new Map(activos.map((m) => [m.tp_trm, m])).values()).map((m) => ({
+            valor: m.tp_trm,
+            automatica: m.orgn_crcn === "Automatico",
+          }))
         );
         const enLista = res.items.find(
           (m) => m.tp_trm === tipoTrama && m.estd === "Activo"
@@ -632,13 +672,21 @@ export default function DispositivoDetalle() {
                           setAgregandoTrama(false);
                         }}
                         className={
-                          "px-4 py-2 text-sm font-medium transition-colors " +
+                          "px-4 py-2 text-sm font-medium transition-colors inline-flex items-center gap-1.5 " +
                           (tipoTrama === opcion.valor
                             ? "bg-[#ccff00] text-[#1a202c]"
                             : "bg-white dark:bg-[#2d3748] text-gray-700 dark:text-gray-300")
                         }
                       >
                         {opcion.etiqueta}
+                        {/* HU49 CA3: distingue visualmente una trama que el
+                            pipeline creó sola (prefijo nunca visto en un
+                            archivo real) de una configurada a mano. */}
+                        {opcion.automatica && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold border bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-300 dark:border-blue-800/30">
+                            Auto-detectada
+                          </span>
+                        )}
                       </button>
                     ))}
                   </div>
@@ -649,12 +697,20 @@ export default function DispositivoDetalle() {
                         className="inline-flex items-center gap-1.5"
                         onSubmit={(e) => {
                           e.preventDefault();
-                          const letra = nuevaTrama.trim().toUpperCase();
-                          if (!/^[A-Z]$/.test(letra)) {
-                            avisar("El tipo de trama debe ser una sola letra (A-Z)", false);
+                          const prefijo = nuevaTrama.trim().toUpperCase();
+                          // HU49: mismo criterio que el backend
+                          // (TIPO_TRAMA_PATRON) - alfanumérico de 1 a 50
+                          // caracteres, sin '_' (extraer_prefijo siempre
+                          // corta ahí, así que un tp_trm con '_' jamás
+                          // podría matchear ningún archivo real).
+                          if (!/^[A-Z0-9]{1,50}$/.test(prefijo)) {
+                            avisar(
+                              "El tipo de trama debe tener entre 1 y 50 caracteres alfanuméricos (A-Z, 0-9), sin espacios ni guiones bajos",
+                              false
+                            );
                             return;
                           }
-                          setTipoTrama(letra);
+                          setTipoTrama(prefijo);
                           setAgregandoTrama(false);
                           setNuevaTrama("");
                         }}
@@ -662,11 +718,11 @@ export default function DispositivoDetalle() {
                         <input
                           autoFocus
                           type="text"
-                          maxLength={1}
-                          placeholder="X"
+                          maxLength={50}
+                          placeholder="X o ESTACION01"
                           value={nuevaTrama}
                           onChange={(e) => setNuevaTrama(e.target.value.toUpperCase())}
-                          className={inputClase + " w-14 uppercase text-center"}
+                          className={inputClase + " w-32 uppercase text-center"}
                         />
                         <button type="submit" className="px-3 py-2 text-sm font-medium text-[#5a7000] dark:text-[#ccff00]">
                           Usar
@@ -733,6 +789,9 @@ export default function DispositivoDetalle() {
                   inputClase={inputClase}
                   labelClase={labelClase}
                   botonPrimario={botonPrimario}
+                  columnasPendientes={mapeo?.columnas_pendientes ?? []}
+                  onColumnaPendienteResuelta={cargarMapeo}
+                  avisar={avisar}
                 />
               )}
 
@@ -967,6 +1026,9 @@ function PestanaDatos({
   inputClase,
   labelClase,
   botonPrimario,
+  columnasPendientes,
+  onColumnaPendienteResuelta,
+  avisar,
 }: {
   formato: FormatoForm;
   setFormato: React.Dispatch<React.SetStateAction<FormatoForm>>;
@@ -979,8 +1041,54 @@ function PestanaDatos({
   inputClase: string;
   labelClase: string;
   botonPrimario: string;
+  /** HU50 CA5: columnas de ESTA trama que el auto-mapeo dejó sin
+   *  resolver, con su nombre real de header. */
+  columnasPendientes: ColumnaPendiente[];
+  /** Se llama tras resolver/ignorar una pendiente, para que el padre
+   *  refresque tanto esta lista como el badge global del Topbar. */
+  onColumnaPendienteResuelta: () => void;
+  avisar: (mensaje: string, ok: boolean) => void;
 }) {
   const [nuevoIndice, setNuevoIndice] = useState("");
+  // HU50 CA5: parámetro elegido en el selector de cada fila pendiente,
+  // ANTES de confirmar con "Asignar" -es una acción inmediata e
+  // independiente del guardado masivo del formulario de abajo-.
+  const [seleccionPendiente, setSeleccionPendiente] = useState<Record<number, number>>({});
+  const [resolviendoPendiente, setResolviendoPendiente] = useState<number | null>(null);
+
+  async function resolverPendiente(idMpClPnd: number) {
+    const idParametro = seleccionPendiente[idMpClPnd];
+    if (!idParametro) {
+      avisar("Elegí un parámetro antes de asignar", false);
+      return;
+    }
+    setResolviendoPendiente(idMpClPnd);
+    try {
+      await apiFetch(`/mapeos/columnas-pendientes/${idMpClPnd}/resolver`, {
+        method: "POST",
+        body: { id_prmtr: idParametro },
+      });
+      avisar("Columna asignada correctamente", true);
+      onColumnaPendienteResuelta();
+    } catch (err) {
+      avisar(err instanceof ApiError ? err.message : "No se pudo asignar la columna", false);
+    } finally {
+      setResolviendoPendiente(null);
+    }
+  }
+
+  async function ignorarPendiente(idMpClPnd: number) {
+    setResolviendoPendiente(idMpClPnd);
+    try {
+      await apiFetch(`/mapeos/columnas-pendientes/${idMpClPnd}/ignorar`, { method: "POST" });
+      avisar("Columna marcada como ignorada", true);
+      onColumnaPendienteResuelta();
+    } catch (err) {
+      avisar(err instanceof ApiError ? err.message : "No se pudo ignorar la columna", false);
+    } finally {
+      setResolviendoPendiente(null);
+    }
+  }
   // Genera varias filas de una vez (desde un índice inicial) en vez de
   // tener que escribir número + click "Añadir" columna por columna: con
   // datalogers de 20+ columnas ese ciclo era el cuello de botella que
@@ -1061,6 +1169,89 @@ function PestanaDatos({
           </div>
         </div>
       </div>
+
+      {/* HU50 CA5: columnas del header real que el auto-mapeo no pudo
+          resolver por nombre. Tabla SEPARADA de "Asignación de columnas"
+          de abajo -esta viene de mp_clmn_pendiente (lo que el pipeline
+          detectó en un archivo real), no del estado local del formulario
+          armado a mano por índice-. Resolver/ignorar es una acción
+          inmediata contra su propio endpoint, no pasa por "Guardar". */}
+      {columnasPendientes.length > 0 && (
+        <div className="mb-6 p-4 rounded-xl border border-amber-300 dark:border-amber-700/50 bg-amber-50 dark:bg-amber-900/10">
+          <h3 className="text-sm font-bold text-amber-900 dark:text-amber-200 mb-1">
+            Columnas pendientes de asignar
+          </h3>
+          <p className="text-xs text-amber-700 dark:text-amber-300/80 mb-3">
+            El sistema no encontró un parámetro con este nombre exacto en un archivo real. Asigná
+            uno o marcá la columna como ignorada si nunca va a tener parámetro.
+          </p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm text-left text-gray-600 dark:text-gray-300">
+              <thead className="text-xs uppercase bg-black/5 dark:bg-white/5 border-b border-black/10 dark:border-white/10">
+                <tr>
+                  <th className="px-4 py-3 font-bold">N° de columna</th>
+                  <th className="px-4 py-3 font-bold">Nombre en el archivo</th>
+                  <th className="px-4 py-3 font-bold">Parámetro estándar</th>
+                  <th className="px-4 py-3 font-bold text-right">Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {columnasPendientes.map((pendiente) => (
+                  <tr
+                    key={pendiente.id_mp_cl_pnd}
+                    className="border-b border-black/10 dark:border-white/10"
+                  >
+                    <td className="px-4 py-3 font-medium text-gray-900 dark:text-white">
+                      {pendiente.indc_clmn}
+                    </td>
+                    <td className="px-4 py-3 font-mono text-xs">{pendiente.nmbr_clmn_orgn}</td>
+                    <td className="px-4 py-3">
+                      <select
+                        value={seleccionPendiente[pendiente.id_mp_cl_pnd] || ""}
+                        onChange={(e) =>
+                          setSeleccionPendiente((prev) => ({
+                            ...prev,
+                            [pendiente.id_mp_cl_pnd]: Number(e.target.value),
+                          }))
+                        }
+                        disabled={!puedeEditar || resolviendoPendiente === pendiente.id_mp_cl_pnd}
+                        className={inputClase}
+                      >
+                        <option value="">Elegir parámetro...</option>
+                        {parametros.map((p) => (
+                          <option key={p.id_prmtr} value={p.id_prmtr}>
+                            {p.nmbr} ({p.undd}){p.tipo_dato === "texto" ? " · texto" : ""}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                    <td className="px-4 py-3 text-right whitespace-nowrap">
+                      <button
+                        type="button"
+                        onClick={() => resolverPendiente(pendiente.id_mp_cl_pnd)}
+                        disabled={!puedeEditar || resolviendoPendiente === pendiente.id_mp_cl_pnd}
+                        className="mr-3 text-xs font-semibold text-[#5a7000] dark:text-[#ccff00] hover:underline disabled:opacity-50"
+                      >
+                        {resolviendoPendiente === pendiente.id_mp_cl_pnd
+                          ? "Asignando..."
+                          : "Asignar"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => ignorarPendiente(pendiente.id_mp_cl_pnd)}
+                        disabled={!puedeEditar || resolviendoPendiente === pendiente.id_mp_cl_pnd}
+                        className="text-xs font-medium text-gray-500 dark:text-gray-400 hover:underline disabled:opacity-50"
+                      >
+                        Ignorar
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       <h3 className="text-sm font-bold text-gray-900 dark:text-white mb-3">
         Asignación de columnas

@@ -27,6 +27,11 @@ interface Parametro {
   undd: string;
   dscrpcn: string | null;
   tipo_dato: "numerico" | "texto";
+  // HU51: un parámetro puede haber nacido del motor de ingesta (una
+  // columna de header que no matcheaba nada) y quedar esperando revisión
+  // del Administrador, que le pone nombre/unidad de verdad y lo activa.
+  estd?: "Activo" | "Pendiente de revision";
+  orgn_crcn?: "Manual" | "Automatico";
 }
 
 interface ListadoParametros {
@@ -63,11 +68,32 @@ export default function Parametros() {
   const [eliminandoId, setEliminandoId] = useState<number | null>(null);
   const [errorEliminar, setErrorEliminar] = useState<string | null>(null);
 
+  // HU51 CA3: filtro para ver solo lo que el motor de ingesta creó y
+  // todavía nadie revisó.
+  const [soloPendientes, setSoloPendientes] = useState(false);
+  // HU51 CA4/CA5: el Administrador revisa un parámetro auto-creado y
+  // decide entre activarlo (con nombre/unidad corregidos) o fusionarlo
+  // contra uno que ya existía.
+  const [parametroARevisar, setParametroARevisar] = useState<Parametro | null>(null);
+  const [modoRevision, setModoRevision] = useState<"activar" | "fusionar">("activar");
+  const [revNmbr, setRevNmbr] = useState("");
+  const [revUndd, setRevUndd] = useState("");
+  const [revTipoDato, setRevTipoDato] = useState<"numerico" | "texto">("numerico");
+  const [revDestino, setRevDestino] = useState<number | "">("");
+  const [candidatosFusion, setCandidatosFusion] = useState<Parametro[]>([]);
+  const [revGuardando, setRevGuardando] = useState(false);
+  const [revError, setRevError] = useState<string | null>(null);
+
   function cargarParametros() {
     setLoading(true);
     setError(null);
     apiFetch<ListadoParametros>("/parametros", {
-      params: { pagina, por_pagina: POR_PAGINA, q: busqueda.trim() || undefined },
+      params: {
+        pagina,
+        por_pagina: POR_PAGINA,
+        q: busqueda.trim() || undefined,
+        estd: soloPendientes ? "Pendiente de revision" : undefined,
+      },
     })
       .then(setData)
       .catch((err) => {
@@ -79,7 +105,60 @@ export default function Parametros() {
   useEffect(() => {
     cargarParametros();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pagina, busqueda]);
+  }, [pagina, busqueda, soloPendientes]);
+
+  // HU51 CA4/CA5: abre el panel de revisión de un parámetro auto-creado.
+  function abrirRevision(p: Parametro) {
+    setParametroARevisar(p);
+    setModoRevision("activar");
+    setRevNmbr(p.nmbr);
+    setRevUndd(p.undd === "-" ? "" : p.undd);
+    setRevTipoDato(p.tipo_dato);
+    setRevDestino("");
+    setRevError(null);
+    // Para el selector de destino de fusión: solo parámetros ya activos
+    // -no tiene sentido fusionar contra otro pendiente, ni el backend lo
+    // permitiría contra uno fusionado-.
+    apiFetch<Parametro[]>("/parametros", { params: { estd: "Activo" } })
+      .then((lista) => setCandidatosFusion(lista.filter((c) => c.id_prmtr !== p.id_prmtr)))
+      .catch(() => setCandidatosFusion([]));
+  }
+
+  async function confirmarRevision() {
+    if (!parametroARevisar) return;
+    setRevGuardando(true);
+    setRevError(null);
+    try {
+      if (modoRevision === "activar") {
+        await apiFetch<Parametro>(`/parametros/${parametroARevisar.id_prmtr}/activar`, {
+          method: "POST",
+          body: {
+            nmbr: revNmbr.trim(),
+            undd: revUndd.trim() || "-",
+            tipo_dato: revTipoDato,
+          },
+        });
+      } else {
+        if (revDestino === "") {
+          setRevError("Elegí el parámetro con el que querés fusionarlo.");
+          setRevGuardando(false);
+          return;
+        }
+        await apiFetch<Parametro>(`/parametros/${parametroARevisar.id_prmtr}/fusionar`, {
+          method: "POST",
+          body: { id_prmtr_destino: revDestino },
+        });
+      }
+      setParametroARevisar(null);
+      cargarParametros();
+    } catch (err) {
+      setRevError(
+        err instanceof ApiError ? err.message : "No se pudo completar la operación"
+      );
+    } finally {
+      setRevGuardando(false);
+    }
+  }
 
   // Cambiar el término de búsqueda vuelve a la primera página: quedarse
   // en la página 3 de un resultado que ahora tiene 1 sola dejaría la
@@ -220,6 +299,25 @@ export default function Parametros() {
                     className="bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block w-full pl-10 p-2.5 transition-all outline-none placeholder-gray-400 dark:placeholder-gray-500"
                   />
                 </div>
+
+                {/* HU51 CA3: los auto-creados sin revisar se pueden aislar
+                    del resto del catálogo, que es lo que el Administrador
+                    necesita para ponerse al día con lo que detectó la
+                    ingesta. */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSoloPendientes((v) => !v);
+                    setPagina(1);
+                  }}
+                  className={`inline-flex items-center gap-2 px-3 py-2.5 text-sm font-bold rounded-xl border transition-all ${
+                    soloPendientes
+                      ? "bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 border-amber-300 dark:border-amber-700"
+                      : "bg-white dark:bg-transparent text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700"
+                  }`}
+                >
+                  {soloPendientes ? "Viendo pendientes de revisión" : "Ver pendientes de revisión"}
+                </button>
               </div>
 
               {error && (
@@ -273,7 +371,25 @@ export default function Parametros() {
                           key={p.id_prmtr}
                           className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm border-b border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
                         >
-                          <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">{p.nmbr}</td>
+                          <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span>{p.nmbr}</span>
+                              {/* HU51 CA3: mismo lenguaje visual que el badge
+                                  "Auto-detectada" de las tramas de HU49, para
+                                  que se lea como la misma idea (lo creó el
+                                  motor de ingesta, no una persona). */}
+                              {p.estd === "Pendiente de revision" && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold border bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-300 dark:border-amber-800/30">
+                                  Pendiente de revisión
+                                </span>
+                              )}
+                              {p.orgn_crcn === "Automatico" && p.estd !== "Pendiente de revision" && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold border bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-300 dark:border-blue-800/30">
+                                  Auto-detectado
+                                </span>
+                              )}
+                            </div>
+                          </td>
                           <td className="px-6 py-4">
                             <span
                               className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold border ${
@@ -289,6 +405,17 @@ export default function Parametros() {
                           <td className="px-6 py-4">{p.dscrpcn ?? "—"}</td>
                           <td className="px-6 py-4 text-right">
                             <div className="inline-flex gap-2">
+                              {/* HU51 CA4/CA5: un parámetro auto-creado sin
+                                  revisar se resuelve con Revisar (activar o
+                                  fusionar), no con el Editar normal. */}
+                              {p.estd === "Pendiente de revision" && (
+                                <button
+                                  onClick={() => abrirRevision(p)}
+                                  className="inline-flex items-center justify-center px-3 py-1.5 text-sm font-bold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/40 rounded-lg hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-all"
+                                >
+                                  Revisar
+                                </button>
+                              )}
                               <button
                                 onClick={() => abrirFormularioEditar(p)}
                                 className="inline-flex items-center justify-center px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-transparent border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white transition-all"
@@ -476,6 +603,154 @@ export default function Parametros() {
           onConfirmar={confirmarEliminarParametro}
           onCancelar={() => setParametroAEliminar(null)}
         />
+      )}
+
+      {/* HU51 CA4/CA5: revisión de un parámetro auto-creado. Las dos
+          salidas posibles conviven en el mismo panel porque son la misma
+          decisión ("¿esto es algo nuevo, o ya lo teníamos con otro
+          nombre?"), y separarlas en dos pantallas obligaría a volver
+          atrás para cambiar de opinión. */}
+      {parametroARevisar && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="w-full max-w-lg bg-white dark:bg-gray-900 border border-black/10 dark:border-white/10 rounded-2xl shadow-2xl overflow-hidden">
+            <div className="px-6 py-4 border-b border-black/10 dark:border-white/10">
+              <h3 className="text-lg font-bold text-gray-900 dark:text-white">
+                Revisar parámetro auto-detectado
+              </h3>
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                Detectado en el archivo como{" "}
+                <code className="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200">
+                  {parametroARevisar.nmbr}
+                </code>
+                . Ya está guardando datos; revisalo para que quede prolijo en el catálogo.
+              </p>
+            </div>
+
+            <div className="px-6 py-4 space-y-4">
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setModoRevision("activar")}
+                  className={`flex-1 px-3 py-2 text-sm font-bold rounded-xl border transition-all ${
+                    modoRevision === "activar"
+                      ? "bg-[#ccff00]/20 text-[#5a7000] dark:text-[#ccff00] border-[#ccff00]/40"
+                      : "bg-white dark:bg-transparent text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-600"
+                  }`}
+                >
+                  Es un parámetro nuevo
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setModoRevision("fusionar")}
+                  className={`flex-1 px-3 py-2 text-sm font-bold rounded-xl border transition-all ${
+                    modoRevision === "fusionar"
+                      ? "bg-[#ccff00]/20 text-[#5a7000] dark:text-[#ccff00] border-[#ccff00]/40"
+                      : "bg-white dark:bg-transparent text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-600"
+                  }`}
+                >
+                  Ya lo teníamos
+                </button>
+              </div>
+
+              {modoRevision === "activar" ? (
+                <>
+                  <div>
+                    <label className="block mb-1.5 text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Nombre visible
+                    </label>
+                    <input
+                      value={revNmbr}
+                      onChange={(e) => setRevNmbr(e.target.value)}
+                      className="bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-xl block w-full p-2.5 outline-none focus:border-[#ccff00]"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block mb-1.5 text-sm font-medium text-gray-700 dark:text-gray-300">
+                        Unidad
+                      </label>
+                      <input
+                        value={revUndd}
+                        onChange={(e) => setRevUndd(e.target.value)}
+                        placeholder="Ej. °C"
+                        className="bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-xl block w-full p-2.5 outline-none focus:border-[#ccff00]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block mb-1.5 text-sm font-medium text-gray-700 dark:text-gray-300">
+                        Tipo de dato
+                      </label>
+                      <select
+                        value={revTipoDato}
+                        onChange={(e) =>
+                          setRevTipoDato(e.target.value as "numerico" | "texto")
+                        }
+                        className="bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-xl block w-full p-2.5 outline-none focus:border-[#ccff00]"
+                      >
+                        <option value="numerico">Numérico</option>
+                        <option value="texto">Texto</option>
+                      </select>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div>
+                  <label className="block mb-1.5 text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Fusionar con
+                  </label>
+                  <select
+                    value={revDestino}
+                    onChange={(e) =>
+                      setRevDestino(e.target.value === "" ? "" : Number(e.target.value))
+                    }
+                    className="bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-xl block w-full p-2.5 outline-none focus:border-[#ccff00]"
+                  >
+                    <option value="">Elegir parámetro...</option>
+                    {candidatosFusion.map((c) => (
+                      <option key={c.id_prmtr} value={c.id_prmtr}>
+                        {c.nmbr} ({c.undd})
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                    Todo el historial ya guardado bajo{" "}
+                    <strong>{parametroARevisar.nmbr}</strong> pasa al parámetro elegido, y
+                    los archivos futuros van a mapear directo contra él. No se pierde ningún
+                    dato.
+                  </p>
+                </div>
+              )}
+
+              {revError && (
+                <div className="p-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm rounded-xl border border-red-200 dark:border-red-800/30">
+                  {revError}
+                </div>
+              )}
+            </div>
+
+            <div className="px-6 py-4 border-t border-black/10 dark:border-white/10 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setParametroARevisar(null)}
+                className="px-4 py-2.5 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-transparent border border-gray-300 dark:border-gray-600 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={confirmarRevision}
+                disabled={revGuardando}
+                className="px-4 py-2.5 text-sm font-semibold text-[#5a7000] dark:text-[#ccff00] bg-[#ccff00]/10 hover:bg-[#ccff00]/20 border border-[#ccff00]/30 rounded-xl transition-colors disabled:opacity-50"
+              >
+                {revGuardando
+                  ? "Guardando..."
+                  : modoRevision === "activar"
+                    ? "Activar"
+                    : "Fusionar"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

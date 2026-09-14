@@ -23,6 +23,7 @@ from app.main import app
 from app.models import PermisoUbicacion, Ubicacion
 from app.models.suscripcion import PermisoUsuarioSede
 from app.security.jwt_auth import create_access_token
+from app.security.ws_tickets import canjear_ticket, emitir_ticket
 from app.services.mapa.eventos import CANAL_PREFIJO, canal_de_ubicacion, construir_evento
 
 POLIGONO_DUMMY = {"type": "Polygon", "coordinates": [[[0, 0], [0, 1], [1, 1], [1, 0], [0, 0]]]}
@@ -38,25 +39,44 @@ def client(db_session):
 
 
 class TestAutenticacionDelCanal:
-    def test_sin_token_cierra_con_1008(self, client):
+    def test_sin_ticket_cierra_con_1008(self, client):
         """El navegador no puede mandar headers en new WebSocket(), así
-        que el token va por query param; sin él, no se abre el canal."""
+        que la credencial va por query param; sin ella, no se abre el
+        canal."""
         with client.websocket_connect("/mapa-cliente/ws") as ws:
             mensaje = ws.receive()
         assert mensaje["type"] == "websocket.close"
         assert mensaje["code"] == 1008
 
-    def test_token_invalido_cierra_con_1008(self, client):
-        with client.websocket_connect("/mapa-cliente/ws?token=esto-no-es-un-jwt") as ws:
+    def test_ticket_invalido_cierra_con_1008(self, client):
+        with client.websocket_connect("/mapa-cliente/ws?ticket=esto-no-existe") as ws:
             mensaje = ws.receive()
         assert mensaje["type"] == "websocket.close"
         assert mensaje["code"] == 1008
 
-    def test_token_valido_sin_permiso_sobre_tableros_cierra_con_1008(
+    def test_jwt_crudo_en_el_query_param_ya_no_sirve(self, client, db_session, fabrica):
+        """Regresión del cambio a tickets (mitigación R-05): el WS ahora
+        espera un ticket opaco emitido por /auth/ws-ticket, no el JWT de
+        sesión. Pasar el JWT directo -como se hacía antes- debe rechazarse
+        igual que cualquier otro valor que no sea un ticket vigente."""
+        rol = fabrica.rol("Cliente Final")
+        usuario = fabrica.usuario(rol=rol)
+        sede = fabrica.sede()
+
+        token = create_access_token(
+            user_id=usuario.id_usr, sede_id=sede.id_sd, scope="por_sede", rol="Cliente Final"
+        )
+
+        with client.websocket_connect(f"/mapa-cliente/ws?ticket={token}") as ws:
+            mensaje = ws.receive()
+        assert mensaje["type"] == "websocket.close"
+        assert mensaje["code"] == 1008
+
+    def test_ticket_valido_sin_permiso_sobre_tableros_cierra_con_1008(
         self, client, db_session, fabrica
     ):
-        """Un JWT válido no alcanza: el módulo "Tableros" se exige igual
-        que en el endpoint REST."""
+        """Un ticket válido no alcanza: el módulo "Tableros" se exige
+        igual que en el endpoint REST."""
         rol = fabrica.rol("Cliente Final")
         usuario = fabrica.usuario(rol=rol)
         sede = fabrica.sede()
@@ -65,8 +85,40 @@ class TestAutenticacionDelCanal:
         token = create_access_token(
             user_id=usuario.id_usr, sede_id=sede.id_sd, scope="por_sede", rol="Cliente Final"
         )
+        ticket = emitir_ticket(token)
 
-        with client.websocket_connect(f"/mapa-cliente/ws?token={token}") as ws:
+        with client.websocket_connect(f"/mapa-cliente/ws?ticket={ticket}") as ws:
+            mensaje = ws.receive()
+        assert mensaje["type"] == "websocket.close"
+        assert mensaje["code"] == 1008
+
+    def test_ticket_ya_usado_no_sirve_dos_veces(self, client, db_session, fabrica):
+        """Uso único real: canjear el ticket una vez lo borra de Redis, así
+        que una segunda conexión con el mismo ticket debe rechazarse."""
+        rol = fabrica.rol("Cliente Final")
+        usuario = fabrica.usuario(rol=rol)
+        sede = fabrica.sede()
+        db_session.add(
+            PermisoUsuarioSede(
+                id_usr=usuario.id_usr,
+                id_sd=sede.id_sd,
+                id_rl=rol.id_rl,
+                mdl="Tableros",
+                nvl="Lectura",
+            )
+        )
+        db_session.flush()
+
+        token = create_access_token(
+            user_id=usuario.id_usr, sede_id=sede.id_sd, scope="por_sede", rol="Cliente Final"
+        )
+        ticket = emitir_ticket(token)
+
+        # Primer uso: el ticket es válido y se consume (aunque el permiso
+        # de módulo no se evalúe acá, canjear_ticket() ya lo borró).
+        assert canjear_ticket(ticket) == token
+
+        with client.websocket_connect(f"/mapa-cliente/ws?ticket={ticket}") as ws:
             mensaje = ws.receive()
         assert mensaje["type"] == "websocket.close"
         assert mensaje["code"] == 1008
@@ -109,6 +161,7 @@ class TestUsuarioSinUbicaciones:
         token = create_access_token(
             user_id=usuario.id_usr, sede_id=sede.id_sd, scope="por_sede", rol="Cliente Final"
         )
+        ticket = emitir_ticket(token)
 
         # El ping normal tarda 25s; se acorta para que el test no espere.
         monkeypatch.setattr("app.routers.mapa_cliente.SEGUNDOS_ENTRE_PINGS", 0.2)
@@ -125,7 +178,7 @@ class TestUsuarioSinUbicaciones:
             "app.routers.mapa_cliente.ubicaciones_permitidas", lambda *a, **k: []
         )
 
-        with client.websocket_connect(f"/mapa-cliente/ws?token={token}") as ws:
+        with client.websocket_connect(f"/mapa-cliente/ws?ticket={ticket}") as ws:
             # Antes del arreglo esto era un 1006 inmediato; ahora tiene que
             # llegar un ping y la conexión seguir viva.
             mensaje = ws.receive_json()

@@ -1,6 +1,7 @@
 """
 HU 27 - Listar alarmas
 HU 28 - Crear alarma
+HU 30 - Configurar notificaciones
 
 HU27 CA1: al cargar el módulo "Gestión de Alarmas y Notificaciones", se
 muestra una tabla con todas las alarmas configuradas por el usuario,
@@ -50,6 +51,29 @@ Los parámetros que se pueden monitorear se restringen a los de tipo
 (cndcn_alrm.vlr_umbrl es Numeric), y un parámetro de texto -"Puerta
 Abierta", ver models/evento_texto.py- no admite ">= 3.5": ofrecerlo en el
 selector sería dejar armar una alarma que no puede dispararse nunca.
+
+HU30 CA:
+  CA1  al elegir "Configurar notificaciones" sobre una alarma, el panel
+       muestra los canales disponibles y los destinatarios actuales
+  CA2  activar el canal de correo y GUARDAR persiste la configuración y
+       muestra "Notificaciones configuradas correctamente"
+  CA4  desactivar un canal y GUARDAR hace que deje de recibir
+       notificaciones cuando la alarma se dispare
+
+Los canales disponibles en v1.0 son fijos: solo correo electrónico de la
+cuenta del usuario (models/alarma.py::DestinatarioAlarma ya admite
+'telegram' y varios destinatarios por canal porque también los usa HU35,
+pero esa combinación todavía no tiene HU que la habilite). Por eso
+"activar/desactivar el canal" para esta HU es, en los hechos, asegurar o
+borrar UNA fila en dstntr_alrm -la del correo de la cuenta (usr.crr)-, no
+un CRUD de destinatarios arbitrarios.
+
+CA3 ("el sistema detecta que la condición se cumple y envía
+automáticamente...") es responsabilidad del motor que evalúa cndcn_alrm
+contra la telemetría entrante y despacha por ntfccn_envd (HT-14): ese
+motor no existe todavía en el código -no hay ningún paso de la ingesta que
+lea cndcn_alrm-, así que HU30 deja la configuración lista (esta HU) para
+que ese motor la consuma cuando se construya.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -57,13 +81,21 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models.alarma import Alarma, CondicionAlarma
+from app.models.alarma import Alarma, CondicionAlarma, DestinatarioAlarma
 from app.models.mapeo_dispositivo import Dispositivo, MapeoColumna, MapeoFormato, Parametro
+from app.models.rol_usuario import Usuario
 from app.models.ubicacion_conexion import Ubicacion
 from app.schemas import (
     AlarmaCreada,
     AlarmaCrear,
     AlarmaListItem,
+    CondicionAlarmaActualizada,
+    CondicionAlarmaActualizar,
+    CondicionAlarmaDetalle,
+    DestinatarioNotificacion,
+    NotificacionesAlarma,
+    NotificacionesGuardadas,
+    NotificacionesGuardar,
     ParametroListItem,
     UbicacionParaAlarma,
 )
@@ -203,6 +235,160 @@ def listar_alarmas(
     ]
 
     return {"total": total, "pagina": pagina, "por_pagina": por_pagina, "items": items}
+
+
+def _alarma_del_usuario(db: Session, id_alrm: int, id_usr: int) -> Alarma:
+    """HU30: la alarma tiene que existir y ser del usuario autenticado
+    -mismo aislamiento por dueño que el listado de HU27, ver el módulo-.
+    404 y no 403: para cualquier otro dueño el recurso no existe, no es
+    que le falte permiso sobre uno ajeno."""
+    alarma = db.query(Alarma).filter(Alarma.id_alrm == id_alrm, Alarma.id_usr == id_usr).first()
+    if alarma is None:
+        raise HTTPException(status_code=404, detail="Alarma no encontrada")
+    return alarma
+
+
+def _alarma_como_item(
+    db: Session, alarma: Alarma, condicion: CondicionAlarma | None
+) -> AlarmaListItem:
+    """Misma forma que el listado de HU27 (AlarmaListItem): la respuesta
+    de actualizar_condicion no necesita un tipo propio."""
+    parametro = db.get(Parametro, alarma.id_prmtr)
+    return AlarmaListItem(
+        id_alrm=alarma.id_alrm,
+        nmbr=alarma.nmbr,
+        parametro_nombre=parametro.nmbr if parametro else "",
+        condicion=_formatear_condicion(condicion, parametro.undd if parametro else ""),
+        estd=alarma.estd,
+    )
+
+
+@router.get("/{id_alrm}/condicion", response_model=CondicionAlarmaDetalle)
+def ver_condicion(
+    id_alrm: int,
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(require_permiso("Alarmas", LECTURA)),
+):
+    """HU29 CA5: precarga el formulario de edición con la condición
+    actual de la alarma (o con los campos vacíos si todavía no tiene)."""
+    alarma = _alarma_del_usuario(db, id_alrm, int(usuario["sub"]))
+    parametro = db.get(Parametro, alarma.id_prmtr)
+    condicion = (
+        db.query(CondicionAlarma)
+        .filter(CondicionAlarma.id_alrm == alarma.id_alrm)
+        .order_by(CondicionAlarma.id_cndcn)
+        .first()
+    )
+    return CondicionAlarmaDetalle(
+        id_alrm=alarma.id_alrm,
+        nmbr=alarma.nmbr,
+        unidad=parametro.undd if parametro else "",
+        oprdr=condicion.oprdr if condicion else None,
+        vlr_umbrl=float(condicion.vlr_umbrl) if condicion else None,
+    )
+
+
+@router.put("/{id_alrm}/condicion", response_model=CondicionAlarmaActualizada)
+def actualizar_condicion(
+    id_alrm: int,
+    body: CondicionAlarmaActualizar,
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(require_permiso("Alarmas", EDICION)),
+):
+    """HU29 CA5: 'modifico el operador o el valor umbral y selecciono
+    ACTUALIZAR' -> guarda los nuevos valores y muestra "Condiciones
+    actualizadas correctamente".
+
+    Reemplaza la condición existente en vez de agregar una nueva: 'Una
+    alarma puede tener únicamente una condición de disparo en v1.0'
+    (detalle de conversación de HU29)."""
+    alarma = _alarma_del_usuario(db, id_alrm, int(usuario["sub"]))
+
+    condiciones_previas = (
+        db.query(CondicionAlarma).filter(CondicionAlarma.id_alrm == alarma.id_alrm).all()
+    )
+    for condicion_previa in condiciones_previas:
+        db.delete(condicion_previa)
+    db.flush()
+
+    nueva_condicion = CondicionAlarma(
+        id_alrm=alarma.id_alrm, oprdr=body.oprdr, vlr_umbrl=body.vlr_umbrl
+    )
+    db.add(nueva_condicion)
+    db.commit()
+
+    return CondicionAlarmaActualizada(alarma=_alarma_como_item(db, alarma, nueva_condicion))
+
+
+def usuario_correo(db: Session, usuario: dict) -> str:
+    """El destinatario de v1.0 (CA2/CA3: 'correo electrónico de la cuenta
+    del usuario') sale de usr.crr, no del JWT: el token no lleva el
+    correo."""
+    fila = db.query(Usuario).filter(Usuario.id_usr == int(usuario["sub"])).first()
+    if fila is None:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    return fila.crr
+
+
+def _panel_notificaciones(db: Session, alarma: Alarma) -> NotificacionesAlarma:
+    destinatarios = (
+        db.query(DestinatarioAlarma)
+        .filter(DestinatarioAlarma.id_alrm == alarma.id_alrm, DestinatarioAlarma.cnl == "email")
+        .all()
+    )
+    return NotificacionesAlarma(
+        id_alrm=alarma.id_alrm,
+        nmbr=alarma.nmbr,
+        canal_email_activo=len(destinatarios) > 0,
+        destinatarios=[DestinatarioNotificacion(crr=d.crr) for d in destinatarios],
+    )
+
+
+@router.get("/{id_alrm}/notificaciones", response_model=NotificacionesAlarma)
+def ver_notificaciones(
+    id_alrm: int,
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(require_permiso("Alarmas", LECTURA)),
+):
+    """HU30 CA1: al seleccionar "Configurar notificaciones" sobre una
+    alarma, el panel muestra los canales disponibles (fijo en v1.0, solo
+    correo) y los destinatarios actuales."""
+    alarma = _alarma_del_usuario(db, id_alrm, int(usuario["sub"]))
+    return _panel_notificaciones(db, alarma)
+
+
+@router.put("/{id_alrm}/notificaciones", response_model=NotificacionesGuardadas)
+def guardar_notificaciones(
+    id_alrm: int,
+    body: NotificacionesGuardar,
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(require_permiso("Alarmas", EDICION)),
+):
+    """HU30 CA2/CA4: activa o desactiva el canal de correo para esta
+    alarma. El único destinatario que HU30 gestiona es el correo de la
+    cuenta del usuario -otros correos son HU35-, así que activar equivale
+    a asegurar esa fila en dstntr_alrm y desactivar a borrarla."""
+    alarma = _alarma_del_usuario(db, id_alrm, int(usuario["sub"]))
+    correo = usuario_correo(db, usuario)
+
+    fila_actual = (
+        db.query(DestinatarioAlarma)
+        .filter(
+            DestinatarioAlarma.id_alrm == alarma.id_alrm,
+            DestinatarioAlarma.cnl == "email",
+            DestinatarioAlarma.crr == correo,
+        )
+        .first()
+    )
+
+    if body.canal_email_activo and fila_actual is None:
+        db.add(DestinatarioAlarma(id_alrm=alarma.id_alrm, cnl="email", crr=correo))
+    elif not body.canal_email_activo and fila_actual is not None:
+        db.delete(fila_actual)
+
+    db.commit()
+
+    return NotificacionesGuardadas(notificaciones=_panel_notificaciones(db, alarma))
 
 
 @router.post("", status_code=201, response_model=AlarmaCreada)
