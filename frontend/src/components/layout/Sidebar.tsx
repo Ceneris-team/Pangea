@@ -1,5 +1,7 @@
+import { motion, MotionConfig } from "framer-motion";
 import { Link } from "react-router-dom";
 import pangeaIconLight from "../../assets/pangea-icon-light.png";
+import pangeaIconDark from "../../assets/pangea-icon-dark.png";
 import { ROLES, rutaPorRol } from "../../config/roles";
 
 export type SeccionActiva = "panel" | "usuarios" | "ubicaciones" | "dispositivos" | "conexiones-ftp" | "dashboard" | "configuracion" | "consulta-datos"| "mapeos" | "parametros" | "cola-ingesta" | "graficos" | "mapa-estaciones" | "mapa-ubicaciones" | "paneles" | "mi-perfil";
@@ -10,30 +12,66 @@ interface SidebarProps {
   rol: string | null;
 }
 
-// El sidebar es oscuro en los dos temas (a diferencia del resto de la
-// app): en modo claro un gris oscuro, en modo oscuro un tono aún más
-// oscuro. El item activo, en cambio, es CLARO -toma el color de fondo de
-// la página, no del sidebar- y "muerde" el carril entrando desde la
-// derecha, con las dos esquinas exteriores cóncavas (ver notchArriba/
-// notchAbajo): ese detalle es lo que distingue esto de un simple
-// rounded-r-full -sin las esquinas mordidas, la cápsula se ve pegada al
-// borde en vez de fundida con él-.
-const linkBase = "relative flex items-center gap-3 pl-3 py-2.5 transition-all";
-const linkInactivo = "mr-4 rounded-lg text-gray-300 hover:bg-white/5 hover:text-white";
-const linkActivo =
-  "mr-0 pr-7 rounded-l-lg bg-[#f6f7f8] dark:bg-[#0b1220] text-gray-900 dark:text-white font-semibold";
-const linkDeshabilitado = "mr-4 rounded-lg text-gray-500 opacity-60 cursor-not-allowed";
-const iconoActivo = "text-gray-900 dark:text-white";
+// El sidebar cambia de paleta completa según el tema, con su propio logo
+// para cada uno (pangeaIconDark en claro, pangeaIconLight en oscuro -el
+// nombre de cada archivo es por el tono del ÍCONO, pensado para
+// contrastar contra el fondo de SU tema, no por el tema en sí-): en claro
+// es blanquito para hacer juego con el gris azulado y el verde lima del
+// logo; en oscuro sigue siendo el tono muy oscuro de siempre. El item
+// activo se resalta con una cápsula que "muerde" el carril con las dos
+// esquinas exteriores cóncavas (ver notchArriba/notchAbajo): ese detalle
+// es lo que distingue esto de un simple rounded-full -sin las esquinas
+// mordidas, la cápsula se ve pegada al borde en vez de fundida con él-.
+//
+// La cápsula nace de la IZQUIERDA en los dos temas, de una franja de marca
+// fija (ver FranjaActiva) pegada al borde izquierdo del sidebar -esa
+// franja es lo que marca "activo" con color de acento-.
+//
+// La cápsula (CapsulaActiva, más abajo) se monta y desmonta con Framer
+// Motion: cada vez que un item pasa a activo, React la crea de cero
+// adentro de ESE link, y Motion anima su aparición con un fundido de
+// opacidad -sin medir nada a mano con getBoundingClientRect ni
+// ResizeObserver, que es como estaba antes de esta migración-.
+// El link tiene la MISMA geometría activo o no (mismo ml-4, mismo
+// padding): solo cambia el color. Si el activo se ensanchara -como cuando
+// pintaba su propio fondo hasta el borde-, al seleccionarlo cambiaría el
+// ancho disponible para el texto y un label largo saltaría a dos líneas.
+// Quien llega hasta el borde izquierdo del <aside> ahora es la cápsula
+// (con un left negativo que compensa el ml-4 del link, ver
+// CapsulaActiva), no el link.
+const linkBase = "relative z-10 flex items-center gap-3 pl-3 ml-4 py-2.5 rounded-lg transition-colors duration-300";
+const linkInactivo = "text-gray-600 hover:bg-black/5 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-white/5 dark:hover:text-white";
+const linkActivo = "text-[#14210a] font-semibold";
+// Mismo verde lima de marca en los dos temas -antes era gray-400 en claro,
+// pero el gris quedaba deslucido contra el nuevo fondo blanquito del
+// sidebar en claro; el verde es el mismo acento de marca de FranjaActiva
+// en ambos casos, así que no hace falta diferenciar por tema-.
+const capsulaColor = "bg-[#ccff00]";
+const linkDeshabilitado = "text-gray-500 opacity-60 cursor-not-allowed";
+
+/** Franja fija de marca en el borde izquierdo del sidebar: el punto del
+ *  que "nace" la cápsula activa, en los dos temas. */
+function FranjaActiva() {
+  return <div aria-hidden="true" className="absolute inset-y-0 left-0 w-1.5 z-20 bg-[#ccff00]" />;
+}
 
 /** Las dos "mordidas" cóncavas de la cápsula activa: un cuarto de círculo
- *  del color del SIDEBAR (no del fondo de página) posicionado justo
- *  arriba y abajo de la cápsula, en la esquina donde se junta con el
- *  carril. Es puro CSS -radial-gradient recortado con el propio
- *  border-radius del pseudo-elemento-, sin SVG ni imagen. */
+ *  posicionado justo arriba y abajo de la cápsula, en la esquina donde se
+ *  junta con el carril. Es puro CSS -radial-gradient-, sin SVG ni imagen.
+ *
+ *  El relleno sólido es el mismo color que capsulaColor (no el del sidebar
+ *  ni el de la página): es la prolongación de la cápsula, y lo que "muerde"
+ *  es el cuarto de círculo TRANSPARENTE, que deja ver el sidebar a través.
+ *
+ *  El corte del gradiente está en exactamente 50% (no otro valor): es el
+ *  único punto donde el círculo queda tangente al borde recto vertical de
+ *  la cápsula sin dejar un escalón visible en la unión de las dos curvas -
+ *  cualquier otro porcentaje desalinea el radio real del círculo respecto
+ *  al tamaño del cuadrado que lo contiene. */
 const notchArriba =
-  "absolute -top-4 right-0 w-4 h-4 bg-[radial-gradient(circle_at_top_left,transparent_70%,#F6F7F8_71%)] dark:bg-[radial-gradient(circle_at_top_left,transparent_70%,#111827_71%)]";
+  "absolute -top-4 left-0 w-[22.5px] h-6 bg-[radial-gradient(circle_at_top_right,transparent_50%,#ccff00_51%)]";
 const notchAbajo =
-  "absolute -bottom-4 right-0 w-4 h-4 bg-[radial-gradient(circle_at_bottom_left,transparent_70%,#F6F7F8_71%)] dark:bg-[radial-gradient(circle_at_bottom_left,transparent_70%,#111827_71%)]";
+  "absolute -bottom-4 left-0 w-[22.5px] h-6 bg-[radial-gradient(circle_at_bottom_right,transparent_50%,#ccff00_51%)]";
 
 /** Encabezado de grupo del menú. En minúscula-versalita y sin borde: la
  *  separación la da el espacio (mt-5), no una línea; con 4 grupos, cuatro
@@ -44,32 +82,77 @@ const tituloGrupo =
 /** Espaciado entre grupos. El primero no lo lleva (va pegado al logo). */
 const grupo = "mt-5 first:mt-0";
 
-/** Un item de menú, con el detalle de las esquinas cóncavas cuando está
- *  activo. Se centralizó en un componente en vez de repetir el mismo
- *  bloque de "cápsula + dos mordidas" en los 13 links del menú. */
+/** La cápsula clara del item activo + sus dos mordidas. Vive DENTRO del
+ *  link activo (position: absolute, inset-0) y no en un elemento
+ *  compartido en el <nav>: como cada item la vuelve a montar de cero al
+ *  activarse, Framer Motion la anima con `initial`/`animate`. Es solo un
+ *  fundido de opacidad -sin desplazamiento- para que la entrada se sienta
+ *  ligera al clickear en vez de una transición vistosa.
+ *  z-[-1] la manda detrás del ícono y el texto del propio link. */
+function CapsulaActiva() {
+  return (
+    // top-0/bottom-0/right-0 + left-[-1rem]: el link tiene ml-4 (1rem), así
+    // que su propio ancho (inset-0) empieza 16px después del borde real
+    // del <aside>. El left negativo compensa ese hueco para que la cápsula
+    // llegue justo al borde izquierdo (donde está FranjaActiva) y se funda
+    // con él -sin él, quedaba corta y el hueco se notaba en items con
+    // label de dos líneas-.
+    <motion.span
+      aria-hidden="true"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.15 }}
+      className={`absolute top-0 bottom-0 right-0 left-[-1rem] z-[-1] rounded-r-lg ${capsulaColor}`}
+    >
+      <span className={notchArriba} />
+      <span className={notchAbajo} />
+    </motion.span>
+  );
+}
+
+/** Un item de menú. El item activo no pinta su fondo con className: lo
+ *  pinta CapsulaActiva, montada de nuevo cada vez que este item pasa a
+ *  estar activo (ver su comentario). */
 function ItemMenu({ to, activo, icono, children }: { to: string; activo: boolean; icono: React.ReactNode; children: React.ReactNode }) {
   return (
     <Link to={to} className={linkBase + " " + (activo ? linkActivo : linkInactivo)}>
-      {activo && (
-        <>
-          <span className={notchArriba} aria-hidden="true" />
-          <span className={notchAbajo} aria-hidden="true" />
-        </>
-      )}
-      <svg className={"w-5 h-5 shrink-0 " + (activo ? iconoActivo : "")} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      {activo && <CapsulaActiva />}
+      <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         {icono}
       </svg>
-      {children}
+      {/* El ancho lo reserva SIEMPRE la versión en negrita (el ::after
+          invisible), no el texto visible: si no, al activarse el item el
+          texto engorda, deja de entrar en una línea y el label salta a dos
+          -y con él el alto de la cápsula-. */}
+      <span
+        className="min-w-0 after:block after:h-0 after:overflow-hidden after:font-semibold after:invisible after:content-[attr(data-label)]"
+        data-label={typeof children === "string" ? children : undefined}
+      >
+        {children}
+      </span>
     </Link>
   );
 }
 
 export default function Sidebar({ onLogout, activo, rol }: SidebarProps) {
   return (
-    <aside className="w-64 bg-gray-800 dark:bg-[#0a0e1a] hidden md:flex flex-col transition-colors duration-300">
-      <div className="h-16 flex items-center gap-2.5 px-5 border-b border-white/10">
-        <img src={pangeaIconLight} alt="" className="h-10 w-auto" />
-        <span className="text-2xl font-bold text-white tracking-tight">Pangea</span>
+    // reducedMotion="user": si el sistema pide menos movimiento, Framer
+    // Motion recorta la animación de CapsulaActiva a un cambio instantáneo
+    // en vez del deslizamiento -sin esto la librería anima igual, no
+    // respeta la preferencia sola-.
+    <MotionConfig reducedMotion="user">
+    {/* relative isolate: sin esto el <aside> no forma su propio stacking
+        context, así que el z-[-1] de CapsulaActiva (ver más abajo) no
+        queda contenido dentro del sidebar sino que compite con el stacking
+        context raíz del documento -pintándose por momentos detrás del
+        propio fondo del <aside>, dejando ver la textura del body a través
+        justo en la zona del item activo-. */}
+    <aside className="relative isolate w-64 bg-gray-50 dark:bg-[#0a0e1a] border-r border-gray-200 dark:border-white/10 hidden md:flex flex-col transition-colors duration-300">
+      <FranjaActiva />
+      <div className="h-16 flex items-center gap-2.5 px-5 border-b border-gray-200 dark:border-white/10">
+        <img src={pangeaIconDark} alt="" className="h-10 w-auto dark:hidden" />
+        <img src={pangeaIconLight} alt="" className="hidden h-10 w-auto dark:block" />
+        <span className="text-2xl font-bold text-gray-900 dark:text-white tracking-tight">Pangea</span>
       </div>
 
       {/* El menú va agrupado por AFINIDAD de tarea, no por orden de
@@ -86,12 +169,11 @@ export default function Sidebar({ onLogout, activo, rol }: SidebarProps) {
           queda como una franja permanente que ensucia el diseño. Se oculta
           solo el indicador; el scroll con rueda, trackpad, teclado y touch
           sigue funcionando. */}
-      {/* pl-4 pr-0 py-4 (no p-4): el padding derecho lo pone cada LINK
-          -mr-4 en los inactivos, pr-7 sin margen en el activo-, no el
-          nav, para que el item activo pueda llegar hasta el borde real
-          del <aside> en vez de quedar recortado por el padding del
-          contenedor con scroll. */}
-      <nav className="flex-1 pl-4 pr-0 py-4 overflow-y-auto scrollbar-oculta">
+      {/* pl-0 pr-4 (no px-4): el margen izquierdo lo pone cada link con
+          ml-4, no el nav, para que la cápsula de cada item pueda llegar al
+          borde izquierdo del aside, donde está FranjaActiva (ver
+          CapsulaActiva). */}
+      <nav className="flex-1 pl-0 pr-4 py-4 overflow-y-auto scrollbar-oculta">
         {/* ---------------- General ---------------- */}
         <div className={grupo + " space-y-1"}>
           {/* Panel: lleva al panel real del rol logueado (panel-admin / panel-tecnico) */}
@@ -355,10 +437,10 @@ export default function Sidebar({ onLogout, activo, rol }: SidebarProps) {
         </div>
       </nav>
 
-      <div className="p-4 border-t border-white/10">
+      <div className="p-4 border-t border-gray-200 dark:border-white/10">
         <button
           onClick={onLogout}
-          className="flex items-center gap-3 px-3 py-2 w-full text-left text-gray-300 hover:bg-red-500/10 hover:text-red-400 rounded-lg transition-colors"
+          className="flex items-center gap-3 px-3 py-2 w-full text-left text-gray-600 hover:bg-red-500/10 hover:text-red-500 dark:text-gray-300 dark:hover:text-red-400 rounded-lg transition-colors"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path
@@ -372,5 +454,6 @@ export default function Sidebar({ onLogout, activo, rol }: SidebarProps) {
         </button>
       </div>
     </aside>
+    </MotionConfig>
   );
 }
