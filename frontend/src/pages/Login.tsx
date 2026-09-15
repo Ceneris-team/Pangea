@@ -1,10 +1,14 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import "./Login.css";
 import { useAuth } from "../context/AuthContext";
 import { rutaPorRol } from "../config/roles";
 import { ApiError } from "../services/api";
 import loginBg from "../assets/login-bg.jpg";
+import loginBg2 from "../assets/login_2.jpg";
+
+const CAROUSEL_IMAGES = [loginBg, loginBg2];
+const CAROUSEL_INTERVAL_MS = 6000;
 
 function isValidEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
@@ -23,6 +27,14 @@ export default function Login() {
   const [formMsg, setFormMsg] = useState("");
   const [formOk, setFormOk] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [bgIndex, setBgIndex] = useState(0);
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      setBgIndex((i) => (i + 1) % CAROUSEL_IMAGES.length);
+    }, CAROUSEL_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, []);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -64,11 +76,14 @@ export default function Login() {
 
   return (
     <div className="login-page">
-      <div
-        className="bg-photo"
-        style={{ backgroundImage: `url(${loginBg})` }}
-        aria-hidden="true"
-      >
+      <div className="bg-photo" aria-hidden="true">
+        {CAROUSEL_IMAGES.map((src, i) => (
+          <div
+            key={src}
+            className={`bg-photo-slide${i === bgIndex ? " active" : ""}`}
+            style={{ backgroundImage: `url(${src})` }}
+          />
+        ))}
         <div className="bg-photo-tint" />
       </div>
 

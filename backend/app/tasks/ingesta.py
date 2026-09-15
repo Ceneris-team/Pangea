@@ -6,6 +6,7 @@ from app.core.celery_app import celery_app
 from app.database import SessionLocal
 from app.ingesta.ftp_receptor import descargar_archivo_dat, listar_archivos_dat
 from app.models.archivo_ingesta import ArchivoIngesta
+from app.models.intento_procesamiento import IntentoProcesamiento
 from app.models.mapeo_dispositivo import Parametro
 from app.models.ubicacion_conexion import ConexionFTP
 from app.security.auditoria import limpiar_contexto_auditoria, marcar_contexto_auditoria
@@ -135,6 +136,46 @@ def interpretar_y_guardar(
     return resultado_validacion, resultado_persistencia
 
 
+def _registrar_intento(
+    db, id_archv: int, resultado: str, mensaje_error: str | None, id_usr: int | None
+) -> None:
+    """HU31: una fila en intnt_prcsmnt por cada intento TERMINADO de
+    procesar_archivo_dat -éxito o fallo definitivo-, para poder mostrar el
+    historial completo de reprocesos de un archivo (GET
+    /ingesta/cola/{id}/intentos, routers/ingesta.py).
+
+    "Terminado" es la palabra clave: NO se llama para un error transitorio
+    que Celery todavía va a reintentar solo (ver el bloque `except
+    Exception` de procesar_archivo_dat) -ese archivo sigue "en camino",
+    todavía no es un intento resuelto, y registrarlo ahí generaría una
+    fila fantasma por cada retry automático de un problema de red, sin
+    que el usuario haya hecho nada.
+
+    id_usr es NULL para el procesamiento automático (primera detección
+    vía sondeo FTP) y el id real del usuario cuando el intento viene de
+    reintentar_archivo_ingesta/reintentar_fallidos_ingesta -ver el
+    parámetro id_usr_reintento de procesar_archivo_dat-. No se usa el
+    usuario "Sistema" (usuario_sistema.py, HU49) acá: ese existe para
+    auditoría de acciones automáticas del sistema, un concepto distinto
+    del historial de intentos que pide HU31, donde "automático" se
+    representa como NULL explícito, no como un usuario ficticio.
+
+    No hace commit: se llama desde dentro de los mismos bloques que ya
+    hacen su propio commit sobre archv_ingst, para que la fila de
+    intnt_prcsmnt quede en la MISMA transacción que el cambio de estado
+    del archivo -o ambos se confirman, o ninguno-.
+    """
+    db.add(
+        IntentoProcesamiento(
+            id_archv=id_archv,
+            fch_intnt=dt.datetime.now(dt.timezone.utc),
+            rsltd=resultado,
+            mnsj_errr=mensaje_error,
+            id_usr=id_usr,
+        )
+    )
+
+
 def _publicar_eventos_mapa(db, resultado_persistencia) -> None:
     """HU17 CA3: publica al bus del mapa el último valor de cada parámetro
     guardado en este archivo.
@@ -181,7 +222,7 @@ def _publicar_eventos_mapa(db, resultado_persistencia) -> None:
     retry_jitter=True,
     max_retries=5,
 )
-def procesar_archivo_dat(self, id_archv: int) -> dict:
+def procesar_archivo_dat(self, id_archv: int, id_usr_reintento: int | None = None) -> dict:
     """Job encolado por cada archivo .dat recibido vía FTP (HT-05, CA1).
 
     sondear_conexiones_ftp (más abajo en este mismo módulo) es quien crea
@@ -204,6 +245,15 @@ def procesar_archivo_dat(self, id_archv: int) -> dict:
     archivo como 'Fallido' de inmediato sin reintentar, porque reintentar
     no lo arregla; queda para reprocesamiento manual (HU31) una vez
     corregida la causa (ej. configuración de dispositivo).
+
+    id_usr_reintento (HU31): quién pidió ESTE intento. None para el
+    procesamiento automático -sondear_conexiones_ftp/
+    reencolar_pendientes_atascados nunca lo pasan-; el id real cuando
+    routers/ingesta.py::reintentar_archivo_ingesta o
+    reintentar_fallidos_ingesta encolan la task tras un reintento manual
+    (ya tienen el usuario del JWT en ese punto). Se usa solo para poblar
+    intnt_prcsmnt.id_usr -ver _registrar_intento-, ninguna otra lógica del
+    pipeline depende de él.
     """
     db = SessionLocal()
     try:
@@ -284,6 +334,7 @@ def procesar_archivo_dat(self, id_archv: int) -> dict:
                 f"fila {e.numero_fila}: {e.motivo}" for e in resultado_validacion.errores[:5]
             )
             archivo.mnsj_errr = resumen_errores[:500]
+        _registrar_intento(db, id_archv, archivo.estd, archivo.mnsj_errr, id_usr_reintento)
         db.commit()
 
         # HU17 CA3: la lectura ya está PERSISTIDA Y CONFIRMADA (el commit
@@ -328,6 +379,7 @@ def procesar_archivo_dat(self, id_archv: int) -> dict:
         if archivo is not None:
             archivo.estd = "Fallido"
             archivo.mnsj_errr = str(exc)[:500]
+            _registrar_intento(db, id_archv, archivo.estd, archivo.mnsj_errr, id_usr_reintento)
             db.commit()
         logger.error("archv_ingst id=%s marcado Fallido (error no recuperable): %s", id_archv, exc)
         return {"id_archv": id_archv, "estado": "Fallido"}
@@ -340,12 +392,18 @@ def procesar_archivo_dat(self, id_archv: int) -> dict:
         # IntegrityError de Postgres- dejaba el archivo colgado en
         # 'Procesando' indefinidamente: ni se reintentaba, ni aparecía como
         # fallido en las métricas de HU09, ni se podía reprocesar (HU31).
+        #
+        # HU31: mismo criterio para intnt_prcsmnt -solo se registra el
+        # intento acá (dentro del if), nunca cuando todavía quedan
+        # reintentos automáticos por delante: ese caso no es un intento
+        # TERMINADO, es Celery reintentando solo (ver _registrar_intento).
         es_transitorio = isinstance(exc, ERRORES_TRANSITORIOS)
         if not es_transitorio or self.request.retries >= self.max_retries:
             archivo = db.get(ArchivoIngesta, id_archv)
             if archivo is not None:
                 archivo.estd = "Fallido"
                 archivo.mnsj_errr = str(exc)[:500]
+                _registrar_intento(db, id_archv, archivo.estd, archivo.mnsj_errr, id_usr_reintento)
                 db.commit()
             logger.error(
                 "archv_ingst id=%s marcado Fallido (%s): %s",

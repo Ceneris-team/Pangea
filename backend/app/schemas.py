@@ -593,6 +593,20 @@ class ArchivoIngestaDetalle(BaseModel):
     mnsj_errr: str | None
 
 
+class IntentoProcesamientoListItem(BaseModel):
+    """HU31: una fila de intnt_prcsmnt -un intento de procesar este
+    archivo, automático o manual (ver _registrar_intento en
+    app/tasks/ingesta.py). usuario_nombre es None cuando el intento fue
+    automático (id_usr NULL); el frontend lo muestra como "Automático"."""
+
+    id_intnt: int
+    fch_intnt: datetime
+    rsltd: str
+    mnsj_errr: str | None
+    id_usr: int | None
+    usuario_nombre: str | None
+
+
 class ReintentoMasivoResponse(BaseModel):
     """Reintento masivo de todos los archivos Fallido de la sede del
     usuario (extensión de HU31 a "en cantidad", ver
@@ -648,12 +662,20 @@ class MedicionListItem(BaseModel):
     en evnt_txt, que este endpoint no consultaba). id_registro es
     id_lctr o id_evnt según origen -no se puede usar un solo id_lctr
     porque son secuencias distintas y podrían colisionar como key de
-    React-."""
+    React-.
+
+    id_dspstv/dispositivo_nombre: una Ubicación puede tener más de un
+    Dispositivo (dos dataloggers midiendo el mismo parámetro en la misma
+    estación es un caso real, no hipotético). Sin este dato, HU15 solo
+    podía agrupar series por ubicación y mezclaba las lecturas de
+    dataloggers distintos en una sola línea."""
 
     id_registro: int
     fch_hr: datetime
     id_ubccn: int
     ubicacion_nombre: str
+    id_dspstv: int
+    dispositivo_nombre: str
     id_prmtr: int
     parametro_nombre: str
     undd: str
@@ -1032,3 +1054,84 @@ class AuditoriaListItem(BaseModel):
     vlrs_antrrs: dict | list | None
     vlrs_nvs: dict | list | None
     fch_evnt: datetime
+
+
+# HU23 - Listar paneles
+
+
+class PanelListItem(BaseModel):
+    """HU23 CA1: nombre, fecha de creación y el id necesario para las
+    acciones del listado (abrir el panel, CA2)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id_pnl: int
+    nmbr: str
+    fch_crcn: datetime
+
+
+class PanelDetalle(PanelListItem):
+    """HU23 CA2: lo que se muestra al abrir un panel desde el listado.
+
+    Hoy son los mismos campos que PanelListItem -las ubicaciones y
+    widgets asociados (HU26/HU34) están fuera de alcance de HU23-, pero
+    es un schema propio porque ese contenido se agregará ACÁ, no en el
+    listado."""
+
+
+# HU24 - Crear panel
+
+
+def _validar_nombre_panel(valor: str) -> str:
+    """Mismo criterio que _validar_nombre_ubicacion: un nombre de solo
+    espacios pasa min_length=1 pero no es un nombre, y el UNIQUE por
+    usuario (uq_pnl_usr_nombre) tiene que comparar siempre el valor ya
+    recortado."""
+    recortado = valor.strip()
+    if not recortado:
+        raise ValueError("El nombre es obligatorio")
+    return recortado
+
+
+class PanelCrear(BaseModel):
+    """HU24 CA1/CA2: único campo del formulario de creación. El panel nace
+    vacío -sin ubicaciones ni widgets- y con id_sd/id_usr resueltos por el
+    router a partir del JWT, igual que hace UbicacionCrear con la sede."""
+
+    nmbr: str = Field(min_length=1, max_length=100)
+
+    @field_validator("nmbr")
+    @classmethod
+    def _nombre_no_vacio(cls, valor: str) -> str:
+        return _validar_nombre_panel(valor)
+
+
+class PanelCreado(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id_pnl: int
+    nmbr: str
+    fch_crcn: datetime
+
+
+# HU25 - Editar / eliminar panel
+
+
+class PanelActualizar(BaseModel):
+    """HU25 CA1/CA2: único campo editable, mismo criterio que PanelCrear
+    (obligatorio, máximo 100, recortado)."""
+
+    nmbr: str = Field(min_length=1, max_length=100)
+
+    @field_validator("nmbr")
+    @classmethod
+    def _nombre_no_vacio(cls, valor: str) -> str:
+        return _validar_nombre_panel(valor)
+
+
+class PanelActualizado(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id_pnl: int
+    nmbr: str
+    fch_crcn: datetime

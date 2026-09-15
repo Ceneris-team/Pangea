@@ -23,7 +23,7 @@ from slowapi.util import get_remote_address
 from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
-from app.models import TokenRecuperacion, Usuario
+from app.models import PermisoUsuarioSede, TokenRecuperacion, Usuario
 from app.security.dependencies import COOKIE_NOMBRE, get_current_user, get_token_crudo
 from app.security.hashing import hash_password, verify_password
 from app.security.jwt_auth import EXPIRATION_MINUTES, create_access_token
@@ -78,6 +78,73 @@ class LoginResponse(BaseModel):
 MSG_CREDENCIALES_INVALIDAS = "Correo o contraseña incorrectos"
 
 
+def _resolver_sede_id_login(db: Session, usuario: Usuario) -> int | None:
+    """HT-04: de dónde sale el sede_id que va al JWT.
+
+    Bug corregido acá: el login emitía SIEMPRE sede_id=None, sin
+    importar el scope del usuario -ver el comentario retirado más abajo
+    y el que queda en routers/auditoria.py sobre este mismo bug-. El
+    middleware de HT-09 (security/permisos.py::tiene_permiso) y todos
+    los routers que filtran por sede (Ubicaciones, Dispositivos,
+    ConexionFTP, Ingesta, Mapeos, Auditoría, el caché de HT-10) siempre
+    asumieron que un usuario 'por_sede' trae su sede_id real; con el
+    bug, sus consultas comparaban contra NULL y devolvían listas vacías
+    o 422 en vez de sus propios recursos.
+
+    La fuente real es prms_usr_sd (HT-03): cada fila liga id_usr con una
+    sede concreta. Casos:
+      - scope 'global': no aplica, sede_id va en None (comportamiento
+        correcto, sin cambios -ver create_access_token).
+      - scope 'por_sede' con exactamente una sede distinta en
+        prms_usr_sd: es el caso normal, se usa esa sede.
+      - scope 'por_sede' sin ninguna fila en prms_usr_sd: cuenta mal
+        configurada -un usuario 'por_sede' tiene que estar ligado a
+        alguna sede-. Se rechaza el login con 403 en vez de dejarlo
+        entrar con sede_id=None otra vez, que es exactamente el bug que
+        se está corrigiendo.
+      - scope 'por_sede' con 2+ sedes distintas en prms_usr_sd: el
+        esquema de HT-03 lo permite (la FK es por fila, no hay tope), y
+        REFERENCIA_HU_SPRINTS_PANGEA.md ("Decisión de diseño - scope de
+        acceso") lo contempla como escenario futuro, pero NINGÚN
+        consumidor actual de usuario["sede_id"] soporta una lista -todos
+        hacen `Modelo.id_sd == usuario["sede_id"]", comparación escalar-.
+        Resolver esto de verdad (¿token por sede? ¿selector de sede
+        post-login? ¿sede_id como lista y reescribir cada filtro?) es una
+        decisión de producto/arquitectura que excede este fix, así que
+        se rechaza el login con 403 en vez de elegir una sede al azar y
+        esconder el resto de los recursos del usuario sin que nadie lo
+        haya decidido así.
+    """
+    if usuario.scp == "global":
+        return None
+
+    ids_sd = {
+        fila[0]
+        for fila in db.query(PermisoUsuarioSede.id_sd)
+        .filter(PermisoUsuarioSede.id_usr == usuario.id_usr)
+        .distinct()
+        .all()
+    }
+
+    if len(ids_sd) == 1:
+        return ids_sd.pop()
+
+    if len(ids_sd) == 0:
+        raise HTTPException(
+            status_code=403,
+            detail="Su usuario no tiene ninguna sede asignada. Contacte al administrador.",
+        )
+
+    # len(ids_sd) >= 2: ver el docstring de arriba, caso "2+ sedes distintas".
+    raise HTTPException(
+        status_code=403,
+        detail=(
+            "Su usuario tiene acceso a más de una sede y el sistema todavía no "
+            "soporta ese caso. Contacte al administrador."
+        ),
+    )
+
+
 @router.post("/login", response_model=LoginResponse)
 @limiter.limit("5/5minutes")
 def login(request: Request, response: Response, body: LoginRequest, db: Session = Depends(get_db)):
@@ -111,9 +178,11 @@ def login(request: Request, response: Response, body: LoginRequest, db: Session 
     usuario.intnts_fllds = 0
     db.commit()
 
+    sede_id = _resolver_sede_id_login(db, usuario)
+
     token = create_access_token(
         user_id=usuario.id_usr,
-        sede_id=None,
+        sede_id=sede_id,
         scope=usuario.scp,
         rol=usuario.rol.nmbr,
     )

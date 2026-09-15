@@ -25,7 +25,7 @@ from fastapi.testclient import TestClient
 from app.database import get_db
 from app.main import app
 from app.main import limiter as limiter_app
-from app.models import TokenRecuperacion, Usuario
+from app.models import PermisoUsuarioSede, TokenRecuperacion, Usuario
 from app.routers.auth import limiter as limiter_auth
 from app.security.hashing import hash_password
 from app.security.jwt_auth import ALGORITHM, SECRET_KEY, create_access_token
@@ -59,10 +59,25 @@ def client(db_session):
 @pytest.fixture()
 def usuario_con_password(db_session, fabrica):
     """Usuario Activo cuya contraseña en claro conocemos, para poder hacer
-    login de verdad (no con get_current_user sobreescrito)."""
+    login de verdad (no con get_current_user sobreescrito).
+
+    scp='por_sede' (default de fabrica.usuario) exige una fila en
+    prms_usr_sd -el fix de HT-04 rechaza el login con 403 si no la tiene,
+    ver _resolver_sede_id_login en routers/auth.py-, así que hace falta
+    una sede real y al menos un permiso para que el login de estos tests
+    siga siendo exitoso. El módulo/nivel no importan para estos tests de
+    /auth (no ejercitan HT-09 sobre otro recurso); 'Tableros'/'Lectura'
+    es un valor cualquiera con el único fin de tener una fila válida.
+    """
     rol = fabrica.rol("Administrador")
+    sede = fabrica.sede()
     usuario = fabrica.usuario(rol=rol)
     usuario.cntrsn_hsh = hash_password(PASSWORD_ORIGINAL)
+    db_session.add(
+        PermisoUsuarioSede(
+            id_usr=usuario.id_usr, id_sd=sede.id_sd, id_rl=rol.id_rl, mdl="Tableros", nvl="Lectura"
+        )
+    )
     db_session.flush()
     return usuario, rol
 
@@ -729,6 +744,11 @@ def test_usuario_borrado_invalida_su_token(client, db_session, usuario_con_passw
     token = token_de(usuario)
     assert client.get("/auth/perfil", headers=auth(token)).status_code == 200
 
+    # usuario_con_password ahora tiene una fila en prms_usr_sd (HT-04): hay
+    # que borrarla primero, si no el DELETE de abajo viola la FK.
+    db_session.query(PermisoUsuarioSede).filter(
+        PermisoUsuarioSede.id_usr == usuario.id_usr
+    ).delete()
     db_session.query(Usuario).filter(Usuario.id_usr == usuario.id_usr).delete()
     db_session.flush()
 

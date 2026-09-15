@@ -13,11 +13,9 @@ import PanelComercial from "../pages/PanelComercial";
 import Usuarios from "../pages/Usuarios";
 import Ubicaciones from "../pages/Ubicaciones";
 import Dispositivos from "../pages/Dispositivos";
-import AgregarUbicacion from "../pages/AgregarUbicacion";
 import DetalleUbicacion from "../pages/DetalleUbicacion";
 import MapaUbicacionesPage from "../pages/MapaUbicacionesPage";
 import MapaEstacionesPage from "../pages/MapaEstacionesPage";
-import EditarUbicacion from "../pages/EditarUbicacion";
 import { ROLES } from "../config/roles";
 import ConexionesFTP from "../pages/ConexionesFTP";
 import ConsultaDatos from "../pages/ConsultaDatos";
@@ -25,6 +23,8 @@ import Graficos from "../pages/Graficos";
 import DispositivoDetalle from "../pages/DispositivoDetalle";
 import Parametros from "../pages/Parametros";
 import ColaIngesta from "../pages/ColaIngesta";
+import Paneles from "../pages/Paneles";
+import DetallePanel from "../pages/DetallePanel";
 
 // HU06: "Solo los roles Técnico CENERIS y Administrador tienen acceso a
 // este módulo." El backend lo exige igual vía require_permiso('Ingesta').
@@ -36,11 +36,6 @@ const ROLES_CONEXIONES_FTP = [ROLES.ADMINISTRADOR, ROLES.TECNICO_CENERIS] as con
 
 // HU09: mismo módulo de permisos ('Ingesta') y mismos roles que HU06.
 const ROLES_COLA_INGESTA = [ROLES.ADMINISTRADOR, ROLES.TECNICO_CENERIS] as const;
-
-// HU08: "Solo los roles Administrador y Técnico CENERIS pueden registrar
-// ubicaciones." El backend lo exige con require_permiso('Ubicaciones',
-// EDICION); el listado (HU07) sigue siendo visible para todos los roles.
-const ROLES_AGREGAR_UBICACION = [ROLES.ADMINISTRADOR, ROLES.TECNICO_CENERIS] as const;
 
 export default function AppRouter() {
   return (
@@ -119,15 +114,12 @@ export default function AppRouter() {
               </ProtectedRoute>
             }
           />
-          {/* HU08: agregar ubicación */}
-          <Route
-            path="/ubicaciones/nueva"
-            element={
-              <ProtectedRoute rolesPermitidos={ROLES_AGREGAR_UBICACION}>
-                <AgregarUbicacion />
-              </ProtectedRoute>
-            }
-          />
+          {/* HU08/HU08 (ampliación): crear y editar ubicación viven como
+              drawer lateral DENTRO de Ubicaciones.tsx (mismo patrón
+              unificado que el resto del sistema), ya no como rutas
+              propias. El backend sigue exigiendo Edición sobre
+              "Ubicaciones" para ambas operaciones -la protección real no
+              dependía de esta ruta-. */}
           {/* HU22: mapa de ubicaciones, solo lectura. Se declara ANTES de
               /ubicaciones/:id para que ese parámetro no la capture (mismo
               patrón que /dispositivos/nueva vs /dispositivos/:id). */}
@@ -136,19 +128,6 @@ export default function AppRouter() {
             element={
               <ProtectedRoute>
                 <MapaUbicacionesPage />
-              </ProtectedRoute>
-            }
-          />
-          {/* HU08 (ampliación): editar una ubicación existente. Mismos
-              roles que el alta -el backend exige Edición sobre
-              "Ubicaciones"-. Va antes de /ubicaciones/:id por el mismo
-              motivo que /ubicaciones/mapa: el segmento literal tiene que
-              ganarle al parámetro. */}
-          <Route
-            path="/ubicaciones/:id/editar"
-            element={
-              <ProtectedRoute rolesPermitidos={ROLES_AGREGAR_UBICACION}>
-                <EditarUbicacion />
               </ProtectedRoute>
             }
           />
@@ -256,6 +235,33 @@ export default function AppRouter() {
             element={
               <ProtectedRoute rolesPermitidos={ROLES_COLA_INGESTA}>
                 <ColaIngesta />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* HU23: listar paneles (Tableros Personalizables, E05). Sin
+              restricción de rol adicional: el backend ya filtra por
+              dueño (id_usr), no por rol -mismo criterio que Ubicaciones/
+              Dispositivos-. Se declara antes de /paneles/:id para que el
+              parámetro no capture "nuevo" (mismo patrón que
+              /ubicaciones/nueva vs /ubicaciones/:id). */}
+          <Route
+            path="/paneles"
+            element={
+              <ProtectedRoute>
+                <Paneles />
+              </ProtectedRoute>
+            }
+          />
+          {/* HU24/HU25: crear y editar panel viven como drawer lateral
+              DENTRO de Paneles.tsx (mismo patrón unificado que el resto
+              del sistema para crear/editar), ya no como rutas propias. */}
+          {/* HU23 CA2: abrir un panel desde el listado. */}
+          <Route
+            path="/paneles/:id"
+            element={
+              <ProtectedRoute>
+                <DetallePanel />
               </ProtectedRoute>
             }
           />

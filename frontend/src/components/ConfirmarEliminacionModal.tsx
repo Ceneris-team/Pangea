@@ -51,7 +51,7 @@ export default function ConfirmarEliminacionModal({
 
   return (
     <div
-      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+      className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
       onClick={onCancelar}
     >
       <div
@@ -105,7 +105,7 @@ export default function ConfirmarEliminacionModal({
             className={`px-4 py-2.5 text-sm font-semibold rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all ${
               variante === "peligro"
                 ? "text-white bg-red-600 hover:bg-red-700"
-                : "text-[#5a7000] dark:text-[#ccff00] bg-[#ccff00]/10 hover:bg-[#ccff00]/20 border border-[#ccff00]/30"
+                : "text-[#5a7000] dark:text-[#ccff00] bg-[#ccff00]/10 hover:bg-[#ccff00]/20 border border-[#8fb300]/40 dark:border-[#ccff00]/30"
             }`}
           >
             {confirmando

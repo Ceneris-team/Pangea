@@ -31,8 +31,8 @@ import {
  * contorno está cerrado.
  *
  * El contrato de props (valor/onChange en GeoJSON, centroLat/centroLng) se
- * conservó intacto en la migración desde el SVG, así que
- * AgregarUbicacion.tsx no necesitó cambios.
+ * conservó intacto en la migración desde el SVG, así que el drawer de
+ * crear/editar ubicación (Ubicaciones.tsx) no necesitó cambios.
  *
  * Arriba del mapa hay un buscador de lugares (Places Autocomplete) que
  * solo reencuadra la vista, para no tener que arrastrar desde el centro

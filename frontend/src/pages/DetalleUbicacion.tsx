@@ -173,7 +173,7 @@ export default function DetalleUbicacion() {
                             <li
                               key={p.id_prmtr}
                               title={p.dscrpcn ?? undefined}
-                              className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium bg-[#ccff00]/10 text-[#5a7000] dark:text-[#ccff00] border border-[#ccff00]/30"
+                              className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium bg-[#ccff00]/10 text-[#5a7000] dark:text-[#ccff00] border border-[#8fb300]/40 dark:border-[#ccff00]/30"
                             >
                               {p.nmbr}
                               <span className="ml-1.5 text-xs opacity-70">({p.undd})</span>

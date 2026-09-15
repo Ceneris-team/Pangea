@@ -89,10 +89,24 @@ def listar_parametros_disponibles(
 def listar_mediciones(
     parametro_ids: list[int] | None = Query(default=None),
     ubicacion_ids: list[int] | None = Query(default=None),
+    # Una Ubicación puede tener más de un Dispositivo (dos dataloggers
+    # midiendo el mismo parámetro en la misma estación es un caso real).
+    # Sin este filtro, HU15 no podía aislar la serie de un solo datalogger
+    # cuando el otro tenía lecturas con fallas mezcladas en el mismo
+    # gráfico.
+    dispositivo_ids: list[int] | None = Query(default=None),
     fecha_inicio: dt.datetime | None = Query(default=None),
     fecha_fin: dt.datetime | None = Query(default=None),
     pagina: int = Query(default=1, ge=1),
-    por_pagina: int = Query(default=50, ge=1, le=500),
+    # El tope era 500, pensado para la TABLA de HU12 (una página que se
+    # lee de a poco). La vista de gráficos (HU15) consume este mismo
+    # endpoint pero necesita la serie entera de una vez, y como la
+    # paginación es sobre la UNIÓN de todos los parámetros, 500 filas
+    # repartidas entre 10 gráficos dejaban ~3 puntos por serie. El default
+    # sigue en 50 para no cambiar el comportamiento de quien no lo pide;
+    # el tamaño real de la respuesta lo sigue acotando max_puntos, que
+    # aplica el downsampling antes de paginar.
+    por_pagina: int = Query(default=50, ge=1, le=5000),
     # HT-10 CA3: tope de puntos cuando el rango es amplio (>30 días).
     # Configurable por petición para que la gráfica pueda pedir menos
     # puntos que el default según su ancho real en pantalla.
@@ -131,6 +145,7 @@ def listar_mediciones(
         ambito,
         parametro_ids=parametro_ids,
         ubicacion_ids=ubicacion_ids,
+        dispositivo_ids=dispositivo_ids,
         fecha_inicio=fecha_inicio,
         fecha_fin=fecha_fin,
         pagina=pagina,
@@ -143,7 +158,7 @@ def listar_mediciones(
 
     def _query_base(modelo):
         query = (
-            db.query(modelo, Ubicacion, Parametro)
+            db.query(modelo, Ubicacion, Parametro, Dispositivo)
             .join(Dispositivo, Dispositivo.id_dspstv == modelo.id_dspstv)
             .join(Ubicacion, Ubicacion.id_ubccn == Dispositivo.id_ubccn)
             .join(Parametro, Parametro.id_prmtr == modelo.id_prmtr)
@@ -152,6 +167,14 @@ def listar_mediciones(
         if ubicacion_ids:
             ids_solicitadas = set(ubicacion_ids) & ids_ubicaciones_permitidas
             query = query.filter(Ubicacion.id_ubccn.in_(ids_solicitadas))
+        if dispositivo_ids:
+            # No hace falta resolver "qué dispositivos son válidos" contra
+            # una lista separada: el filtro por Ubicacion.id_ubccn (arriba,
+            # siempre activo) ya acota la consulta a las ubicaciones
+            # permitidas, así que un id_dspstv de una ubicación ajena
+            # simplemente no matchea ninguna fila -no hace falta validarlo
+            # aparte para que el aislamiento por ubicación se sostenga-.
+            query = query.filter(Dispositivo.id_dspstv.in_(dispositivo_ids))
         if parametro_ids:
             query = query.filter(Parametro.id_prmtr.in_(parametro_ids))
         # HT-10 punto 4: el rango de fechas se aplica EN SQL.
@@ -181,24 +204,28 @@ def listar_mediciones(
             fch_hr=t.fch_hr,
             id_ubccn=u.id_ubccn,
             ubicacion_nombre=u.nmbr,
+            id_dspstv=d.id_dspstv,
+            dispositivo_nombre=d.nmbr,
             id_prmtr=p.id_prmtr,
             parametro_nombre=p.nmbr,
             undd=p.undd,
             vlr=float(t.vlr),
         )
-        for t, u, p in mediciones
+        for t, u, p, d in mediciones
     ] + [
         MedicionListItem(
             id_registro=e.id_evnt,
             fch_hr=e.fch_hr,
             id_ubccn=u.id_ubccn,
             ubicacion_nombre=u.nmbr,
+            id_dspstv=d.id_dspstv,
+            dispositivo_nombre=d.nmbr,
             id_prmtr=p.id_prmtr,
             parametro_nombre=p.nmbr,
             undd=p.undd,
             vlr=e.vlr,
         )
-        for e, u, p in eventos
+        for e, u, p, d in eventos
     ]
     # Las dos consultas ya vienen ordenadas de SQL, pero hay que
     # reordenar la UNION de ambas (tlmtr + evnt_txt son tablas distintas).
@@ -241,7 +268,7 @@ def listar_mediciones(
     # una sede-, y una lectura nueva en cualquiera de ellas cambia esta
     # respuesta. invalidar_por_lectura() borra ambos índices, así que el
     # camino de escritura acierta igual.
-    sedes_en_respuesta = {u.id_sd for _, u, _ in mediciones} | {u.id_sd for _, u, _ in eventos}
+    sedes_en_respuesta = {u.id_sd for _, u, _, _ in mediciones} | {u.id_sd for _, u, _, _ in eventos}
     if not sedes_en_respuesta:
         # Respuesta vacía: no hay ninguna sede en los resultados de la que
         # colgar el índice, pero la entrada IGUAL debe invalidarse cuando

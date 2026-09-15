@@ -3,6 +3,7 @@ import { apiFetch, ApiError } from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import Sidebar from "../components/layout/Sidebar";
 import Topbar from "../components/layout/Topbar";
+import DrawerPanel from "../components/layout/DrawerPanel";
 
 interface UsuarioListItem {
   id_usr: number;
@@ -459,7 +460,7 @@ export default function Usuarios() {
               {!mostrarForm && editandoId === null && permisosDe === null && (
                 <button
                   onClick={abrirForm}
-                  className="px-4 py-2.5 text-sm font-semibold text-[#5a7000] dark:text-[#ccff00] bg-[#ccff00]/10 hover:bg-[#ccff00]/20 border border-[#ccff00]/30 rounded-xl transition-colors"
+                  className="px-4 py-2.5 text-sm font-semibold text-[#5a7000] dark:text-[#ccff00] bg-[#ccff00]/10 hover:bg-[#ccff00]/20 border border-[#8fb300]/40 dark:border-[#ccff00]/30 rounded-xl transition-colors"
                 >
                   + Agregar usuario
                 </button>
@@ -468,10 +469,16 @@ export default function Usuarios() {
 
             {/* ============================ HU20 ============================ */}
 
-            {/* HU20 CA2/CA3: confirmación tras editar. Reemplaza al formulario
-                y exige un clic explícito en "VER USUARIOS" para ir al listado. */}
-            {editandoId !== null && editado && (
-              <div className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl shadow-sm border border-[#ccff00]/40 p-5 mb-6">
+            {/* HU20: editar usuario vive como drawer lateral, mismo patrón
+                unificado que el resto del sistema. Dentro se alternan la
+                confirmación (CA2/CA3, tras guardar) y el formulario
+                (CA1) según haya o no `editado`. */}
+            <DrawerPanel
+              abierto={editandoId !== null}
+              onCerrar={editado ? verUsuariosTrasEditar : cancelarEdicion}
+              titulo="Editar usuario"
+            >
+              {editado ? (
                 <div className="flex items-start gap-3">
                   <span className="mt-0.5 inline-flex items-center justify-center w-8 h-8 rounded-full bg-[#ccff00]/20 text-[#5a7000] dark:text-[#ccff00]">
                     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth="2.5" stroke="currentColor">
@@ -499,176 +506,182 @@ export default function Usuarios() {
                     </div>
                   </div>
                 </div>
-              </div>
-            )}
+              ) : (
+                <>
+                  {cargandoEdicion && (
+                    <p className="text-sm text-gray-600 dark:text-gray-300">Cargando datos del usuario…</p>
+                  )}
 
-            {/* HU20 CA1: formulario de edición con los datos precargados. */}
-            {editandoId !== null && !editado && (
-              <div className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl shadow-sm border border-black/10 dark:border-white/10 p-5 mb-6">
-                <h2 className="text-base font-bold text-gray-900 dark:text-white mb-4">Editar usuario</h2>
+                  {!cargandoEdicion && errorEdicion && !formEditar && (
+                    <div className="text-sm text-red-600 dark:text-red-400">{errorEdicion}</div>
+                  )}
 
-                {cargandoEdicion && (
-                  <p className="text-sm text-gray-600 dark:text-gray-300">Cargando datos del usuario…</p>
-                )}
+                  {formEditar && (
+                    <form onSubmit={guardarEdicion} className="flex flex-col h-full">
+                      <div className="space-y-4 flex-1">
+                        <div>
+                          <label className="block text-sm text-gray-700 dark:text-gray-200 mb-1">Nombre completo *</label>
+                          <input
+                            type="text"
+                            value={formEditar.nmbr_cmplt}
+                            onChange={(e) => setFormEditar((f) => (f ? { ...f, nmbr_cmplt: e.target.value } : f))}
+                            className="bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl block w-full p-2.5 outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm text-gray-700 dark:text-gray-200 mb-1">Correo electrónico *</label>
+                          <input
+                            type="email"
+                            value={formEditar.crr}
+                            onChange={(e) => setFormEditar((f) => (f ? { ...f, crr: e.target.value } : f))}
+                            className="bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl block w-full p-2.5 outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm text-gray-700 dark:text-gray-200 mb-1">Rol *</label>
+                          <select
+                            value={formEditar.rol_nombre}
+                            onChange={(e) => setFormEditar((f) => (f ? { ...f, rol_nombre: e.target.value } : f))}
+                            className="bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl block w-full p-2.5 outline-none cursor-pointer"
+                          >
+                            <option value="">Selecciona un rol</option>
+                            {ROLES_DISPONIBLES.map((r) => (
+                              <option key={r} value={r}>{r}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-sm text-gray-700 dark:text-gray-200 mb-1">Teléfono (opcional)</label>
+                          <input
+                            type="text"
+                            value={formEditar.tlfn}
+                            onChange={(e) => setFormEditar((f) => (f ? { ...f, tlfn: e.target.value } : f))}
+                            className="bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl block w-full p-2.5 outline-none"
+                          />
+                        </div>
 
-                {!cargandoEdicion && errorEdicion && !formEditar && (
-                  <div className="text-sm text-red-600 dark:text-red-400">{errorEdicion}</div>
-                )}
+                        {errorEdicion && (
+                          <div className="text-sm text-red-600 dark:text-red-400">{errorEdicion}</div>
+                        )}
+                      </div>
 
-                {formEditar && (
-                  <form onSubmit={guardarEdicion} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm text-gray-700 dark:text-gray-200 mb-1">Nombre completo *</label>
-                      <input
-                        type="text"
-                        value={formEditar.nmbr_cmplt}
-                        onChange={(e) => setFormEditar((f) => (f ? { ...f, nmbr_cmplt: e.target.value } : f))}
-                        className="bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl block w-full p-2.5 outline-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm text-gray-700 dark:text-gray-200 mb-1">Correo electrónico *</label>
-                      <input
-                        type="email"
-                        value={formEditar.crr}
-                        onChange={(e) => setFormEditar((f) => (f ? { ...f, crr: e.target.value } : f))}
-                        className="bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl block w-full p-2.5 outline-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm text-gray-700 dark:text-gray-200 mb-1">Rol *</label>
-                      <select
-                        value={formEditar.rol_nombre}
-                        onChange={(e) => setFormEditar((f) => (f ? { ...f, rol_nombre: e.target.value } : f))}
-                        className="bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl block w-full p-2.5 outline-none cursor-pointer"
-                      >
-                        <option value="">Selecciona un rol</option>
-                        {ROLES_DISPONIBLES.map((r) => (
-                          <option key={r} value={r}>{r}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm text-gray-700 dark:text-gray-200 mb-1">Teléfono (opcional)</label>
-                      <input
-                        type="text"
-                        value={formEditar.tlfn}
-                        onChange={(e) => setFormEditar((f) => (f ? { ...f, tlfn: e.target.value } : f))}
-                        className="bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl block w-full p-2.5 outline-none"
-                      />
-                    </div>
-
-                    {errorEdicion && (
-                      <div className="md:col-span-2 text-sm text-red-600 dark:text-red-400">{errorEdicion}</div>
-                    )}
-
-                    <div className="md:col-span-2 flex gap-3 justify-end">
-                      <button
-                        type="button"
-                        onClick={cancelarEdicion}
-                        disabled={guardandoEdicion}
-                        className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 rounded-lg hover:bg-black/5 dark:hover:bg-white/5 disabled:opacity-50 transition-colors"
-                      >
-                        Cancelar
-                      </button>
-                      <button
-                        type="submit"
-                        disabled={guardandoEdicion}
-                        className="px-4 py-2 text-sm font-semibold text-[#0c1712] bg-[#ccff00] hover:bg-[#b8e600] rounded-lg disabled:opacity-50 transition-colors"
-                      >
-                        {guardandoEdicion ? "Guardando…" : "GUARDAR"}
-                      </button>
-                    </div>
-                  </form>
-                )}
-              </div>
-            )}
+                      <div className="mt-6 pt-6 border-t border-black/10 dark:border-white/10 flex gap-3 justify-end">
+                        <button
+                          type="button"
+                          onClick={cancelarEdicion}
+                          disabled={guardandoEdicion}
+                          className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 rounded-lg hover:bg-black/5 dark:hover:bg-white/5 disabled:opacity-50 transition-colors"
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          type="submit"
+                          disabled={guardandoEdicion}
+                          className="px-4 py-2 text-sm font-semibold text-[#0c1712] bg-[#ccff00] hover:bg-[#b8e600] rounded-lg disabled:opacity-50 transition-colors"
+                        >
+                          {guardandoEdicion ? "Guardando…" : "GUARDAR"}
+                        </button>
+                      </div>
+                    </form>
+                  )}
+                </>
+              )}
+            </DrawerPanel>
 
             {/* ============================ HU21 ============================ */}
 
             {/* HU21 CA1: panel de permisos con TODAS las ubicaciones
                 registradas y el estado de acceso actual del usuario. */}
-            {permisosDe !== null && (
-              <div className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl shadow-sm border border-black/10 dark:border-white/10 p-5 mb-6">
-                <h2 className="text-base font-bold text-gray-900 dark:text-white">
-                  Permisos de ubicación
-                </h2>
-                <p className="text-sm text-gray-600 dark:text-gray-300 mt-1 mb-4">
-                  <span className="font-medium text-gray-700 dark:text-gray-200">{permisosDe.nmbr_cmplt}</span>{" "}
-                  ({permisosDe.crr}) · {permisosDe.rol_nombre}
-                </p>
-
-                {cargandoPermisos && (
-                  <p className="text-sm text-gray-600 dark:text-gray-300">Cargando ubicaciones…</p>
-                )}
-
-                {/* CA2: confirmación con el mensaje que devuelve el backend. */}
-                {permisosGuardados && (
-                  <div className="flex items-start gap-3 mb-4 p-3 rounded-xl border border-[#ccff00]/40 bg-[#ccff00]/10">
-                    <span className="mt-0.5 inline-flex items-center justify-center w-6 h-6 rounded-full bg-[#ccff00]/20 text-[#5a7000] dark:text-[#ccff00]">
-                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth="2.5" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-                      </svg>
-                    </span>
-                    <p className="text-sm font-semibold text-gray-900 dark:text-white">{permisosGuardados}</p>
-                  </div>
-                )}
-
-                {errorPermisos && (
-                  <div className="text-sm text-red-600 dark:text-red-400 mb-4">{errorPermisos}</div>
-                )}
-
-                {panelPermisos && panelPermisos.items.length === 0 && (
-                  <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">
-                    No hay ubicaciones registradas todavía.
+            {/* HU21: permisos de ubicación vive como drawer lateral, mismo
+                patrón unificado que el resto del sistema. */}
+            <DrawerPanel
+              abierto={permisosDe !== null}
+              onCerrar={cerrarPermisos}
+              titulo="Permisos de ubicación"
+            >
+              {permisosDe && (
+                <div className="flex flex-col h-full">
+                  <p className="text-sm text-gray-600 dark:text-gray-300 mb-5">
+                    <span className="font-medium text-gray-700 dark:text-gray-200">{permisosDe.nmbr_cmplt}</span>{" "}
+                    ({permisosDe.crr}) · {permisosDe.rol_nombre}
                   </p>
-                )}
 
-                {panelPermisos && panelPermisos.items.length > 0 && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
-                    {panelPermisos.items.map((u) => (
-                      <label
-                        key={u.id_ubccn}
-                        className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200 cursor-pointer"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={seleccionUbicaciones.includes(u.id_ubccn)}
-                          onChange={() => alternarUbicacion(u.id_ubccn)}
-                          className="accent-[#ccff00]"
-                        />
-                        {u.nmbr}
-                      </label>
-                    ))}
+                  <div className="flex-1">
+                    {cargandoPermisos && (
+                      <p className="text-sm text-gray-600 dark:text-gray-300">Cargando ubicaciones…</p>
+                    )}
+
+                    {/* CA2: confirmación con el mensaje que devuelve el backend. */}
+                    {permisosGuardados && (
+                      <div className="flex items-start gap-3 mb-4 p-3 rounded-xl border border-[#ccff00]/40 bg-[#ccff00]/10">
+                        <span className="mt-0.5 inline-flex items-center justify-center w-6 h-6 rounded-full bg-[#ccff00]/20 text-[#5a7000] dark:text-[#ccff00]">
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth="2.5" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                          </svg>
+                        </span>
+                        <p className="text-sm font-semibold text-gray-900 dark:text-white">{permisosGuardados}</p>
+                      </div>
+                    )}
+
+                    {errorPermisos && (
+                      <div className="text-sm text-red-600 dark:text-red-400 mb-4">{errorPermisos}</div>
+                    )}
+
+                    {panelPermisos && panelPermisos.items.length === 0 && (
+                      <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">
+                        No hay ubicaciones registradas todavía.
+                      </p>
+                    )}
+
+                    {panelPermisos && panelPermisos.items.length > 0 && (
+                      <div className="flex flex-col gap-1">
+                        {panelPermisos.items.map((u) => (
+                          <label
+                            key={u.id_ubccn}
+                            className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200 cursor-pointer rounded-lg px-2 py-2 hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={seleccionUbicaciones.includes(u.id_ubccn)}
+                              onChange={() => alternarUbicacion(u.id_ubccn)}
+                              className="accent-[#ccff00]"
+                            />
+                            {u.nmbr}
+                          </label>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                )}
 
-                <div className="flex gap-3 justify-end">
-                  {/* CA4: descarta los cambios y regresa al listado. */}
-                  <button
-                    type="button"
-                    onClick={cerrarPermisos}
-                    disabled={guardandoPermisos}
-                    className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 rounded-lg hover:bg-black/5 dark:hover:bg-white/5 disabled:opacity-50 transition-colors"
-                  >
-                    CANCELAR
-                  </button>
-                  <button
-                    type="button"
-                    onClick={guardarPermisos}
-                    disabled={guardandoPermisos || !panelPermisos}
-                    className="px-4 py-2 text-sm font-semibold text-[#0c1712] bg-[#ccff00] hover:bg-[#b8e600] rounded-lg disabled:opacity-50 transition-colors"
-                  >
-                    {guardandoPermisos ? "Guardando…" : "GUARDAR PERMISOS"}
-                  </button>
+                  <div className="mt-6 pt-6 border-t border-black/10 dark:border-white/10 flex gap-3 justify-end">
+                    {/* CA4: descarta los cambios y regresa al listado. */}
+                    <button
+                      type="button"
+                      onClick={cerrarPermisos}
+                      disabled={guardandoPermisos}
+                      className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 rounded-lg hover:bg-black/5 dark:hover:bg-white/5 disabled:opacity-50 transition-colors"
+                    >
+                      CANCELAR
+                    </button>
+                    <button
+                      type="button"
+                      onClick={guardarPermisos}
+                      disabled={guardandoPermisos || !panelPermisos}
+                      className="px-4 py-2 text-sm font-semibold text-[#0c1712] bg-[#ccff00] hover:bg-[#b8e600] rounded-lg disabled:opacity-50 transition-colors"
+                    >
+                      {guardandoPermisos ? "Guardando…" : "GUARDAR PERMISOS"}
+                    </button>
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
+            </DrawerPanel>
 
-            {/* HU04 CA2/CA3: confirmación tras crear. Reemplaza al formulario
-                y exige un clic explícito en "VER USUARIOS" para ir al listado. */}
-            {mostrarForm && creado && (
-              <div className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl shadow-sm border border-[#ccff00]/40 p-5 mb-6">
+            {/* HU04: crear usuario vive como drawer lateral, mismo patrón
+                unificado que el resto del sistema. Dentro se alternan la
+                confirmación (CA2/CA3, tras guardar) y el formulario según
+                haya o no `creado`. */}
+            <DrawerPanel abierto={mostrarForm} onCerrar={cancelarForm} titulo="Agregar usuario">
+              {creado ? (
                 <div className="flex items-start gap-3">
                   <span className="mt-0.5 inline-flex items-center justify-center w-8 h-8 rounded-full bg-[#ccff00]/20 text-[#5a7000] dark:text-[#ccff00]">
                     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth="2.5" stroke="currentColor">
@@ -703,60 +716,56 @@ export default function Usuarios() {
                     </div>
                   </div>
                 </div>
-              </div>
-            )}
+              ) : (
+                <form onSubmit={guardarUsuario} className="flex flex-col h-full">
+                  <div className="space-y-4 flex-1">
+                    <div>
+                      <label className="block text-sm text-gray-700 dark:text-gray-200 mb-1">Nombre completo *</label>
+                      <input
+                        type="text"
+                        value={form.nmbr_cmplt}
+                        onChange={(e) => setForm((f) => ({ ...f, nmbr_cmplt: e.target.value }))}
+                        className="bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl block w-full p-2.5 outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-gray-700 dark:text-gray-200 mb-1">Correo electrónico *</label>
+                      <input
+                        type="email"
+                        value={form.crr}
+                        onChange={(e) => setForm((f) => ({ ...f, crr: e.target.value }))}
+                        className="bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl block w-full p-2.5 outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-gray-700 dark:text-gray-200 mb-1">Rol *</label>
+                      <select
+                        value={form.rol_nombre}
+                        onChange={(e) => setForm((f) => ({ ...f, rol_nombre: e.target.value }))}
+                        className="bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl block w-full p-2.5 outline-none cursor-pointer"
+                      >
+                        <option value="">Selecciona un rol</option>
+                        {ROLES_DISPONIBLES.map((r) => (
+                          <option key={r} value={r}>{r}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm text-gray-700 dark:text-gray-200 mb-1">Teléfono (opcional)</label>
+                      <input
+                        type="text"
+                        value={form.tlfn}
+                        onChange={(e) => setForm((f) => ({ ...f, tlfn: e.target.value }))}
+                        className="bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl block w-full p-2.5 outline-none"
+                      />
+                    </div>
 
-            {/* HU04: formulario de alta mínimo, sin mockup definido todavía */}
-            {mostrarForm && !creado && (
-              <div className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl shadow-sm border border-black/10 dark:border-white/10 p-5 mb-6">
-                <h2 className="text-base font-bold text-gray-900 dark:text-white mb-4">Agregar usuario</h2>
-                <form onSubmit={guardarUsuario} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm text-gray-700 dark:text-gray-200 mb-1">Nombre completo *</label>
-                    <input
-                      type="text"
-                      value={form.nmbr_cmplt}
-                      onChange={(e) => setForm((f) => ({ ...f, nmbr_cmplt: e.target.value }))}
-                      className="bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl block w-full p-2.5 outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-gray-700 dark:text-gray-200 mb-1">Correo electrónico *</label>
-                    <input
-                      type="email"
-                      value={form.crr}
-                      onChange={(e) => setForm((f) => ({ ...f, crr: e.target.value }))}
-                      className="bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl block w-full p-2.5 outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-gray-700 dark:text-gray-200 mb-1">Rol *</label>
-                    <select
-                      value={form.rol_nombre}
-                      onChange={(e) => setForm((f) => ({ ...f, rol_nombre: e.target.value }))}
-                      className="bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl block w-full p-2.5 outline-none cursor-pointer"
-                    >
-                      <option value="">Selecciona un rol</option>
-                      {ROLES_DISPONIBLES.map((r) => (
-                        <option key={r} value={r}>{r}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm text-gray-700 dark:text-gray-200 mb-1">Teléfono (opcional)</label>
-                    <input
-                      type="text"
-                      value={form.tlfn}
-                      onChange={(e) => setForm((f) => ({ ...f, tlfn: e.target.value }))}
-                      className="bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl block w-full p-2.5 outline-none"
-                    />
+                    {errorForm && (
+                      <div className="text-sm text-red-600 dark:text-red-400">{errorForm}</div>
+                    )}
                   </div>
 
-                  {errorForm && (
-                    <div className="md:col-span-2 text-sm text-red-600 dark:text-red-400">{errorForm}</div>
-                  )}
-
-                  <div className="md:col-span-2 flex gap-3 justify-end">
+                  <div className="mt-6 pt-6 border-t border-black/10 dark:border-white/10 flex gap-3 justify-end">
                     <button
                       type="button"
                       onClick={cancelarForm}
@@ -774,8 +783,8 @@ export default function Usuarios() {
                     </button>
                   </div>
                 </form>
-              </div>
-            )}
+              )}
+            </DrawerPanel>
 
             {/* Contenedor Principal (Tarjeta) */}
             <div className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl shadow-sm border border-black/10 dark:border-white/10 overflow-hidden transition-colors duration-300">
@@ -896,7 +905,7 @@ export default function Usuarios() {
                                   datos actuales precargados. */}
                               <button
                                 onClick={() => abrirEdicion(u)}
-                                className="inline-flex items-center justify-center px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-200 bg-transparent border border-black/20 dark:border-white/20 rounded-lg hover:bg-black/10 dark:hover:bg-white/10 hover:text-gray-900 dark:hover:text-white focus:ring-4 focus:outline-none focus:ring-black/10 dark:focus:ring-white/10 transition-all"
+                                className="inline-flex items-center justify-center px-3 py-1.5 text-xs sm:text-sm font-medium whitespace-nowrap text-gray-700 dark:text-gray-200 bg-transparent border border-black/20 dark:border-white/20 rounded-lg hover:bg-black/10 dark:hover:bg-white/10 hover:text-gray-900 dark:hover:text-white focus:ring-4 focus:outline-none focus:ring-black/10 dark:focus:ring-white/10 transition-all"
                               >
                                 <svg className="w-4 h-4 mr-2 text-gray-600 dark:text-gray-300" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor">
                                   <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
@@ -911,7 +920,7 @@ export default function Usuarios() {
                               {!ROLES_CON_ACCESO_TOTAL.includes(u.rol_nombre) && (
                                 <button
                                   onClick={() => abrirPermisos(u)}
-                                  className="inline-flex items-center justify-center px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-200 bg-transparent border border-black/20 dark:border-white/20 rounded-lg hover:bg-black/10 dark:hover:bg-white/10 hover:text-gray-900 dark:hover:text-white focus:ring-4 focus:outline-none focus:ring-black/10 dark:focus:ring-white/10 transition-all"
+                                  className="inline-flex items-center justify-center px-3 py-1.5 text-xs sm:text-sm font-medium whitespace-nowrap text-gray-700 dark:text-gray-200 bg-transparent border border-black/20 dark:border-white/20 rounded-lg hover:bg-black/10 dark:hover:bg-white/10 hover:text-gray-900 dark:hover:text-white focus:ring-4 focus:outline-none focus:ring-black/10 dark:focus:ring-white/10 transition-all"
                                 >
                                   <svg className="w-4 h-4 mr-2 text-gray-600 dark:text-gray-300" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12c0 1.268-.63 2.39-1.593 3.068a3.745 3.745 0 01-1.043 3.296 3.745 3.745 0 01-3.296 1.043A3.745 3.745 0 0112 21c-1.268 0-2.39-.63-3.068-1.593a3.746 3.746 0 01-3.296-1.043 3.745 3.745 0 01-1.043-3.296A3.745 3.745 0 013 12c0-1.268.63-2.39 1.593-3.068a3.745 3.745 0 011.043-3.296 3.746 3.746 0 013.296-1.043A3.746 3.746 0 0112 3c1.268 0 2.39.63 3.068 1.593a3.746 3.746 0 013.296 1.043 3.746 3.746 0 011.043 3.296A3.745 3.745 0 0121 12z" />

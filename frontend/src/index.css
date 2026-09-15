@@ -26,22 +26,46 @@
   display: none;
 }
 
+/* La animación de la cápsula activa del sidebar (Sidebar.tsx,
+ * CapsulaActiva) se hace con Framer Motion, no con keyframes CSS; el
+ * respeto a prefers-reduced-motion se resuelve ahí con MotionConfig. */
+
+/* Textura de fondo global: el mapamundi de red de Fondo_Pangea.png (fondo
+ * ya removido, ver assets/) como marca de agua fija de la página.
+ *
+ * Va en un ::before propio, NO directo en background-image del body,
+ * porque necesita su opacity muy baja (0.06/0.1) para no competir con los
+ * datos reales de cada pantalla -si fuera parte del fondo del body, esa
+ * opacity le restaría contraste también al color de fondo sólido de atrás,
+ * aclarándolo sin querer-. position: fixed (no absolute) para que quede
+ * pegado al viewport en vez de desplazarse con el scroll del contenido.
+ * background-size: cover (no un ancho fijo en px): con un tamaño fijo, en
+ * pantallas anchas la imagen queda chica y centrada, dejando ver el color
+ * sólido en los costados -se notaba "cortada"/angosta en monitores
+ * grandes-; cover la escala para llenar siempre el viewport completo. */
 body {
   min-height: 100vh;
-  background-color: #eef0f2;
-  background-image:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.55), rgba(238, 240, 242, 0.75)),
-    url("./assets/background_white2.jpg");
-  background-size: cover;
-  background-position: center;
-  background-attachment: fixed;
-  background-repeat: no-repeat;
+  background-color: #f6f7f8;
   transition: background-color 0.3s ease;
 }
 
 html.dark body {
   background-color: #0b1220;
-  background-image:
-    linear-gradient(180deg, rgba(11, 18, 32, 0.72), rgba(11, 18, 32, 0.85)),
-    url("./assets/background1.png");
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background-image: url("./assets/Fondo_Pangea.png");
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  opacity: 0.06;
+  pointer-events: none;
+}
+
+html.dark body::before {
+  opacity: 0.1;
 }

@@ -5,6 +5,7 @@ import { useAuth } from "../context/AuthContext";
 import { ROLES } from "../config/roles";
 import Sidebar from "../components/layout/Sidebar";
 import Topbar from "../components/layout/Topbar";
+import DrawerPanel from "../components/layout/DrawerPanel";
 import ConfirmarEliminacionModal from "../components/ConfirmarEliminacionModal";
 
 /**
@@ -530,12 +531,14 @@ export default function DispositivoDetalle() {
                   </button>
                 )}
               </div>
+            </header>
 
-              {editando && (
-                <form
-                  onSubmit={guardarEdicionDispositivo}
-                  className="mt-4 p-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/40 grid grid-cols-1 md:grid-cols-2 gap-4"
-                >
+            {/* Editar dispositivo vive como drawer lateral, mismo patrón
+                unificado que el resto del sistema, en vez de un bloque
+                inline que empujaba el resto del header hacia abajo. */}
+            <DrawerPanel abierto={editando} onCerrar={() => setEditando(false)} titulo="Editar dispositivo">
+              <form onSubmit={guardarEdicionDispositivo} className="flex flex-col h-full">
+                <div className="space-y-4 flex-1">
                   <div>
                     <label className={labelClase}>Nombre del dispositivo</label>
                     <input
@@ -600,22 +603,23 @@ export default function DispositivoDetalle() {
                       Entre -180 y 180.
                     </p>
                   </div>
-                  <div className="md:col-span-2 flex gap-3">
-                    <button type="submit" disabled={guardandoEdicion} className={botonPrimario}>
-                      {guardandoEdicion ? "Guardando..." : "Guardar cambios"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setEditando(false)}
-                      disabled={guardandoEdicion}
-                      className="px-4 py-2 text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-all"
-                    >
-                      Cancelar
-                    </button>
-                  </div>
-                </form>
-              )}
-            </header>
+                </div>
+
+                <div className="mt-6 pt-6 border-t border-black/10 dark:border-white/10 flex gap-3">
+                  <button type="submit" disabled={guardandoEdicion} className={botonPrimario}>
+                    {guardandoEdicion ? "Guardando..." : "Guardar cambios"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditando(false)}
+                    disabled={guardandoEdicion}
+                    className="px-4 py-2 text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-all"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </form>
+            </DrawerPanel>
 
             {mensaje && (
               <div
@@ -1670,9 +1674,9 @@ function PestanaLogs({
 
   const colorEstado: Record<string, string> = {
     Exitoso: "bg-[#ccff00]/20 text-[#5a7000] dark:text-[#ccff00] border-[#ccff00]/30",
-    Fallido: "bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 border-red-200",
+    Fallido: "bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 border-red-200 dark:border-red-800/30",
     Procesando: "bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800/30",
-    Pendiente: "bg-black/5 dark:bg-white/10 text-gray-600 dark:text-gray-300 border-gray-200",
+    Pendiente: "bg-black/5 dark:bg-white/10 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-white/20",
   };
 
   return (

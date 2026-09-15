@@ -37,6 +37,16 @@ def create_access_token(user_id: int, sede_id: int | None, scope: str, rol: str)
     verify_password). scope viene de usr.scp ('global' o 'por_sede'):
     si es 'global', sede_id puede ir en None y el middleware de HT-09
     debe saltarse el filtro de sede para ese request.
+
+    El CALLER es responsable de resolver sede_id antes de invocar esta
+    función -acá solo se empaqueta en el payload-. Para un login real,
+    ver routers/auth.py::_resolver_sede_id_login: para scope 'por_sede'
+    sale de prms_usr_sd (HT-03), no de un valor fijo. Antes de ese fix,
+    routers/auth.py llamaba a esta función con sede_id=None siempre,
+    incluso para usuarios 'por_sede', lo que dejaba sede_id=None en el
+    JWT de cualquiera con ese scope -bug ahora corregido en el único
+    punto de emisión real (el login); ver el docstring de
+    _resolver_sede_id_login para el detalle completo-.
     """
     now = dt.datetime.now(dt.timezone.utc)
     payload = {
