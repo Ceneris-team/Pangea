@@ -4,11 +4,14 @@ import "./Login.css";
 import { useAuth } from "../context/AuthContext";
 import { rutaPorRol } from "../config/roles";
 import { ApiError } from "../services/api";
-import loginBg from "../assets/login-bg.jpg";
 import loginBg2 from "../assets/login_2.jpg";
+import loginBg3 from "../assets/login_3.png";
+import loginBg4 from "../assets/login_4.png";
+import loginBg5 from "../assets/login_5.png";
+import loginBg6 from "../assets/login_6.png";
 
-const CAROUSEL_IMAGES = [loginBg, loginBg2];
-const CAROUSEL_INTERVAL_MS = 6000;
+const CAROUSEL_IMAGES = [loginBg2, loginBg3, loginBg4, loginBg5, loginBg6];
+const CAROUSEL_INTERVAL_MS = 5000;
 
 function isValidEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
