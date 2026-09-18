@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap');
+
 :root{
   --deep-01:#0c1712;
   --deep-02:#122019;
@@ -7,7 +9,8 @@
   --ink-soft:rgba(238,242,238,0.62);
   --ink-faint:rgba(238,242,238,0.38);
   --line:rgba(238,242,238,0.18);
-  --accent:#7fd8a3;
+  --accent:#b7f901;
+  --slate:#3a4855;
   --danger:#ff9b8a;
   --radius:2px;
 }
@@ -15,11 +18,64 @@
 .login-page *{box-sizing:border-box;}
 .login-page{
   margin:0;
-  font-family:'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif;
+  font-family:'Outfit', 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif;
   background:var(--deep-01);
   color:var(--ink);
   display:flex;
   min-height:100vh;
+}
+
+.enter-overlay{
+  position:fixed;
+  inset:0;
+  z-index:10;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background:var(--deep-01);
+  opacity:0;
+  pointer-events:none;
+  transition:opacity .45s ease;
+}
+.enter-overlay.active{
+  opacity:1;
+  pointer-events:all;
+}
+
+.enter-check{
+  width:76px;
+  height:76px;
+  opacity:0;
+  transform:scale(0.8);
+  transition:opacity .4s ease .25s, transform .4s ease .25s;
+}
+.enter-overlay.active .enter-check{
+  opacity:1;
+  transform:scale(1);
+}
+.enter-check svg{width:100%;height:100%;}
+.enter-check-circle{
+  stroke:var(--accent);
+  stroke-width:2;
+  stroke-dasharray:145;
+  stroke-dashoffset:145;
+  animation:enter-circle .5s ease-out .25s forwards;
+}
+.enter-check-mark{
+  stroke:var(--accent);
+  stroke-width:3;
+  stroke-linecap:round;
+  stroke-linejoin:round;
+  stroke-dasharray:28;
+  stroke-dashoffset:28;
+  animation:enter-mark .35s ease-out .55s forwards;
+}
+
+@keyframes enter-circle{
+  to{stroke-dashoffset:0;}
+}
+@keyframes enter-mark{
+  to{stroke-dashoffset:0;}
 }
 
 .bg-photo{
@@ -34,31 +90,33 @@
   background-position:center;
   background-repeat:no-repeat;
   opacity:0;
-  transition:opacity 1.4s ease;
+  transform:scale(1.045);
+  transition:opacity 1.8s cubic-bezier(.19,1,.22,1), transform 3.2s cubic-bezier(.19,1,.22,1);
 }
 .bg-photo-slide.active{
   opacity:1;
+  transform:scale(1);
 }
+
+.bg-photo-blur{
+  position:absolute;
+  inset:0;
+  background-size:cover;
+  background-position:center;
+  background-repeat:no-repeat;
+  filter:blur(12px) saturate(20%) brightness(0.9);
+  transform:scale(1.12);
+  -webkit-mask-image:linear-gradient(to left, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 46%, rgba(0,0,0,0) 78%);
+  mask-image:linear-gradient(to left, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 46%, rgba(0,0,0,0) 78%);
+}
+
 .bg-photo-tint{
   position:absolute;
   inset:0;
-  background:linear-gradient(160deg, rgba(8,14,11,0.55) 0%, rgba(10,18,14,0.3) 45%, rgba(8,14,11,0.62) 100%);
+  background:linear-gradient(180deg, rgba(8,14,11,0.32) 0%, rgba(8,14,11,0.08) 30%, rgba(8,14,11,0.08) 70%, rgba(8,14,11,0.4) 100%);
 }
 
-.stage{
-  position:relative;
-  z-index:1;
-  display:flex;
-  width:100%;
-  min-height:100vh;
-}
-
-.canopy{
-  position:relative;
-  flex:1.3;
-  display:none;
-}
-.canopy-tag{
+.auth-photo-tag{
   position:absolute;
   left:44px;
   bottom:40px;
@@ -69,7 +127,7 @@
   color:rgba(238,242,238,0.55);
   text-shadow:0 2px 12px rgba(0,0,0,0.55);
 }
-.canopy-tag b{
+.auth-photo-tag b{
   display:block;
   font-size:20px;
   letter-spacing:0.04em;
@@ -78,21 +136,40 @@
   margin-bottom:6px;
   font-weight:600;
 }
-
-.panel{
-  flex:0.7;
+.auth-photo-dots{
+  position:absolute;
+  left:44px;
+  bottom:20px;
+  z-index:2;
   display:flex;
-  align-items:center;
-  justify-content:center;
-  position:relative;
-  background:rgba(10,18,14,0.42);
-  backdrop-filter:blur(18px) saturate(115%);
-  -webkit-backdrop-filter:blur(18px) saturate(115%);
-  border-left:1px solid rgba(238,242,238,0.08);
-  padding:48px 32px;
+  gap:7px;
+}
+.auth-photo-dots span{
+  width:6px;
+  height:6px;
+  border-radius:50%;
+  background:rgba(238,242,238,0.32);
+  transition:background .3s ease, transform .3s ease;
+}
+.auth-photo-dots span.active{
+  background:var(--accent);
+  transform:scale(1.25);
 }
 
-.card{
+.stage{
+  position:relative;
+  z-index:1;
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  width:100%;
+  min-height:100vh;
+  padding:32px 9vw;
+}
+
+.auth-form-side{
+  display:flex;
+  flex-direction:column;
   width:100%;
   max-width:380px;
 }
@@ -103,20 +180,23 @@
   text-transform:uppercase;
   color:var(--ink-faint);
   margin:0 0 14px;
+  text-shadow:0 2px 16px rgba(0,0,0,0.5);
 }
 
 .login-page h1{
-  font-size:34px;
-  line-height:1.1;
+  font-size:36px;
+  line-height:1.08;
   margin:0 0 8px;
-  font-weight:600;
-  letter-spacing:-0.01em;
+  font-weight:500;
+  letter-spacing:-0.02em;
+  text-shadow:0 2px 20px rgba(0,0,0,0.5);
 }
 
 .sub{
   margin:0 0 34px;
   color:var(--ink-soft);
   font-size:14.5px;
+  text-shadow:0 2px 16px rgba(0,0,0,0.5);
 }
 
 .login-page form{margin:0;}
@@ -131,6 +211,7 @@
   font-weight:600;
   margin-bottom:8px;
   color:var(--ink);
+  text-shadow:0 2px 12px rgba(0,0,0,0.5);
 }
 
 .input-wrap{
@@ -155,6 +236,9 @@
   font-family:inherit;
 }
 .login-page input::placeholder{color:var(--ink-faint);}
+
+/* Edge inyecta su propio botón de revelar contraseña, que se duplica con .toggle-visibility */
+.login-page input::-ms-reveal{display:none;}
 
 .toggle-visibility{
   position:absolute;
@@ -222,7 +306,7 @@
   top:1px;
   width:4px;
   height:8px;
-  border:solid #0c1712;
+  border:solid var(--slate);
   border-width:0 2px 2px 0;
   transform:rotate(45deg);
 }
@@ -238,21 +322,39 @@
 .submit{
   width:100%;
   padding:15px;
-  background:var(--ink);
-  color:#0c1712;
+  background:var(--accent);
+  color:var(--slate);
   border:none;
   border-radius:var(--radius);
   font-size:15px;
   font-weight:600;
   cursor:pointer;
   letter-spacing:.01em;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:10px;
   transition:transform .15s ease, background .2s ease;
 }
-.submit:hover{background:var(--accent);}
+.submit:hover{background:var(--ink);}
 .submit:active{transform:scale(0.99);}
 .submit:disabled{
-  opacity:.55;
+  opacity:.85;
   cursor:not-allowed;
+}
+.submit.is-loading{opacity:1;}
+
+.submit-spinner{
+  width:16px;
+  height:16px;
+  border-radius:50%;
+  border:2px solid rgba(58,72,85,0.25);
+  border-top-color:var(--slate);
+  animation:submit-spin .7s linear infinite;
+}
+
+@keyframes submit-spin{
+  to{transform:rotate(360deg);}
 }
 
 .form-msg{
@@ -278,16 +380,20 @@
   margin:0;
   font:inherit;
   font-weight:600;
-  color:var(--ink);
+  color:var(--accent);
   cursor:pointer;
-  border-bottom:1px solid var(--line);
+  border-bottom:1px solid transparent;
   transition:border-color .2s ease;
 }
 .register-link:hover{
-  border-color:var(--ink);
+  border-color:var(--accent);
 }
 
-@media (min-width: 880px){
-  .canopy{display:block; flex:1.3;}
-  .panel{flex:0.7;}
+@media (max-width: 640px){
+  .stage{justify-content:center; padding:32px 20px;}
+  .bg-photo-blur{
+    -webkit-mask-image:linear-gradient(to top, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 46%, rgba(0,0,0,0) 78%);
+    mask-image:linear-gradient(to top, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 46%, rgba(0,0,0,0) 78%);
+  }
+  .auth-photo-tag, .auth-photo-dots{left:20px;}
 }

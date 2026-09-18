@@ -119,6 +119,10 @@ class Parametro(Base):
         CheckConstraint(
             "orgn_crcn IN ('Manual','Automatico')", name="prmtr_orgncrcn_check"
         ),
+        CheckConstraint(
+            "tipo_visualizacion IN ('continuo','contador','estado')",
+            name="prmtr_tipovisualizacion_check",
+        ),
     )
 
     id_prmtr = Column(Integer, primary_key=True, autoincrement=True)
@@ -126,6 +130,14 @@ class Parametro(Base):
     undd = Column(String(30), nullable=False)
     dscrpcn = Column(String(200))
     tipo_dato = Column(String(10), nullable=False, server_default="numerico")
+
+    # Cómo graficar la serie, que es independiente de dónde se persiste
+    # (eso lo decide tipo_dato). Un contador acumulativo y un estado
+    # binario son tan 'numerico' como la temperatura, pero dibujarlos como
+    # línea continua con min/promedio/máximo no dice nada: el promedio de
+    # una cuenta corrida no es una magnitud. 'continuo' es el default para
+    # que el catálogo preexistente no cambie de comportamiento.
+    tipo_visualizacion = Column(String(20), nullable=False, server_default="continuo")
 
     # HU51. 'Pendiente de revision' = auto-creado por el motor de ingesta a
     # partir de una columna sin match (CA1), a la espera de que un

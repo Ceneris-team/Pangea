@@ -68,9 +68,18 @@ PARAMETROS = {
     "conductividad": "uS/cm",
     "orp": "mV",
     "bateria_v": "V",
-    "estado_gabinete": "N/A",
-    "estado_puerta": "N/A",
     "contador_puerta": "N/A",
+}
+
+# Columnas de la trama E que llegan como texto, no como número: el equipo
+# reporta "Modo Normal"/"Modo Mantenimiento" y "Puerta Abierta"/"Puerta
+# Cerrada", no un 0/1. Van a evnt_txt (ver EventoTexto), así que necesitan
+# tipo_dato='texto' -con 'numerico' cada fila se descartaba como error de
+# validación, porque float("Modo Normal") siempre falla-.
+PARAMETROS_TEXTO = {
+    "mensaje_gabinete": "N/A",
+    "mensaje_puerta": "N/A",
+    "mensaje_alarma": "N/A",
 }
 
 # Marca de agua para poder limpiar solo lo de este script (--reset).
@@ -96,15 +105,24 @@ def obtener_sede(db: Session) -> Sede:
 def asegurar_parametros(db: Session) -> dict:
     """nombre -> Parametro, creando los que falten."""
     resultado = {}
-    for nombre, unidad in PARAMETROS.items():
+    catalogo = [(n, u, "numerico") for n, u in PARAMETROS.items()]
+    catalogo += [(n, u, "texto") for n, u in PARAMETROS_TEXTO.items()]
+    for nombre, unidad, tipo_dato in catalogo:
         parametro = db.query(Parametro).filter(Parametro.nmbr == nombre).first()
         if parametro is None:
             parametro = Parametro(
-                nmbr=nombre, undd=unidad, dscrpcn="Sembrado por el script de demo"
+                nmbr=nombre,
+                undd=unidad,
+                dscrpcn="Sembrado por el script de demo",
+                tipo_dato=tipo_dato,
+                # Un contador acumulativo no se lee como una medición
+                # continua: la vista de Gráficos lo muestra como eventos
+                # por intervalo en vez de línea con promedio.
+                tipo_visualizacion="contador" if nombre.startswith("contador_") else "continuo",
             )
             db.add(parametro)
             db.flush()
-            _log(f"parámetro creado: {nombre} ({unidad})")
+            _log(f"parámetro creado: {nombre} ({unidad}, {tipo_dato})")
         resultado[nombre] = parametro
     return resultado
 
@@ -337,11 +355,21 @@ def sembrar(db: Session) -> None:
         "CR300",
     )
     asegurar_mapeo(db, disp_c, "H", {1: p["temperatura"], 2: p["bateria_v"]})
+    # Índices del archivo real de campo (ver tests/fixtures/E_demo_gabinete.dat):
+    #   0 Fecha | 1 R | 2 Estado_Gabinete | 3 Estado_Puerta | 4 Contador_Puerta
+    #   5 Mensaje_Alarma | 6 FTP_H | 7 FTP_E | 8 Resend_H
+    # R es el número de registro del datalogger y FTP_*/Resend_H son
+    # diagnóstico de transmisión: no son mediciones, así que no se mapean.
     asegurar_mapeo(
         db,
         disp_c,
         "E",
-        {1: p["estado_gabinete"], 2: p["estado_puerta"], 3: p["contador_puerta"]},
+        {
+            2: p["mensaje_gabinete"],
+            3: p["mensaje_puerta"],
+            4: p["contador_puerta"],
+            5: p["mensaje_alarma"],
+        },
     )
     sembrar_logs(
         db,

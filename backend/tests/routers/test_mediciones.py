@@ -707,6 +707,195 @@ class TestEventosDeTexto:
         assert body["items"][0]["vlr"] == "Llave No Encontrada"
 
 
+class TestHU32FiltrosAvanzados:
+    """HU32: valor mínimo/máximo (decimales, acumulativo = rango) y
+    frecuencia de muestreo (minutos), sobre los parámetros/ubicaciones ya
+    seleccionados en HU13. Los 4 CA de la HU + los dos casos que la HT
+    marca como fáciles de romper: que valor_min/max no toque EventoTexto
+    y que dos consultas con filtros avanzados distintos no comparta
+    caché."""
+
+    @pytest.fixture(autouse=True)
+    def _cache_limpia(self):
+        # Cada test de esta clase reutiliza escenario_basico (misma sede
+        # y usuario), así que dos ejecuciones consecutivas de la suite
+        # comparten ámbito de caché -sin esto, una entrada que dejó una
+        # corrida anterior podría servirle a la siguiente su respuesta
+        # vieja. Se saltea sola si no hay Redis, igual que test_cache_ht10.
+        from app.services.cache import consultas as cache
+
+        try:
+            cache._cliente().ping()
+            hay_redis = True
+        except Exception:
+            hay_redis = False
+        if hay_redis:
+            cache.invalidar_todo()
+        yield
+        if hay_redis:
+            cache.invalidar_todo()
+
+    def test_ca1_valor_minimo_y_maximo_acotan_el_rango(self, client, db_session, escenario_basico):
+        dispositivo = escenario_basico["dispositivo"]
+        parametro = escenario_basico["parametro"]
+        sede = escenario_basico["sede"]
+        # escenario_basico ya deja un valor en 10.0; se agregan el resto
+        # del rango para poder distinguir "filtrado" de "todo".
+        crear_medicion(db_session, dispositivo, parametro, sede, valor=1.0)
+        crear_medicion(db_session, dispositivo, parametro, sede, valor=50.0)
+        crear_medicion(db_session, dispositivo, parametro, sede, valor=99.0)
+
+        resp = client.get("/mediciones", params={"valor_min": 5, "valor_max": 60})
+        body = resp.json()
+        valores = {i["vlr"] for i in body["items"]}
+        assert valores == {10.0, 50.0}
+
+    def test_ca2_aplicar_filtros_avanzados_solo_valor_minimo(
+        self, client, db_session, escenario_basico
+    ):
+        dispositivo = escenario_basico["dispositivo"]
+        parametro = escenario_basico["parametro"]
+        sede = escenario_basico["sede"]
+        crear_medicion(db_session, dispositivo, parametro, sede, valor=1.0)
+        crear_medicion(db_session, dispositivo, parametro, sede, valor=200.0)
+
+        resp = client.get("/mediciones", params={"valor_min": 15})
+        body = resp.json()
+        valores = {i["vlr"] for i in body["items"]}
+        assert valores == {200.0}
+        assert 10.0 not in valores and 1.0 not in valores
+
+    def test_ca3_filtros_avanzados_se_combinan_con_rango_de_fechas_hu12(
+        self, client, db_session, escenario_basico
+    ):
+        dispositivo = escenario_basico["dispositivo"]
+        parametro = escenario_basico["parametro"]
+        sede = escenario_basico["sede"]
+        ahora = dt.datetime.now(dt.timezone.utc)
+
+        # Dentro del rango de fechas Y dentro del rango de valor.
+        crear_medicion(
+            db_session, dispositivo, parametro, sede, valor=30.0, fecha=ahora - dt.timedelta(hours=1)
+        )
+        # Dentro del rango de fechas, pero FUERA del rango de valor.
+        crear_medicion(
+            db_session, dispositivo, parametro, sede, valor=999.0, fecha=ahora - dt.timedelta(hours=1)
+        )
+        # Dentro del rango de valor, pero FUERA del rango de fechas.
+        crear_medicion(
+            db_session, dispositivo, parametro, sede, valor=30.0, fecha=ahora - dt.timedelta(days=10)
+        )
+
+        resp = client.get(
+            "/mediciones",
+            params={
+                "fecha_inicio": (ahora - dt.timedelta(days=1)).isoformat(),
+                "fecha_fin": ahora.isoformat(),
+                "valor_min": 5,
+                "valor_max": 50,
+            },
+        )
+        body = resp.json()
+        # Solo el de escenario_basico (10.0, "ahora") + el de 30.0 dentro
+        # de ambos rangos: la intersección, no la unión.
+        valores = {i["vlr"] for i in body["items"]}
+        assert valores == {10.0, 30.0}
+        assert 999.0 not in valores
+
+    def test_ca4_limpiar_filtros_avanzados_restaura_el_rango_de_fechas_activo(
+        self, client, db_session, escenario_basico
+    ):
+        dispositivo = escenario_basico["dispositivo"]
+        parametro = escenario_basico["parametro"]
+        sede = escenario_basico["sede"]
+        crear_medicion(db_session, dispositivo, parametro, sede, valor=500.0)
+
+        con_filtro = client.get("/mediciones", params={"valor_max": 20}).json()
+        assert con_filtro["total"] == 1
+        assert con_filtro["items"][0]["vlr"] == 10.0
+
+        # "LIMPIAR FILTROS AVANZADOS": misma consulta sin valor_min/max,
+        # pero conservando el resto (aquí, sin filtros de fecha porque
+        # escenario_basico no aplicó ninguno -CA4 no depende de eso-).
+        sin_filtro = client.get("/mediciones").json()
+        assert sin_filtro["total"] == 2
+        assert {i["vlr"] for i in sin_filtro["items"]} == {10.0, 500.0}
+
+    def test_valor_min_max_no_filtra_ni_rompe_eventos_de_texto(
+        self, client, db_session, escenario_basico
+    ):
+        parametro_txt = crear_parametro(db_session, "MensajeP HU32", unidad="-", tipo_dato="texto")
+        mapear_parametro(
+            db_session, escenario_basico["dispositivo"], parametro_txt, indice=2, tipo_trama="P"
+        )
+        crear_evento_texto(
+            db_session,
+            escenario_basico["dispositivo"],
+            parametro_txt,
+            escenario_basico["sede"],
+            valor="Puerta Abierta",
+        )
+
+        # valor_min/valor_max no deben excluir el evento de texto ni
+        # romper con un error de comparación texto-vs-numero en Postgres.
+        resp = client.get("/mediciones", params={"valor_min": 5, "valor_max": 20})
+        assert resp.status_code == 200
+        body = resp.json()
+        nombres = {i["parametro_nombre"] for i in body["items"]}
+        assert "MensajeP HU32" in nombres
+        assert "Temperatura HU13" in nombres  # el numérico de 10.0, dentro del rango
+
+    def test_frecuencia_muestreo_reduce_a_una_lectura_por_intervalo(
+        self, client, db_session, escenario_basico
+    ):
+        dispositivo = escenario_basico["dispositivo"]
+        parametro = escenario_basico["parametro"]
+        sede = escenario_basico["sede"]
+        ahora = dt.datetime.now(dt.timezone.utc).replace(microsecond=0)
+
+        # Cuatro lecturas cada 5 minutos dentro de la misma ventana de 15
+        # minutos que escenario_basico ya no toca (usa "ahora" real).
+        base = ahora - dt.timedelta(hours=2)
+        for i in range(4):
+            crear_medicion(
+                db_session, dispositivo, parametro, sede, valor=float(i), fecha=base + dt.timedelta(minutes=5 * i)
+            )
+
+        resp = client.get(
+            "/mediciones",
+            params={
+                "fecha_inicio": (base - dt.timedelta(minutes=1)).isoformat(),
+                "fecha_fin": (base + dt.timedelta(minutes=20)).isoformat(),
+                "frecuencia_muestreo": 15,
+            },
+        )
+        body = resp.json()
+        # 20 minutos de datos a intervalos de 5' son 4 lecturas; a 15'
+        # de frecuencia, como mucho 2 buckets caben en esa ventana.
+        assert body["total"] <= 2
+
+    def test_dos_consultas_con_filtros_avanzados_distintos_no_comparten_cache(
+        self, client, db_session, escenario_basico
+    ):
+        dispositivo = escenario_basico["dispositivo"]
+        parametro = escenario_basico["parametro"]
+        sede = escenario_basico["sede"]
+        crear_medicion(db_session, dispositivo, parametro, sede, valor=5.0)
+        crear_medicion(db_session, dispositivo, parametro, sede, valor=500.0)
+
+        resp_bajo = client.get("/mediciones", params={"valor_max": 20})
+        resp_alto = client.get("/mediciones", params={"valor_min": 100})
+
+        valores_bajo = {i["vlr"] for i in resp_bajo.json()["items"]}
+        valores_alto = {i["vlr"] for i in resp_alto.json()["items"]}
+
+        # Si compartieran clave de caché, la segunda respuesta traería los
+        # mismos resultados que la primera en vez de los suyos.
+        assert valores_bajo == {5.0, 10.0}
+        assert valores_alto == {500.0}
+        assert valores_bajo != valores_alto
+
+
 class TestDenegadoSinPermiso:
     def test_denegado_sin_permiso_en_tableros(self, client, db_session, fabrica):
         rol = fabrica.rol("Cliente Final")

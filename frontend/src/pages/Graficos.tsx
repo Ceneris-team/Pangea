@@ -12,8 +12,13 @@ import {
   claseColumnasGrilla,
   construirQuery,
   COLORES_SERIE,
+  barrasDeDelta,
+  etiquetaDeIntervalo,
   formatearFechaCorta,
+  intervaloParaRango,
+  pathDeEscalon,
   pathDeLinea,
+  tilesDeResumen,
   type DispositivoItem,
   type HoverInfo,
   type ListadoMediciones,
@@ -599,19 +604,22 @@ function GraficoDeParametro({ parametro, items, tipoGrafico, zonaHoraria, hover,
     return { series: todas.slice(0, 4), otrosDispositivos: todas.slice(4).map((s) => s.nombre) };
   }, [items]);
 
-  const resumen = useMemo(() => {
-    const valores = items.map((i) => i.vlr);
-    if (valores.length === 0) return null;
-    const suma = valores.reduce((acc, v) => acc + v, 0);
-    return {
-      min: Math.min(...valores),
-      max: Math.max(...valores),
-      promedio: suma / valores.length,
-      cantidad: valores.length,
-    };
-  }, [items]);
-
   const unidad = items[0]?.undd ?? parametro.undd;
+  const tipoVisualizacion = parametro.tipo_visualizacion ?? "continuo";
+
+  const tiles = useMemo(() => {
+    // Una serie por dispositivo y cada una ordenada por tiempo: en un
+    // contador cada datalogger lleva su propia cuenta, y mezclarlas hacía
+    // que el salto de una a otra se sumara como si fuera un incremento
+    // real. El orden importa porque "inicial"/"actual" y las transiciones
+    // se leen de los extremos, e `items` no viene cronológico.
+    const seriesDeValores = series.map((s) =>
+      [...s.items]
+        .sort((a, b) => new Date(a.fch_hr).getTime() - new Date(b.fch_hr).getTime())
+        .map((i) => i.vlr),
+    );
+    return tilesDeResumen(seriesDeValores, unidad, tipoVisualizacion);
+  }, [series, unidad, tipoVisualizacion]);
 
   // Geometría del SVG: simple, sin librerías, siguiendo specs de marca fina
   // (línea 2px, extremos redondeados, grilla recesiva).
@@ -716,6 +724,38 @@ function GraficoDeParametro({ parametro, items, tipoGrafico, zonaHoraria, hover,
     return t >= minT && t <= maxT;
   }
 
+  // Un contador acumulativo se muestra por defecto como eventos ocurridos
+  // por intervalo ("cuántas veces se abrió la puerta el martes"), que es
+  // la pregunta que se le hace, y no como el número corrido del equipo.
+  // El toggle Área deja ver el acumulado en escalón cuando hace falta.
+  const modoDelta = tipoVisualizacion === "contador" && tipoGrafico === "linea";
+  const intervaloDelta = intervaloParaRango(rangoT);
+
+  // Una barra por bucket y por serie. Se calcula sobre los items dentro
+  // del zoom para que al acercarse el intervalo se recalcule más fino.
+  const seriesDeBarras = useMemo(() => {
+    if (!modoDelta) return [];
+    return series.map((s) => ({
+      nombre: s.nombre,
+      barras: barrasDeDelta(s.items.filter(enRangoZoom), intervaloDelta, zonaHoraria),
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [series, modoDelta, intervaloDelta, zonaHoraria, minT, maxT]);
+
+  // Escala propia: los deltas son de otra magnitud que el acumulado (12
+  // eventos vs. un contador en 30.071), así que reusar la escala del
+  // acumulado dejaría todas las barras pegadas al piso del gráfico.
+  const maxDelta = Math.max(
+    1,
+    ...seriesDeBarras.flatMap((s) => s.barras.map((b) => b.delta)),
+  );
+  function yDeDelta(delta: number) {
+    return PAD.top + (1 - delta / maxDelta) * (ALTO - PAD.top - PAD.bottom);
+  }
+  function xDeTiempo(t: number) {
+    return PAD.left + ((t - minT) / rangoT) * (ANCHO - PAD.left - PAD.right);
+  }
+
   function coordenadaSvgX(clientX: number): number {
     const rect = svgRef.current?.getBoundingClientRect();
     if (!rect || rect.width === 0) return 0;
@@ -776,7 +816,8 @@ function GraficoDeParametro({ parametro, items, tipoGrafico, zonaHoraria, hover,
     >
       <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
         <h2 className="text-sm font-bold text-gray-900 dark:text-white">
-          {parametro.nmbr} en el tiempo
+          {parametro.nmbr}{" "}
+          {modoDelta ? `— eventos ${etiquetaDeIntervalo(intervaloDelta)}` : "en el tiempo"}
         </h2>
 
         <div className="flex items-center gap-4 flex-wrap">
@@ -830,12 +871,7 @@ function GraficoDeParametro({ parametro, items, tipoGrafico, zonaHoraria, hover,
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-        {[
-          { etiqueta: "Mediciones", valor: resumen ? resumen.cantidad.toLocaleString("es") : "—" },
-          { etiqueta: "Mínimo", valor: resumen ? `${resumen.min.toFixed(2)} ${unidad}` : "—" },
-          { etiqueta: "Promedio", valor: resumen ? `${resumen.promedio.toFixed(2)} ${unidad}` : "—" },
-          { etiqueta: "Máximo", valor: resumen ? `${resumen.max.toFixed(2)} ${unidad}` : "—" },
-        ].map((tile) => (
+        {tiles.map((tile) => (
           <div key={tile.etiqueta} className="bg-black/5 dark:bg-white/5 rounded-xl p-3">
             <div className="text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">{tile.etiqueta}</div>
             <div className="text-lg font-bold text-gray-900 dark:text-white mt-0.5">{tile.valor}</div>
@@ -875,15 +911,19 @@ function GraficoDeParametro({ parametro, items, tipoGrafico, zonaHoraria, hover,
               </filter>
             </defs>
 
-            {/* Grilla recesiva */}
+            {/* Grilla recesiva. En modo delta el eje Y cuenta eventos por
+                intervalo, no el valor acumulado, así que la escala y las
+                etiquetas son las de las barras. */}
             {Array.from({ length: lineasGrilla + 1 }).map((_, i) => {
               const y = PAD.top + (i / lineasGrilla) * (ALTO - PAD.top - PAD.bottom);
-              const valor = maxVlr - (i / lineasGrilla) * rangoVlr;
+              const valor = modoDelta
+                ? maxDelta - (i / lineasGrilla) * maxDelta
+                : maxVlr - (i / lineasGrilla) * rangoVlr;
               return (
                 <g key={i}>
                   <line x1={PAD.left} x2={ANCHO - PAD.right} y1={y} y2={y} stroke={colorGrilla} strokeWidth={1} />
                   <text x={PAD.left - 8} y={y} textAnchor="end" dominantBaseline="middle" fontSize={10} fill={colorTextoEje}>
-                    {valor.toFixed(decimalesEje)}
+                    {modoDelta ? Math.round(valor).toLocaleString("es") : valor.toFixed(decimalesEje)}
                   </text>
                 </g>
               );
@@ -897,11 +937,56 @@ function GraficoDeParametro({ parametro, items, tipoGrafico, zonaHoraria, hover,
               {formatearFechaCorta(new Date(maxT).toISOString(), zonaHoraria)}
             </text>
 
-            {series.map((s, i) => {
+            {/* Barras de delta: eventos por intervalo. Las series se
+                dibujan lado a lado dentro de cada bucket para que dos
+                dataloggers no se tapen entre sí. */}
+            {modoDelta &&
+              seriesDeBarras.map((s, i) => {
+                const color = COLORES_SERIE[i];
+                // Ancho del bucket en píxeles, derivado de dos buckets
+                // consecutivos reales (no de una constante): un mes dura
+                // distinto que otro, y así la barra no desborda.
+                const anchoBucket =
+                  s.barras.length > 1
+                    ? Math.abs(xDeTiempo(s.barras[1].t) - xDeTiempo(s.barras[0].t))
+                    : (ANCHO - PAD.left - PAD.right) / 12;
+                const anchoBarra = Math.max(
+                  1,
+                  (Math.min(anchoBucket, 64) * 0.7) / Math.max(seriesDeBarras.length, 1),
+                );
+                return (
+                  <g key={`barras-${s.nombre}`}>
+                    {s.barras.map((b) => {
+                      const xBucket = xDeTiempo(b.t);
+                      const x = xBucket + i * anchoBarra;
+                      const y = yDeDelta(b.delta);
+                      const alto = Math.max(1, ALTO - PAD.bottom - y);
+                      if (x + anchoBarra < PAD.left || x > ANCHO - PAD.right) return null;
+                      return (
+                        <rect
+                          key={b.t}
+                          x={x}
+                          y={y}
+                          width={anchoBarra}
+                          height={alto}
+                          fill={color}
+                          fillOpacity={0.85}
+                        />
+                      );
+                    })}
+                  </g>
+                );
+              })}
+
+            {!modoDelta && series.map((s, i) => {
               const color = COLORES_SERIE[i];
               const itemsVisibles = s.items.filter(enRangoZoom);
               const coords = itemsVisibles.map((item) => ({ x: xDe(item), y: yDe(item) }));
-              const trazo = pathDeLinea(coords);
+              // Un contador y un estado se mantienen planos entre lecturas
+              // y saltan de golpe: la spline los dibujaría subiendo de a
+              // poco, inventando valores intermedios que nunca se midieron.
+              const trazo =
+                tipoVisualizacion === "continuo" ? pathDeLinea(coords) : pathDeEscalon(coords);
               // Radio del punto visible, adaptado a cuánto espacio real
               // hay entre una medición y la siguiente. Con un radio fijo
               // (antes 3px siempre), una serie de varios cientos de

@@ -727,6 +727,9 @@ class ConexionFTPUpdate(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+TIPOS_VISUALIZACION = ("continuo", "contador", "estado")
+
+
 class ParametroListItem(BaseModel):
     """HU06 CA1: pobla el selector de "parámetro estándar" de la tabla de
     asignación columna -> parámetro."""
@@ -738,6 +741,10 @@ class ParametroListItem(BaseModel):
     undd: str
     dscrpcn: str | None
     tipo_dato: str
+    # Cómo dibujar la serie en Gráficos: 'continuo' (línea/área con
+    # min/promedio/máximo), 'contador' (escalón, acumulativo) o 'estado'
+    # (banda de estado binaria).
+    tipo_visualizacion: str = "continuo"
     # HU51: permite a la UI distinguir un parámetro auto-creado por el
     # motor de ingesta (badge "Auto-detectado" + sección de pendientes de
     # revisión) de uno del catálogo de siempre.
@@ -781,6 +788,7 @@ class ParametroCrear(BaseModel):
     undd: str = Field(..., min_length=1, max_length=30)
     dscrpcn: str | None = Field(default=None, max_length=200)
     tipo_dato: str = Field(default="numerico")
+    tipo_visualizacion: str = Field(default="continuo")
 
     @field_validator("nmbr", "undd")
     @classmethod
@@ -797,6 +805,15 @@ class ParametroCrear(BaseModel):
             raise ValueError("tipo_dato debe ser 'numerico' o 'texto'")
         return valor
 
+    @field_validator("tipo_visualizacion")
+    @classmethod
+    def _tipo_visualizacion_valido(cls, valor: str) -> str:
+        if valor not in TIPOS_VISUALIZACION:
+            raise ValueError(
+                "tipo_visualizacion debe ser " + ", ".join(TIPOS_VISUALIZACION)
+            )
+        return valor
+
 
 class ParametroActualizar(BaseModel):
     """Todos los campos opcionales: se edita solo lo que cambia, mismo
@@ -806,11 +823,17 @@ class ParametroActualizar(BaseModel):
     tiene lecturas guardadas, cambiarlo dejaría datos mezclados entre
     tlmtr y evnt_txt bajo el mismo id_prmtr. Se define una sola vez al
     crear (ParametroCrear); si se necesita el otro tipo, se crea un
-    parámetro nuevo."""
+    parámetro nuevo.
+
+    tipo_visualizacion SÍ es editable, al revés que tipo_dato: no decide
+    dónde se guarda nada, solo cómo se dibuja la serie ya guardada. Que
+    un parámetro resulte ser un contador se descubre mirando los datos,
+    normalmente después de crearlo."""
 
     nmbr: str | None = Field(default=None, min_length=1, max_length=100)
     undd: str | None = Field(default=None, min_length=1, max_length=30)
     dscrpcn: str | None = Field(default=None, max_length=200)
+    tipo_visualizacion: str | None = Field(default=None)
 
     @field_validator("nmbr", "undd")
     @classmethod
@@ -820,6 +843,17 @@ class ParametroActualizar(BaseModel):
         valor = valor.strip()
         if not valor:
             raise ValueError("No puede estar vacío")
+        return valor
+
+    @field_validator("tipo_visualizacion")
+    @classmethod
+    def _tipo_visualizacion_valido(cls, valor: str | None) -> str | None:
+        if valor is None:
+            return valor
+        if valor not in TIPOS_VISUALIZACION:
+            raise ValueError(
+                "tipo_visualizacion debe ser " + ", ".join(TIPOS_VISUALIZACION)
+            )
         return valor
 
 

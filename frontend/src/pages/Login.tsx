@@ -12,6 +12,11 @@ import loginBg6 from "../assets/login_6.png";
 
 const CAROUSEL_IMAGES = [loginBg2, loginBg3, loginBg4, loginBg5, loginBg6];
 const CAROUSEL_INTERVAL_MS = 5000;
+const ENTER_ANIMATION_MS = 900;
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 function isValidEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
@@ -30,6 +35,7 @@ export default function Login() {
   const [formMsg, setFormMsg] = useState("");
   const [formOk, setFormOk] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [entering, setEntering] = useState(false);
   const [bgIndex, setBgIndex] = useState(0);
 
   useEffect(() => {
@@ -56,6 +62,8 @@ export default function Login() {
 
       setFormMsg(`Bienvenido, ${data.nombre_completo}`);
       setFormOk(true);
+      setEntering(true);
+      await wait(ENTER_ANIMATION_MS);
 
       // HU04: la contraseña temporal generada al crear el usuario "deberá
       // cambiarla en su primer inicio de sesión". Se le manda al formulario
@@ -72,13 +80,21 @@ export default function Login() {
     } catch (err) {
       setFormMsg(err instanceof ApiError ? err.message : "Correo o contraseña incorrectos");
       setFormOk(false);
-    } finally {
       setLoading(false);
     }
   }
 
   return (
     <div className="login-page">
+      <div className={`enter-overlay${entering ? " active" : ""}`} aria-hidden={!entering}>
+        <div className="enter-check">
+          <svg viewBox="0 0 52 52">
+            <circle className="enter-check-circle" cx="26" cy="26" r="23" fill="none" />
+            <path className="enter-check-mark" fill="none" d="M14 27l7 7 17-17" />
+          </svg>
+        </div>
+      </div>
+
       <div className="bg-photo" aria-hidden="true">
         {CAROUSEL_IMAGES.map((src, i) => (
           <div
@@ -87,92 +103,95 @@ export default function Login() {
             style={{ backgroundImage: `url(${src})` }}
           />
         ))}
+        <div
+          className="bg-photo-blur"
+          style={{ backgroundImage: `url(${CAROUSEL_IMAGES[bgIndex]})` }}
+        />
         <div className="bg-photo-tint" />
+        <div className="auth-photo-tag">
+          <b>Pangea 4.0</b>
+          Monitoreo ambiental en tiempo real
+        </div>
+        <div className="auth-photo-dots">
+          {CAROUSEL_IMAGES.map((src, i) => (
+            <span key={src} className={i === bgIndex ? "active" : ""} />
+          ))}
+        </div>
       </div>
 
       <div className="stage">
-        <div className="canopy">
-          <div className="canopy-tag">
-            <b>Pangea 4.0</b>
-            Monitoreo ambiental en tiempo real
-          </div>
-        </div>
+        <div className="auth-form-side">
+          <p className="eyebrow">Pangea · Plataforma de monitoreo</p>
+          <h1>Bienvenido de nuevo</h1>
+          <p className="sub">Ingresa tus credenciales para continuar.</p>
 
-        <div className="panel">
-          <div className="card">
-            <p className="eyebrow">Pangea · Plataforma de monitoreo</p>
-            <h1>Bienvenido de nuevo</h1>
-            <p className="sub">Ingresa tus credenciales para continuar.</p>
-
-            <form onSubmit={handleSubmit} noValidate>
-              <div className={`field${emailError ? " has-error" : ""}`}>
-                <label htmlFor="email">Correo electrónico</label>
-                <div className="input-wrap">
-                  <input
-                    type="email"
-                    id="email"
-                    autoComplete="username"
-                    placeholder="Ingresa tu correo"
-                    value={correo}
-                    onChange={(e) => setCorreo(e.target.value)}
-                    required
-                  />
-                </div>
-                {emailError && <p className="field-error">Ingresa un correo electrónico válido.</p>}
+          <form onSubmit={handleSubmit} noValidate>
+            <div className={`field${emailError ? " has-error" : ""}`}>
+              <label htmlFor="email">Correo electrónico</label>
+              <div className="input-wrap">
+                <input
+                  type="email"
+                  id="email"
+                  autoComplete="username"
+                  placeholder="Ingresa tu correo"
+                  value={correo}
+                  onChange={(e) => setCorreo(e.target.value)}
+                  required
+                />
               </div>
+              {emailError && <p className="field-error">Ingresa un correo electrónico válido.</p>}
+            </div>
 
-              <div className={`field${passwordError ? " has-error" : ""}`}>
-                <label htmlFor="password">Contraseña</label>
-                <div className="input-wrap">
-                  <input
-                    type={showPassword ? "text" : "password"}
-                    id="password"
-                    autoComplete="current-password"
-                    placeholder="Ingresa tu contraseña"
-                    value={contrasena}
-                    onChange={(e) => setContrasena(e.target.value)}
-                    required
-                  />
-                  <button
-                    type="button"
-                    className="toggle-visibility"
-                    aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
-                    onClick={() => setShowPassword((v) => !v)}
-                  >
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6}>
-                      <path d="M1.5 12S5 5 12 5s10.5 7 10.5 7-3.5 7-10.5 7S1.5 12 1.5 12Z" />
-                      <circle cx={12} cy={12} r={3} />
-                    </svg>
-                  </button>
-                </div>
-                {passwordError && <p className="field-error">Ingresa tu contraseña.</p>}
+            <div className={`field${passwordError ? " has-error" : ""}`}>
+              <label htmlFor="password">Contraseña</label>
+              <div className="input-wrap">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  id="password"
+                  autoComplete="current-password"
+                  placeholder="Ingresa tu contraseña"
+                  value={contrasena}
+                  onChange={(e) => setContrasena(e.target.value)}
+                  required
+                />
+                <button
+                  type="button"
+                  className="toggle-visibility"
+                  aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+                  onClick={() => setShowPassword((v) => !v)}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6}>
+                    <path d="M1.5 12S5 5 12 5s10.5 7 10.5 7-3.5 7-10.5 7S1.5 12 1.5 12Z" />
+                    <circle cx={12} cy={12} r={3} />
+                  </svg>
+                </button>
               </div>
+              {passwordError && <p className="field-error">Ingresa tu contraseña.</p>}
+            </div>
 
-              <div className="row-between">
-                <label className="remember">
-                  <input
-                    type="checkbox"
-                    checked={remember}
-                    onChange={(e) => setRemember(e.target.checked)}
-                  />
-                      Recordarme
-                </label>
-                <Link to="/olvide-contrasena" className="link">
-                  ¿Olvidaste tu contraseña?
-                </Link>
-              </div>
+            <div className="row-between">
+              <label className="remember">
+                <input
+                  type="checkbox"
+                  checked={remember}
+                  onChange={(e) => setRemember(e.target.checked)}
+                />
+                    Recordarme
+              </label>
+              <Link to="/olvide-contrasena" className="link">
+                ¿Olvidaste tu contraseña?
+              </Link>
+            </div>
 
-              <button type="submit" className="submit" disabled={loading}>
-                {loading ? "Ingresando…" : "Iniciar sesión"}
-              </button>
-              <p className="register-note">
-                ¿No tienes cuenta? <button type="button" className="register-link">Regístrate aquí</button>
-              </p>
-              <p className={`form-msg${formOk ? " ok" : ""}`}>{formMsg}</p>
-            </form>
-
-            
-          </div>
+            <button type="submit" className={`submit${loading ? " is-loading" : ""}`} disabled={loading}>
+              {loading && <span className="submit-spinner" aria-hidden="true" />}
+              {loading ? "Ingresando…" : "Iniciar sesión"}
+            </button>
+            <p className="register-note">
+              ¿No tienes cuenta? <button type="button" className="register-link">Regístrate aquí</button>
+            </p>
+            <p className={`form-msg${formOk ? " ok" : ""}`}>{formMsg}</p>
+          </form>
         </div>
       </div>
     </div>

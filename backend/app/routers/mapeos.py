@@ -438,7 +438,11 @@ def crear_parametro(
         raise HTTPException(status_code=409, detail=f"Ya existe un parámetro llamado '{body.nmbr}'")
 
     parametro = Parametro(
-        nmbr=body.nmbr, undd=body.undd, dscrpcn=body.dscrpcn, tipo_dato=body.tipo_dato
+        nmbr=body.nmbr,
+        undd=body.undd,
+        dscrpcn=body.dscrpcn,
+        tipo_dato=body.tipo_dato,
+        tipo_visualizacion=body.tipo_visualizacion,
     )
     db.add(parametro)
     try:
@@ -477,6 +481,8 @@ def actualizar_parametro(
         parametro.undd = body.undd
     if body.dscrpcn is not None:
         parametro.dscrpcn = body.dscrpcn.strip() or None
+    if body.tipo_visualizacion is not None:
+        parametro.tipo_visualizacion = body.tipo_visualizacion
 
     try:
         db.commit()

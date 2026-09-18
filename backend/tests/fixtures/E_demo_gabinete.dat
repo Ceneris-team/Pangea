@@ -1,7 +1,7 @@
-Fecha,EstadoGab,EstadoPuerta,ContadorPuerta
-"2026-08-12 11:08:48",0,1,0
-"2026-08-12 11:23:48",1,0,1
-"2026-08-12 11:38:48",0,1,2
-"2026-08-12 11:53:48",1,0,3
-"2026-08-12 12:08:48",0,1,4
-"2026-08-12 12:23:48",1,0,5
+Fecha,R,Estado_Gabinete,Estado_Puerta,Contador_Puerta,Mensaje_Alarma,FTP_H,FTP_E,Resend_H
+"2026-08-12 11:08:48",8050,"Modo Normal","",0,"","-1","0",-1
+"2026-08-12 11:23:48",8051,"Modo Normal","Puerta Abierta",1,"","-1","0",-1
+"2026-08-12 11:38:48",8052,"Modo Normal","Puerta Cerrada",1,"","-1","0",-1
+"2026-08-12 11:53:48",8053,"Modo Mantenimiento","Puerta Abierta",2,"Llave No Encontrada","-1","0",-1
+"2026-08-12 12:08:48",8054,"Modo Normal","Puerta Cerrada",2,"","-1","0",-1
+"2026-08-12 12:23:48",8055,"Modo Normal","",3,"","-1","0",-1

@@ -15,11 +15,18 @@ import type { RangoFechas } from "../utils/fechas";
  * conviene evitarlo mientras el archivo sigue en cambio.
  */
 
+/** Cómo se dibuja la serie, independiente de dónde se persiste (eso lo
+ *  decide tipo_dato). Ver prmtr.tipo_visualizacion en el backend. */
+export type TipoVisualizacion = "continuo" | "contador" | "estado";
+
 export interface ParametroItem {
   id_prmtr: number;
   nmbr: string;
   undd: string;
   tipo_dato: string;
+  /** Opcional: un backend sin la migración aplicada no lo manda, y ahí
+   *  todo se comporta como antes ('continuo'). */
+  tipo_visualizacion?: TipoVisualizacion;
 }
 
 export interface UbicacionItem {
@@ -216,4 +223,245 @@ export function pathDeLinea(puntos: { x: number; y: number }[]): string {
     d += ` C ${c1x},${c1y} ${c2x},${c2y} ${p1.x},${p1.y}`;
   }
   return d;
+}
+
+/**
+ * Trazo en escalón: mantiene el valor constante hasta la medición
+ * siguiente y solo ahí sube. Es la forma correcta para un contador
+ * acumulativo -entre dos lecturas el contador NO creció de a poco, se
+ * quedó quieto y saltó cuando ocurrió el evento-, mientras que la
+ * spline de pathDeLinea inventa una rampa suave que sugiere un flujo
+ * continuo que nunca existió.
+ */
+export function pathDeEscalon(puntos: { x: number; y: number }[]): string {
+  if (puntos.length === 0) return "";
+  let d = `M ${puntos[0].x},${puntos[0].y}`;
+  for (let i = 1; i < puntos.length; i++) {
+    d += ` L ${puntos[i].x},${puntos[i - 1].y} L ${puntos[i].x},${puntos[i].y}`;
+  }
+  return d;
+}
+
+export interface TileResumen {
+  etiqueta: string;
+  valor: string;
+}
+
+/**
+ * Los cuatro tiles de arriba del gráfico, según qué representa la serie.
+ * Un contador acumulativo y un estado binario comparten el tipo de dato
+ * numérico con una medición ambiental, pero min/promedio/máximo solo
+ * significa algo para la última: el promedio de una cuenta corrida es el
+ * promedio de un número que solo sube, y el de un 0/1 es un porcentaje
+ * disfrazado de magnitud.
+ */
+export function tilesDeResumen(
+  seriesDeValores: number[][],
+  unidad: string,
+  tipo: TipoVisualizacion,
+): TileResumen[] {
+  // Los contadores y los estados se leen POR dispositivo: dos dataloggers
+  // llevan cada uno su propia cuenta, y concatenarlas hace que el salto
+  // entre una y otra se lea como un incremento gigante que nunca ocurrió.
+  // Para 'continuo' da igual -min/promedio/máximo de la unión es lo que
+  // se venía mostrando-, pero se arma igual desde las series para tener
+  // una sola forma de entrada.
+  const valores = seriesDeValores.flat();
+
+  if (valores.length === 0) {
+    return [
+      { etiqueta: "Mediciones", valor: "—" },
+      { etiqueta: "Mínimo", valor: "—" },
+      { etiqueta: "Promedio", valor: "—" },
+      { etiqueta: "Máximo", valor: "—" },
+    ];
+  }
+
+  const cantidad = valores.length;
+  const cantidadTxt = cantidad.toLocaleString("es");
+  // La unidad real de un contador son "eventos" y la de un estado no
+  // existe; el catálogo las tiene como 'N/A' (ver seed_dispositivos_demo)
+  // y arrastrar ese literal a un tile solo mete ruido.
+  const sufijo = unidad && unidad !== "N/A" ? ` ${unidad}` : "";
+
+  // Series con al menos un dato, cada una ya ordenada cronológicamente
+  // por quien llama.
+  const seriesConDatos = seriesDeValores.filter((s) => s.length > 0);
+
+  if (tipo === "contador") {
+    // Un contador puede reiniciarse (reemplazo del equipo, corte de
+    // energía). Sumar solo los incrementos positivos evita que un reset
+    // reporte un delta negativo sin sentido.
+    let acumulado = 0;
+    for (const serie of seriesConDatos) {
+      for (let i = 1; i < serie.length; i++) {
+        const delta = serie[i] - serie[i - 1];
+        if (delta > 0) acumulado += delta;
+      }
+    }
+    // Con varios dispositivos no existe UN valor inicial ni UNO actual:
+    // cada uno lleva su cuenta. Se suman, que es la lectura útil ("cuánto
+    // marcan entre todos"), y el detalle por dispositivo ya está en el
+    // gráfico, con una línea por serie.
+    const inicial = seriesConDatos.reduce((acc, s) => acc + s[0], 0);
+    const actual = seriesConDatos.reduce((acc, s) => acc + s[s.length - 1], 0);
+    return [
+      { etiqueta: "Lecturas", valor: cantidadTxt },
+      { etiqueta: "Inicial", valor: inicial.toLocaleString("es") },
+      { etiqueta: "Actual", valor: actual.toLocaleString("es") },
+      { etiqueta: "Incremento", valor: `+${acumulado.toLocaleString("es")}` },
+    ];
+  }
+
+  if (tipo === "estado") {
+    // "Activo" = cualquier valor distinto de 0, sin asumir que el estado
+    // se codifica exactamente como 1: basta con que 0 sea el reposo.
+    const activas = valores.filter((v) => v !== 0).length;
+    let transiciones = 0;
+    for (const serie of seriesConDatos) {
+      for (let i = 1; i < serie.length; i++) {
+        if ((serie[i] !== 0) !== (serie[i - 1] !== 0)) transiciones++;
+      }
+    }
+    const porcentaje = (activas / cantidad) * 100;
+    const ultimoActivo = seriesConDatos.some((s) => s[s.length - 1] !== 0);
+    return [
+      { etiqueta: "Lecturas", valor: cantidadTxt },
+      { etiqueta: "Activo", valor: `${porcentaje.toFixed(1)} %` },
+      { etiqueta: "Transiciones", valor: transiciones.toLocaleString("es") },
+      { etiqueta: "Estado actual", valor: ultimoActivo ? "Activo" : "Inactivo" },
+    ];
+  }
+
+  const suma = valores.reduce((acc, v) => acc + v, 0);
+  return [
+    { etiqueta: "Mediciones", valor: cantidadTxt },
+    { etiqueta: "Mínimo", valor: `${Math.min(...valores).toFixed(2)}${sufijo}` },
+    { etiqueta: "Promedio", valor: `${(suma / cantidad).toFixed(2)}${sufijo}` },
+    { etiqueta: "Máximo", valor: `${Math.max(...valores).toFixed(2)}${sufijo}` },
+  ];
+}
+
+/** Ancho del bucket de las barras de delta, elegido según el rango visible. */
+export type IntervaloDelta = "hora" | "dia" | "semana" | "mes";
+
+const MS_HORA = 3_600_000;
+const MS_DIA = 24 * MS_HORA;
+
+/**
+ * Bucket que deja una cantidad de barras legible (~15-45) para el rango
+ * que se está mirando. Sin esto, un rango de un año agrupado por hora
+ * daría ~8760 barras de menos de un píxel, y un rango de un día agrupado
+ * por mes daría una sola.
+ */
+export function intervaloParaRango(rangoMs: number): IntervaloDelta {
+  if (rangoMs <= 2 * MS_DIA) return "hora";
+  if (rangoMs <= 45 * MS_DIA) return "dia";
+  if (rangoMs <= 300 * MS_DIA) return "semana";
+  return "mes";
+}
+
+/**
+ * Inicio del bucket al que cae `t`, en la zona horaria de visualización.
+ * Importa que sea esa y no UTC: si un día empieza a las 00:00 UTC, en
+ * America/Lima las barras quedarían cortadas a las 19:00 del día anterior
+ * y "los eventos del martes" incluirían parte del lunes.
+ */
+export function inicioDeBucket(t: number, intervalo: IntervaloDelta, zonaHoraria: string): number {
+  // Partes del instante YA en la zona del usuario, para truncar sobre
+  // ellas en vez de sobre UTC.
+  const fmt = new Intl.DateTimeFormat("en-CA", {
+    timeZone: zonaHoraria,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+  const p: Record<string, string> = {};
+  for (const parte of fmt.formatToParts(new Date(t))) {
+    if (parte.type !== "literal") p[parte.type] = parte.value;
+  }
+  // El offset real de ESE instante (no el de hoy): así el truncado sigue
+  // siendo correcto si la zona tuvo un cambio de horario en el rango.
+  const comoUtc = Date.UTC(
+    Number(p.year),
+    Number(p.month) - 1,
+    Number(p.day),
+    Number(p.hour === "24" ? "0" : p.hour),
+    Number(p.minute),
+    Number(p.second),
+  );
+  const offset = comoUtc - Math.floor(t / 1000) * 1000;
+
+  const anio = Number(p.year);
+  const mes = Number(p.month) - 1;
+  const dia = Number(p.day);
+  const hora = Number(p.hour === "24" ? "0" : p.hour);
+
+  if (intervalo === "hora") return Date.UTC(anio, mes, dia, hora) - offset;
+  if (intervalo === "dia") return Date.UTC(anio, mes, dia) - offset;
+  if (intervalo === "mes") return Date.UTC(anio, mes, 1) - offset;
+  // Semana: se ancla al lunes, que es el inicio de semana de la configuración
+  // regional del proyecto (es-PE).
+  const diaSemana = new Date(Date.UTC(anio, mes, dia)).getUTCDay();
+  const diasDesdeLunes = (diaSemana + 6) % 7;
+  return Date.UTC(anio, mes, dia - diasDesdeLunes) - offset;
+}
+
+export interface BarraDelta {
+  /** Inicio del bucket, en ms epoch. */
+  t: number;
+  /** Eventos ocurridos dentro del bucket. */
+  delta: number;
+}
+
+/**
+ * Convierte una serie acumulativa en los eventos ocurridos por intervalo.
+ *
+ * Un contador acumulativo responde "en qué número va"; lo que casi
+ * siempre se quiere saber de él es "cuántas veces pasó esto hoy", y eso
+ * es la diferencia entre lecturas consecutivas agrupada por tiempo.
+ *
+ * Los deltas negativos se descartan en vez de restarse: un contador que
+ * baja no registró eventos negativos, se reinició (reemplazo de equipo,
+ * corte de energía), y contarlo como -22.000 eventos ensuciaría el
+ * bucket entero.
+ */
+export function barrasDeDelta(
+  items: { fch_hr: string; vlr: number }[],
+  intervalo: IntervaloDelta,
+  zonaHoraria: string,
+): BarraDelta[] {
+  if (items.length < 2) return [];
+  const ordenados = [...items].sort(
+    (a, b) => new Date(a.fch_hr).getTime() - new Date(b.fch_hr).getTime(),
+  );
+
+  const porBucket = new Map<number, number>();
+  for (let i = 1; i < ordenados.length; i++) {
+    const delta = ordenados[i].vlr - ordenados[i - 1].vlr;
+    if (delta <= 0) continue;
+    // El evento se atribuye al bucket de la lectura que lo reporta.
+    const t = new Date(ordenados[i].fch_hr).getTime();
+    const bucket = inicioDeBucket(t, intervalo, zonaHoraria);
+    porBucket.set(bucket, (porBucket.get(bucket) ?? 0) + delta);
+  }
+
+  return [...porBucket.entries()]
+    .map(([t, delta]) => ({ t, delta }))
+    .sort((a, b) => a.t - b.t);
+}
+
+const ETIQUETA_INTERVALO: Record<IntervaloDelta, string> = {
+  hora: "por hora",
+  dia: "por día",
+  semana: "por semana",
+  mes: "por mes",
+};
+
+export function etiquetaDeIntervalo(intervalo: IntervaloDelta): string {
+  return ETIQUETA_INTERVALO[intervalo];
 }

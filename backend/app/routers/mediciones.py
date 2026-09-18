@@ -16,9 +16,11 @@ de HU13 sigue sin depender de ningún filtro de fecha).
 """
 
 import datetime as dt
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.encoders import jsonable_encoder
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -111,6 +113,19 @@ def listar_mediciones(
     # Configurable por petición para que la gráfica pueda pedir menos
     # puntos que el default según su ancho real en pantalla.
     max_puntos: int = Query(default=MAXIMO_PUNTOS_DEFECTO, ge=1, le=50000),
+    # HU32: filtros avanzados. valor_min/valor_max son comparaciones
+    # numéricas -solo tienen sentido sobre Telemetria.vlr (decimal); un
+    # EventoTexto.vlr es texto ("Puerta Abierta") y no se filtra por
+    # rango, ver _query_base.
+    valor_min: Decimal | None = Query(default=None),
+    valor_max: Decimal | None = Query(default=None),
+    # HU32: NO es el downsampling de HT-10 (services/cache/downsampling.py,
+    # automático por cantidad de puntos cuando el rango supera 30 días).
+    # Es un filtro explícito que pide el usuario ("una lectura cada N
+    # minutos"), independiente del ancho del rango. Se resuelve en SQL con
+    # date_bin, mismo criterio que fecha_inicio/fecha_fin (ver comentario
+    # en _query_base): así el planner lo resuelve sin traer filas de más.
+    frecuencia_muestreo: int | None = Query(default=None, ge=1),
     db: Session = Depends(get_db),
     # "Mediciones" no es un módulo válido en prms_usr_sd (HT-03: solo
     # Usuarios/Ubicaciones/Dispositivos/Ingesta/Tableros/Alarmas/Comercial).
@@ -151,6 +166,9 @@ def listar_mediciones(
         pagina=pagina,
         por_pagina=por_pagina,
         max_puntos=max_puntos,
+        valor_min=valor_min,
+        valor_max=valor_max,
+        frecuencia_muestreo=frecuencia_muestreo,
     )
     cacheado = cache.obtener(clave_cache)
     if cacheado is not None:
@@ -191,6 +209,42 @@ def listar_mediciones(
             query = query.filter(modelo.fch_hr >= fecha_inicio)
         if fecha_fin is not None:
             query = query.filter(modelo.fch_hr <= fecha_fin)
+        # HU32 CA1/CA2: valor mínimo/máximo (acumulativo = rango). Solo
+        # aplica a Telemetria.vlr (Numeric): EventoTexto.vlr es String
+        # ("Puerta Abierta") y una comparación >=/<= ahí sería una
+        # comparación lexicográfica sin sentido de negocio, no un filtro
+        # de rango. _query_base se llama una vez por modelo (ver abajo),
+        # así que alcanza con mirar cuál es antes de aplicar el filtro.
+        if modelo is Telemetria:
+            if valor_min is not None:
+                query = query.filter(modelo.vlr >= valor_min)
+            if valor_max is not None:
+                query = query.filter(modelo.vlr <= valor_max)
+        if frecuencia_muestreo is not None:
+            # HU32: "una lectura cada N minutos", no el downsampling de
+            # HT-10 (services/cache/downsampling.py) -ver docstring del
+            # parámetro en el endpoint-. date_bin trunca fch_hr a
+            # intervalos fijos de N minutos anclados a las 00:00 de una
+            # fecha de referencia (epoch), y DISTINCT ON se queda con UNA
+            # fila por combinación (dispositivo, parámetro, bucket): sin
+            # id_dspstv/id_prmtr en el DISTINCT ON, dos series distintas
+            # que comparten el mismo bucket temporal se pisarían entre sí
+            # y una perdería puntos que la otra no.
+            #
+            # Se resuelve en SQL, no con muestrear() en Python, por el
+            # mismo motivo que fecha_inicio/fecha_fin: reduce las filas
+            # que hay que traer de Postgres en vez de traerlas todas y
+            # descartar después, y es el punto de la consulta donde ya se
+            # decide qué filas pertenecen a la respuesta.
+            bucket = func.date_bin(
+                dt.timedelta(minutes=frecuencia_muestreo),
+                modelo.fch_hr,
+                dt.datetime(2000, 1, 1, tzinfo=dt.timezone.utc),
+            )
+            query = query.distinct(modelo.id_dspstv, modelo.id_prmtr, bucket)
+            return query.order_by(
+                modelo.id_dspstv, modelo.id_prmtr, bucket, modelo.fch_hr.desc()
+            )
         # El ORDER BY se baja a SQL (antes se ordenaba en Python sobre la
         # lista completa) para que el planner pueda resolverlo por índice.
         return query.order_by(modelo.fch_hr.desc())

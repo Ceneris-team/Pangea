@@ -28,6 +28,10 @@ interface Parametro {
   undd: string;
   dscrpcn: string | null;
   tipo_dato: "numerico" | "texto";
+  /** Cómo lo dibuja la pantalla de Gráficos. Un contador acumulativo o un
+   *  estado binario son tan 'numerico' como la temperatura, pero no se
+   *  leen como una línea continua con promedio. */
+  tipo_visualizacion?: "continuo" | "contador" | "estado";
   // HU51: un parámetro puede haber nacido del motor de ingesta (una
   // columna de header que no matcheaba nada) y quedar esperando revisión
   // del Administrador, que le pone nombre/unidad de verdad y lo activa.
@@ -62,6 +66,7 @@ export default function Parametros() {
   // tenga lecturas mezclaría datos entre tlmtr (numérico) y evnt_txt
   // (texto) bajo el mismo id_prmtr, así que PUT no lo acepta.
   const [tipoDato, setTipoDato] = useState<"numerico" | "texto">("numerico");
+  const [tipoVisualizacion, setTipoVisualizacion] = useState<"continuo" | "contador" | "estado">("continuo");
   const [guardando, setGuardando] = useState(false);
   const [errorFormulario, setErrorFormulario] = useState<string | null>(null);
 
@@ -177,6 +182,7 @@ export default function Parametros() {
     setUndd("");
     setDscrpcn("");
     setTipoDato("numerico");
+    setTipoVisualizacion("continuo");
     setErrorFormulario(null);
     setMostrarFormulario(true);
   }
@@ -187,6 +193,7 @@ export default function Parametros() {
     setUndd(p.undd);
     setDscrpcn(p.dscrpcn ?? "");
     setTipoDato(p.tipo_dato);
+    setTipoVisualizacion(p.tipo_visualizacion ?? "continuo");
     setErrorFormulario(null);
     setMostrarFormulario(true);
   }
@@ -205,14 +212,23 @@ export default function Parametros() {
       // tipo_dato solo se manda al crear: el PUT no lo acepta (ver
       // backend ParametroActualizar), así que incluirlo en la edición
       // no tendría efecto -se omite para que quede claro en el payload.
+      // tipo_visualizacion sí va en ambos: solo cambia cómo se dibuja la
+      // serie, no dónde se guarda, y que un parámetro es un contador
+      // suele descubrirse recién al ver sus datos.
       const body =
         editandoId !== null
-          ? { nmbr: nmbr.trim(), undd: undd.trim(), dscrpcn: dscrpcn.trim() || null }
+          ? {
+              nmbr: nmbr.trim(),
+              undd: undd.trim(),
+              dscrpcn: dscrpcn.trim() || null,
+              tipo_visualizacion: tipoVisualizacion,
+            }
           : {
               nmbr: nmbr.trim(),
               undd: undd.trim(),
               dscrpcn: dscrpcn.trim() || null,
               tipo_dato: tipoDato,
+              tipo_visualizacion: tipoVisualizacion,
             };
       if (editandoId !== null) {
         await apiFetch<Parametro>(`/parametros/${editandoId}`, { method: "PUT", body });
@@ -545,6 +561,46 @@ export default function Parametros() {
                   : "Para mediciones (temperatura, caudal, etc.)."}
               </p>
             </div>
+
+            {/* Un parámetro de texto no se grafica (va a evnt_txt, no a
+                tlmtr), así que elegir cómo dibujarlo no aplica. */}
+            {tipoDato === "numerico" && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Cómo se grafica *
+                </label>
+                <div className="inline-flex rounded-xl border border-gray-300 dark:border-gray-600 overflow-hidden">
+                  {(
+                    [
+                      ["continuo", "Continuo"],
+                      ["contador", "Contador"],
+                      ["estado", "Estado"],
+                    ] as const
+                  ).map(([valor, etiqueta]) => (
+                    <button
+                      key={valor}
+                      type="button"
+                      onClick={() => setTipoVisualizacion(valor)}
+                      className={
+                        "px-4 py-2 text-sm font-medium transition-colors " +
+                        (tipoVisualizacion === valor
+                          ? "bg-[#ccff00] text-[#1a202c]"
+                          : "bg-white dark:bg-[#2d3748] text-gray-700 dark:text-gray-300")
+                      }
+                    >
+                      {etiqueta}
+                    </button>
+                  ))}
+                </div>
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  {tipoVisualizacion === "contador"
+                    ? "Acumulativo: solo sube (ej. contador de eventos). Se dibuja en escalón y el resumen muestra el incremento del período."
+                    : tipoVisualizacion === "estado"
+                      ? "Binario o de pocos niveles (ej. puerta abierta/cerrada). El resumen muestra % de tiempo activo y transiciones."
+                      : "Sube y baja libremente (temperatura, caudal). Se dibuja como línea con mínimo, promedio y máximo."}
+                </p>
+              </div>
+            )}
 
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">

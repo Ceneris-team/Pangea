@@ -33,10 +33,25 @@ interface ListadoMediciones {
   items: MedicionItem[];
 }
 
+// HU32: valor mínimo/máximo (decimales) y frecuencia de muestreo
+// (minutos). Filtros v1.0, acumulativos entre sí (mín+máx = rango).
+interface FiltrosAvanzados {
+  valorMin: string;
+  valorMax: string;
+  frecuenciaMuestreo: string;
+}
+
+const FILTROS_AVANZADOS_VACIOS: FiltrosAvanzados = {
+  valorMin: "",
+  valorMax: "",
+  frecuenciaMuestreo: "",
+};
+
 function construirQuery(
   parametroIds: number[],
   ubicacionIds: number[],
   rangoFechas: RangoFechas | null,
+  filtrosAvanzados: FiltrosAvanzados,
 ): string {
   const params = new URLSearchParams();
   parametroIds.forEach((id) => params.append("parametro_ids", String(id)));
@@ -44,6 +59,18 @@ function construirQuery(
   if (rangoFechas) {
     params.append("fecha_inicio", new Date(rangoFechas.inicio).toISOString());
     params.append("fecha_fin", new Date(rangoFechas.fin).toISOString());
+  }
+  // CA3: se agregan a la misma query que parámetros/ubicaciones/fechas
+  // -el backend los intersecta, no hace falta nada especial acá para
+  // que HU32 se combine con el rango de HU12-.
+  if (filtrosAvanzados.valorMin !== "") {
+    params.append("valor_min", filtrosAvanzados.valorMin);
+  }
+  if (filtrosAvanzados.valorMax !== "") {
+    params.append("valor_max", filtrosAvanzados.valorMax);
+  }
+  if (filtrosAvanzados.frecuenciaMuestreo !== "") {
+    params.append("frecuencia_muestreo", filtrosAvanzados.frecuenciaMuestreo);
   }
   const query = params.toString();
   return query ? `/mediciones?${query}` : "/mediciones";
@@ -75,6 +102,18 @@ export default function ConsultaDatos() {
   // CA: el rango por defecto al ingresar al módulo son las últimas 24 horas.
   const [seleccionFechas, setSeleccionFechas] = useState<RangoFechas>(rangoUltimas24Horas);
   const [filtroFechas, setFiltroFechas] = useState<RangoFechas>(rangoUltimas24Horas);
+
+  // HU32: filtros avanzados (valor mín/máx, frecuencia de muestreo), con
+  // su propia selección/filtro aplicado -mismo patrón que los tres
+  // bloques de arriba, panel propio con su propio APLICAR/LIMPIAR,
+  // independiente de "LIMPIAR" (HU13) y "LIMPIAR FILTRO" (HU12).
+  const [seleccionAvanzados, setSeleccionAvanzados] = useState<FiltrosAvanzados>(
+    FILTROS_AVANZADOS_VACIOS,
+  );
+  const [filtroAvanzados, setFiltroAvanzados] = useState<FiltrosAvanzados>(
+    FILTROS_AVANZADOS_VACIOS,
+  );
+  const [errorAvanzados, setErrorAvanzados] = useState<string | null>(null);
 
   const [mediciones, setMediciones] = useState<ListadoMediciones | null>(null);
   const [loading, setLoading] = useState(false);
@@ -109,7 +148,9 @@ export default function ConsultaDatos() {
     setLoading(true);
     setError(null);
 
-    apiFetch<ListadoMediciones>(construirQuery(filtroParametros, filtroUbicaciones, filtroFechas))
+    apiFetch<ListadoMediciones>(
+      construirQuery(filtroParametros, filtroUbicaciones, filtroFechas, filtroAvanzados),
+    )
       .then((res) => {
         if (!cancelado) setMediciones(res);
       })
@@ -124,7 +165,7 @@ export default function ConsultaDatos() {
     return () => {
       cancelado = true;
     };
-  }, [filtroParametros, filtroUbicaciones, filtroFechas]);
+  }, [filtroParametros, filtroUbicaciones, filtroFechas, filtroAvanzados]);
 
   const toggleSeleccion = (lista: number[], setLista: (v: number[]) => void, id: number) => {
     setLista(lista.includes(id) ? lista.filter((v) => v !== id) : [...lista, id]);
@@ -144,7 +185,12 @@ export default function ConsultaDatos() {
   // Conteo de filtros YA APLICADOS (no la selección en curso dentro del
   // panel) para el badge del botón "Filtros": deja ver de un vistazo que
   // hay algo filtrado sin tener que abrir el panel a revisar.
-  const filtrosActivos = filtroParametros.length + filtroUbicaciones.length;
+  const cantidadFiltrosAvanzados =
+    (filtroAvanzados.valorMin !== "" ? 1 : 0) +
+    (filtroAvanzados.valorMax !== "" ? 1 : 0) +
+    (filtroAvanzados.frecuenciaMuestreo !== "" ? 1 : 0);
+  const filtrosActivos =
+    filtroParametros.length + filtroUbicaciones.length + cantidadFiltrosAvanzados;
 
   // CA2/CA3: "APLICAR" traslada la selección en curso a los filtros activos
   const handleAplicar = () => {
@@ -170,6 +216,35 @@ export default function ConsultaDatos() {
     const rangoPorDefecto = rangoUltimas24Horas();
     setSeleccionFechas(rangoPorDefecto);
     setFiltroFechas(rangoPorDefecto);
+  };
+
+  // HU32 CA1/CA2: "APLICAR FILTROS" traslada la selección en curso del
+  // panel de filtros avanzados a los filtros activos. Valida antes de
+  // aplicar -mismo patrón que SelectorRangoFechas.handleAplicar-: un
+  // mínimo mayor que el máximo no es un filtro válido, solo confundiría
+  // al ver "no hay registros" sin explicación.
+  const handleAplicarAvanzados = () => {
+    const { valorMin, valorMax, frecuenciaMuestreo } = seleccionAvanzados;
+    if (valorMin !== "" && valorMax !== "" && Number(valorMin) > Number(valorMax)) {
+      setErrorAvanzados("El valor mínimo no puede ser mayor que el valor máximo.");
+      return;
+    }
+    if (frecuenciaMuestreo !== "" && Number(frecuenciaMuestreo) <= 0) {
+      setErrorAvanzados("La frecuencia de muestreo debe ser mayor a 0.");
+      return;
+    }
+    setErrorAvanzados(null);
+    setFiltroAvanzados(seleccionAvanzados);
+  };
+
+  // HU32 CA4: "LIMPIAR FILTROS AVANZADOS" quita SOLO esas condiciones y
+  // restaura la vista con todos los datos dentro del rango de fechas
+  // activo -no toca filtroParametros/filtroUbicaciones (HU13) ni
+  // filtroFechas (HU12), cada bloque tiene su propio LIMPIAR-.
+  const handleLimpiarAvanzados = () => {
+    setErrorAvanzados(null);
+    setSeleccionAvanzados(FILTROS_AVANZADOS_VACIOS);
+    setFiltroAvanzados(FILTROS_AVANZADOS_VACIOS);
   };
 
   return (
@@ -407,6 +482,81 @@ export default function ConsultaDatos() {
                   onLimpiar={handleLimpiarFechas}
                 />
               </div>
+
+              {/* HU32: filtros avanzados (valor mín/máx, frecuencia de
+                  muestreo), con su propio par APLICAR/LIMPIAR -tercer
+                  bloque independiente, mismo patrón que HU13 y HU12 arriba-. */}
+              <fieldset className="pt-6 border-t border-black/10 dark:border-white/10">
+                <legend className="text-sm font-bold text-gray-700 dark:text-gray-200 mb-3">
+                  Filtros avanzados
+                </legend>
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <label className="flex flex-col gap-1 text-sm text-gray-700 dark:text-gray-200">
+                    Valor mínimo
+                    <input
+                      type="number"
+                      step="any"
+                      inputMode="decimal"
+                      value={seleccionAvanzados.valorMin}
+                      onChange={(e) =>
+                        setSeleccionAvanzados({ ...seleccionAvanzados, valorMin: e.target.value })
+                      }
+                      className="rounded-lg border border-black/20 dark:border-white/20 bg-transparent px-3 py-1.5 text-sm text-gray-900 dark:text-white"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1 text-sm text-gray-700 dark:text-gray-200">
+                    Valor máximo
+                    <input
+                      type="number"
+                      step="any"
+                      inputMode="decimal"
+                      value={seleccionAvanzados.valorMax}
+                      onChange={(e) =>
+                        setSeleccionAvanzados({ ...seleccionAvanzados, valorMax: e.target.value })
+                      }
+                      className="rounded-lg border border-black/20 dark:border-white/20 bg-transparent px-3 py-1.5 text-sm text-gray-900 dark:text-white"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1 text-sm text-gray-700 dark:text-gray-200">
+                    Frecuencia de muestreo (min)
+                    <input
+                      type="number"
+                      step="1"
+                      min="1"
+                      inputMode="numeric"
+                      value={seleccionAvanzados.frecuenciaMuestreo}
+                      onChange={(e) =>
+                        setSeleccionAvanzados({
+                          ...seleccionAvanzados,
+                          frecuenciaMuestreo: e.target.value,
+                        })
+                      }
+                      className="rounded-lg border border-black/20 dark:border-white/20 bg-transparent px-3 py-1.5 text-sm text-gray-900 dark:text-white"
+                    />
+                  </label>
+                </div>
+
+                {errorAvanzados && (
+                  <p className="text-xs text-red-600 dark:text-red-400 mt-2">{errorAvanzados}</p>
+                )}
+
+                <div className="flex gap-2 mt-3">
+                  <button
+                    type="button"
+                    onClick={handleAplicarAvanzados}
+                    className="px-4 py-2 rounded-xl bg-[#ccff00] text-gray-900 text-sm font-bold hover:brightness-95 transition-all"
+                  >
+                    APLICAR FILTROS
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleLimpiarAvanzados}
+                    className="px-4 py-2 rounded-xl border border-black/20 dark:border-white/20 text-gray-700 dark:text-gray-200 text-sm font-bold hover:bg-black/10 dark:hover:bg-white/10 transition-all"
+                  >
+                    LIMPIAR FILTROS AVANZADOS
+                  </button>
+                </div>
+              </fieldset>
             </div>
       </DrawerPanel>
     </div>
