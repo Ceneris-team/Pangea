@@ -38,6 +38,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.services.limites_plan import comprobar_cupo
 from app.models import (
     Dispositivo, MapeoColumna, MapeoFormato, Parametro, Sede, Ubicacion, PermisoUbicacion,
 )
@@ -57,6 +58,16 @@ ROLES_CON_ACCESO_TOTAL = {"Administrador", "Tecnico CENERIS", "Técnico CENERIS"
 def listar_ubicaciones(
     busqueda: str | None = Query(default=None, description="Nombre de la ubicación, parcial"),
     estado: str | None = Query(default=None, description="Activa / Inactiva"),
+    # HU36: variante para poblar selectores de filtro (p. ej. Dispositivos.tsx)
+    # que no tiene sentido ofrecer con una ubicación sin ningún dispositivo
+    # asociado -elegirla siempre daría una tabla vacía-. Parámetro nuevo
+    # sobre el endpoint existente, no un endpoint aparte: /ubicaciones ya
+    # es multiuso (HU07, selectores de formularios en varios módulos) y
+    # extenderlo con un filtro opcional sigue el mismo patrón que
+    # busqueda/estado en vez de duplicar la lógica de acceso en otro sitio.
+    con_dispositivos: bool = Query(
+        default=False, description="Solo ubicaciones con al menos un dispositivo asociado"
+    ),
     pagina: int = Query(default=1, ge=1),
     por_pagina: int = Query(default=10, ge=1, le=100),  # CA: 10 por defecto
     db: Session = Depends(get_db),
@@ -76,6 +87,15 @@ def listar_ubicaciones(
         query = query.filter(func.lower(Ubicacion.nmbr).like(patron))
     if estado:
         query = query.filter(Ubicacion.estd == estado)
+    if con_dispositivos:
+        # EXISTS en vez de JOIN: una ubicación con más de un dispositivo
+        # no debe duplicarse en el listado -acá solo importa "tiene o no
+        # tiene", no cuántos-.
+        query = query.filter(
+            db.query(Dispositivo)
+            .filter(Dispositivo.id_ubccn == Ubicacion.id_ubccn)
+            .exists()
+        )
 
     total = query.count()
     ubicaciones = (
@@ -296,6 +316,9 @@ def crear_ubicacion(
             status_code=409, detail="Ya existe una ubicación con ese nombre en esta sede"
         )
 
+    id_clnt = db.query(Sede.id_clnt).filter(Sede.id_sd == id_sd).scalar()
+    comprobar_cupo(db, id_clnt, "ubicaciones")
+
     ubicacion = Ubicacion(
         id_sd=id_sd,
         nmbr=body.nmbr,
@@ -368,6 +391,10 @@ def actualizar_ubicacion(
             )
 
     datos = body.model_dump(exclude_unset=True)
+
+    if ubicacion.estd != "Activa" and datos.get("estd") == "Activa":
+        id_clnt = db.query(Sede.id_clnt).filter(Sede.id_sd == ubicacion.id_sd).scalar()
+        comprobar_cupo(db, id_clnt, "ubicaciones")
 
     # dscrpcn es la única columna nullable del conjunto: un string vacío se
     # normaliza a NULL, igual que en el alta. El resto son NOT NULL, así

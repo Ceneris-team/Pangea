@@ -10,6 +10,7 @@ import PanelAdmin from "../pages/PanelAdmin";
 import PanelTecnico from "../pages/PanelTecnico";
 import PanelUsuario from "../pages/PanelUsuario";
 import PanelComercial from "../pages/PanelComercial";
+import PlanesSuscripciones from "../pages/PlanesSuscripciones";
 import Usuarios from "../pages/Usuarios";
 import Ubicaciones from "../pages/Ubicaciones";
 import Dispositivos from "../pages/Dispositivos";
@@ -93,6 +94,15 @@ export default function AppRouter() {
             element={
               <ProtectedRoute rolRequerido={ROLES.ADMINISTRADOR_COMERCIAL}>
                 <PanelComercial />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/planes-suscripciones"
+            element={
+              <ProtectedRoute rolesPermitidos={[ROLES.ADMINISTRADOR, ROLES.ADMINISTRADOR_COMERCIAL]}>
+                <PlanesSuscripciones />
               </ProtectedRoute>
             }
           />

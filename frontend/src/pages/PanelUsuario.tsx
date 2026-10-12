@@ -1,10 +1,27 @@
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import Sidebar from "../components/layout/Sidebar";
 import Topbar from "../components/layout/Topbar";
+import { apiFetch } from "../services/api";
+
+type ResumenPlan = {
+  nombre: string;
+  plan_nombre: string | null;
+  estado_suscripcion: string;
+  fecha_vencimiento: string | null;
+  consumo: { ubicaciones: number; dispositivos: number; usuarios: number };
+  limites: { ubicaciones: number; dispositivos: number; usuarios: number } | null;
+  ubicaciones_visibles: number;
+};
 
 export default function PanelUsuario() {
 	const { nombreCompleto, rol, logout } = useAuth();
+	const [plan, setPlan] = useState<ResumenPlan | null>(null);
+
+	useEffect(() => {
+		apiFetch<ResumenPlan>("/comercial/mi-plan").then(setPlan).catch(() => setPlan(null));
+	}, []);
 
 	return (
 		<div className="font-sans">
@@ -28,6 +45,27 @@ export default function PanelUsuario() {
 								Panel de Cliente Final - Pangea 4.0.
 							</p>
 						</header>
+
+						{plan && (
+							<section className="mb-6 rounded-2xl border border-black/10 bg-white/60 p-5 dark:border-white/10 dark:bg-white/[0.04]">
+								<div className="flex flex-wrap items-start justify-between gap-3">
+									<div>
+										<p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Suscripción de {plan.nombre}</p>
+										<h2 className="mt-1 text-xl font-bold text-gray-900 dark:text-white">Plan {plan.plan_nombre || "sin asignar"}</h2>
+									</div>
+									<span className="text-sm text-gray-600 dark:text-gray-300">{plan.estado_suscripcion}{plan.fecha_vencimiento ? ` · Vencimiento: ${plan.fecha_vencimiento}` : ""}</span>
+								</div>
+								<p className="mt-3 text-sm text-gray-600 dark:text-gray-300">
+									Los cupos muestran el consumo total del cliente en todas sus sedes. Tu cuenta tiene acceso a {plan.ubicaciones_visibles} {plan.ubicaciones_visibles === 1 ? "ubicación activa" : "ubicaciones activas"}.
+								</p>
+								{plan.limites && <div className="mt-4 grid gap-3 sm:grid-cols-3">
+									{(["ubicaciones", "dispositivos", "usuarios"] as const).map((recurso) => <div key={recurso} className="rounded-xl bg-black/5 p-3 dark:bg-white/5">
+										<p className="text-sm capitalize text-gray-600 dark:text-gray-300">{recurso}</p>
+										<p className="mt-1 font-bold text-gray-900 dark:text-white">{plan.consumo[recurso]} / {plan.limites?.[recurso] === 0 ? "Sin límite" : plan.limites?.[recurso]}</p>
+									</div>)}
+								</div>}
+							</section>
+						)}
 
 						<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-4">
 							<Link

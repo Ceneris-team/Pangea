@@ -11,6 +11,12 @@ def _validar_ruta_remota(valor: str) -> str:
     return valor
 
 
+class UsuarioClientePlan(BaseModel):
+    id_clnt: int
+    cliente: str
+    plan: str | None
+
+
 class UsuarioListItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -19,6 +25,7 @@ class UsuarioListItem(BaseModel):
     crr: str
     rol_nombre: str
     estd: str
+    clientes: list[UsuarioClientePlan] = Field(default_factory=list)
 
 
 class UsuarioCrear(BaseModel):
@@ -674,6 +681,7 @@ class MedicionListItem(BaseModel):
     fch_hr: datetime
     id_ubccn: int
     ubicacion_nombre: str
+    id_sd: int
     id_dspstv: int
     dispositivo_nombre: str
     id_prmtr: int

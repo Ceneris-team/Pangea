@@ -15,7 +15,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import PermisoUbicacion, Rol, Ubicacion, Usuario
+from app.models import Cliente, PermisoUbicacion, PermisoUsuarioSede, PlanSuscripcion, Rol, Sede, Suscripcion, Ubicacion, Usuario
+from app.services.limites_plan import comprobar_cupo, fecha_comercial
 from app.schemas import (
     PermisosUbicacionActualizados,
     PermisosUbicacionActualizar,
@@ -27,6 +28,7 @@ from app.schemas import (
     UsuarioCrear,
     UsuarioDetalle,
     UsuarioListItem,
+    UsuarioClientePlan,
 )
 from app.security.auditoria import auditar_cambios
 from app.security.hashing import generar_password_temporal, hash_password
@@ -67,6 +69,51 @@ def listar_usuarios(
         query.order_by(Usuario.nmbr_cmplt).offset((pagina - 1) * por_pagina).limit(por_pagina).all()
     )
 
+    # La suscripción es del cliente, no del usuario. Un Cliente Final puede
+    # acceder a varios clientes; se muestran todos los vinculados por permisos.
+    ids_cliente_final = [u.id_usr for u in usuarios if u.rol.nmbr == "Cliente Final"]
+    clientes_por_usuario: dict[int, set[int]] = {id_usr: set() for id_usr in ids_cliente_final}
+    if ids_cliente_final:
+        por_sede = (
+            db.query(PermisoUsuarioSede.id_usr, Sede.id_clnt)
+            .join(Sede, Sede.id_sd == PermisoUsuarioSede.id_sd)
+            .filter(PermisoUsuarioSede.id_usr.in_(ids_cliente_final))
+            .distinct()
+            .all()
+        )
+        por_ubicacion = (
+            db.query(PermisoUbicacion.id_usr, Sede.id_clnt)
+            .join(Ubicacion, Ubicacion.id_ubccn == PermisoUbicacion.id_ubccn)
+            .join(Sede, Sede.id_sd == Ubicacion.id_sd)
+            .filter(PermisoUbicacion.id_usr.in_(ids_cliente_final))
+            .distinct()
+            .all()
+        )
+        for id_usr, id_clnt in (*por_sede, *por_ubicacion):
+            clientes_por_usuario[id_usr].add(id_clnt)
+
+    ids_clientes = set().union(*clientes_por_usuario.values()) if clientes_por_usuario else set()
+    nombres_clientes = {
+        cliente.id_clnt: cliente.rzn_scl
+        for cliente in db.query(Cliente).filter(Cliente.id_clnt.in_(ids_clientes)).all()
+    } if ids_clientes else {}
+    hoy = fecha_comercial()
+    planes_clientes = {
+        id_clnt: nombre_plan
+        for id_clnt, nombre_plan in (
+            db.query(Suscripcion.id_clnt, PlanSuscripcion.nmbr)
+            .join(PlanSuscripcion, PlanSuscripcion.id_pln == Suscripcion.id_pln)
+            .filter(
+                Suscripcion.id_clnt.in_(ids_clientes),
+                Suscripcion.estd == "Activa",
+                Suscripcion.fch_inc <= hoy,
+                Suscripcion.fch_vncmnt >= hoy,
+            )
+            .all()
+            if ids_clientes else []
+        )
+    }
+
     items = [
         UsuarioListItem(
             id_usr=u.id_usr,
@@ -74,6 +121,14 @@ def listar_usuarios(
             crr=u.crr,
             rol_nombre=u.rol.nmbr,
             estd=u.estd,
+            clientes=[
+                UsuarioClientePlan(
+                    id_clnt=id_clnt,
+                    cliente=nombres_clientes[id_clnt],
+                    plan=planes_clientes.get(id_clnt),
+                )
+                for id_clnt in sorted(clientes_por_usuario.get(u.id_usr, ()), key=lambda id: nombres_clientes[id])
+            ],
         )
         for u in usuarios
     ]
@@ -361,7 +416,7 @@ def actualizar_permisos_ubicaciones(
     el conjunto permitido NO viaja en el JWT -si viajara, un permiso
     recién quitado seguiría vigente hasta que expirara el token-.
     """
-    _usuario_gestionable_o_error(db, id_usr)
+    usuario_objetivo = _usuario_gestionable_o_error(db, id_usr)
 
     solicitadas = set(body.ubicacion_ids)
 
@@ -383,6 +438,36 @@ def actualizar_permisos_ubicaciones(
         fila.id_ubccn: fila
         for fila in db.query(PermisoUbicacion).filter(PermisoUbicacion.id_usr == id_usr).all()
     }
+
+    # El cupo de usuarios se consume al otorgar la primera ubicación de un
+    # cliente. Varias ubicaciones del mismo cliente cuentan como una cuenta.
+    if usuario_objetivo.estd == "Activo" and solicitadas - set(actuales):
+        clientes_nuevos = {
+            id_clnt
+            for (id_clnt,) in db.query(Sede.id_clnt)
+            .join(Ubicacion, Ubicacion.id_sd == Sede.id_sd)
+            .filter(Ubicacion.id_ubccn.in_(solicitadas - set(actuales)))
+            .distinct()
+            .all()
+        }
+        clientes_actuales = {
+            id_clnt
+            for (id_clnt,) in db.query(Sede.id_clnt)
+            .join(Ubicacion, Ubicacion.id_sd == Sede.id_sd)
+            .filter(Ubicacion.id_ubccn.in_(actuales))
+            .distinct()
+            .all()
+        }
+        clientes_actuales.update(
+            id_clnt
+            for (id_clnt,) in db.query(Sede.id_clnt)
+            .join(PermisoUsuarioSede, PermisoUsuarioSede.id_sd == Sede.id_sd)
+            .filter(PermisoUsuarioSede.id_usr == id_usr)
+            .distinct()
+            .all()
+        )
+        for id_clnt in sorted(clientes_nuevos - clientes_actuales):
+            comprobar_cupo(db, id_clnt, "usuarios")
 
     for id_ubccn, fila in actuales.items():
         if id_ubccn not in solicitadas:

@@ -31,6 +31,22 @@ export default function PanelComercial() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-4">
               <Link
+                to="/planes-suscripciones?vista=planes"
+                className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl shadow-sm border border-black/10 dark:border-white/10 p-6 hover:border-[#ccff00] transition-colors"
+              >
+                <div className="w-10 h-10 rounded-lg bg-[#ccff00]/20 flex items-center justify-center mb-3 text-xl font-bold text-[#5a7000] dark:text-[#ccff00]">$</div>
+                <h2 className="font-semibold text-gray-900 dark:text-white">Planes y suscripciones</h2>
+                <p className="text-sm text-gray-600 dark:text-gray-300">Define cupos, asigna planes y revisa el consumo de cada cliente.</p>
+              </Link>
+              <Link
+                to="/planes-suscripciones?vista=suscripciones"
+                className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl shadow-sm border border-black/10 dark:border-white/10 p-6 hover:border-[#ccff00] transition-colors"
+              >
+                <div className="w-10 h-10 rounded-lg bg-[#ccff00]/20 flex items-center justify-center mb-3 text-xl font-bold text-[#5a7000] dark:text-[#ccff00]">S</div>
+                <h2 className="font-semibold text-gray-900 dark:text-white">Suscripciones de clientes</h2>
+                <p className="text-sm text-gray-600 dark:text-gray-300">Consulta la vigencia y crea o cambia la suscripción de un cliente.</p>
+              </Link>
+              <Link
                 to="/ubicaciones"
                 className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl shadow-sm border border-black/10 dark:border-white/10 p-6 hover:border-[#ccff00] transition-colors"
               >

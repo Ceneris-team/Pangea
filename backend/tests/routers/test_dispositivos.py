@@ -310,6 +310,175 @@ class TestFiltros:
 
 
 # ---------------------------------------------------------------------------
+# HU36 CA1 - Filtro por marca (coincidencia exacta, acumulativo con los
+# demás filtros de HU10)
+# ---------------------------------------------------------------------------
+
+
+class TestFiltroPorMarca:
+    def test_filtro_por_marca_sola(self, client, db_session, tecnico_lector):
+        sede, _ = tecnico_lector
+        preparar_dispositivo(db_session, sede, nombre="Disp-Campbell", marca="Campbell")
+        preparar_dispositivo(db_session, sede, nombre="Disp-Vaisala", marca="Vaisala")
+
+        resp = client.get("/dispositivos", params={"marca": "Campbell"})
+        nombres = [i["nmbr"] for i in resp.json()["items"]]
+        assert nombres == ["Disp-Campbell"]
+
+    def test_marca_es_coincidencia_exacta_no_parcial(self, client, db_session, tecnico_lector):
+        # A diferencia de `busqueda` (texto libre, parcial), `marca` es
+        # coincidencia exacta: "Campbell" no debe matchear "Campbell Sci".
+        sede, _ = tecnico_lector
+        preparar_dispositivo(db_session, sede, nombre="Disp-Campbell", marca="Campbell")
+        preparar_dispositivo(db_session, sede, nombre="Disp-CampbellSci", marca="Campbell Sci")
+
+        resp = client.get("/dispositivos", params={"marca": "Campbell"})
+        nombres = [i["nmbr"] for i in resp.json()["items"]]
+        assert nombres == ["Disp-Campbell"]
+
+    def test_marca_combinada_con_ubicacion(self, client, db_session, tecnico_lector):
+        sede, _ = tecnico_lector
+        ubicacion_a = crear_ubicacion(db_session, sede, nombre="Ubicacion A")
+        ubicacion_b = crear_ubicacion(db_session, sede, nombre="Ubicacion B")
+        preparar_dispositivo(
+            db_session, sede, nombre="Disp-A-Campbell", marca="Campbell", ubicacion=ubicacion_a
+        )
+        preparar_dispositivo(
+            db_session, sede, nombre="Disp-A-Vaisala", marca="Vaisala", ubicacion=ubicacion_a
+        )
+        preparar_dispositivo(
+            db_session, sede, nombre="Disp-B-Campbell", marca="Campbell", ubicacion=ubicacion_b
+        )
+
+        resp = client.get(
+            "/dispositivos", params={"marca": "Campbell", "id_ubccn": ubicacion_a.id_ubccn}
+        )
+        nombres = [i["nmbr"] for i in resp.json()["items"]]
+        assert nombres == ["Disp-A-Campbell"]
+
+    def test_marca_ubicacion_y_estado_los_tres_a_la_vez(self, client, db_session, tecnico_lector):
+        sede, _ = tecnico_lector
+        ubicacion_a = crear_ubicacion(db_session, sede, nombre="Ubicacion A")
+        ubicacion_b = crear_ubicacion(db_session, sede, nombre="Ubicacion B")
+
+        # Coincide con los tres filtros: el único que debe sobrevivir.
+        preparar_dispositivo(
+            db_session,
+            sede,
+            nombre="Disp-Coincide",
+            marca="Campbell",
+            estado="Activo",
+            ubicacion=ubicacion_a,
+        )
+        # Marca distinta, mismo resto.
+        preparar_dispositivo(
+            db_session,
+            sede,
+            nombre="Disp-OtraMarca",
+            marca="Vaisala",
+            estado="Activo",
+            ubicacion=ubicacion_a,
+        )
+        # Misma marca y ubicación, pero Inactivo.
+        preparar_dispositivo(
+            db_session,
+            sede,
+            nombre="Disp-Inactivo",
+            marca="Campbell",
+            estado="Inactivo",
+            ubicacion=ubicacion_a,
+        )
+        # Misma marca y estado, pero otra ubicación.
+        preparar_dispositivo(
+            db_session,
+            sede,
+            nombre="Disp-OtraUbicacion",
+            marca="Campbell",
+            estado="Activo",
+            ubicacion=ubicacion_b,
+        )
+
+        resp = client.get(
+            "/dispositivos",
+            params={"marca": "Campbell", "id_ubccn": ubicacion_a.id_ubccn, "estado": "Activo"},
+        )
+        nombres = [i["nmbr"] for i in resp.json()["items"]]
+        assert nombres == ["Disp-Coincide"]
+
+    def test_marca_inexistente_devuelve_vacio(self, client, db_session, tecnico_lector):
+        sede, _ = tecnico_lector
+        preparar_dispositivo(db_session, sede, nombre="Disp-Campbell", marca="Campbell")
+
+        resp = client.get("/dispositivos", params={"marca": "NoExiste"})
+        assert resp.json()["total"] == 0
+
+
+# ---------------------------------------------------------------------------
+# HU36 CA1 - GET /dispositivos/marcas (selector del filtro por marca)
+# ---------------------------------------------------------------------------
+
+
+class TestMarcasDisponibles:
+    def test_devuelve_marcas_distintas_ordenadas(self, client, db_session, tecnico_lector):
+        sede, _ = tecnico_lector
+        preparar_dispositivo(db_session, sede, nombre="Disp-1", marca="Vaisala")
+        preparar_dispositivo(db_session, sede, nombre="Disp-2", marca="Campbell")
+        # Misma marca que Disp-1: no debe duplicarse en la respuesta.
+        preparar_dispositivo(db_session, sede, nombre="Disp-3", marca="Vaisala")
+
+        resp = client.get("/dispositivos/marcas")
+        assert resp.status_code == 200
+        assert resp.json()["items"] == ["Campbell", "Vaisala"]
+
+    def test_no_expone_marcas_de_otra_sede(self, client, db_session, tecnico_lector, fabrica):
+        # Aislamiento por sede (HT-09 CA3): mismo criterio que
+        # listar_dispositivos, replicado en listar_marcas_disponibles vía
+        # _query_dispositivos_visibles.
+        sede, _ = tecnico_lector
+        preparar_dispositivo(db_session, sede, nombre="Disp-Propia", marca="Campbell")
+
+        otra_sede = fabrica.sede()
+        preparar_dispositivo(db_session, otra_sede, nombre="Disp-Ajena", marca="Vaisala")
+
+        resp = client.get("/dispositivos/marcas")
+        assert resp.json()["items"] == ["Campbell"]
+
+    def test_cliente_final_solo_ve_marcas_de_su_ubicacion_asignada(
+        self, client, db_session, fabrica
+    ):
+        # Mismo criterio de PermisoUbicacion que listar_dispositivos: un
+        # Cliente Final no debe ver la marca de un dispositivo fuera de lo
+        # que le fue asignado, aunque esté en su propia sede.
+        rol = fabrica.rol("Cliente Final")
+        sede = fabrica.sede()
+        usuario = fabrica.usuario(rol=rol)
+        agregar_permiso(db_session, usuario, sede, "Dispositivos", "Lectura", rol)
+
+        ubicacion_asignada = crear_ubicacion(db_session, sede, nombre="Asignada")
+        db_session.add(PermisoUbicacion(id_usr=usuario.id_usr, id_ubccn=ubicacion_asignada.id_ubccn))
+        db_session.flush()
+        preparar_dispositivo(
+            db_session, sede, nombre="Disp-Asignado", marca="Campbell", ubicacion=ubicacion_asignada
+        )
+
+        ubicacion_ajena = crear_ubicacion(db_session, sede, nombre="No Asignada")
+        preparar_dispositivo(
+            db_session, sede, nombre="Disp-Ajeno", marca="Vaisala", ubicacion=ubicacion_ajena
+        )
+
+        app.dependency_overrides[get_current_user] = lambda: usuario_jwt(
+            usuario, rol.nmbr, sede_id=sede.id_sd
+        )
+
+        resp = client.get("/dispositivos/marcas")
+        assert resp.json()["items"] == ["Campbell"]
+
+    def test_sin_dispositivos_devuelve_lista_vacia(self, client, db_session, tecnico_lector):
+        resp = client.get("/dispositivos/marcas")
+        assert resp.json() == {"items": []}
+
+
+# ---------------------------------------------------------------------------
 # Paginación
 # ---------------------------------------------------------------------------
 

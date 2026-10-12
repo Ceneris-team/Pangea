@@ -4,7 +4,7 @@ import pangeaIconLight from "../../assets/pangea-icon-light.png";
 import pangeaIconDark from "../../assets/pangea-icon-dark.png";
 import { ROLES, rutaPorRol } from "../../config/roles";
 
-export type SeccionActiva = "panel" | "usuarios" | "ubicaciones" | "dispositivos" | "conexiones-ftp" | "dashboard" | "configuracion" | "consulta-datos"| "mapeos" | "parametros" | "cola-ingesta" | "graficos" | "mapa-estaciones" | "mapa-ubicaciones" | "paneles" | "mi-perfil";
+export type SeccionActiva = "panel" | "usuarios" | "ubicaciones" | "dispositivos" | "conexiones-ftp" | "dashboard" | "configuracion" | "consulta-datos"| "mapeos" | "parametros" | "cola-ingesta" | "graficos" | "mapa-estaciones" | "mapa-ubicaciones" | "paneles" | "mi-perfil" | "planes" | "suscripciones";
 
 interface SidebarProps {
   onLogout: () => void;
@@ -410,6 +410,19 @@ export default function Sidebar({ onLogout, activo, rol }: SidebarProps) {
             -> click en el dispositivo -> pestañas Formato y Datos), porque
             el mapeo depende de qué sensores tiene cableados ese datalogger
             concreto. */}
+
+        {/* ---------------- Sistema ---------------- */}
+        {(rol === ROLES.ADMINISTRADOR_COMERCIAL || rol === ROLES.ADMINISTRADOR) && (
+          <div className={grupo}>
+            <p className={tituloGrupo}>Comercial</p>
+            <ItemMenu to="/planes-suscripciones?vista=planes" activo={activo === "planes"} icono={<path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 7h16M4 12h16M4 17h10" />}>
+              Planes
+            </ItemMenu>
+            <ItemMenu to="/planes-suscripciones?vista=suscripciones" activo={activo === "suscripciones"} icono={<path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 5h16v14H4zM8 9h8m-8 4h5" />}>
+              Suscripciones
+            </ItemMenu>
+          </div>
+        )}
 
         {/* ---------------- Sistema ---------------- */}
         <div className={grupo}>

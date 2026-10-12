@@ -2,6 +2,36 @@
 @tailwind components;
 @tailwind utilities;
 
+html {
+  color-scheme: light;
+}
+
+html.dark {
+  color-scheme: dark;
+}
+
+/* La lista desplegable de un select nativo la pinta el navegador fuera del
+ * elemento visible. Sus opciones necesitan colores propios en ambos temas. */
+select {
+  color-scheme: light;
+}
+
+select option,
+select optgroup {
+  background-color: #fff;
+  color: #111827;
+}
+
+html.dark select {
+  color-scheme: dark;
+}
+
+html.dark select option,
+html.dark select optgroup {
+  background-color: #1a202c;
+  color: #f9fafb;
+}
+
 /* Oculta la barra de scroll sin perder el scroll.
  *
  * Se usa en contenedores que SÍ tienen que poder desplazarse (el menú

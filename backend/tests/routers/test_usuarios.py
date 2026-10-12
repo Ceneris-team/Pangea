@@ -14,12 +14,14 @@ También cubre HU03 (listado): búsqueda insensible a mayúsculas por nombre y
 por fragmento de correo, filtros por rol/estado y paginado de 10.
 """
 
+from datetime import date, timedelta
+
 import pytest
 from fastapi.testclient import TestClient
 
 from app.database import get_db
 from app.main import app
-from app.models import Usuario
+from app.models import PlanSuscripcion, Suscripcion, Usuario
 from app.models.suscripcion import PermisoUsuarioSede
 from app.security.dependencies import get_current_user
 from app.security.password_policy import es_password_valido
@@ -357,3 +359,39 @@ class TestListarUsuarios:
 
         ids = [i["id_usr"] for i in resp.json()["items"]]
         assert usuario_admin.id_usr in ids
+
+
+def test_listado_muestra_planes_de_todos_los_clientes_del_usuario(
+    client, db_session, fabrica, admin_editor
+):
+    rol_cliente = fabrica.rol("Cliente Final")
+    usuario = fabrica.usuario(rol_cliente)
+    cliente_con_plan = fabrica.cliente()
+    cliente_sin_plan = fabrica.cliente()
+    sede_con_plan = fabrica.sede(cliente_con_plan)
+    sede_sin_plan = fabrica.sede(cliente_sin_plan)
+    agregar_permiso(db_session, usuario, sede_con_plan, "Tableros", "Lectura", rol_cliente)
+    agregar_permiso(db_session, usuario, sede_sin_plan, "Tableros", "Lectura", rol_cliente)
+
+    plan = PlanSuscripcion(nmbr=f"Plan para usuario {usuario.id_usr}", prc_mnsl=299)
+    db_session.add(plan)
+    db_session.flush()
+    db_session.add(Suscripcion(
+        id_clnt=cliente_con_plan.id_clnt,
+        id_pln=plan.id_pln,
+        fch_inc=date.today() - timedelta(days=1),
+        fch_vncmnt=date.today() + timedelta(days=30),
+        estd="Activa",
+    ))
+    db_session.flush()
+
+    respuesta = client.get("/usuarios", params={"busqueda": usuario.crr})
+    assert respuesta.status_code == 200, respuesta.text
+    assert respuesta.json()["items"][0]["clientes"] == [
+        {"id_clnt": cliente_con_plan.id_clnt, "cliente": cliente_con_plan.rzn_scl, "plan": plan.nmbr},
+        {"id_clnt": cliente_sin_plan.id_clnt, "cliente": cliente_sin_plan.rzn_scl, "plan": None},
+    ]
+
+    admin = admin_editor[0]
+    respuesta_admin = client.get("/usuarios", params={"busqueda": admin.crr})
+    assert respuesta_admin.json()["items"][0]["clientes"] == []

@@ -9,6 +9,7 @@ from slowapi.util import get_remote_address
 from app.routers import (
     auditoria,
     auth,
+    comercial,
     conexiones_ftp,
     dispositivos,
     ingesta,
@@ -43,6 +44,7 @@ app.add_middleware(
 )
 
 app.include_router(auth.router)
+app.include_router(comercial.router)
 app.include_router(usuarios.router)
 app.include_router(auditoria.router)
 app.include_router(ubicaciones.router)

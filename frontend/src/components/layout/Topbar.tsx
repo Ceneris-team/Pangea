@@ -3,6 +3,8 @@ import { Link } from "react-router-dom";
 import { useTheme } from "../../context/ThemeContext";
 import { apiFetch } from "../../services/api";
 import { ROLES } from "../../config/roles";
+import DrawerPanel from "./DrawerPanel";
+import PerfilConfiguracion from "../perfil/PerfilConfiguracion";
 
 interface TopbarProps {
   nombreCompleto: string | null;
@@ -33,6 +35,8 @@ export default function Topbar({ nombreCompleto, rol }: TopbarProps) {
   const [conteoPendientes, setConteoPendientes] = useState(0);
   const [popoverAbierto, setPopoverAbierto] = useState(false);
   const [pendientes, setPendientes] = useState<ColumnaPendiente[] | null>(null);
+  const [perfilAbierto, setPerfilAbierto] = useState(false);
+  const [perfilVisitado, setPerfilVisitado] = useState(false);
 
   const puedeVerNotificacion = ROLES_VEN_NOTIFICACION.includes(rol ?? "");
 
@@ -73,7 +77,13 @@ export default function Topbar({ nombreCompleto, rol }: TopbarProps) {
     }
   }
 
+  function abrirPerfil() {
+    setPerfilVisitado(true);
+    setPerfilAbierto(true);
+  }
+
   return (
+    <>
     <div className="inline-flex items-center gap-4 bg-white/60 dark:bg-white/10 backdrop-blur-md border border-black/10 dark:border-white/10 rounded-2xl pl-3 pr-4 py-2 shadow-lg transition-colors duration-300">
       <button
         onClick={toggleTema}
@@ -166,12 +176,24 @@ export default function Topbar({ nombreCompleto, rol }: TopbarProps) {
           <div className="text-sm font-semibold text-gray-900 dark:text-white">{nombreCompleto ?? "Usuario"}</div>
           <div className="text-xs text-gray-500 dark:text-gray-300">{rol ?? ""}</div>
         </div>
-        <img
-          className="w-10 h-10 rounded-full border-2 border-[#ccff00] object-cover"
-          src={`https://ui-avatars.com/api/?name=${encodeURIComponent(nombreCompleto ?? "Usuario")}&background=2d3748&color=ccff00`}
-          alt="Avatar del usuario"
-        />
+        <button
+          type="button"
+          onClick={abrirPerfil}
+          aria-label="Abrir configuración de mi perfil"
+          aria-expanded={perfilAbierto}
+          className="rounded-full focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ccff00]"
+        >
+          <img
+            className="w-10 h-10 rounded-full border-2 border-[#ccff00] object-cover"
+            src={`https://ui-avatars.com/api/?name=${encodeURIComponent(nombreCompleto ?? "Usuario")}&background=2d3748&color=ccff00`}
+            alt=""
+          />
+        </button>
       </div>
     </div>
+    <DrawerPanel abierto={perfilAbierto} onCerrar={() => setPerfilAbierto(false)} titulo="Mi perfil">
+      {perfilVisitado && <PerfilConfiguracion enPanel />}
+    </DrawerPanel>
+    </>
   );
 }

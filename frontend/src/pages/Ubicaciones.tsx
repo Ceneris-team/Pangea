@@ -308,6 +308,12 @@ export default function Ubicaciones() {
                 <p className="text-sm text-gray-600 dark:text-gray-300">
                   Listado centralizado de estaciones de monitoreo registradas.
                 </p>
+                {rol === ROLES.CLIENTE_FINAL && (
+                  <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
+                    Aquí solo aparecen las ubicaciones asignadas a tu cuenta. El cupo del plan incluye todas las ubicaciones activas de tu cliente.{" "}
+                    <Link to="/panel-cliente" className="font-semibold text-[#5a7000] underline dark:text-[#ccff00]">Ver consumo del plan</Link>
+                  </p>
+                )}
               </div>
 
               <div className="flex gap-3">

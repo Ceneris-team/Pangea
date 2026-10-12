@@ -11,6 +11,7 @@ interface UsuarioListItem {
   crr: string;
   rol_nombre: string;
   estd: string;
+  clientes: { id_clnt: number; cliente: string; plan: string | null }[];
 }
 
 /** HU04 CA2: respuesta de POST /usuarios, con el mensaje de éxito. */
@@ -845,6 +846,7 @@ export default function Usuarios() {
                       <th className="px-6 py-4 font-bold tracking-wider">Nombre</th>
                       <th className="px-6 py-4 font-bold tracking-wider">Correo</th>
                       <th className="px-6 py-4 font-bold tracking-wider">Rol</th>
+                      <th className="px-6 py-4 font-bold tracking-wider">Cliente y plan</th>
                       <th className="px-6 py-4 font-bold tracking-wider">Estado</th>
                       <th className="px-6 py-4 font-bold tracking-wider text-right">Acciones</th>
                     </tr>
@@ -852,7 +854,7 @@ export default function Usuarios() {
                   <tbody>
                     {loading && (
                       <tr>
-                        <td colSpan={5} className="px-6 py-8 text-center text-gray-600 dark:text-gray-300">
+                        <td colSpan={6} className="px-6 py-8 text-center text-gray-600 dark:text-gray-300">
                           <div className="flex justify-center items-center gap-2">
                             <div className="w-4 h-4 rounded-full bg-[#ccff00] animate-bounce"></div>
                             <span>Cargando datos...</span>
@@ -863,7 +865,7 @@ export default function Usuarios() {
 
                     {!loading && data?.items.length === 0 && (
                       <tr>
-                        <td colSpan={5} className="px-6 py-8 text-center text-gray-600 dark:text-gray-300">
+                        <td colSpan={6} className="px-6 py-8 text-center text-gray-600 dark:text-gray-300">
                           No se encontraron usuarios con ese criterio.
                         </td>
                       </tr>
@@ -885,6 +887,22 @@ export default function Usuarios() {
                           <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">{u.nmbr_cmplt}</td>
                           <td className="px-6 py-4">{u.crr}</td>
                           <td className="px-6 py-4">{u.rol_nombre}</td>
+                          <td className="px-6 py-4">
+                            {u.rol_nombre !== "Cliente Final" ? (
+                              <span className="text-gray-500 dark:text-gray-400">Personal CENERIS</span>
+                            ) : u.clientes.length === 0 ? (
+                              <span className="text-amber-700 dark:text-amber-300">Sin cliente asignado</span>
+                            ) : (
+                              <div className="flex flex-col gap-1">
+                                {u.clientes.map((cliente) => (
+                                  <span key={cliente.id_clnt} className="whitespace-nowrap">
+                                    <span className="font-medium text-gray-900 dark:text-white">{cliente.cliente}</span>
+                                    <span className="text-gray-500 dark:text-gray-400"> · {cliente.plan ?? "Sin plan vigente"}</span>
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </td>
                           <td className="px-6 py-4">
                             <span
                               className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold border ${

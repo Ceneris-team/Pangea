@@ -118,27 +118,40 @@ export default function Dispositivos() {
   // CA HU10: filtro por ubicación y por estado
   const [idUbccn, setIdUbccn] = useState("");
   const [estado, setEstado] = useState("");
+  // HU36 CA1: filtro por marca, mismo patrón que idUbccn/estado.
+  const [marca, setMarca] = useState("");
   const [pagina, setPagina] = useState(1);
 
   const [data, setData] = useState<ListadoPaginado | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // El selector de "Ubicación" se puebla con GET /ubicaciones (HU07 ya
-  // existente): no hace falta otro endpoint para esto.
+  // El selector de "Ubicación" se puebla con GET /ubicaciones?con_dispositivos=true
+  // (HU36): no tiene sentido ofrecer una ubicación sin ningún dispositivo
+  // asociado en este filtro -elegirla siempre daría una tabla vacía-.
   const [ubicaciones, setUbicaciones] = useState<UbicacionListItem[]>([]);
 
   useEffect(() => {
     apiFetch<{ items: UbicacionListItem[] }>("/ubicaciones", {
-      params: { por_pagina: 100 },
+      params: { con_dispositivos: "true", por_pagina: 100 },
     })
       .then((res) => setUbicaciones(res.items))
       .catch(() => setUbicaciones([]));
   }, []);
 
+  // HU36 CA1: el selector de "Marca" se puebla con GET /dispositivos/marcas
+  // (marcas distintas entre los dispositivos que este usuario puede ver).
+  const [marcas, setMarcas] = useState<string[]>([]);
+
+  useEffect(() => {
+    apiFetch<{ items: string[] }>("/dispositivos/marcas")
+      .then((res) => setMarcas(res.items))
+      .catch(() => setMarcas([]));
+  }, []);
+
   useEffect(() => {
     setPagina(1);
-  }, [busqueda, idUbccn, estado]);
+  }, [busqueda, idUbccn, estado, marca]);
 
   function cargarDispositivos() {
     let cancelado = false;
@@ -150,6 +163,7 @@ export default function Dispositivos() {
         busqueda: busqueda || undefined,
         id_ubccn: idUbccn || undefined,
         estado: estado || undefined,
+        marca: marca || undefined,
         pagina,
         por_pagina: POR_PAGINA,
       },
@@ -170,7 +184,7 @@ export default function Dispositivos() {
     };
   }
 
-  useEffect(cargarDispositivos, [busqueda, idUbccn, estado, pagina]);
+  useEffect(cargarDispositivos, [busqueda, idUbccn, estado, marca, pagina]);
 
   // HU11: formulario de "Añadir dispositivo" como ventana emergente sobre
   // el listado (mismo patrón que Conexiones FTP y Parámetros).
@@ -408,12 +422,14 @@ export default function Dispositivos() {
   const inicioRango = data ? (data.pagina - 1) * data.por_pagina + 1 : 0;
   const finRango = data ? Math.min(data.pagina * data.por_pagina, data.total) : 0;
 
-  const hayFiltrosActivos = busquedaInput !== "" || idUbccn !== "" || estado !== "";
+  const hayFiltrosActivos =
+    busquedaInput !== "" || idUbccn !== "" || estado !== "" || marca !== "";
 
   function limpiarFiltros() {
     setBusquedaInput("");
     setIdUbccn("");
     setEstado("");
+    setMarca("");
   }
 
   return (
@@ -518,6 +534,21 @@ export default function Dispositivos() {
                     <option value="">Todos los estados</option>
                     <option value="Activo">Activo</option>
                     <option value="Inactivo">Inactivo</option>
+                  </select>
+
+                  {/* HU36 CA1: filtro por marca, coincidencia exacta,
+                      acumulativo con ubicación y estado. */}
+                  <select
+                    value={marca}
+                    onChange={(e) => setMarca(e.target.value)}
+                    className="bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block p-2.5 outline-none cursor-pointer"
+                  >
+                    <option value="">Todas las marcas</option>
+                    {marcas.map((m) => (
+                      <option key={m} value={m}>
+                        {m}
+                      </option>
+                    ))}
                   </select>
 
                   {hayFiltrosActivos && (

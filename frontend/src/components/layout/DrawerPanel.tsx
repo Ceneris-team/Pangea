@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 
 /**
@@ -45,6 +45,15 @@ export default function DrawerPanel({
   ancho = "md",
   pie,
 }: DrawerPanelProps) {
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!abierto) return;
+    const focoAnterior = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    panelRef.current?.focus({ preventScroll: true });
+    return () => focoAnterior?.focus({ preventScroll: true });
+  }, [abierto]);
+
   // Escape cierra el panel, igual que clickear el overlay -consistente
   // con cualquier otro diálogo del sistema operativo o del navegador-.
   useEffect(() => {
@@ -66,9 +75,13 @@ export default function DrawerPanel({
         aria-hidden="true"
       />
       <div
+        ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-label={titulo}
+        aria-hidden={!abierto}
+        inert={!abierto}
+        tabIndex={-1}
         className={`fixed top-0 right-0 h-full w-full ${ANCHOS[ancho]} bg-white dark:bg-[#1a202c] shadow-2xl z-50 transition-transform duration-300 flex flex-col ${
           abierto ? "translate-x-0" : "translate-x-full"
         }`}

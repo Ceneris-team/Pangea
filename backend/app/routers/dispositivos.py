@@ -96,7 +96,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import ConexionFTP, Dispositivo, PermisoUbicacion, Ubicacion
+from app.models import ConexionFTP, Dispositivo, PermisoUbicacion, Sede, Ubicacion
+from app.services.limites_plan import comprobar_cupo
 from app.models.archivo_ingesta import ArchivoIngesta
 from app.models.mapeo_dispositivo import MapeoColumna, MapeoFormato
 from app.models.telemetria import Telemetria
@@ -144,18 +145,13 @@ def _requerir_tecnico_o_admin(usuario: dict = Depends(get_current_user)) -> dict
     return usuario
 
 
-@router.get("")
-def listar_dispositivos(
-    busqueda: str | None = Query(
-        default=None, description="Nombre o marca del dispositivo, parcial"
-    ),
-    id_ubccn: int | None = Query(default=None, description="Filtrar por ubicación"),
-    estado: str | None = Query(default=None, description="Activo / Inactivo"),
-    pagina: int = Query(default=1, ge=1),
-    por_pagina: int = Query(default=10, ge=1, le=100),  # CA: 10 por defecto
-    db: Session = Depends(get_db),
-    usuario: dict = Depends(require_permiso("Dispositivos", LECTURA)),
-):
+def _query_dispositivos_visibles(db: Session, usuario: dict):
+    """Dispositivos que este usuario puede ver, antes de cualquier filtro
+    de HU10/HU36: aislamiento por sede (HT-09 CA3) + PermisoUbicacion para
+    quien no tiene acceso total. Se extrae de listar_dispositivos para que
+    listar_marcas_disponibles (HU36 CA1) aplique EXACTAMENTE el mismo
+    criterio de acceso -sin esto, el selector de marca podría exponer la
+    marca de un dispositivo que el usuario no puede ver en la tabla."""
     query = db.query(Dispositivo, Ubicacion.nmbr).join(
         Ubicacion, Ubicacion.id_ubccn == Dispositivo.id_ubccn
     )
@@ -172,6 +168,50 @@ def listar_dispositivos(
             PermisoUbicacion, PermisoUbicacion.id_ubccn == Dispositivo.id_ubccn
         ).filter(PermisoUbicacion.id_usr == id_usr)
 
+    return query
+
+
+@router.get("/marcas")
+def listar_marcas_disponibles(
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(require_permiso("Dispositivos", LECTURA)),
+):
+    """HU36 CA1: marcas distintas entre los dispositivos REGISTRADOS que
+    este usuario puede ver, para poblar el selector de "Filtro por marca"
+    -mismo patrón que listar_parametros_disponibles en routers/mediciones.py
+    (endpoint dedicado que reusa el criterio de acceso del listado
+    principal en vez de exponer el catálogo completo).
+
+    Se declara ANTES de GET /{id_dspstv}: si fuera después, esa ruta
+    capturaría "marcas" como si fuera un id y respondería 422 (mismo
+    motivo que /mapa, más abajo).
+    """
+    query = _query_dispositivos_visibles(db, usuario)
+    marcas = [
+        fila[0] for fila in query.with_entities(Dispositivo.mrc).distinct().order_by(Dispositivo.mrc)
+    ]
+    return {"items": marcas}
+
+
+@router.get("")
+def listar_dispositivos(
+    busqueda: str | None = Query(
+        default=None, description="Nombre o marca del dispositivo, parcial"
+    ),
+    id_ubccn: int | None = Query(default=None, description="Filtrar por ubicación"),
+    estado: str | None = Query(default=None, description="Activo / Inactivo"),
+    # HU36 CA1: coincidencia EXACTA sobre Dispositivo.mrc, para combinarse
+    # de forma acumulativa (AND) con id_ubccn/estado -distinto de
+    # `busqueda`, que sigue siendo texto libre parcial sobre nombre+marca
+    # (HU10) y no se toca acá.
+    marca: str | None = Query(default=None, description="Marca exacta del dispositivo"),
+    pagina: int = Query(default=1, ge=1),
+    por_pagina: int = Query(default=10, ge=1, le=100),  # CA: 10 por defecto
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(require_permiso("Dispositivos", LECTURA)),
+):
+    query = _query_dispositivos_visibles(db, usuario)
+
     if busqueda:
         patron = f"%{busqueda.lower()}%"
         query = query.filter(
@@ -181,6 +221,8 @@ def listar_dispositivos(
         query = query.filter(Dispositivo.id_ubccn == id_ubccn)
     if estado:
         query = query.filter(Dispositivo.estd == estado)
+    if marca:
+        query = query.filter(Dispositivo.mrc == marca)
 
     total = query.count()
     filas = (
@@ -279,6 +321,9 @@ def crear_dispositivo(
             status_code=409,
             detail="Esta conexión FTP ya tiene un dispositivo activo asociado",
         )
+
+    id_clnt = db.query(Sede.id_clnt).filter(Sede.id_sd == ubicacion.id_sd).scalar()
+    comprobar_cupo(db, id_clnt, "dispositivos")
 
     dispositivo = Dispositivo(
         id_ubccn=ubicacion.id_ubccn,
@@ -520,6 +565,9 @@ def reactivar_dispositivo(
             status_code=409,
             detail="Esta conexión FTP ya tiene un dispositivo activo asociado",
         )
+
+    id_clnt = db.query(Sede.id_clnt).filter(Sede.id_sd == ubicacion.id_sd).scalar()
+    comprobar_cupo(db, id_clnt, "dispositivos")
 
     dispositivo.estd = "Activo"
     db.commit()

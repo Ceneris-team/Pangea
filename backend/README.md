@@ -538,10 +538,14 @@ sus 4 CA, así que quedan documentados en vez de implementados aquí:
   consulta toca 1 de 17 particiones usando el índice `(id_sd, fch_hr)` de HT-08. Ver
   "Caché de consultas (HT-10)" más abajo. El frontend (`ConsultaDatos.tsx`) sigue sin
   enviar el rango: eso queda fuera del alcance de HT-10, que es backend.
-- **HT-16** (optimización de índices) debería repetir la medición de CA2 con varias
-  sedes y dispositivos y volumen realista -el script de arriba es el punto de partida-,
-  y **HT-18** (pruebas de carga con Locust) queda para su propio sprint. Ninguno de los
-  dos se tocó en este trabajo.
+- ~~**HT-16** (optimización de índices) debería repetir la medición de CA2 con varias
+  sedes y dispositivos y volumen realista -el script de arriba es el punto de partida-~~
+  **RESUELTO en HT-16** (HU32 + HU36; HU40/HU41 quedan pendientes porque no existen
+  todavía). Ver `backend/docs/ht16-rendimiento-consultas.md`: EXPLAIN ANALYZE
+  antes/después sobre un dataset de 5 clientes (~2.1M filas), paginación por cursor en
+  `GET /mediciones` (HU32) y la decisión, con datos, de no migrar `GET /dispositivos`
+  (HU36) porque la tabla es demasiado chica para que importe.
+  **HT-18** (pruebas de carga con Locust) queda para su propio sprint, sin tocar acá.
 
 ## Caché de consultas (HT-10)
 

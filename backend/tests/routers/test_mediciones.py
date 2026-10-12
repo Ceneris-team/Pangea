@@ -895,6 +895,271 @@ class TestHU32FiltrosAvanzados:
         assert valores_alto == {500.0}
         assert valores_bajo != valores_alto
 
+    def test_frecuencia_muestreo_reduce_eventos_de_texto_a_uno_por_intervalo(
+        self, client, db_session, escenario_basico
+    ):
+        """A diferencia de valor_min/max (que solo aplica a Telemetria por
+        ser una comparación numérica), frecuencia_muestreo sí tiene
+        sentido de negocio sobre EventoTexto -un evento de puerta cada 15
+        minutos es una condición válida-, y _query_base aplica el bloque
+        de date_bin + DISTINCT ON sin distinguir de modelo (a propósito,
+        no es un olvido: ver el bloque de valor_min/max, que sí lo hace)."""
+        parametro_txt = crear_parametro(
+            db_session, "MensajeP Frecuencia", unidad="-", tipo_dato="texto"
+        )
+        mapear_parametro(
+            db_session, escenario_basico["dispositivo"], parametro_txt, indice=2, tipo_trama="P"
+        )
+        ahora = dt.datetime.now(dt.timezone.utc).replace(microsecond=0)
+        base = ahora - dt.timedelta(hours=2)
+        for i in range(4):
+            crear_evento_texto(
+                db_session,
+                escenario_basico["dispositivo"],
+                parametro_txt,
+                escenario_basico["sede"],
+                valor=f"Evento {i}",
+                fecha=base + dt.timedelta(minutes=5 * i),
+            )
+
+        resp = client.get(
+            "/mediciones",
+            params={
+                "parametro_ids": [parametro_txt.id_prmtr],
+                "fecha_inicio": (base - dt.timedelta(minutes=1)).isoformat(),
+                "fecha_fin": (base + dt.timedelta(minutes=20)).isoformat(),
+                "frecuencia_muestreo": 15,
+            },
+        )
+        body = resp.json()
+        # Mismo criterio que el test equivalente sobre Telemetria: 20
+        # minutos de eventos cada 5' son 4 lecturas; a 15' de frecuencia,
+        # como mucho 2 buckets caben en esa ventana.
+        assert body["total"] <= 2
+        assert body["total"] >= 1
+        assert all(i["parametro_nombre"] == "MensajeP Frecuencia" for i in body["items"])
+
+
+class TestRegresionOrdenCronologico:
+    """El DISTINCT ON de frecuencia_muestreo exige que el ORDER BY de SQL
+    empiece exactamente por (id_dspstv, id_prmtr, bucket) -restricción dura
+    de Postgres, no de estilo-, así que _query_base cambia su order_by
+    SOLO dentro del `if frecuencia_muestreo is not None` (hay un `return`
+    ahí adentro); sin ese parámetro, la función llega sin tocar hasta el
+    `return query.order_by(modelo.fch_hr.desc())` de siempre.
+
+    Ese order_by de SQL es la única garantía de que items.sort(key=fch_hr)
+    -que se hace en Python sobre la UNIÓN de Telemetria + EventoTexto,
+    tablas distintas- reciba de cada lado una lista ya razonablemente
+    ordenada. Este test fija ese comportamiento para HU12/HU13 sin
+    frecuencia_muestreo: si alguna vez el order_by condicional se
+    "simplificara" a uno unificado por dispositivo/parámetro, este test
+    tiene que fallar.
+    """
+
+    def test_orden_cronologico_correcto_mezclando_telemetria_y_evento_texto(
+        self, client, db_session, escenario_basico
+    ):
+        dispositivo = escenario_basico["dispositivo"]
+        sede = escenario_basico["sede"]
+        parametro_num = escenario_basico["parametro"]
+
+        parametro_txt = crear_parametro(db_session, "MensajeP Orden", unidad="-", tipo_dato="texto")
+        mapear_parametro(db_session, dispositivo, parametro_txt, indice=2, tipo_trama="P")
+
+        # Ancla propia de este test, ANTERIOR a la medición de
+        # escenario_basico (creada con dt.datetime.now() al montar la
+        # fixture, en un instante que este test no controla): así el
+        # rango de fechas de la consulta excluye esa medición y la
+        # secuencia esperada depende solo de los puntos creados acá, no
+        # de una carrera de timing entre la fixture y el test.
+        base = dt.datetime.now(dt.timezone.utc).replace(microsecond=0) - dt.timedelta(days=1)
+        # Se intercalan a mano Telemetria y EventoTexto en el tiempo, para
+        # que un sort incorrecto (o una lista que llegue de SQL en un
+        # orden inesperado) sea visible en la secuencia final, no solo en
+        # los conjuntos de valores.
+        crear_medicion(
+            db_session, dispositivo, parametro_num, sede, valor=1.0, fecha=base
+        )
+        crear_evento_texto(
+            db_session,
+            dispositivo,
+            parametro_txt,
+            sede,
+            valor="Evento t-30",
+            fecha=base + dt.timedelta(minutes=10),
+        )
+        crear_medicion(
+            db_session, dispositivo, parametro_num, sede, valor=2.0, fecha=base + dt.timedelta(minutes=20)
+        )
+        crear_evento_texto(
+            db_session,
+            dispositivo,
+            parametro_txt,
+            sede,
+            valor="Evento t-10",
+            fecha=base + dt.timedelta(minutes=30),
+        )
+
+        resp = client.get(
+            "/mediciones",
+            params={
+                "fecha_inicio": base.isoformat(),
+                "fecha_fin": (base + dt.timedelta(minutes=30)).isoformat(),
+                "por_pagina": 500,
+            },
+        )
+        body = resp.json()
+        assert body["total"] == 4  # excluye la medición de escenario_basico (fuera del rango)
+        fechas = [i["fch_hr"] for i in body["items"]]
+        # CA de HU12/HU13, sin frecuencia_muestreo: orden cronológico
+        # descendente (más reciente primero), tal como lo dibuja la
+        # tabla de ConsultaDatos.tsx.
+        assert fechas == sorted(fechas, reverse=True)
+
+        valores_en_orden = [i["vlr"] for i in body["items"]]
+        assert valores_en_orden == ["Evento t-10", 2.0, "Evento t-30", 1.0]
+
+
+class TestHT16PaginacionPorCursor:
+    """HT-16 CA3: paginación por cursor keyset para el modo "tabla" de
+    HU32 (rango de fechas acotado, sin frecuencia_muestreo -ver
+    modo_cursor en routers/mediciones.py-). Un rango de fechas de pocas
+    horas activa ese modo: rango_es_amplio() lo considera "no amplio"
+    (bajo el umbral de 30 días de HT-10) y no hay downsampling que
+    dependa de conocer la serie completa antes de cortar.
+
+    Los tests tratan el cursor como opaco (lo toman de next_cursor de la
+    respuesta anterior, nunca lo arman a mano): es la caja negra con la
+    que el frontend real va a operar.
+    """
+
+    def _rango_reciente(self, base):
+        return {
+            "fecha_inicio": (base - dt.timedelta(hours=1)).isoformat(),
+            "fecha_fin": (base + dt.timedelta(hours=1)).isoformat(),
+        }
+
+    def test_pagina_siguiente_no_repite_ni_salta_filas(
+        self, client, db_session, escenario_basico
+    ):
+        dispositivo = escenario_basico["dispositivo"]
+        parametro = escenario_basico["parametro"]
+        sede = escenario_basico["sede"]
+        base = dt.datetime.now(dt.timezone.utc).replace(microsecond=0)
+
+        # 5 mediciones con timestamps distintos entre sí (evita depender
+        # del desempate por id): escenario_basico ya dejó una en "ahora".
+        fechas_creadas = [base]
+        for i in range(1, 5):
+            fecha = base - dt.timedelta(minutes=i)
+            crear_medicion(db_session, dispositivo, parametro, sede, valor=float(i), fecha=fecha)
+            fechas_creadas.append(fecha)
+
+        pagina_1 = client.get(
+            "/mediciones", params={**self._rango_reciente(base), "por_pagina": 2}
+        ).json()
+        assert len(pagina_1["items"]) == 2
+        assert pagina_1["next_cursor"] is not None
+        assert pagina_1["total"] == 5
+
+        pagina_2 = client.get(
+            "/mediciones",
+            params={**self._rango_reciente(base), "por_pagina": 2, "cursor": pagina_1["next_cursor"]},
+        ).json()
+        assert len(pagina_2["items"]) == 2
+
+        ids_pagina_1 = {i["id_registro"] for i in pagina_1["items"]}
+        ids_pagina_2 = {i["id_registro"] for i in pagina_2["items"]}
+        assert ids_pagina_1.isdisjoint(ids_pagina_2)
+
+        pagina_3 = client.get(
+            "/mediciones",
+            params={**self._rango_reciente(base), "por_pagina": 2, "cursor": pagina_2["next_cursor"]},
+        ).json()
+        assert len(pagina_3["items"]) == 1
+        assert pagina_3["next_cursor"] is None
+
+        ids_totales = ids_pagina_1 | ids_pagina_2 | {i["id_registro"] for i in pagina_3["items"]}
+        assert len(ids_totales) == 5
+
+    def test_pagina_con_dataset_vacio_no_rompe(self, client, db_session, escenario_basico):
+        base = dt.datetime.now(dt.timezone.utc).replace(microsecond=0)
+        # Rango sin ninguna medición: escenario_basico dejó la suya fuera
+        # de esta ventana (un año antes).
+        resp = client.get(
+            "/mediciones",
+            params={
+                "fecha_inicio": (base - dt.timedelta(days=400, hours=1)).isoformat(),
+                "fecha_fin": (base - dt.timedelta(days=400)).isoformat(),
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["items"] == []
+        assert body["total"] == 0
+        assert body["next_cursor"] is None
+
+    def test_cursor_invalido_devuelve_422(self, client, db_session, escenario_basico):
+        base = dt.datetime.now(dt.timezone.utc)
+        resp = client.get(
+            "/mediciones",
+            params={**self._rango_reciente(base), "cursor": "no-es-un-cursor-valido"},
+        )
+        assert resp.status_code == 422
+
+    def test_cursor_estable_ante_insercion_concurrente_entre_paginas(
+        self, client, db_session, escenario_basico
+    ):
+        """El caso que distingue un cursor real de "OFFSET con otro
+        nombre": una fila nueva se inserta DESPUÉS de pedir la página 1
+        pero ANTES de pedir la página 2. Con OFFSET, esa inserción corre
+        el índice de todas las filas siguientes y la página 2 repite o se
+        salta una fila. Con el cursor keyset (fch_hr, origen, id), la
+        fila nueva ocupa su posición según esa clave -acá, más reciente
+        que todo lo ya paginado- y nunca aparece antes del cursor ya
+        entregado."""
+        dispositivo = escenario_basico["dispositivo"]
+        parametro = escenario_basico["parametro"]
+        sede = escenario_basico["sede"]
+        base = dt.datetime.now(dt.timezone.utc).replace(microsecond=0)
+
+        for i in range(1, 4):
+            crear_medicion(
+                db_session, dispositivo, parametro, sede, valor=float(i),
+                fecha=base - dt.timedelta(minutes=i),
+            )
+
+        pagina_1 = client.get(
+            "/mediciones", params={**self._rango_reciente(base), "por_pagina": 2}
+        ).json()
+        ids_pagina_1 = {i["id_registro"] for i in pagina_1["items"]}
+
+        # Inserción concurrente: una lectura nueva, más reciente que todo
+        # lo existente -llega DESPUÉS de la página 1 en el orden del
+        # cursor, así que no debe aparecer en la página 2-.
+        crear_medicion(
+            db_session, dispositivo, parametro, sede, valor=999.0,
+            fecha=base + dt.timedelta(seconds=30),
+        )
+
+        pagina_2 = client.get(
+            "/mediciones",
+            params={**self._rango_reciente(base), "por_pagina": 2, "cursor": pagina_1["next_cursor"]},
+        ).json()
+        ids_pagina_2 = {i["id_registro"] for i in pagina_2["items"]}
+
+        assert ids_pagina_1.isdisjoint(ids_pagina_2)
+        assert all(i["vlr"] != 999.0 for i in pagina_2["items"])
+
+    def test_rango_amplio_no_activa_modo_cursor(self, client, db_session, escenario_basico):
+        # Sin fecha_inicio/fecha_fin, rango_es_amplio() es True (rango
+        # abierto): el contrato pagina/por_pagina de siempre sigue
+        # aplicando, y next_cursor es None -no es que "no haya más
+        # datos", es que este modo no lo calcula-.
+        resp = client.get("/mediciones").json()
+        assert resp["next_cursor"] is None
+
 
 class TestDenegadoSinPermiso:
     def test_denegado_sin_permiso_en_tableros(self, client, db_session, fabrica):

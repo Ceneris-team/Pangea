@@ -44,7 +44,15 @@ class LimitePlan(Base):
 
 class Suscripcion(Base):
     __tablename__ = "sscrpcn"
-    __table_args__ = (Index("idx_sscrpcn_vncmnt", "fch_vncmnt", "estd"),)
+    __table_args__ = (
+        Index("idx_sscrpcn_vncmnt", "fch_vncmnt", "estd"),
+        Index(
+            "uq_sscrpcn_clnt_activa",
+            "id_clnt",
+            unique=True,
+            postgresql_where=text("estd = 'Activa'"),
+        ),
+    )
 
     id_sscrpcn = Column(Integer, primary_key=True, autoincrement=True)
     id_clnt = Column(Integer, ForeignKey("clnt.id_clnt"), nullable=False)

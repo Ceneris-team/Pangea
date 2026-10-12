@@ -325,6 +325,53 @@ def test_la_ubicacion_creada_aparece_en_el_listado(client, tecnico_editor):
 
 
 # ---------------------------------------------------------------------------
+# HU36 - GET /ubicaciones?con_dispositivos=true (selector de ubicación del
+# filtro de Dispositivos.tsx: solo ubicaciones con al menos un dispositivo)
+# ---------------------------------------------------------------------------
+
+
+def test_con_dispositivos_excluye_ubicaciones_sin_ningun_dispositivo(
+    client, db_session, tecnico_editor
+):
+    sede = tecnico_editor
+    con_dispositivo = crear_ubicacion_directa(db_session, sede, "Con dispositivo")
+    crear_dispositivo_en(db_session, con_dispositivo, sede, "CR1000-A")
+    crear_ubicacion_directa(db_session, sede, "Sin dispositivo")
+
+    resp = client.get("/ubicaciones", params={"con_dispositivos": True})
+    nombres = [i["nmbr"] for i in resp.json()["items"]]
+    assert nombres == ["Con dispositivo"]
+
+
+def test_con_dispositivos_no_duplica_ubicacion_con_varios_dispositivos(
+    client, db_session, tecnico_editor
+):
+    sede = tecnico_editor
+    ubicacion = crear_ubicacion_directa(db_session, sede, "Con dos dispositivos")
+    crear_dispositivo_en(db_session, ubicacion, sede, "CR1000-A")
+    crear_dispositivo_en(db_session, ubicacion, sede, "CR1000-B")
+
+    resp = client.get("/ubicaciones", params={"con_dispositivos": True})
+    nombres = [i["nmbr"] for i in resp.json()["items"]]
+    assert nombres == ["Con dos dispositivos"]
+    assert resp.json()["total"] == 1
+
+
+def test_sin_con_dispositivos_el_comportamiento_de_hu07_no_cambia(
+    client, db_session, tecnico_editor
+):
+    """Default False: sin el parámetro, /ubicaciones sigue devolviendo
+    todas -HU07 no se toca."""
+    sede = tecnico_editor
+    crear_ubicacion_directa(db_session, sede, "Con dispositivo")
+    crear_ubicacion_directa(db_session, sede, "Sin dispositivo")
+
+    resp = client.get("/ubicaciones")
+    nombres = {i["nmbr"] for i in resp.json()["items"]}
+    assert nombres == {"Con dispositivo", "Sin dispositivo"}
+
+
+# ---------------------------------------------------------------------------
 # HU22 - Ver ubicaciones en mapa (GET /ubicaciones/mapa)
 # ---------------------------------------------------------------------------
 
