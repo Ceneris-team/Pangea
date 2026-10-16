@@ -1,8 +1,8 @@
+import DashboardLayout from "../components/layout/DashboardLayout";
 import { useCallback, useEffect, useState, type ChangeEvent, type FormEvent } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { apiFetch, apiUpload, ApiError } from "../services/api";
 import { useAuth } from "../context/AuthContext";
-import { ROLES } from "../config/roles";
 import Sidebar from "../components/layout/Sidebar";
 import Topbar from "../components/layout/Topbar";
 import DrawerPanel from "../components/layout/DrawerPanel";
@@ -191,7 +191,6 @@ const FORMATO_VACIO: FormatoForm = {
   indice_columna_fecha: "0",
 };
 
-const ROLES_PUEDEN_EDITAR: readonly string[] = [ROLES.ADMINISTRADOR, ROLES.TECNICO_CENERIS];
 
 const PESTANAS: { clave: Pestana; etiqueta: string }[] = [
   { clave: "formato", etiqueta: "Formato" },
@@ -204,9 +203,9 @@ const PESTANAS: { clave: Pestana; etiqueta: string }[] = [
 export default function DispositivoDetalle() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { nombreCompleto, rol, logout } = useAuth();
+  const { nombreCompleto, rol, logout, puedeOperar } = useAuth();
 
-  const puedeEditar = ROLES_PUEDEN_EDITAR.includes(rol ?? "");
+  const puedeEditar = puedeOperar;
 
   const [pestana, setPestana] = useState<Pestana>("formato");
   // Compartido por Formato y Datos: son dos vistas del MISMO registro de
@@ -277,6 +276,7 @@ export default function DispositivoDetalle() {
   }
 
   useEffect(() => {
+    if (!puedeEditar) return;
     apiFetch<Parametro[]>("/parametros")
       .then(setParametros)
       .catch(() => setParametros([]));
@@ -297,6 +297,7 @@ export default function DispositivoDetalle() {
   // Selector de Conexión FTP del formulario de edición: mismo patrón que
   // AgregarDispositivo.tsx (GET /conexiones-ftp, hasta 100 por página).
   useEffect(() => {
+    if (!puedeEditar) return;
     apiFetch<{ items: ConexionFTPOption[] }>("/conexiones-ftp", { params: { por_pagina: 100 } })
       .then((res) => setConexiones(res.items))
       .catch(() => setConexiones([]));
@@ -362,7 +363,7 @@ export default function DispositivoDetalle() {
    *  exista es un estado válido -el dispositivo todavía no se configuró
    *  para ese tipo-, así que deja el formulario en blanco sin error. */
   const cargarMapeo = useCallback(() => {
-    if (!id) return;
+    if (!id || !puedeEditar) { setCargando(false); return; }
     setCargando(true);
     apiFetch<{ items: MapeoFormatoListItem[] }>("/mapeos", {
       params: { id_dspstv: id },
@@ -405,7 +406,7 @@ export default function DispositivoDetalle() {
         avisar(err instanceof ApiError ? err.message : "No se pudo cargar el mapeo", false)
       )
       .finally(() => setCargando(false));
-  }, [id, tipoTrama]);
+  }, [id, tipoTrama, puedeEditar]);
 
   useEffect(() => {
     cargarMapeo();
@@ -488,6 +489,19 @@ export default function DispositivoDetalle() {
   const botonPrimario =
     "inline-flex items-center px-4 py-2 text-sm font-bold rounded-xl bg-[#ccff00] text-[#1a202c] hover:bg-[#b8e600] transition-colors disabled:opacity-50";
 
+  if (!puedeEditar) return <DashboardLayout activo="dispositivos">
+    {mensaje && <p role="alert" className="text-red-600 dark:text-red-400">{mensaje}</p>}
+    {dispositivo ? <section className="space-y-4 text-gray-900 dark:text-white">
+      <h1 className="text-2xl font-bold">{dispositivo.nmbr}</h1>
+      <p>Proyecto: {dispositivo.ubicacion_nombre} · {dispositivo.mrc} · {dispositivo.mdl} · {dispositivo.estd}</p>
+      <p>Ubicación del dispositivo: {dispositivo.lttd}, {dispositivo.lngtd}</p>
+      <div className="flex flex-wrap gap-3">
+        <button className={botonPrimario} onClick={() => navigate(`/consulta-datos?ubicacion_id=${dispositivo.id_ubccn}`)}>Consultar datos</button>
+        <button className={botonPrimario} onClick={() => navigate(`/graficos?ubicacion_id=${dispositivo.id_ubccn}`)}>Ver gráficos</button>
+      </div>
+    </section> : <p className="text-gray-700 dark:text-gray-200">Cargando dispositivo...</p>}
+  </DashboardLayout>;
+
   return (
     <div className="font-sans">
       <div className="flex h-screen bg-transparent transition-colors duration-300 overflow-hidden">
@@ -517,9 +531,10 @@ export default function DispositivoDetalle() {
                   </h1>
                   <p className="text-sm text-gray-500 dark:text-gray-400">
                     {dispositivo
-                      ? `${dispositivo.mrc}${dispositivo.mdl ? ` · ${dispositivo.mdl}` : ""} · ${dispositivo.ubicacion_nombre} · Conexión: ${dispositivo.conexion_nombre}`
+                      ? `${dispositivo.mrc}${dispositivo.mdl ? ` · ${dispositivo.mdl}` : ""} · Proyecto: ${dispositivo.ubicacion_nombre} · Conexión: ${dispositivo.conexion_nombre}`
                       : "Cargando..."}
                   </p>
+                  {dispositivo && <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Ubicación del dispositivo: {dispositivo.lttd}, {dispositivo.lngtd}</p>}
                 </div>
                 {puedeEditar && dispositivo && !editando && (
                   <button
@@ -569,6 +584,7 @@ export default function DispositivoDetalle() {
                     </select>
                   </div>
                   {/* DEC-28: punto GPS propio del dispositivo, editable. */}
+                  <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Ubicación del dispositivo</h3>
                   <div>
                     <label className={labelClase}>Latitud</label>
                     <input

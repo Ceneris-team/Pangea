@@ -78,7 +78,7 @@ export default function MapaEstacionesPage() {
       })
       .catch((err) => {
         if (cancelado) return;
-        setError(err instanceof ApiError ? err.message : "No se pudo cargar el mapa de estaciones");
+        setError(err instanceof ApiError ? err.message : "No se pudo cargar el mapa de lecturas");
       })
       .finally(() => {
         if (!cancelado) setCargando(false);
@@ -168,10 +168,10 @@ export default function MapaEstacionesPage() {
             <header className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div>
                 <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-                  Mapa de Estaciones
+                  Mapa de lecturas por proyecto
                 </h1>
                 <p className="text-sm text-gray-500 dark:text-gray-400">
-                  Estado actual de tus estaciones. Haz clic en un marcador para ver sus últimos
+                  Estado de los proyectos de tu empresa. Haz clic en un marcador para ver sus últimos
                   valores.
                 </p>
               </div>
@@ -234,13 +234,13 @@ export default function MapaEstacionesPage() {
                 <div className="flex items-center justify-center h-full text-sm text-gray-500 dark:text-gray-400">
                   <div className="flex items-center gap-2">
                     <div className="w-4 h-4 rounded-full bg-[#ccff00] animate-bounce"></div>
-                    <span>Cargando estaciones...</span>
+                    <span>Cargando proyectos...</span>
                   </div>
                 </div>
               ) : estaciones && estaciones.length === 0 ? (
                 <div className="flex items-center justify-center h-full text-sm text-gray-500 dark:text-gray-400 text-center px-6">
-                  No tienes estaciones asignadas todavía. Contacta al administrador para que te
-                  asigne acceso a una ubicación.
+                  No tienes proyectos asignados todavía. Contacta al administrador para que te
+                  asigne acceso a un proyecto.
                 </div>
               ) : (
                 estaciones && (

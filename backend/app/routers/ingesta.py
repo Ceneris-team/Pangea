@@ -29,6 +29,7 @@ from app.schemas import (
     RegistrosIngestaResponse,
     ReintentoMasivoResponse,
 )
+from app.security.entorno import filtrar_sedes
 from app.security.permisos import EDICION, LECTURA, require_permiso, verificar_sede
 from app.services.ingesta.mapeo import MapeoNoEncontradoError, resolver_formato
 from app.services.ingesta.parser import parsear_dat
@@ -100,8 +101,11 @@ def metricas_cola_ingesta(
     db: Session = Depends(get_db),
     usuario: dict = Depends(require_permiso("Ingesta", LECTURA)),
 ):
+    query = db.query(ArchivoIngesta.estd, func.count(ArchivoIngesta.id_archv)).join(
+        ConexionFTP, ConexionFTP.id_cnxn == ArchivoIngesta.id_cnxn
+    )
     conteos = dict(
-        db.query(ArchivoIngesta.estd, func.count(ArchivoIngesta.id_archv))
+        filtrar_sedes(query, ConexionFTP.id_sd, db, usuario)
         .filter(ArchivoIngesta.estd.in_(ESTADOS))
         .group_by(ArchivoIngesta.estd)
         .all()
@@ -132,8 +136,7 @@ def listar_dataloggers_cola(
     query = db.query(ArchivoIngesta.id_cnxn).join(
         ConexionFTP, ConexionFTP.id_cnxn == ArchivoIngesta.id_cnxn
     )
-    if usuario.get("scope") == "por_sede":
-        query = query.filter(ConexionFTP.id_sd == usuario["sede_id"])
+    query = filtrar_sedes(query, ConexionFTP.id_sd, db, usuario)
 
     ids_cnxn = {id_cnxn for (id_cnxn,) in query.distinct().all()}
     dataloggers = _mapa_dataloggers(db, ids_cnxn)
@@ -172,8 +175,7 @@ def listar_cola_ingesta(
     # Aislamiento por sede (mismo criterio que el resto del módulo Ingesta,
     # ver routers/mapeos.py y HT-09 CA3): un usuario 'por_sede' solo ve los
     # archivos de conexiones FTP de su propia sede.
-    if usuario.get("scope") == "por_sede":
-        query = query.filter(ConexionFTP.id_sd == usuario["sede_id"])
+    query = filtrar_sedes(query, ConexionFTP.id_sd, db, usuario)
 
     if estado is not None:
         query = query.filter(ArchivoIngesta.estd == _validar_estado_negocio(estado))
@@ -234,8 +236,7 @@ def reintentar_fallidos_ingesta(
     query = db.query(ArchivoIngesta).join(
         ConexionFTP, ConexionFTP.id_cnxn == ArchivoIngesta.id_cnxn
     )
-    if usuario.get("scope") == "por_sede":
-        query = query.filter(ConexionFTP.id_sd == usuario["sede_id"])
+    query = filtrar_sedes(query, ConexionFTP.id_sd, db, usuario)
     query = query.filter(ArchivoIngesta.estd == "Fallido")
 
     fallidos = query.all()

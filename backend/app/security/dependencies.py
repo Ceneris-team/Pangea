@@ -15,6 +15,7 @@ Uso en un endpoint:
 """
 
 import datetime as dt
+from typing import Annotated
 
 from fastapi import Cookie, Depends, Header, HTTPException
 from sqlalchemy.orm import Session
@@ -22,6 +23,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import Usuario
 
+from .entorno import resolver_entorno
 from .jwt_auth import TokenExpirado, TokenInvalido, decode_access_token
 
 # HT-04 migración a cookie httpOnly: nombre de la cookie de sesión,
@@ -50,6 +52,8 @@ def get_token_crudo(
 def get_current_user(
     token: str = Depends(get_token_crudo),
     db: Session = Depends(get_db),
+    x_cliente_id: Annotated[int | None, Header()] = None,
+    x_proyecto_id: Annotated[int | None, Header()] = None,
 ) -> dict:
     try:
         payload = decode_access_token(token)
@@ -62,8 +66,12 @@ def get_current_user(
     # previas del usuario." Como el JWT es stateless, se compara su fecha de
     # emisión (iat) contra la última vez que se cambió la contraseña.
     usuario = db.query(Usuario).filter(Usuario.id_usr == int(payload["sub"])).first()
-    if usuario is None:
+    if usuario is None or usuario.estd != "Activo":
         raise HTTPException(status_code=401, detail="El token es inválido")
+    # Un cambio de rol o alcance debe invalidar de inmediato los tokens
+    # antiguos; de otro modo un exadministrador conservaría su JWT global.
+    if payload.get("scope") != usuario.scp or payload.get("rol") != usuario.rol.nmbr:
+        raise HTTPException(status_code=401, detail="Tu acceso cambió. Vuelve a iniciar sesión")
 
     if usuario.fch_cntrsn_actlzd is not None:
         emitido_en = dt.datetime.fromtimestamp(payload["iat"], tz=dt.timezone.utc)
@@ -76,4 +84,4 @@ def get_current_user(
                 detail="Tu sesión ya no es válida porque la contraseña fue actualizada. Vuelve a iniciar sesión.",
             )
 
-    return payload
+    return resolver_entorno(db, payload, x_cliente_id, x_proyecto_id)

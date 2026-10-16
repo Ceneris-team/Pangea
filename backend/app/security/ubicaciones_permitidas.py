@@ -21,6 +21,7 @@ vecina de permisos.py, no de presentación.
 from sqlalchemy.orm import Session
 
 from app.models import PermisoUbicacion, Ubicacion
+from app.security.entorno import filtrar_proyectos
 
 # Incluye "Tecnico CENERIS" sin tilde además de "Técnico CENERIS": el rol
 # viaja en el JWT como texto y ambas grafías han aparecido en datos
@@ -38,7 +39,8 @@ def ubicaciones_permitidas(db: Session, usuario: dict) -> list:
     endpoint WebSocket de HU 17, que valida el token a mano.
     """
     query = db.query(Ubicacion.id_ubccn)
-    if usuario.get("rol") not in ROLES_CON_ACCESO_TOTAL:
+    query = filtrar_proyectos(query, Ubicacion.id_ubccn, db, usuario)
+    if usuario.get("scope") != "por_cliente" and usuario.get("rol") not in ROLES_CON_ACCESO_TOTAL:
         id_usr = int(usuario["sub"])
         query = query.join(
             PermisoUbicacion, PermisoUbicacion.id_ubccn == Ubicacion.id_ubccn

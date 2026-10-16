@@ -4,6 +4,8 @@ import { useAuth } from "../context/AuthContext";
 import Sidebar from "../components/layout/Sidebar";
 import Topbar from "../components/layout/Topbar";
 import DrawerPanel from "../components/layout/DrawerPanel";
+import { Link } from "react-router-dom";
+import { ROLES } from "../config/roles";
 
 interface UsuarioListItem {
   id_usr: number;
@@ -82,14 +84,6 @@ const ROLES_DISPONIBLES = [
 ];
 
 const POR_PAGINA = 10;
-
-/** HU21: "La gestión de permisos aplica ÚNICAMENTE a usuarios con rol
- *  Cliente Final. Administrador y Técnico CENERIS tienen acceso completo por
- *  defecto y no requieren asignación", así que la acción no se les ofrece.
- *  Réplica en el cliente de ROLES_CON_ACCESO_TOTAL
- *  (backend/app/security/ubicaciones_permitidas.py), que es quien decide de
- *  verdad: esto solo evita ofrecer un botón que el backend rechazaría. */
-const ROLES_CON_ACCESO_TOTAL = ["Administrador", "Técnico CENERIS", "Tecnico CENERIS"];
 
 interface FormEditarUsuario {
   nmbr_cmplt: string;
@@ -598,7 +592,7 @@ export default function Usuarios() {
             <DrawerPanel
               abierto={permisosDe !== null}
               onCerrar={cerrarPermisos}
-              titulo="Permisos de ubicación"
+              titulo="Permisos de proyecto"
             >
               {permisosDe && (
                 <div className="flex flex-col h-full">
@@ -609,7 +603,7 @@ export default function Usuarios() {
 
                   <div className="flex-1">
                     {cargandoPermisos && (
-                      <p className="text-sm text-gray-600 dark:text-gray-300">Cargando ubicaciones…</p>
+                      <p className="text-sm text-gray-600 dark:text-gray-300">Cargando proyectos…</p>
                     )}
 
                     {/* CA2: confirmación con el mensaje que devuelve el backend. */}
@@ -630,7 +624,7 @@ export default function Usuarios() {
 
                     {panelPermisos && panelPermisos.items.length === 0 && (
                       <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">
-                        No hay ubicaciones registradas todavía.
+                        No hay proyectos registrados todavía.
                       </p>
                     )}
 
@@ -746,7 +740,7 @@ export default function Usuarios() {
                         className="bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl block w-full p-2.5 outline-none cursor-pointer"
                       >
                         <option value="">Selecciona un rol</option>
-                        {ROLES_DISPONIBLES.map((r) => (
+                        {["Administrador", "Técnico CENERIS"].map((r) => (
                           <option key={r} value={r}>{r}</option>
                         ))}
                       </select>
@@ -846,7 +840,7 @@ export default function Usuarios() {
                       <th className="px-6 py-4 font-bold tracking-wider">Nombre</th>
                       <th className="px-6 py-4 font-bold tracking-wider">Correo</th>
                       <th className="px-6 py-4 font-bold tracking-wider">Rol</th>
-                      <th className="px-6 py-4 font-bold tracking-wider">Cliente y plan</th>
+                      <th className="px-6 py-4 font-bold tracking-wider">Empresa y plan</th>
                       <th className="px-6 py-4 font-bold tracking-wider">Estado</th>
                       <th className="px-6 py-4 font-bold tracking-wider text-right">Acciones</th>
                     </tr>
@@ -888,10 +882,10 @@ export default function Usuarios() {
                           <td className="px-6 py-4">{u.crr}</td>
                           <td className="px-6 py-4">{u.rol_nombre}</td>
                           <td className="px-6 py-4">
-                            {u.rol_nombre !== "Cliente Final" ? (
+                            {!([ROLES.CLIENTE_FINAL, ROLES.USUARIO_EMPRESA] as string[]).includes(u.rol_nombre) ? (
                               <span className="text-gray-500 dark:text-gray-400">Personal CENERIS</span>
                             ) : u.clientes.length === 0 ? (
-                              <span className="text-amber-700 dark:text-amber-300">Sin cliente asignado</span>
+                              <span className="text-amber-700 dark:text-amber-300">Sin empresa asignada</span>
                             ) : (
                               <div className="flex flex-col gap-1">
                                 {u.clientes.map((cliente) => (
@@ -921,7 +915,12 @@ export default function Usuarios() {
                             <div className="inline-flex gap-2">
                               {/* HU20 CA1: abre el formulario de edición con los
                                   datos actuales precargados. */}
-                              <button
+                              {u.rol_nombre === ROLES.USUARIO_EMPRESA ? (
+                                <Link to={u.clientes.length ? `/empresas?cliente=${u.clientes[0].id_clnt}` : "/empresas"}
+                                  className="inline-flex items-center rounded-lg border border-black/20 px-3 py-1.5 text-sm text-gray-700 dark:border-white/20 dark:text-gray-200">
+                                  Gestionar en empresa
+                                </Link>
+                              ) : <button
                                 onClick={() => abrirEdicion(u)}
                                 className="inline-flex items-center justify-center px-3 py-1.5 text-xs sm:text-sm font-medium whitespace-nowrap text-gray-700 dark:text-gray-200 bg-transparent border border-black/20 dark:border-white/20 rounded-lg hover:bg-black/10 dark:hover:bg-white/10 hover:text-gray-900 dark:hover:text-white focus:ring-4 focus:outline-none focus:ring-black/10 dark:focus:ring-white/10 transition-all"
                               >
@@ -929,13 +928,13 @@ export default function Usuarios() {
                                   <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                                 </svg>
                                 Editar
-                              </button>
+                              </button>}
 
                               {/* HU21 CA1: "Gestionar permisos" solo sobre un
                                   usuario con rol Cliente Final. Administrador y
                                   Técnico CENERIS ya tienen acceso completo por
                                   defecto, así que la acción NO se les ofrece. */}
-                              {!ROLES_CON_ACCESO_TOTAL.includes(u.rol_nombre) && (
+                              {u.rol_nombre === ROLES.CLIENTE_FINAL && (
                                 <button
                                   onClick={() => abrirPermisos(u)}
                                   className="inline-flex items-center justify-center px-3 py-1.5 text-xs sm:text-sm font-medium whitespace-nowrap text-gray-700 dark:text-gray-200 bg-transparent border border-black/20 dark:border-white/20 rounded-lg hover:bg-black/10 dark:hover:bg-white/10 hover:text-gray-900 dark:hover:text-white focus:ring-4 focus:outline-none focus:ring-black/10 dark:focus:ring-white/10 transition-all"

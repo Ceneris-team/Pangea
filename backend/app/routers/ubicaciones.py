@@ -38,16 +38,29 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.services.limites_plan import comprobar_cupo
 from app.models import (
-    Dispositivo, MapeoColumna, MapeoFormato, Parametro, Sede, Ubicacion, PermisoUbicacion,
+    Cliente,
+    Dispositivo,
+    MapeoColumna,
+    MapeoFormato,
+    Parametro,
+    PermisoUbicacion,
+    Sede,
+    Ubicacion,
 )
-from app.security.permisos import require_permiso, verificar_sede, LECTURA, EDICION
-from app.services.cache import consultas as cache
 from app.schemas import (
-    ParametroListItem, UbicacionActualizar, UbicacionCrear, UbicacionCreada, UbicacionDetalle,
-    UbicacionListItem, UbicacionParaMapa,
+    ParametroListItem,
+    UbicacionActualizar,
+    UbicacionCreada,
+    UbicacionCrear,
+    UbicacionDetalle,
+    UbicacionListItem,
+    UbicacionParaMapa,
 )
+from app.security.entorno import filtrar_proyectos, verificar_proyecto
+from app.security.permisos import EDICION, LECTURA, require_permiso, verificar_sede
+from app.services.cache import consultas as cache
+from app.services.limites_plan import comprobar_cupo
 
 router = APIRouter(prefix="/ubicaciones", tags=["Ubicaciones"])
 
@@ -73,10 +86,10 @@ def listar_ubicaciones(
     db: Session = Depends(get_db),
     usuario: dict = Depends(require_permiso("Ubicaciones", LECTURA)),
 ):
-    query = db.query(Ubicacion)
+    query = filtrar_proyectos(db.query(Ubicacion), Ubicacion.id_ubccn, db, usuario)
 
     # CA: Administrador/Tecnico CENERIS ven todo; Cliente solo lo asignado (HU 21)
-    if usuario.get("rol") not in ROLES_CON_ACCESO_TOTAL:
+    if usuario.get("scope") != "por_cliente" and usuario.get("rol") not in ROLES_CON_ACCESO_TOTAL:
         id_usr = int(usuario["sub"])
         query = query.join(
             PermisoUbicacion, PermisoUbicacion.id_ubccn == Ubicacion.id_ubccn
@@ -142,7 +155,8 @@ def ubicaciones_para_mapa(
     # consulta barata (solo ids), para poder armar la clave antes de
     # ejecutar la consulta pesada con el JOIN y el COUNT.
     ids_visibles = db.query(Ubicacion.id_ubccn)
-    if usuario.get("rol") not in ROLES_CON_ACCESO_TOTAL:
+    ids_visibles = filtrar_proyectos(ids_visibles, Ubicacion.id_ubccn, db, usuario)
+    if usuario.get("scope") != "por_cliente" and usuario.get("rol") not in ROLES_CON_ACCESO_TOTAL:
         ids_visibles = ids_visibles.join(
             PermisoUbicacion, PermisoUbicacion.id_ubccn == Ubicacion.id_ubccn
         ).filter(PermisoUbicacion.id_usr == int(usuario["sub"]))
@@ -165,12 +179,13 @@ def ubicaciones_para_mapa(
         .group_by(Ubicacion.id_ubccn)
     )
 
-    if usuario.get("rol") not in ROLES_CON_ACCESO_TOTAL:
+    if usuario.get("scope") != "por_cliente" and usuario.get("rol") not in ROLES_CON_ACCESO_TOTAL:
         id_usr = int(usuario["sub"])
         filas = filas.join(
             PermisoUbicacion, PermisoUbicacion.id_ubccn == Ubicacion.id_ubccn
         ).filter(PermisoUbicacion.id_usr == id_usr)
 
+    filas = filtrar_proyectos(filas, Ubicacion.id_ubccn, db, usuario)
     resultado = filas.order_by(Ubicacion.nmbr).all()
     items = [
         UbicacionParaMapa(
@@ -200,7 +215,8 @@ def _verificar_acceso_ubicacion(db: Session, usuario: dict, ubicacion: Ubicacion
     cualquier ubicación (dentro de su sede, ver verificar_sede);
     Cliente Final solo la suya, vía PermisoUbicacion (HU 21)."""
     verificar_sede(usuario, ubicacion.id_sd, db, modulo="Ubicaciones", accion=LECTURA)
-    if usuario.get("rol") not in ROLES_CON_ACCESO_TOTAL:
+    verificar_proyecto(db, usuario, ubicacion.id_ubccn)
+    if usuario.get("scope") != "por_cliente" and usuario.get("rol") not in ROLES_CON_ACCESO_TOTAL:
         id_usr = int(usuario["sub"])
         tiene_permiso = (
             db.query(PermisoUbicacion)
@@ -263,12 +279,24 @@ def parametros_en_uso(
     return {"items": items}
 
 
-def _resolver_sede(usuario: dict, id_sd_body: int | None) -> int:
-    """Mismo criterio que HU05/HU06 (routers/mapeos.py): un usuario con
-    scope 'por_sede' siempre registra en su propia sede; uno 'global'
-    debe indicar a qué sede pertenece la ubicación."""
+def _resolver_sede(db: Session, usuario: dict, id_sd_body: int | None) -> int:
+    """Usa la sede histórica del usuario o una sede de la empresa activa.
+
+    Sin contexto de empresa, el flujo anterior sigue exigiendo id_sd.
+    """
     if usuario.get("scope") == "por_sede":
         return usuario["sede_id"]
+    if id_sd_body is None and usuario.get("cliente_id") is not None:
+        # Sede es un detalle interno del esquema histórico. El primer
+        # proyecto de una empresa no requiere crear un agrupador previo.
+        cliente_id = usuario["cliente_id"]
+        db.query(Cliente).filter(Cliente.id_clnt == cliente_id).with_for_update().one()
+        sede = db.query(Sede).filter(Sede.id_clnt == cliente_id).order_by(Sede.id_sd).first()
+        if sede is None:
+            sede = Sede(id_clnt=cliente_id, nmbr="Sede principal")
+            db.add(sede)
+            db.flush()
+        return sede.id_sd
     if id_sd_body is None:
         raise HTTPException(
             status_code=422,
@@ -291,7 +319,7 @@ def crear_ubicacion(
     el modelo real (UniqueConstraint uq_ubccn_sd_nombre). Ver el resumen
     de cierre de la HU sobre esta diferencia con el texto del CA.
     """
-    id_sd = _resolver_sede(usuario, body.id_sd)
+    id_sd = _resolver_sede(db, usuario, body.id_sd)
 
     # Un id_sd inexistente reventaría como IntegrityError de FK en el
     # commit, y ahí se confundiría con el 409 de nombre duplicado.
@@ -371,6 +399,7 @@ def actualizar_ubicacion(
     # Mismo aislamiento por sede que el resto del módulo (HT-09 CA3): un
     # usuario 'por_sede' no edita ubicaciones de otra sede.
     verificar_sede(usuario, ubicacion.id_sd, db, modulo="Ubicaciones", accion=EDICION)
+    verificar_proyecto(db, usuario, ubicacion.id_ubccn)
 
     # CA de HU08: nombre único DENTRO de la sede (uq_ubccn_sd_nombre). Se
     # excluye el propio registro: guardar sin cambiar el nombre no puede

@@ -714,6 +714,7 @@ class ConexionFTPCreate(BaseModel):
 
 
 class ConexionFTPUpdate(BaseModel):
+    estd: str | None = Field(default=None, pattern="^(Activa|Inactiva)$")
     nmbr: str | None = None
     hst: str | None = None
     prt: int | None = None

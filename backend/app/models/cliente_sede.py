@@ -1,4 +1,4 @@
-from sqlalchemy import TIMESTAMP, Column, ForeignKey, Integer, String, text
+from sqlalchemy import TIMESTAMP, Column, ForeignKey, Integer, String, UniqueConstraint, text
 from sqlalchemy.orm import relationship
 
 from app.database import Base
@@ -18,11 +18,29 @@ class Cliente(Base):
     sedes = relationship("Sede", back_populates="cliente")
 
 
+class Proyecto(Base):
+    """Agrupador histórico, conservado para reversión de migraciones.
+
+    El proyecto operativo actual es Ubicacion; los flujos de la aplicación
+    no crean ni consultan este agrupador.
+    """
+    __tablename__ = "pryct"
+    __table_args__ = (UniqueConstraint("id_clnt", "nmbr", name="uq_pryct_clnt_nmbr"),)
+
+    id_pryct = Column(Integer, primary_key=True, autoincrement=True)
+    id_clnt = Column(Integer, ForeignKey("clnt.id_clnt"), nullable=False)
+    nmbr = Column(String(150), nullable=False)
+    dscrpcn = Column(String(300))
+    estd = Column(String(20), nullable=False, server_default="Activo")
+
+
 class Sede(Base):
     __tablename__ = "sd"
 
     id_sd = Column(Integer, primary_key=True, autoincrement=True)
     id_clnt = Column(Integer, ForeignKey("clnt.id_clnt"), nullable=False)
+    # Relación histórica sin uso operativo; preservada para reversión.
+    id_pryct = Column(Integer, ForeignKey("pryct.id_pryct"))
     nmbr = Column(String(150), nullable=False)
     dscrpcn = Column(String(300))
     estd = Column(String(20), nullable=False, server_default="Activa")

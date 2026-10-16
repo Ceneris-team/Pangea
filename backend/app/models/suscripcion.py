@@ -11,6 +11,7 @@ from sqlalchemy import (
     UniqueConstraint,
     text,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 
 from app.database import Base
 
@@ -23,6 +24,30 @@ class PlanSuscripcion(Base):
     dscrpcn = Column(String(300))
     prc_mnsl = Column(Numeric(12, 2), nullable=False)
     estd = Column(String(20), nullable=False, server_default="Activo")
+    moneda = Column(String(3), nullable=False, server_default="PEN")
+    revision = Column(Integer, nullable=False, server_default="1")
+    funcionalidades = Column(JSONB, nullable=False, server_default="[]")
+
+
+class FuncionalidadComercial(Base):
+    __tablename__ = "funcionalidad_comercial"
+
+    codigo = Column(String(80), primary_key=True)
+    nombre = Column(String(150), nullable=False)
+    disponible = Column(Integer, nullable=False, server_default="0")
+
+
+class ComplementoComercial(Base):
+    __tablename__ = "complemento_comercial"
+
+    id = Column(Integer, primary_key=True)
+    nombre = Column(String(150), nullable=False, unique=True)
+    tipo = Column(String(20), nullable=False)  # Recurrente / Servicio
+    precio = Column(Numeric(12, 2), nullable=False)
+    moneda = Column(String(3), nullable=False, server_default="PEN")
+    cupos = Column(JSONB, nullable=False, server_default="{}")
+    funcionalidades = Column(JSONB, nullable=False, server_default="[]")
+    activo = Column(Integer, nullable=False, server_default="1")
 
 
 class LimitePlan(Base):
@@ -45,6 +70,8 @@ class LimitePlan(Base):
 class Suscripcion(Base):
     __tablename__ = "sscrpcn"
     __table_args__ = (
+        UniqueConstraint("id_clnt", "clave_idempotencia", name="uq_suscripcion_idempotencia"),
+        Index("uq_suscripcion_programada", "id_clnt", unique=True, postgresql_where=text("estd = 'Programada'")),
         Index("idx_sscrpcn_vncmnt", "fch_vncmnt", "estd"),
         Index(
             "uq_sscrpcn_clnt_activa",
@@ -60,6 +87,8 @@ class Suscripcion(Base):
     fch_inc = Column(Date, nullable=False)
     fch_vncmnt = Column(Date, nullable=False)
     estd = Column(String(20), nullable=False, server_default="Activa")
+    condiciones = Column(JSONB)
+    clave_idempotencia = Column(String(64))
 
 
 class Cobro(Base):

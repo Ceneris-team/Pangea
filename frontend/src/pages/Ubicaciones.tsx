@@ -1,3 +1,4 @@
+import { estadoProyecto } from "../config/terminologia";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { apiFetch, ApiError } from "../services/api";
@@ -62,7 +63,6 @@ const POR_PAGINA = 10;
 // ubicaciones". El backend lo exige igual vía
 // require_permiso('Ubicaciones', EDICION); esto solo evita mostrar un
 // botón que terminaría en 403.
-const ROLES_PUEDEN_AGREGAR: readonly string[] = [ROLES.ADMINISTRADOR, ROLES.TECNICO_CENERIS];
 
 function useDebouncedValue<T>(value: T, delayMs: number): T {
   const [debounced, setDebounced] = useState(value);
@@ -74,7 +74,7 @@ function useDebouncedValue<T>(value: T, delayMs: number): T {
 }
 
 export default function Ubicaciones() {
-  const { nombreCompleto, rol, logout } = useAuth();
+  const { nombreCompleto, rol, logout, puedeOperar } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -198,7 +198,7 @@ export default function Ubicaciones() {
         setPoligono(u.plgn_gjsn ?? null);
       })
       .catch((err) => {
-        setErrorForm(err instanceof ApiError ? err.message : "No se pudo cargar la ubicación");
+        setErrorForm(err instanceof ApiError ? err.message : "No se pudo cargar el proyecto");
       })
       .finally(() => setCargandoDetalle(false));
   }
@@ -209,6 +209,13 @@ export default function Ubicaciones() {
   // CA4)-.
   const [searchParams, setSearchParams] = useSearchParams();
   useEffect(() => {
+    if (searchParams.get("crear") === "1" && puedeOperar) {
+      abrirCrear();
+      const siguiente = new URLSearchParams(searchParams);
+      siguiente.delete("crear");
+      setSearchParams(siguiente, { replace: true });
+      return;
+    }
     const idParam = searchParams.get("editar");
     const id = idParam !== null ? Number(idParam) : null;
     if (id !== null && Number.isFinite(id)) {
@@ -226,7 +233,7 @@ export default function Ubicaciones() {
     // Mismas reglas que el backend (UbicacionCrear/UbicacionActualizar);
     // esto solo evita un viaje de ida y vuelta con un campo vacío.
     if (!form.nmbr.trim()) {
-      setErrorForm("El nombre de la ubicación es obligatorio");
+      setErrorForm("El nombre del proyecto es obligatorio");
       return;
     }
     if (!poligono || !centro) {
@@ -253,7 +260,7 @@ export default function Ubicaciones() {
           },
         });
         setDrawerAbierto(false);
-        setMensajeExito("Ubicación actualizada correctamente");
+        setMensajeExito("Proyecto actualizado correctamente");
         cargarUbicaciones();
       } else {
         await apiFetch<{ mensaje: string }>("/ubicaciones", {
@@ -268,14 +275,14 @@ export default function Ubicaciones() {
           },
         });
         setDrawerAbierto(false);
-        setMensajeExito("Ubicación registrada correctamente");
+        setMensajeExito("Proyecto registrado correctamente");
         cargarUbicaciones();
       }
     } catch (err) {
       setErrorForm(
         err instanceof ApiError
           ? err.message
-          : `No se pudo ${idEnEdicion ? "actualizar" : "registrar"} la ubicación`,
+          : `No se pudo ${idEnEdicion ? "actualizar" : "registrar"} el proyecto`,
       );
     } finally {
       setGuardando(false);
@@ -304,13 +311,13 @@ export default function Ubicaciones() {
           <main className="flex-1 overflow-y-auto p-6 md:p-8">
             <header className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div>
-                <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Gestión de Ubicaciones</h1>
+                <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Gestión de Proyectos</h1>
                 <p className="text-sm text-gray-600 dark:text-gray-300">
-                  Listado centralizado de estaciones de monitoreo registradas.
+                  Proyectos de monitoreo de la empresa minera y sus dispositivos asociados.
                 </p>
                 {rol === ROLES.CLIENTE_FINAL && (
                   <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
-                    Aquí solo aparecen las ubicaciones asignadas a tu cuenta. El cupo del plan incluye todas las ubicaciones activas de tu cliente.{" "}
+                    Aquí solo aparecen los proyectos asignados a tu cuenta. El cupo del plan incluye todos los proyectos activos de tu empresa.{" "}
                     <Link to="/panel-cliente" className="font-semibold text-[#5a7000] underline dark:text-[#ccff00]">Ver consumo del plan</Link>
                   </p>
                 )}
@@ -337,7 +344,7 @@ export default function Ubicaciones() {
                 </button>
 
                 {/* HU08 CA1: punto de entrada al drawer de registro. */}
-                {ROLES_PUEDEN_AGREGAR.includes(rol ?? "") && (
+                {puedeOperar && (
                   <button
                     onClick={abrirCrear}
                     className="inline-flex items-center px-4 py-2 text-sm font-bold rounded-xl bg-[#ccff00] text-[#1a202c] hover:bg-[#b8e600] transition-colors"
@@ -353,7 +360,7 @@ export default function Ubicaciones() {
                     >
                       <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
                     </svg>
-                    Agregar ubicación
+                    Agregar proyecto
                   </button>
                 )}
               </div>
@@ -384,7 +391,7 @@ export default function Ubicaciones() {
                     type="text"
                     value={busquedaInput}
                     onChange={(e) => setBusquedaInput(e.target.value)}
-                    placeholder="Buscar por nombre de ubicación..."
+                    placeholder="Buscar por nombre de proyecto..."
                     className="bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block w-full pl-10 p-2.5 transition-all outline-none placeholder-gray-400"
                   />
                 </div>
@@ -396,8 +403,8 @@ export default function Ubicaciones() {
                     className="bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block p-2.5 outline-none cursor-pointer"
                   >
                     <option value="">Todos los estados</option>
-                    <option value="Activa">Activa</option>
-                    <option value="Inactiva">Inactiva</option>
+                    <option value="Activa">Activo</option>
+                    <option value="Inactiva">Inactivo</option>
                   </select>
                 </div>
               </div>
@@ -436,7 +443,7 @@ export default function Ubicaciones() {
                     {!loading && data?.items.length === 0 && (
                       <tr>
                         <td colSpan={6} className="px-6 py-8 text-center text-gray-600 dark:text-gray-300">
-                          No se encontraron ubicaciones con ese criterio.
+                          No se encontraron proyectos con ese criterio.
                         </td>
                       </tr>
                     )}
@@ -462,7 +469,7 @@ export default function Ubicaciones() {
                               {u.estd === "Activa" && (
                                 <span className="w-1.5 h-1.5 mr-1.5 rounded-full bg-[#ccff00]"></span>
                               )}
-                              {u.estd}
+                              {estadoProyecto(u.estd)}
                             </span>
                           </td>
                           <td className="px-6 py-4 text-right">
@@ -487,7 +494,7 @@ export default function Ubicaciones() {
                                   contorno precargados. Mismos roles que el
                                   alta, porque el backend exige Edición
                                   sobre "Ubicaciones". */}
-                              {ROLES_PUEDEN_AGREGAR.includes(rol ?? "") && (
+                              {puedeOperar && (
                                 <button
                                   type="button"
                                   onClick={() => abrirEditar(u.id_ubccn)}
@@ -545,7 +552,7 @@ export default function Ubicaciones() {
       <DrawerPanel
         abierto={drawerAbierto}
         onCerrar={() => setDrawerAbierto(false)}
-        titulo={idEnEdicion ? "Editar ubicación" : "Agregar ubicación"}
+        titulo={idEnEdicion ? "Editar proyecto" : "Agregar proyecto"}
         ancho="xl"
       >
         {cargandoDetalle ? (
@@ -554,8 +561,8 @@ export default function Ubicaciones() {
           <form onSubmit={handleSubmitUbicacion} className="flex flex-col h-full">
             <p className="text-sm text-gray-600 dark:text-gray-300 mb-5">
               {idEnEdicion
-                ? "Modifica los datos de la zona de monitoreo y ajusta su contorno sobre el mapa."
-                : "Registra una nueva zona de monitoreo y delimita su contorno sobre el mapa."}
+                ? "Modifica los datos del proyecto y ajusta su área sobre el mapa."
+                : "Registra un proyecto de monitoreo y delimita su área sobre el mapa."}
             </p>
 
             {errorForm && (
@@ -576,7 +583,7 @@ export default function Ubicaciones() {
                     maxLength={150}
                     value={form.nmbr}
                     onChange={(e) => actualizarCampo("nmbr", e.target.value)}
-                    placeholder="Estación Río Rímac"
+                    placeholder="Proyecto Río Rímac"
                     className={INPUT_CLASE}
                   />
                 </div>
@@ -595,8 +602,8 @@ export default function Ubicaciones() {
                       onChange={(e) => actualizarCampo("estd", e.target.value)}
                       className={INPUT_CLASE + " cursor-pointer"}
                     >
-                      <option value="Activa">Activa</option>
-                      <option value="Inactiva">Inactiva</option>
+                      <option value="Activa">Activo</option>
+                      <option value="Inactiva">Inactivo</option>
                     </select>
                   </div>
                 ) : (
@@ -674,7 +681,7 @@ export default function Ubicaciones() {
                 disabled={guardando}
                 className="px-4 py-2 text-sm font-bold rounded-xl bg-[#ccff00] text-[#1a202c] hover:bg-[#b8e600] disabled:opacity-50 transition-colors"
               >
-                {guardando ? "Guardando..." : idEnEdicion ? "Guardar cambios" : "Guardar ubicación"}
+                {guardando ? "Guardando..." : idEnEdicion ? "Guardar cambios" : "Guardar proyecto"}
               </button>
             </div>
           </form>

@@ -71,6 +71,7 @@ from app.schemas import (
     SedeListItem,
     VistaPreviaResponse,
 )
+from app.security.entorno import filtrar_proyectos, filtrar_sedes, verificar_proyecto
 from app.security.permisos import (
     EDICION,
     LECTURA,
@@ -427,7 +428,7 @@ def listar_parametros(
 def crear_parametro(
     body: ParametroCrear,
     db: Session = Depends(get_db),
-    _usuario: dict = Depends(require_permiso("Ingesta", EDICION)),
+    _usuario: dict = Depends(require_permiso("Catalogo", EDICION)),
 ):
     """Alta de un parámetro estándar en el catálogo (prmtr). No es parte de
     los CA de HU06 -que solo lista lo ya existente- sino del hueco que
@@ -459,7 +460,7 @@ def actualizar_parametro(
     id_prmtr: int,
     body: ParametroActualizar,
     db: Session = Depends(get_db),
-    _usuario: dict = Depends(require_permiso("Ingesta", EDICION)),
+    _usuario: dict = Depends(require_permiso("Catalogo", EDICION)),
 ):
     """Edita un parámetro del catálogo. No afecta los mapeos que ya lo
     usan (mp_clmn referencia id_prmtr, no el nombre): renombrar o cambiar
@@ -500,7 +501,7 @@ def activar_parametro(
     id_prmtr: int,
     body: ActivarParametroRequest,
     db: Session = Depends(get_db),
-    _usuario: dict = Depends(require_permiso("Ingesta", EDICION)),
+    _usuario: dict = Depends(require_permiso("Catalogo", EDICION)),
 ):
     """HU51 CA4: el Administrador revisa un parámetro auto-creado
     ('Pendiente de revision'), le corrige el nombre visible y le asigna
@@ -567,7 +568,7 @@ def fusionar_parametro(
     id_prmtr: int,
     body: FusionarParametroRequest,
     db: Session = Depends(get_db),
-    _usuario: dict = Depends(require_permiso("Ingesta", EDICION)),
+    _usuario: dict = Depends(require_permiso("Catalogo", EDICION)),
 ):
     """HU51 CA5: fusiona el parámetro `id_prmtr` contra
     `id_prmtr_destino`, reasignando TODO su historial.
@@ -637,7 +638,7 @@ def fusionar_parametro(
 def eliminar_parametro(
     id_prmtr: int,
     db: Session = Depends(get_db),
-    _usuario: dict = Depends(require_permiso("Ingesta", EDICION)),
+    _usuario: dict = Depends(require_permiso("Catalogo", EDICION)),
 ):
     """Borra un parámetro del catálogo -a diferencia del borrado de mapeo
     (ver eliminar_mapeo más abajo), acá SÍ es un borrado físico: un
@@ -686,7 +687,7 @@ def listar_sedes(
     permiso admite también Ubicaciones/lectura: el endpoint solo expone id
     y nombre de sede, y negárselo a quien administra ubicaciones no
     respondería a ninguna regla de negocio."""
-    sedes = db.query(Sede).order_by(Sede.nmbr).all()
+    sedes = filtrar_sedes(db.query(Sede), Sede.id_sd, db, _usuario).order_by(Sede.nmbr).all()
     return [SedeListItem.model_validate(s) for s in sedes]
 
 
@@ -714,9 +715,8 @@ def listar_mapeos(
     # Aislamiento por sede (HT-09 CA3): un usuario 'por_sede' solo ve los
     # mapeos de dispositivos de su sede, aunque pida otra explícitamente.
     # La sede sale de la ubicación del dispositivo (ver _sede_de_dispositivo).
-    if usuario.get("scope") == "por_sede":
-        query = query.filter(Ubicacion.id_sd == usuario["sede_id"])
-    elif id_sd is not None:
+    query = filtrar_proyectos(query, Ubicacion.id_ubccn, db, usuario)
+    if id_sd is not None:
         query = query.filter(Ubicacion.id_sd == id_sd)
 
     if marca:
@@ -742,8 +742,7 @@ def _query_columnas_pendientes(db: Session, usuario: dict, id_dspstv: int | None
         .join(Ubicacion, Ubicacion.id_ubccn == Dispositivo.id_ubccn)
         .filter(MapeoColumnaPendiente.estd == "Pendiente")
     )
-    if usuario.get("scope") == "por_sede":
-        query = query.filter(Ubicacion.id_sd == usuario["sede_id"])
+    query = filtrar_proyectos(query, Ubicacion.id_ubccn, db, usuario)
     if id_dspstv is not None:
         query = query.filter(MapeoFormato.id_dspstv == id_dspstv)
     return query
@@ -829,6 +828,7 @@ def resolver_columna_pendiente(
         raise HTTPException(status_code=404, detail="El mapeo de esta columna ya no existe")
     dispositivo, ubicacion = _cargar_contexto(db, formato)
     verificar_sede(usuario, ubicacion.id_sd, db, modulo="Ingesta", accion=EDICION)
+    verificar_proyecto(db, usuario, ubicacion.id_ubccn)
 
     parametro = db.query(Parametro).filter(Parametro.id_prmtr == body.id_prmtr).first()
     if parametro is None:
@@ -890,6 +890,7 @@ def ignorar_columna_pendiente(
         raise HTTPException(status_code=404, detail="El mapeo de esta columna ya no existe")
     dispositivo, ubicacion = _cargar_contexto(db, formato)
     verificar_sede(usuario, ubicacion.id_sd, db, modulo="Ingesta", accion=EDICION)
+    verificar_proyecto(db, usuario, ubicacion.id_ubccn)
 
     pendiente.estd = "Ignorada"
     pendiente.fch_resolucion = dt.datetime.now(dt.timezone.utc)
@@ -913,6 +914,7 @@ def obtener_mapeo(
 
     dispositivo, ubicacion = _cargar_contexto(db, formato)
     verificar_sede(usuario, ubicacion.id_sd, db, modulo="Ingesta", accion=LECTURA)
+    verificar_proyecto(db, usuario, ubicacion.id_ubccn)
 
     base = _a_list_item(formato, dispositivo, ubicacion, _contar_columnas(db, formato.id_mp))
     return MapeoFormatoDetalle(
@@ -940,6 +942,7 @@ def crear_mapeo(
     # un mapeo de un dispositivo de otra sede aunque conozca su id.
     dispositivo, ubicacion = _resolver_dispositivo(db, body.id_dspstv)
     verificar_sede(usuario, ubicacion.id_sd, db, modulo="Ingesta", accion=EDICION)
+    verificar_proyecto(db, usuario, ubicacion.id_ubccn)
 
     _validar_indices_unicos(body.columnas)
     _validar_parametros_existen(db, body.columnas)
@@ -1033,6 +1036,7 @@ def actualizar_mapeo(
 
     dispositivo, ubicacion = _cargar_contexto(db, formato)
     verificar_sede(usuario, ubicacion.id_sd, db, modulo="Ingesta", accion=EDICION)
+    verificar_proyecto(db, usuario, ubicacion.id_ubccn)
 
     if body.dlmtdr is not None:
         formato.dlmtdr = _validar_delimitador(body.dlmtdr)
@@ -1112,6 +1116,7 @@ def eliminar_mapeo(
 
     dispositivo, ubicacion = _cargar_contexto(db, formato)
     verificar_sede(usuario, ubicacion.id_sd, db, modulo="Ingesta", accion=EDICION)
+    verificar_proyecto(db, usuario, ubicacion.id_ubccn)
 
     if formato.estd == "Inactivo":
         raise HTTPException(status_code=409, detail="Este mapeo ya está inactivo")
@@ -1287,8 +1292,7 @@ def listar_dispositivos_para_mapeo(
         .join(ConexionFTP, ConexionFTP.id_cnxn == Dispositivo.id_cnxn)
         .filter(ConexionFTP.prtcl == "FTP")
     )
-    if usuario.get("scope") == "por_sede":
-        query = query.filter(ConexionFTP.id_sd == usuario["sede_id"])
+    query = filtrar_sedes(query, ConexionFTP.id_sd, db, usuario)
 
     dispositivos = query.order_by(Dispositivo.nmbr).all()
     return [DispositivoParaMapeo.model_validate(d) for d in dispositivos]

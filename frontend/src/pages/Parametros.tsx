@@ -50,6 +50,7 @@ const POR_PAGINA = 25;
 
 export default function Parametros() {
   const { nombreCompleto, rol, logout } = useAuth();
+  const puedeGestionarCatalogo = rol !== "Usuario Empresa";
 
   const [data, setData] = useState<ListadoParametros | null>(null);
   const [pagina, setPagina] = useState(1);
@@ -286,12 +287,12 @@ export default function Parametros() {
                   Catálogo estándar de parámetros usado por los mapeos de formato.
                 </p>
               </div>
-              <button
+              {puedeGestionarCatalogo && <button
                 onClick={abrirFormularioCrear}
                 className="px-4 py-2.5 text-sm font-semibold text-[#5a7000] dark:text-[#ccff00] bg-[#ccff00]/10 hover:bg-[#ccff00]/20 border border-[#8fb300]/40 dark:border-[#ccff00]/30 rounded-xl transition-colors"
               >
                 + Nuevo parámetro
-              </button>
+              </button>}
             </header>
 
             <div className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl shadow-sm border border-black/10 dark:border-white/10 overflow-hidden transition-colors duration-300">
@@ -421,7 +422,7 @@ export default function Parametros() {
                           <td className="px-6 py-4">{p.undd}</td>
                           <td className="px-6 py-4">{p.dscrpcn ?? "—"}</td>
                           <td className="px-6 py-4 text-right">
-                            <div className="inline-flex gap-2">
+                            {puedeGestionarCatalogo ? <div className="inline-flex gap-2">
                               {/* HU51 CA4/CA5: un parámetro auto-creado sin
                                   revisar se resuelve con Revisar (activar o
                                   fusionar), no con el Editar normal. */}
@@ -446,7 +447,7 @@ export default function Parametros() {
                               >
                                 {eliminandoId === p.id_prmtr ? "Eliminando..." : "Eliminar"}
                               </button>
-                            </div>
+                            </div> : <span className="text-gray-500 dark:text-gray-400">Catálogo compartido</span>}
                           </td>
                         </tr>
                       ))}

@@ -177,6 +177,11 @@ class TestUsuarioSinUbicaciones:
         monkeypatch.setattr(
             "app.routers.mapa_cliente.ubicaciones_permitidas", lambda *a, **k: []
         )
+        monkeypatch.setattr(
+            "app.routers.mapa_cliente.get_current_user",
+            lambda *a, **k: {"sub": str(usuario.id_usr), "sede_id": sede.id_sd,
+                           "scope": "por_sede", "rol": "Cliente Final"},
+        )
 
         with client.websocket_connect(f"/mapa-cliente/ws?ticket={ticket}") as ws:
             # Antes del arreglo esto era un 1006 inmediato; ahora tiene que

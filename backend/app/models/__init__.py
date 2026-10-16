@@ -5,7 +5,7 @@ from app.models.alarma import (
     NotificacionEnviada,
 )
 from app.models.archivo_ingesta import ArchivoIngesta
-from app.models.cliente_sede import Cliente, Sede
+from app.models.cliente_sede import Cliente, Proyecto, Sede
 from app.models.evento_texto import EventoTexto
 from app.models.intento_procesamiento import IntentoProcesamiento
 from app.models.mapeo_dispositivo import (
@@ -15,11 +15,15 @@ from app.models.mapeo_dispositivo import (
     MapeoFormato,
     Parametro,
 )
+from app.models.membresia_cliente import UsuarioCliente, UsuarioProyecto
 from app.models.panel_widget import Panel, PanelUbicacion, Widget
 from app.models.permiso_ubicacion import PermisoUbicacion
 from app.models.rol_usuario import Rol, Usuario
+from app.models.solicitud_suscripcion import SolicitudSuscripcion
 from app.models.suscripcion import (
     Cobro,
+    ComplementoComercial,
+    FuncionalidadComercial,
     LimitePlan,
     PermisoUsuarioSede,
     PlanSuscripcion,

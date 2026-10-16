@@ -1,3 +1,4 @@
+import { estadoProyecto } from "../config/terminologia";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { GoogleMap, Marker, Polygon, InfoWindow, useJsApiLoader } from "@react-google-maps/api";
@@ -399,7 +400,7 @@ export default function MapaUbicaciones({
                     backgroundColor: colorDe(seleccionada),
                   }}
                 />
-                {seleccionada.estd}
+                {estadoProyecto(seleccionada.estd)}
               </span>
 
               <span style={{ fontSize: 12, color: paleta.textoSecundario }}>
@@ -428,7 +429,7 @@ export default function MapaUbicaciones({
                 backgroundColor: "#ccff00",
               }}
             >
-              Editar ubicación
+              Editar proyecto
             </button>
           </div>
         </InfoWindow>

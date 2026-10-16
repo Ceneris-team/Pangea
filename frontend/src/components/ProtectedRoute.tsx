@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { esCeneris, esModuloOperativo } from "../config/espacios";
+import { ROLES, rutaPorRol } from "../config/roles";
 
 interface ProtectedRouteProps {
   children: ReactNode;
@@ -9,6 +11,8 @@ interface ProtectedRouteProps {
   /** Varios roles admitidos, para módulos compartidos (p. ej. HU06: "Solo
    *  Técnico CENERIS y Administrador"). Se ignora si se pasa rolRequerido. */
   rolesPermitidos?: readonly string[];
+  requiereOperacion?: boolean;
+  requiereAdministracionEmpresa?: boolean;
 }
 
 /** Única ruta accesible mientras la contraseña temporal siga sin cambiarse:
@@ -19,8 +23,10 @@ export default function ProtectedRoute({
   children,
   rolRequerido,
   rolesPermitidos,
+  requiereOperacion,
+  requiereAdministracionEmpresa,
 }: ProtectedRouteProps) {
-  const { isAuthenticated, rol, debeCambiarContrasena, verificandoSesion } = useAuth();
+  const { isAuthenticated, rol, rolEmpresa, debeCambiarContrasena, verificandoSesion, puedeOperar } = useAuth();
   const location = useLocation();
 
   // Pestaña nueva, F5, o la primera carga de la app montan AuthProvider
@@ -62,5 +68,12 @@ export default function ProtectedRoute({
     return <Navigate to="/login" replace />;
   }
 
+  if (requiereAdministracionEmpresa && rol === ROLES.USUARIO_EMPRESA && rolEmpresa !== "Administrador") {
+    return <Navigate to={rutaPorRol(rol)} replace />;
+  }
+  if (requiereOperacion && !puedeOperar) return <Navigate to={rutaPorRol(rol ?? "")} replace />;
+  if (esCeneris(rol) && esModuloOperativo(location.pathname) && !sessionStorage.getItem("pangea_cliente")) {
+    return <Navigate to="/clientes" replace />;
+  }
   return <>{children}</>;
 }

@@ -58,18 +58,33 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import Panel, PanelUbicacion, Widget
+from app.models import Panel, PanelUbicacion, Sede, Widget
 from app.schemas import (
     PanelActualizado,
     PanelActualizar,
-    PanelCrear,
     PanelCreado,
+    PanelCrear,
     PanelDetalle,
     PanelListItem,
 )
-from app.security.permisos import EDICION, LECTURA, require_permiso
+from app.security.entorno import filtrar_sedes, sedes_permitidas
+from app.security.permisos import EDICION, LECTURA, require_permiso, verificar_sede
+from app.services.contratos import condiciones_de, ultimo_contrato
+from app.services.limites_plan import fecha_comercial
 
-router = APIRouter(prefix="/paneles", tags=["Paneles"])
+
+def verificar_tableros_contratados(db: Session = Depends(get_db),
+                                 usuario: dict = Depends(require_permiso("Tableros", LECTURA))):
+    cliente_id = usuario.get("cliente_id")
+    if cliente_id is None and usuario.get("sede_id"):
+        sede = db.get(Sede, usuario["sede_id"])
+        cliente_id = sede.id_clnt if sede else None
+    contrato = ultimo_contrato(db, cliente_id, fecha_comercial()) if cliente_id else None
+    if contrato and "tableros" not in condiciones_de(db, contrato)["funcionalidades"]:
+        raise HTTPException(403, "Los tableros no están incluidos en la suscripción contratada")
+
+
+router = APIRouter(prefix="/paneles", tags=["Paneles"], dependencies=[Depends(verificar_tableros_contratados)])
 
 MSG_NOMBRE_DUPLICADO = "Ya tienes un panel con ese nombre"
 
@@ -89,7 +104,7 @@ def listar_paneles(
     usuario: dict = Depends(require_permiso("Tableros", LECTURA)),
 ):
     id_usr = int(usuario["sub"])
-    query = db.query(Panel).filter(Panel.id_usr == id_usr)
+    query = filtrar_sedes(db.query(Panel).filter(Panel.id_usr == id_usr), Panel.id_sd, db, usuario)
 
     if busqueda:
         patron = f"%{busqueda.lower()}%"
@@ -134,6 +149,7 @@ def obtener_panel(
     """
     id_usr = int(usuario["sub"])
     panel = _obtener_panel_propio(db, id_pnl, id_usr)
+    verificar_sede(usuario, panel.id_sd, db, modulo="Tableros", accion=LECTURA)
 
     return PanelDetalle.model_validate(panel)
 
@@ -187,13 +203,15 @@ def crear_panel(
     el mensaje de negocio; el UNIQUE real de la BD (ver except) sigue
     siendo la garantía ante dos altas simultáneas del mismo usuario.
     """
-    if usuario.get("rol") != ROL_CREADOR_DE_PANELES:
+    if usuario.get("scope") != "por_cliente" and usuario.get("rol") != ROL_CREADOR_DE_PANELES:
         raise HTTPException(
             status_code=403, detail=f"Solo {ROL_CREADOR_DE_PANELES} puede crear paneles"
         )
 
     id_usr = int(usuario["sub"])
-    id_sd = _resolver_sede_panel(usuario)
+    id_sd = _resolver_sede_panel(usuario) if usuario.get("scope") != "por_cliente" else next(iter(sedes_permitidas(db, usuario) or []), None)
+    if id_sd is None:
+        raise HTTPException(422, "Crea una sede en el proyecto antes de crear un tablero")
 
     duplicado = (
         db.query(Panel)
@@ -240,13 +258,14 @@ def actualizar_panel(
     -guardar sin cambiar el nombre, o cambiarlo por otro texto, no puede
     chocar consigo mismo-, mismo criterio que actualizar_ubicacion.
     """
-    if usuario.get("rol") != ROL_CREADOR_DE_PANELES:
+    if usuario.get("scope") != "por_cliente" and usuario.get("rol") != ROL_CREADOR_DE_PANELES:
         raise HTTPException(
             status_code=403, detail=f"Solo {ROL_CREADOR_DE_PANELES} puede editar paneles"
         )
 
     id_usr = int(usuario["sub"])
     panel = _obtener_panel_propio(db, id_pnl, id_usr)
+    verificar_sede(usuario, panel.id_sd, db, modulo="Tableros", accion=LECTURA)
 
     duplicado = (
         db.query(Panel)
@@ -304,13 +323,14 @@ def eliminar_panel(
     visualización (qué ubicaciones/widgets arma ESTE panel), nunca las
     filas de tlmtr que esos widgets simplemente consultaban.
     """
-    if usuario.get("rol") != ROL_CREADOR_DE_PANELES:
+    if usuario.get("scope") != "por_cliente" and usuario.get("rol") != ROL_CREADOR_DE_PANELES:
         raise HTTPException(
             status_code=403, detail=f"Solo {ROL_CREADOR_DE_PANELES} puede eliminar paneles"
         )
 
     id_usr = int(usuario["sub"])
     panel = _obtener_panel_propio(db, id_pnl, id_usr)
+    verificar_sede(usuario, panel.id_sd, db, modulo="Tableros", accion=LECTURA)
 
     db.query(Widget).filter(Widget.id_pnl == id_pnl).delete()
     db.query(PanelUbicacion).filter(PanelUbicacion.id_pnl == id_pnl).delete()

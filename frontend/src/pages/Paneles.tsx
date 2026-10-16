@@ -35,7 +35,7 @@ const LABEL_CLASE = "block text-sm font-medium text-gray-700 dark:text-gray-200 
 // + chequeo de rol en routers/panel.py, 403 para cualquier otro); esto
 // solo evita mostrar acciones que terminarían en 403, mismo patrón que
 // ROLES_PUEDEN_AGREGAR en Ubicaciones.tsx.
-const ROLES_PUEDEN_GESTIONAR: readonly string[] = [ROLES.CLIENTE_FINAL];
+const ROLES_PUEDEN_GESTIONAR: readonly string[] = [ROLES.CLIENTE_FINAL, ROLES.USUARIO_EMPRESA];
 
 function useDebouncedValue<T>(value: T, delayMs: number): T {
   const [debounced, setDebounced] = useState(value);
@@ -387,7 +387,7 @@ export default function Paneles() {
       {panelAEliminar && (
         <ConfirmarEliminacionModal
           titulo={`Eliminar panel '${panelAEliminar.nmbr}'`}
-          mensaje="Esta acción eliminará el panel junto con todas sus ubicaciones y widgets asociados. Los datos de telemetría no se ven afectados. Esta acción no se puede deshacer."
+          mensaje="Esta acción eliminará el panel junto con todas sus proyectos y widgets asociados. Los datos de telemetría no se ven afectados. Esta acción no se puede deshacer."
           confirmando={eliminandoId === panelAEliminar.id_pnl}
           onConfirmar={confirmarEliminarPanel}
           onCancelar={() => setPanelAEliminar(null)}

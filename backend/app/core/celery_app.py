@@ -18,6 +18,7 @@ celery_app = Celery(
         "app.tasks.ingesta",
         "app.tasks.notificaciones",
         "app.tasks.particiones",
+        "app.tasks.suscripciones",
     ],
 )
 
@@ -68,6 +69,10 @@ celery_app.conf.update(
 # posible, así que ninguna frcnc_mnts configurada por debajo de eso puede
 # cumplirse igual.
 celery_app.conf.beat_schedule = {
+    "activar-suscripciones-programadas": {
+        "task": "app.tasks.suscripciones.activar_suscripciones_programadas",
+        "schedule": 60.0,
+    },
     "sondear-conexiones-ftp-cada-minuto": {
         "task": "app.tasks.ingesta.sondear_conexiones_ftp",
         "schedule": 60.0,

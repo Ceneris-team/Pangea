@@ -120,7 +120,7 @@ export default function ConexionesFTP() {
     setError(null);
 
     apiFetch<ListadoPaginado>("/conexiones-ftp", {
-      params: { pagina, por_pagina: POR_PAGINA },
+      params: { pagina, por_pagina: POR_PAGINA, incluir_inactivas: "true" },
     })
       .then((res) => {
         if (!cancelado) setData(res);
@@ -435,7 +435,13 @@ export default function ConexionesFTP() {
                                 </button>
                                 <button
                                   type="button"
-                                  onClick={() => iniciarConfirmacion(c.id_cnxn)}
+                                  onClick={async () => {
+                                    if (c.estd === "Activa") { iniciarConfirmacion(c.id_cnxn); return; }
+                                    try {
+                                      await apiFetch(`/conexiones-ftp/${c.id_cnxn}`, { method: "PUT", body: { estd: "Activa" } });
+                                      cargarConexiones();
+                                    } catch (err) { setError(err instanceof ApiError ? err.message : "No se pudo activar"); }
+                                  }}
                                   className="inline-flex items-center justify-center px-3 py-1.5 text-sm font-medium text-red-600 dark:text-red-400 bg-transparent border border-black/20 dark:border-white/20 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-all"
                                 >
                                   <svg
@@ -451,7 +457,7 @@ export default function ConexionesFTP() {
                                       d="M6 18L18 6M6 6l12 12"
                                     />
                                   </svg>
-                                  Eliminar
+                                  {c.estd === "Activa" ? "Desactivar" : "Activar"}
                                 </button>
                               </div>
                             )}

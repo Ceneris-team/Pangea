@@ -28,7 +28,9 @@ from app.schemas import (
     ConexionFTPUpdate,
 )
 from app.security.dependencies import get_current_user
+from app.security.entorno import filtrar_sedes, puede_operar
 from app.security.ftp_crypto import encrypt_credential
+from app.security.permisos import EDICION, verificar_sede
 
 router = APIRouter(prefix="/conexiones-ftp", tags=["Conexiones FTP"])
 
@@ -37,10 +39,10 @@ FRECUENCIAS_VALIDAS = {1, 60}  # CA: "cada minuto" o "cada hora"
 TIMEOUT_SEGUNDOS = 8
 
 
-def _requerir_tecnico_o_admin(usuario: dict = Depends(get_current_user)) -> dict:
+def _requerir_tecnico_o_admin(usuario: dict = Depends(get_current_user), db: Session = Depends(get_db)) -> dict:
     """HU 05 CA: 'Solo los roles Técnico CENERIS y Administrador tienen
     acceso a este módulo.'"""
-    if usuario.get("rol") not in ROLES_CON_ACCESO:
+    if not puede_operar(db, usuario):
         raise HTTPException(
             status_code=403,
             detail="Solo Técnico CENERIS o Administrador pueden acceder a este módulo",
@@ -74,14 +76,16 @@ def _validar_frecuencia(frcnc_mnts: int) -> None:
 def listar_conexiones(
     pagina: int = Query(default=1, ge=1),
     por_pagina: int = Query(default=10, ge=1, le=100),
+    incluir_inactivas: bool = False,
     db: Session = Depends(get_db),
     usuario: dict = Depends(_requerir_tecnico_o_admin),
 ):
     """CA: 'VER CONEXIONES' redirige al listado, la nueva configuración
     aparece registrada con estado 'Activo'."""
-    query = db.query(ConexionFTP).filter(ConexionFTP.estd != "Inactiva")
-    if usuario.get("scope") == "por_sede":
-        query = query.filter(ConexionFTP.id_sd == usuario["sede_id"])
+    query = db.query(ConexionFTP)
+    if not incluir_inactivas:
+        query = query.filter(ConexionFTP.estd != "Inactiva")
+    query = filtrar_sedes(query, ConexionFTP.id_sd, db, usuario)
 
     total = query.count()
     conexiones = (
@@ -132,8 +136,7 @@ def obtener_conexion(
     if conexion is None:
         raise HTTPException(status_code=404, detail="Conexión FTP no encontrada")
 
-    if usuario.get("scope") == "por_sede" and conexion.id_sd != usuario["sede_id"]:
-        raise HTTPException(status_code=403, detail="No tiene acceso a esta conexión")
+    verificar_sede(usuario, conexion.id_sd, db, modulo="Ingesta", accion=EDICION)
 
     return ConexionFTPListItem.model_validate(conexion)
 
@@ -148,6 +151,7 @@ def crear_conexion(
     'Conexión FTP configurada correctamente'."""
     _validar_frecuencia(body.frcnc_mnts)
     id_sd = _resolver_sede(usuario, body.id_sd)
+    verificar_sede(usuario, id_sd, db, modulo="Ingesta", accion=EDICION)
 
     conexion = ConexionFTP(
         id_sd=id_sd,
@@ -184,8 +188,7 @@ def actualizar_conexion(
     if conexion is None:
         raise HTTPException(status_code=404, detail="Conexión FTP no encontrada")
 
-    if usuario.get("scope") == "por_sede" and conexion.id_sd != usuario["sede_id"]:
-        raise HTTPException(status_code=403, detail="No tiene acceso a esta conexión")
+    verificar_sede(usuario, conexion.id_sd, db, modulo="Ingesta", accion=EDICION)
 
     if body.frcnc_mnts is not None:
         _validar_frecuencia(body.frcnc_mnts)
@@ -225,8 +228,7 @@ def eliminar_conexion(
     if conexion is None:
         raise HTTPException(status_code=404, detail="Conexión FTP no encontrada")
 
-    if usuario.get("scope") == "por_sede" and conexion.id_sd != usuario["sede_id"]:
-        raise HTTPException(status_code=403, detail="No tiene acceso a esta conexión")
+    verificar_sede(usuario, conexion.id_sd, db, modulo="Ingesta", accion=EDICION)
 
     conexion.estd = "Inactiva"
     db.commit()

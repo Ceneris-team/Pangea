@@ -260,7 +260,7 @@ export default function Graficos() {
                   si esa ubicación tiene más de uno). */}
               <div>
                 <label htmlFor="ubicacion-graficos" className="block text-sm font-bold text-gray-700 dark:text-gray-200 mb-2">
-                  Ubicación
+                  Proyecto
                 </label>
                 <div className="flex items-center gap-3 flex-wrap">
                   <select
@@ -277,7 +277,7 @@ export default function Graficos() {
                         dark:bg-[#2d3748] acá mismo y no solo en el
                         contenedor. */}
                     <option value="" className="bg-white dark:bg-[#2d3748] text-gray-900 dark:text-white">
-                      Selecciona una ubicación…
+                      Selecciona un proyecto…
                     </option>
                     {ubicaciones.map((u) => (
                       <option
@@ -369,7 +369,7 @@ export default function Graficos() {
 
             {!ubicacionIdValida && (
               <div className="py-24 text-center text-gray-500 dark:text-gray-400 text-sm">
-                Selecciona una ubicación para ver sus gráficos.
+                Selecciona un proyecto para ver sus gráficos.
               </div>
             )}
 

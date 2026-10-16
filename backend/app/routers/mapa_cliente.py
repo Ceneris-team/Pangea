@@ -26,10 +26,12 @@ import asyncio
 import json
 import logging
 
-from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal, get_db
+from app.security.dependencies import get_current_user
+from app.security.entorno import permiso_del_entorno, resolver_entorno
 from app.security.jwt_auth import TokenExpirado, TokenInvalido, decode_access_token
 from app.security.permisos import LECTURA, require_permiso, tiene_permiso
 from app.security.ubicaciones_permitidas import ubicaciones_permitidas
@@ -182,9 +184,25 @@ def _autenticar_websocket(ticket: str | None) -> dict | None:
     if not token:
         return None
     try:
-        return decode_access_token(token)
-    except (TokenExpirado, TokenInvalido):
+        seleccion = json.loads(token) if token.startswith("{") else {"token": token}
+        payload = decode_access_token(seleccion["token"])
+        return {**payload, "cliente_id": seleccion.get("cliente_id"),
+                "proyecto_id": seleccion.get("proyecto_id"), "_token_crudo": seleccion["token"]}
+    except (TokenExpirado, TokenInvalido, ValueError, KeyError):
         return None
+
+
+def _acceso_ws(db, usuario):
+    if usuario.get("_token_crudo"):
+        actual = get_current_user(usuario["_token_crudo"], db, usuario.get("cliente_id"), usuario.get("proyecto_id"))
+    else:
+        actual = resolver_entorno(db, usuario, usuario.get("cliente_id"), usuario.get("proyecto_id"))
+    permitido = permiso_del_entorno(db, actual, "Tableros", LECTURA)
+    if permitido is None:
+        permitido = tiene_permiso(db, int(actual["sub"]), actual.get("sede_id"), "Tableros", LECTURA)
+    if not permitido:
+        raise HTTPException(403, "Sin permiso sobre Tableros")
+    return ubicaciones_permitidas(db, actual)
 
 
 @router.websocket("/ws")
@@ -217,11 +235,11 @@ async def websocket_telemetria(websocket: WebSocket, ticket: str | None = None):
     # durar horas- retendría una conexión del pool de Postgres sin usarla.
     db = SessionLocal()
     try:
-        if not tiene_permiso(db, int(usuario["sub"]), usuario.get("sede_id"), "Tableros", LECTURA):
-            await websocket.accept()
-            await websocket.close(code=1008, reason="Sin permiso sobre Tableros")
-            return
-        ids_permitidas = ubicaciones_permitidas(db, usuario)
+        ids_permitidas = _acceso_ws(db, usuario)
+    except HTTPException:
+        await websocket.accept()
+        await websocket.close(code=1008, reason="Sin acceso al entorno")
+        return
     finally:
         db.close()
 
@@ -268,6 +286,16 @@ async def websocket_telemetria(websocket: WebSocket, ticket: str | None = None):
                 await asyncio.sleep(SEGUNDOS_ENTRE_PINGS)
                 mensaje = None
 
+            # Una revocación de membresía o proyecto también corta conexiones abiertas.
+            with SessionLocal() as db_actual:
+                try:
+                    ids_actuales = _acceso_ws(db_actual, usuario)
+                except HTTPException:
+                    await websocket.close(code=1008, reason="El acceso cambió")
+                    return
+            if set(ids_actuales) != set(ids_permitidas):
+                await websocket.close(code=1008, reason="Los proyectos disponibles cambiaron")
+                return
             if mensaje is None:
                 # Sin eventos en la ventana: se manda un ping de
                 # keep-alive. Es lo que evita que el balanceador vea la

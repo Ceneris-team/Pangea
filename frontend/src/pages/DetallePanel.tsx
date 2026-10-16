@@ -109,14 +109,14 @@ export default function DetallePanel() {
                     funcionalidad detrás, a propósito. */}
                 <div className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl shadow-sm border border-black/10 dark:border-white/10 flex flex-col items-center justify-center gap-4 py-20 px-6 text-center">
                   <p className="text-gray-600 dark:text-gray-300">
-                    Este panel todavía no tiene ubicaciones configuradas.
+                    Este panel todavía no tiene proyectos configuradas.
                   </p>
                   <button
                     disabled
                     title="Disponible próximamente"
                     className="inline-flex items-center px-4 py-2 text-sm font-bold rounded-xl bg-[#ccff00] text-[#1a202c] opacity-60 cursor-not-allowed"
                   >
-                    + Añadir ubicaciones
+                    + Añadir proyectos
                   </button>
                 </div>
               </>

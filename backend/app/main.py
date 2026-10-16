@@ -12,11 +12,13 @@ from app.routers import (
     comercial,
     conexiones_ftp,
     dispositivos,
+    empresas,
     ingesta,
     mapa_cliente,
     mapeos,
     mediciones,
     panel,
+    solicitudes_suscripcion,
     ubicaciones,
     usuarios,
 )
@@ -45,6 +47,8 @@ app.add_middleware(
 
 app.include_router(auth.router)
 app.include_router(comercial.router)
+app.include_router(solicitudes_suscripcion.router)
+app.include_router(empresas.router)
 app.include_router(usuarios.router)
 app.include_router(auditoria.router)
 app.include_router(ubicaciones.router)

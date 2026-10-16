@@ -56,7 +56,7 @@ export default function PanelUsuario() {
 									<span className="text-sm text-gray-600 dark:text-gray-300">{plan.estado_suscripcion}{plan.fecha_vencimiento ? ` · Vencimiento: ${plan.fecha_vencimiento}` : ""}</span>
 								</div>
 								<p className="mt-3 text-sm text-gray-600 dark:text-gray-300">
-									Los cupos muestran el consumo total del cliente en todas sus sedes. Tu cuenta tiene acceso a {plan.ubicaciones_visibles} {plan.ubicaciones_visibles === 1 ? "ubicación activa" : "ubicaciones activas"}.
+									Los cupos muestran el consumo total del cliente en todas sus sedes. Tu cuenta tiene acceso a {plan.ubicaciones_visibles} {plan.ubicaciones_visibles === 1 ? "proyecto activa" : "proyectos activos"}.
 								</p>
 								{plan.limites && <div className="mt-4 grid gap-3 sm:grid-cols-3">
 									{(["ubicaciones", "dispositivos", "usuarios"] as const).map((recurso) => <div key={recurso} className="rounded-xl bg-black/5 p-3 dark:bg-white/5">
@@ -78,7 +78,7 @@ export default function PanelUsuario() {
 										<path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
 									</svg>
 								</div>
-								<h2 className="font-semibold text-gray-900 dark:text-white">Ubicaciones</h2>
+								<h2 className="font-semibold text-gray-900 dark:text-white">Proyectos</h2>
 								<p className="text-sm text-gray-600 dark:text-gray-300">Consulta las sedes y estaciones asociadas a tu cuenta.</p>
 							</Link>
 

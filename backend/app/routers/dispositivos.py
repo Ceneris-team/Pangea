@@ -97,7 +97,6 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import ConexionFTP, Dispositivo, PermisoUbicacion, Sede, Ubicacion
-from app.services.limites_plan import comprobar_cupo
 from app.models.archivo_ingesta import ArchivoIngesta
 from app.models.mapeo_dispositivo import MapeoColumna, MapeoFormato
 from app.models.telemetria import Telemetria
@@ -114,10 +113,12 @@ from app.schemas import (
 )
 from app.security.auditoria import limpiar_contexto_auditoria, marcar_contexto_auditoria
 from app.security.dependencies import get_current_user
+from app.security.entorno import filtrar_proyectos, puede_operar, verificar_proyecto
 from app.security.permisos import EDICION, LECTURA, require_permiso, verificar_sede
 from app.services.cache.invalidacion import invalidar_por_lectura
 from app.services.ingesta.mapeo import MapeoNoEncontradoError, resolver_formato
 from app.services.ingesta.usuario_sistema import resolver_id_usuario_sistema
+from app.services.limites_plan import comprobar_cupo
 from app.services.particiones import (
     ParticionInexistenteError,
     es_error_de_particion_faltante,
@@ -129,7 +130,7 @@ router = APIRouter(prefix="/dispositivos", tags=["Dispositivos"])
 ROLES_CON_ACCESO_TOTAL = {"Administrador", "Tecnico CENERIS", "Técnico CENERIS"}
 
 
-def _requerir_tecnico_o_admin(usuario: dict = Depends(get_current_user)) -> dict:
+def _requerir_tecnico_o_admin(usuario: dict = Depends(get_current_user), db: Session = Depends(get_db)) -> dict:
     """HU19: 'Solo los roles Técnico CENERIS y Administrador tienen acceso
     a esta vista' -una restricción de rol explícita, distinta del permiso
     de Lectura sobre 'Dispositivos' que también tiene Cliente Final (ve el
@@ -137,7 +138,7 @@ def _requerir_tecnico_o_admin(usuario: dict = Depends(get_current_user)) -> dict
     patrón que _requerir_tecnico_o_admin en routers/conexiones_ftp.py: se
     valida el rol directo del token en vez de la matriz de prms_usr_sd,
     porque acá la regla de negocio es por rol, no por permiso asignable."""
-    if usuario.get("rol") not in ROLES_CON_ACCESO_TOTAL:
+    if not puede_operar(db, usuario):
         raise HTTPException(
             status_code=403,
             detail="Solo Técnico CENERIS o Administrador pueden ver las estadísticas del dispositivo",
@@ -158,11 +159,10 @@ def _query_dispositivos_visibles(db: Session, usuario: dict):
 
     # Aislamiento por sede (HT-09 CA3): un usuario 'por_sede' solo ve los
     # dispositivos de ubicaciones de su sede, aunque pida otra explícitamente.
-    if usuario.get("scope") == "por_sede":
-        query = query.filter(Ubicacion.id_sd == usuario["sede_id"])
+    query = filtrar_proyectos(query, Ubicacion.id_ubccn, db, usuario)
 
     # CA: Administrador/Tecnico CENERIS ven todo; Cliente solo lo asignado.
-    if usuario.get("rol") not in ROLES_CON_ACCESO_TOTAL:
+    if usuario.get("scope") != "por_cliente" and usuario.get("rol") not in ROLES_CON_ACCESO_TOTAL:
         id_usr = int(usuario["sub"])
         query = query.join(
             PermisoUbicacion, PermisoUbicacion.id_ubccn == Dispositivo.id_ubccn
@@ -270,10 +270,9 @@ def dispositivos_para_mapa(
 
     # Aislamiento por sede (HT-09 CA3). Dispositivo no tiene id_sd propio:
     # se resuelve por su ubicación, igual que en listar_dispositivos.
-    if usuario.get("scope") == "por_sede":
-        query = query.filter(Ubicacion.id_sd == usuario["sede_id"])
+    query = filtrar_proyectos(query, Ubicacion.id_ubccn, db, usuario)
 
-    if usuario.get("rol") not in ROLES_CON_ACCESO_TOTAL:
+    if usuario.get("scope") != "por_cliente" and usuario.get("rol") not in ROLES_CON_ACCESO_TOTAL:
         id_usr = int(usuario["sub"])
         query = query.join(
             PermisoUbicacion, PermisoUbicacion.id_ubccn == Dispositivo.id_ubccn
@@ -307,6 +306,10 @@ def crear_dispositivo(
     # Un usuario 'por_sede' no puede crear un dispositivo en una ubicación
     # de otra sede aunque conozca su id_ubccn (HT-09 CA3).
     verificar_sede(usuario, ubicacion.id_sd, db, modulo="Dispositivos", accion=EDICION)
+    verificar_proyecto(db, usuario, ubicacion.id_ubccn)
+    verificar_sede(usuario, conexion.id_sd, db, modulo="Ingesta", accion=EDICION)
+    if conexion.id_sd != ubicacion.id_sd:
+        raise HTTPException(422, "La conexión FTP debe pertenecer a la sede de la ubicación")
 
     # resolver_dispositivo() en services/ingesta/persistencia.py asume
     # exactamente 1 dispositivo Activo por conexión FTP; un segundo
@@ -366,10 +369,11 @@ def _cargar_ficha(db: Session, id_dspstv: int, usuario: dict, accion: str):
 
     dispositivo, ubicacion, conexion = fila
     verificar_sede(usuario, ubicacion.id_sd, db, modulo="Dispositivos", accion=accion)
+    verificar_proyecto(db, usuario, ubicacion.id_ubccn)
 
     # Un Cliente Final solo ve dispositivos de ubicaciones que tenga
     # asignadas, mismo criterio que el listado de HU10.
-    if usuario.get("rol") not in ROLES_CON_ACCESO_TOTAL:
+    if usuario.get("scope") != "por_cliente" and usuario.get("rol") not in ROLES_CON_ACCESO_TOTAL:
         tiene_permiso = (
             db.query(PermisoUbicacion)
             .filter(
@@ -438,6 +442,9 @@ def actualizar_dispositivo(
             raise HTTPException(
                 status_code=422, detail=f"La conexión FTP {body.id_cnxn} no existe"
             )
+        verificar_sede(usuario, conexion_nueva.id_sd, db, modulo="Ingesta", accion=EDICION)
+        if conexion_nueva.id_sd != ubicacion.id_sd:
+            raise HTTPException(422, "La conexión FTP debe pertenecer a la sede de la ubicación")
 
         # Mismo criterio que crear_dispositivo (línea 151-163): un solo
         # dispositivo Activo por conexión. Se excluye el propio

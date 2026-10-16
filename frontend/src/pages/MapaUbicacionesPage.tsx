@@ -75,7 +75,7 @@ export default function MapaUbicacionesPage() {
       })
       .catch((err) => {
         if (cancelado) return;
-        setError(err instanceof ApiError ? err.message : "No se pudo cargar el mapa de ubicaciones");
+        setError(err instanceof ApiError ? err.message : "No se pudo cargar el mapa de proyectos");
       })
       .finally(() => {
         if (!cancelado) setCargando(false);
@@ -106,9 +106,9 @@ export default function MapaUbicacionesPage() {
           <main className="flex-1 overflow-hidden p-6 md:p-8 flex flex-col">
             <header className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div>
-                <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Mapa de Ubicaciones</h1>
+                <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Mapa de Proyectos</h1>
                 <p className="text-sm text-gray-500 dark:text-gray-400">
-                  Distribución de las estaciones de monitoreo. Haz clic en un marcador para ver
+                  Áreas de los proyectos y ubicación de sus dispositivos. Haz clic en un marcador para ver
                   su detalle.
                 </p>
               </div>
@@ -120,18 +120,18 @@ export default function MapaUbicacionesPage() {
                     compitiendo por el espacio. */}
                 <div className="hidden lg:flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
                   <span className="inline-flex items-center gap-2">
-                    <span className="font-semibold text-gray-600 dark:text-gray-300">Zonas</span>
+                    <span className="font-semibold text-gray-600 dark:text-gray-300">Proyectos</span>
                     <span className="inline-flex items-center gap-1">
                       <span className="w-3 h-3 rounded-full bg-[#8fb300] ring-1 ring-white dark:ring-gray-700 flex items-center justify-center text-[7px] leading-none text-white font-bold">
                         ⋮
                       </span>
-                      Activa
+                      Activo
                     </span>
                     <span className="inline-flex items-center gap-1">
                       <span className="w-3 h-3 rounded-full bg-[#9ca3af] ring-1 ring-white dark:ring-gray-700 flex items-center justify-center text-[7px] leading-none text-white font-bold">
                         ⋮
                       </span>
-                      Inactiva
+                      Inactivo
                     </span>
                   </span>
 
@@ -139,7 +139,7 @@ export default function MapaUbicacionesPage() {
 
                   <span className="inline-flex items-center gap-2">
                     <span className="font-semibold text-gray-600 dark:text-gray-300">
-                      Dispositivos
+                      Ubicación de dispositivos
                     </span>
                     <span className="inline-flex items-center gap-1">
                       <span className="w-2 h-2 rotate-45 bg-[#2563eb] ring-1 ring-white dark:ring-gray-700" />
@@ -243,12 +243,12 @@ export default function MapaUbicacionesPage() {
                 <div className="flex items-center justify-center h-full text-sm text-gray-500 dark:text-gray-400">
                   <div className="flex items-center gap-2">
                     <div className="w-4 h-4 rounded-full bg-[#ccff00] animate-bounce"></div>
-                    <span>Cargando ubicaciones...</span>
+                    <span>Cargando proyectos...</span>
                   </div>
                 </div>
               ) : ubicaciones && ubicaciones.length === 0 ? (
                 <div className="flex items-center justify-center h-full text-sm text-gray-500 dark:text-gray-400">
-                  No hay ubicaciones registradas para mostrar.
+                  No hay proyectos registrados para mostrar.
                 </div>
               ) : (
                 ubicaciones && (

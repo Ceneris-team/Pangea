@@ -1,3 +1,4 @@
+import { estadoProyecto } from "../config/terminologia";
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { apiFetch, ApiError } from "../services/api";
@@ -60,7 +61,7 @@ export default function DetalleUbicacion() {
       })
       .catch((err) => {
         if (cancelado) return;
-        setError(err instanceof ApiError ? err.message : "No se pudo cargar la ubicación");
+        setError(err instanceof ApiError ? err.message : "No se pudo cargar el proyecto");
       })
       .finally(() => {
         if (!cancelado) setCargando(false);
@@ -90,7 +91,7 @@ export default function DetalleUbicacion() {
                 to="/ubicaciones"
                 className="inline-flex items-center text-sm font-medium text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors"
               >
-                ← Volver a Ubicaciones
+                ← Volver a Proyectos
               </Link>
             </div>
 
@@ -123,13 +124,13 @@ export default function DetalleUbicacion() {
                           : "bg-black/5 dark:bg-white/10 text-gray-600 dark:text-gray-300 border-black/20 dark:border-white/20"
                       }`}
                     >
-                      {ubicacion.estd}
+                      {estadoProyecto(ubicacion.estd)}
                     </span>
                   </header>
 
                   <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                     <section className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl shadow-sm border border-black/10 dark:border-white/10 p-6">
-                      <h2 className="text-base font-bold text-gray-900 dark:text-white mb-4">Ubicación</h2>
+                      <h2 className="text-base font-bold text-gray-900 dark:text-white mb-4">Área del proyecto</h2>
                       <dl className="space-y-3 text-sm">
                         <div>
                           <dt className="text-gray-600 dark:text-gray-300">Latitud</dt>
@@ -153,13 +154,13 @@ export default function DetalleUbicacion() {
                         Parámetros en uso
                       </h2>
                       <p className="text-sm text-gray-600 dark:text-gray-300 mb-4 font-light">
-                        Lo que se está midiendo hoy en esta ubicación, según los mapeos de formato de sus
+                        Lo que se está midiendo hoy en este proyecto, según los mapeos de formato de sus
                         dispositivos.
                       </p>
 
                       {parametros && parametros.length === 0 && (
                         <p className="text-sm text-gray-600 dark:text-gray-300">
-                          Todavía no hay parámetros mapeados para los dispositivos de esta ubicación.{" "}
+                          Todavía no hay parámetros mapeados para los dispositivos de este proyecto.{" "}
                           <Link to="/dispositivos" className="text-[#5a7000] dark:text-[#ccff00] underline">
                             Configura sus mapeos de formato
                           </Link>

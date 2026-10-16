@@ -2,7 +2,6 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { apiFetch, ApiError } from "../services/api";
 import { useAuth } from "../context/AuthContext";
-import { ROLES } from "../config/roles";
 import Sidebar from "../components/layout/Sidebar";
 import Topbar from "../components/layout/Topbar";
 import DrawerPanel from "../components/layout/DrawerPanel";
@@ -78,7 +77,6 @@ const POR_PAGINA = 10;
 // HU19 usa el mismo conjunto de roles para "Ver estadísticas" ('Solo los
 // roles Técnico CENERIS y Administrador tienen acceso a esta vista'), así
 // que se reusa esta constante en vez de duplicarla.
-const ROLES_PUEDEN_AGREGAR: readonly string[] = [ROLES.ADMINISTRADOR, ROLES.TECNICO_CENERIS];
 
 function useDebouncedValue<T>(value: T, delayMs: number): T {
   const [debounced, setDebounced] = useState(value);
@@ -90,7 +88,7 @@ function useDebouncedValue<T>(value: T, delayMs: number): T {
 }
 
 export default function Dispositivos() {
-  const { nombreCompleto, rol, logout, zonaHoraria } = useAuth();
+  const { nombreCompleto, rol, logout, zonaHoraria, puedeOperar } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -269,7 +267,7 @@ export default function Dispositivos() {
       return;
     }
     if (!form.id_ubccn) {
-      setErrorFormulario("Selecciona la ubicación del dispositivo");
+      setErrorFormulario("Selecciona el proyecto del dispositivo");
       return;
     }
     if (!form.id_cnxn) {
@@ -461,7 +459,7 @@ export default function Dispositivos() {
               </div>
 
               {/* HU11 CA1: punto de entrada al formulario de registro. */}
-              {ROLES_PUEDEN_AGREGAR.includes(rol ?? "") && (
+              {puedeOperar && (
                 <button
                   onClick={abrirFormulario}
                   className="inline-flex items-center px-4 py-2.5 text-sm font-semibold text-[#5a7000] dark:text-[#ccff00] bg-[#ccff00]/10 hover:bg-[#ccff00]/20 border border-[#8fb300]/40 dark:border-[#ccff00]/30 rounded-xl transition-colors"
@@ -518,7 +516,7 @@ export default function Dispositivos() {
                     onChange={(e) => setIdUbccn(e.target.value)}
                     className="bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block p-2.5 outline-none cursor-pointer"
                   >
-                    <option value="">Todas las ubicaciones</option>
+                    <option value="">Todas los proyectos</option>
                     {ubicaciones.map((u) => (
                       <option key={u.id_ubccn} value={u.id_ubccn}>
                         {u.nmbr}
@@ -587,7 +585,7 @@ export default function Dispositivos() {
                     <tr>
                       <th className="px-6 py-4 font-bold tracking-wider">Nombre</th>
                       <th className="px-6 py-4 font-bold tracking-wider">Marca</th>
-                      <th className="px-6 py-4 font-bold tracking-wider">Ubicación</th>
+                      <th className="px-6 py-4 font-bold tracking-wider">Proyecto</th>
                       <th className="px-6 py-4 font-bold tracking-wider">Estado</th>
                       <th className="px-6 py-4 font-bold tracking-wider text-right">Acciones</th>
                     </tr>
@@ -654,7 +652,7 @@ export default function Dispositivos() {
 
                             {/* HU19 CA1: solo Administrador/Técnico CENERIS
                                 acceden al panel de estadísticas. */}
-                            {ROLES_PUEDEN_AGREGAR.includes(rol ?? "") && (
+                            {puedeOperar && (
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -673,7 +671,7 @@ export default function Dispositivos() {
                                 de EDICION sobre Dispositivos) pueden
                                 desactivar/reactivar. Desactivar solo aplica a
                                 un dispositivo Activo; Reactivar, a uno Inactivo. */}
-                            {ROLES_PUEDEN_AGREGAR.includes(rol ?? "") && d.estd === "Activo" && (
+                            {puedeOperar && d.estd === "Activo" && (
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -688,7 +686,7 @@ export default function Dispositivos() {
                               </button>
                             )}
 
-                            {ROLES_PUEDEN_AGREGAR.includes(rol ?? "") && d.estd === "Inactivo" && (
+                            {puedeOperar && d.estd === "Inactivo" && (
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -745,7 +743,7 @@ export default function Dispositivos() {
       <DrawerPanel abierto={mostrarFormulario} onCerrar={cerrarFormulario} titulo="Agregar dispositivo">
         <form onSubmit={handleSubmitDispositivo} className="flex flex-col h-full">
           <p className="text-sm text-gray-600 dark:text-gray-300 mb-5">
-            Registra un nuevo dispositivo de monitoreo y asócialo a una ubicación y conexión FTP.
+            Registra un nuevo dispositivo de monitoreo y asócialo a un proyecto y conexión FTP.
           </p>
 
           {errorFormulario && (
@@ -802,7 +800,7 @@ export default function Dispositivos() {
 
             <div>
               <label className={labelClaseDispositivo} htmlFor="id_ubccn">
-                Ubicación <span className="text-red-500">*</span>
+                Proyecto <span className="text-red-500">*</span>
               </label>
               <select
                 id="id_ubccn"
@@ -810,7 +808,7 @@ export default function Dispositivos() {
                 onChange={(e) => actualizarCampoDispositivo("id_ubccn", e.target.value)}
                 className={inputClaseDispositivo + " cursor-pointer"}
               >
-                <option value="">Selecciona una ubicación...</option>
+                <option value="">Selecciona un proyecto...</option>
                 {ubicacionesActivas.map((u) => (
                   <option key={u.id_ubccn} value={u.id_ubccn}>
                     {u.nmbr}

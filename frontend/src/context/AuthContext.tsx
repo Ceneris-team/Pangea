@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { ApiError, apiFetch, limpiarDatosDeSesion } from "../services/api";
 
 interface LoginResponse {
@@ -14,6 +14,10 @@ interface LoginResponse {
  *  -"rol" es el único campo que comparten con el mismo nombre-, así que
  *  no se puede reutilizar esa interfaz para la verificación de sesión. */
 interface PerfilResponse {
+  operacion_habilitada: boolean;
+  rol_empresa: string | null;
+  cliente_id: number | null;
+  proyecto_id: number | null;
   nombre_completo: string;
   correo: string;
   rol: string;
@@ -24,6 +28,10 @@ interface PerfilResponse {
 }
 
 interface AuthState {
+  operacionHabilitada: boolean;
+  rolEmpresa: string | null;
+  clienteId: number | null;
+  proyectoId: number | null;
   /** Ya NO es el JWT: el navegador ni lo ve, vive en una cookie httpOnly
    *  que el backend setea en el login (ver Set-Cookie en
    *  routers/auth.py). Este flag solo refleja "hay una sesión iniciada
@@ -43,6 +51,8 @@ interface AuthState {
 }
 
 interface AuthContextValue extends AuthState {
+  actualizarAccesoComercial: (habilitada: boolean) => void;
+  puedeOperar: boolean;
   isAuthenticated: boolean;
   /** true SOLO durante la comprobación inicial de sesión (GET
    *  /auth/perfil al montar la app). Mientras esté en true, ProtectedRoute
@@ -78,6 +88,8 @@ function readInitialState(): AuthState {
   const zonaHoraria =
     localStorage.getItem("pangea_zona_horaria") ?? sessionStorage.getItem("pangea_zona_horaria");
   return {
+    operacionHabilitada: false,
+    rolEmpresa: null, clienteId: null, proyectoId: null,
     sesionIniciada: rol !== null,
     rol,
     nombreCompleto,
@@ -126,6 +138,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         localStorage.setItem("pangea_zona_horaria", perfil.zona_horaria);
 
         setState({
+          operacionHabilitada: perfil.operacion_habilitada ?? true,
+          rolEmpresa: perfil.rol_empresa, clienteId: perfil.cliente_id, proyectoId: perfil.proyecto_id,
           sesionIniciada: true,
           rol: perfil.rol,
           nombreCompleto: perfil.nombre_completo,
@@ -147,6 +161,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         limpiarDatosDeSesion();
         setState({
+          operacionHabilitada: false,
+          rolEmpresa: null, clienteId: null, proyectoId: null,
           sesionIniciada: false,
           rol: null,
           nombreCompleto: null,
@@ -169,11 +185,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // hace guardar la cookie Set-Cookie de la respuesta al navegador; acá
     // no hay nada que hacer con data.access_token del lado del token en
     // sí, solo con los datos de UI que lo acompañan.
+    sessionStorage.removeItem("pangea_cliente");
+    sessionStorage.removeItem("pangea_proyecto");
+    sessionStorage.removeItem("pangea_proyecto_v2");
     const data = await apiFetch<LoginResponse>("/auth/login", {
       method: "POST",
       body: { correo, contrasena },
     });
 
+    const perfil = await apiFetch<PerfilResponse>("/auth/perfil");
     const storage = recordar ? localStorage : sessionStorage;
     storage.setItem("pangea_rol", data.rol);
     storage.setItem("pangea_nombre", data.nombre_completo);
@@ -181,6 +201,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     storage.setItem("pangea_zona_horaria", data.zona_horaria);
 
     setState({
+      operacionHabilitada: perfil.operacion_habilitada ?? true,
+      rolEmpresa: perfil.rol_empresa, clienteId: perfil.cliente_id, proyectoId: perfil.proyecto_id,
       sesionIniciada: true,
       rol: data.rol,
       nombreCompleto: data.nombre_completo,
@@ -198,6 +220,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     apiFetch("/auth/logout", { method: "POST" }).catch(() => {});
     limpiarDatosDeSesion();
     setState({
+      operacionHabilitada: false,
+      rolEmpresa: null, clienteId: null, proyectoId: null,
       sesionIniciada: false,
       rol: null,
       nombreCompleto: null,
@@ -218,6 +242,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setState((prev) => ({ ...prev, zonaHoraria: zona }));
   }
 
+  const actualizarAccesoComercial = useCallback((habilitada: boolean) => {
+    setState(prev => prev.operacionHabilitada === habilitada ? prev : { ...prev, operacionHabilitada: habilitada });
+  }, []);
+
   /** El cambio de contraseña invalida el token actual (ver
    *  security/dependencies.py), así que tras cambiarla el flujo termina en
    *  logout. Esto solo levanta el bloqueo en memoria para que el redirect
@@ -232,12 +260,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     <AuthContext.Provider
       value={{
         ...state,
+        puedeOperar: state.operacionHabilitada && (["Administrador", "Técnico CENERIS", "Tecnico CENERIS"].includes(state.rol ?? "") || (state.rol === "Usuario Empresa" && ["Administrador", "Tecnico"].includes(state.rolEmpresa ?? ""))),
         isAuthenticated: state.sesionIniciada,
         verificandoSesion,
         login,
         logout,
         marcarContrasenaCambiada,
         actualizarZonaHoraria,
+        actualizarAccesoComercial,
       }}
     >
       {children}

@@ -141,7 +141,7 @@ def test_listado_comercial_muestra_plan_vencido(comercial, fabrica):
     assert resumen["estado_suscripcion"] == "Vencida"
 
 
-def test_administrador_consulta_pero_no_crea_planes(comercial, fabrica):
+def test_administrador_ceneris_consulta_y_crea_planes(comercial, fabrica):
     rol = fabrica.rol("Administrador")
     sede = fabrica.sede()
     usuario = fabrica.usuario(rol, scp="global")
@@ -159,5 +159,5 @@ def test_administrador_consulta_pero_no_crea_planes(comercial, fabrica):
 
     assert comercial.get("/comercial/clientes").status_code == 200
     assert comercial.get("/comercial/planes").status_code == 200
-    respuesta = comercial.post("/comercial/planes", json={"nombre": "Plan prohibido", "precio_mensual": "99"})
-    assert respuesta.status_code == 403
+    respuesta = comercial.post("/comercial/planes", json={"nombre": "Plan CENERIS", "precio_mensual": "99"})
+    assert respuesta.status_code == 201, respuesta.text

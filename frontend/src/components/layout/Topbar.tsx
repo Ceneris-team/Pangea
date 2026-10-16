@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
+import { esAdministracion, esCeneris } from "../../config/espacios";
+import { volverAdministracion } from "../../services/api";
 import { useTheme } from "../../context/ThemeContext";
 import { apiFetch } from "../../services/api";
-import { ROLES } from "../../config/roles";
+import { useAuth } from "../../context/AuthContext";
 import DrawerPanel from "./DrawerPanel";
 import PerfilConfiguracion from "../perfil/PerfilConfiguracion";
 
@@ -26,19 +28,46 @@ interface ColumnaPendiente {
 // de la app) - un Cliente Final o Administrador Comercial no tiene
 // permiso sobre GET /mapeos/columnas-pendientes, así que ni se intenta
 // el fetch para esos roles.
-const ROLES_VEN_NOTIFICACION: readonly string[] = [ROLES.ADMINISTRADOR, ROLES.TECNICO_CENERIS];
+
 
 const MAXIMO_EN_POPOVER = 15;
 
 export default function Topbar({ nombreCompleto, rol }: TopbarProps) {
   const { esOscuro, toggleTema } = useTheme();
+  const { puedeOperar, rolEmpresa, clienteId, actualizarAccesoComercial } = useAuth();
+  const { pathname } = useLocation();
+  const administracion = esCeneris(rol) && esAdministracion(pathname);
   const [conteoPendientes, setConteoPendientes] = useState(0);
   const [popoverAbierto, setPopoverAbierto] = useState(false);
   const [pendientes, setPendientes] = useState<ColumnaPendiente[] | null>(null);
   const [perfilAbierto, setPerfilAbierto] = useState(false);
   const [perfilVisitado, setPerfilVisitado] = useState(false);
+  const [avisoSuscripcion, setAvisoSuscripcion] = useState<string | null>(null);
+  const [solicitudesPendientes, setSolicitudesPendientes] = useState(0);
+  const comercial = rol === "Administrador" || rol === "Administrador Comercial";
+  const puedeVerSolicitudes = comercial || (rol === "Usuario Empresa" && rolEmpresa === "Administrador");
+  useEffect(() => {
+    if (!puedeVerSolicitudes) return;
+    let activo = true;
+    const cargar = () => apiFetch<{ total: number }>("/solicitudes-suscripcion/resumen").then(r => { if (activo) setSolicitudesPendientes(r.total); }).catch(() => {});
+    cargar();
+    const intervalo = window.setInterval(cargar, 60_000);
+    window.addEventListener("solicitudes-actualizadas", cargar);
+    return () => { activo = false; window.clearInterval(intervalo); window.removeEventListener("solicitudes-actualizadas", cargar); };
+  }, [puedeVerSolicitudes, clienteId, pathname]);
 
-  const puedeVerNotificacion = ROLES_VEN_NOTIFICACION.includes(rol ?? "");
+  useEffect(() => {
+    if (administracion || !clienteId) { setAvisoSuscripcion(null); return; }
+    let vigente = true;
+    const cargar = () => apiFetch<{ aviso: string | null; operacion_habilitada: boolean }>("/comercial/mi-acceso")
+      .then(data => { if (vigente) { setAvisoSuscripcion(data.aviso); actualizarAccesoComercial(data.operacion_habilitada); } }).catch(() => {});
+    cargar();
+    const intervalo = window.setInterval(cargar, 60_000);
+    window.addEventListener("solicitudes-actualizadas", cargar);
+    return () => { vigente = false; window.clearInterval(intervalo); window.removeEventListener("solicitudes-actualizadas", cargar); };
+  }, [administracion, clienteId, actualizarAccesoComercial]);
+
+  const puedeVerNotificacion = puedeOperar && !administracion;
 
   useEffect(() => {
     if (!puedeVerNotificacion) return;
@@ -84,7 +113,11 @@ export default function Topbar({ nombreCompleto, rol }: TopbarProps) {
 
   return (
     <>
-    <div className="inline-flex items-center gap-4 bg-white/60 dark:bg-white/10 backdrop-blur-md border border-black/10 dark:border-white/10 rounded-2xl pl-3 pr-4 py-2 shadow-lg transition-colors duration-300">
+    <div className="inline-flex flex-wrap items-center gap-4 bg-white/60 dark:bg-white/10 backdrop-blur-md border border-black/10 dark:border-white/10 rounded-2xl pl-3 pr-4 py-2 shadow-lg transition-colors duration-300">
+      {avisoSuscripcion && <p role="status" className="max-w-sm text-xs text-amber-800 dark:text-amber-200">{avisoSuscripcion}</p>}
+      {puedeVerSolicitudes && solicitudesPendientes > 0 && <Link to={comercial ? "/planes-suscripciones?vista=solicitudes" : "/empresas#solicitudes"} className="rounded-xl border border-gray-300 px-3 py-2 text-xs font-semibold dark:border-white/20" aria-label={`Solicitudes de suscripción: ${solicitudesPendientes} por revisar`}>Solicitudes<span className="ml-2 rounded-full bg-[#ccff00] px-2 py-0.5 text-gray-950">{solicitudesPendientes}</span></Link>}
+      {!administracion && esCeneris(rol) && <button type="button" onClick={volverAdministracion} className="text-xs text-gray-700 dark:text-gray-200 md:hidden">← Administración</button>}
+      {administracion && <Link to={rol === "Administrador" ? "/panel-admin" : "/clientes"} className="text-sm font-semibold text-gray-700 dark:text-gray-200 md:hidden">Administración</Link>}
       <button
         onClick={toggleTema}
         className="text-gray-600 dark:text-gray-300 hover:bg-black/5 dark:hover:bg-white/10 p-2 rounded-full transition-colors"
@@ -174,7 +207,7 @@ export default function Topbar({ nombreCompleto, rol }: TopbarProps) {
       <div className="flex items-center gap-3 pl-4 border-l border-black/10 dark:border-white/10">
         <div className="text-right hidden sm:block">
           <div className="text-sm font-semibold text-gray-900 dark:text-white">{nombreCompleto ?? "Usuario"}</div>
-          <div className="text-xs text-gray-500 dark:text-gray-300">{rol ?? ""}</div>
+          <div className="text-xs text-gray-500 dark:text-gray-300">{rol === "Usuario Empresa" ? (rolEmpresa === "Tecnico" ? "Técnico de empresa" : rolEmpresa) : rol}</div>
         </div>
         <button
           type="button"

@@ -15,6 +15,9 @@
  * sin esto, el navegador no manda cookies en requests cross-origin aunque
  * la cookie exista.
  */
+import { esAdministracion, esCeneris } from "../config/espacios";
+import { textoDeProyectos } from "../config/terminologia";
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
 
 /** Claves de UI que AuthContext guarda junto a la sesión (rol, nombre,
@@ -26,6 +29,9 @@ export const CLAVES_SESION_UI = [
   "pangea_nombre",
   "pangea_debe_cambiar",
   "pangea_zona_horaria",
+  "pangea_cliente",
+  "pangea_proyecto",
+  "pangea_proyecto_v2",
 ] as const;
 
 export function limpiarDatosDeSesion(): void {
@@ -38,7 +44,7 @@ export function limpiarDatosDeSesion(): void {
 export class ApiError extends Error {
   status: number;
   constructor(message: string, status: number) {
-    super(message);
+    super(textoDeProyectos(message));
     this.status = status;
   }
 }
@@ -58,6 +64,32 @@ interface ApiOptions {
   sinInterceptor401?: boolean;
 }
 
+export function headersEntorno(): Record<string, string> {
+  const rol = localStorage.getItem("pangea_rol") ?? sessionStorage.getItem("pangea_rol");
+  if (esCeneris(rol) && esAdministracion(window.location.pathname)) return {};
+  const cliente = sessionStorage.getItem("pangea_cliente");
+  const proyecto = sessionStorage.getItem("pangea_proyecto_v2");
+  return {
+    ...(cliente ? { "X-Cliente-Id": cliente } : {}),
+    ...(proyecto ? { "X-Proyecto-Id": proyecto } : {}),
+  };
+}
+
+export function abrirEntorno(cliente: number | null, proyecto: number | null = null, destino = "/entorno") {
+  if (cliente) sessionStorage.setItem("pangea_cliente", String(cliente));
+  else sessionStorage.removeItem("pangea_cliente");
+  if (proyecto) sessionStorage.setItem("pangea_proyecto_v2", String(proyecto));
+  else sessionStorage.removeItem("pangea_proyecto_v2");
+  window.location.assign(cliente ? destino : "/clientes");
+}
+
+export function volverAdministracion() {
+  sessionStorage.removeItem("pangea_cliente");
+  sessionStorage.removeItem("pangea_proyecto_v2");
+  const rol = localStorage.getItem("pangea_rol") ?? sessionStorage.getItem("pangea_rol");
+  window.location.assign(rol === "Administrador" ? "/panel-admin" : "/clientes");
+}
+
 export async function apiFetch<T>(path: string, options: ApiOptions = {}): Promise<T> {
   const url = new URL(path, API_BASE_URL);
 
@@ -74,6 +106,7 @@ export async function apiFetch<T>(path: string, options: ApiOptions = {}): Promi
     credentials: "include",
     headers: {
       "Content-Type": "application/json",
+      ...headersEntorno(),
     },
     body: options.body ? JSON.stringify(options.body) : undefined,
   });
@@ -95,6 +128,7 @@ export async function apiUpload<T>(path: string, formData: FormData): Promise<T>
   const res = await fetch(url.toString(), {
     method: "POST",
     credentials: "include",
+    headers: headersEntorno(),
     body: formData,
   });
 

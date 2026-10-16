@@ -11,6 +11,7 @@ export const ROLES = {
   TECNICO_CENERIS: "Técnico CENERIS",
   CLIENTE_FINAL: "Cliente Final",
   ADMINISTRADOR_COMERCIAL: "Administrador Comercial",
+  USUARIO_EMPRESA: "Usuario Empresa",
 } as const;
 
 export type RolNombre = (typeof ROLES)[keyof typeof ROLES];
@@ -18,8 +19,9 @@ export type RolNombre = (typeof ROLES)[keyof typeof ROLES];
 export const RUTA_POR_ROL: Record<string, string> = {
   [ROLES.ADMINISTRADOR]: "/panel-admin",
   [ROLES.TECNICO_CENERIS]: "/panel-tecnico",
-  [ROLES.CLIENTE_FINAL]: "/panel-cliente",
+  [ROLES.CLIENTE_FINAL]: "/paneles",
   [ROLES.ADMINISTRADOR_COMERCIAL]: "/panel-comercial",
+  [ROLES.USUARIO_EMPRESA]: "/paneles",
 };
 
 export function rutaPorRol(rol: string): string {

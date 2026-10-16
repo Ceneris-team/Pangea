@@ -15,7 +15,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import Cliente, PermisoUbicacion, PermisoUsuarioSede, PlanSuscripcion, Rol, Sede, Suscripcion, Ubicacion, Usuario
+from app.models import Cliente, PermisoUbicacion, PermisoUsuarioSede, PlanSuscripcion, Rol, Sede, Suscripcion, Ubicacion, Usuario, UsuarioCliente
 from app.services.limites_plan import comprobar_cupo, fecha_comercial
 from app.schemas import (
     PermisosUbicacionActualizados,
@@ -72,7 +72,8 @@ def listar_usuarios(
     # La suscripción es del cliente, no del usuario. Un Cliente Final puede
     # acceder a varios clientes; se muestran todos los vinculados por permisos.
     ids_cliente_final = [u.id_usr for u in usuarios if u.rol.nmbr == "Cliente Final"]
-    clientes_por_usuario: dict[int, set[int]] = {id_usr: set() for id_usr in ids_cliente_final}
+    ids_externos = [u.id_usr for u in usuarios if u.rol.nmbr in {"Cliente Final", "Usuario Empresa"}]
+    clientes_por_usuario: dict[int, set[int]] = {id_usr: set() for id_usr in ids_externos}
     if ids_cliente_final:
         por_sede = (
             db.query(PermisoUsuarioSede.id_usr, Sede.id_clnt)
@@ -90,6 +91,12 @@ def listar_usuarios(
             .all()
         )
         for id_usr, id_clnt in (*por_sede, *por_ubicacion):
+            clientes_por_usuario[id_usr].add(id_clnt)
+
+    if ids_externos:
+        for id_usr, id_clnt in db.query(UsuarioCliente.id_usr, UsuarioCliente.id_clnt).filter(
+            UsuarioCliente.id_usr.in_(ids_externos), UsuarioCliente.estd == "Activo"
+        ).all():
             clientes_por_usuario[id_usr].add(id_clnt)
 
     ids_clientes = set().union(*clientes_por_usuario.values()) if clientes_por_usuario else set()
@@ -149,11 +156,14 @@ def crear_usuario(
     rol = db.query(Rol).filter(Rol.nmbr == body.rol_nombre).first()
     if rol is None:
         raise HTTPException(status_code=400, detail=f"Rol '{body.rol_nombre}' no existe")
+    if rol.nmbr == "Usuario Empresa":
+        raise HTTPException(status_code=409, detail="Crea los usuarios de empresa desde Empresas y proyectos")
 
     password_temporal = generar_password_temporal()
 
     usuario = Usuario(
         id_rl=rol.id_rl,
+        scp="global" if rol.nmbr in {"Administrador", "Técnico CENERIS", "Tecnico CENERIS", "Administrador Comercial"} else "por_sede",
         nmbr_cmplt=body.nmbr_cmplt,
         crr=body.crr.lower(),
         tlfn=body.tlfn,
@@ -251,6 +261,8 @@ def actualizar_usuario(
     usuario = db.query(Usuario).filter(Usuario.id_usr == id_usr).first()
     if usuario is None:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    if usuario.scp == "por_cliente":
+        raise HTTPException(status_code=409, detail="Gestiona esta cuenta desde Empresas y proyectos")
 
     datos = body.model_dump(exclude_unset=True)
 
@@ -269,6 +281,8 @@ def actualizar_usuario(
         rol_nuevo = db.query(Rol).filter(Rol.nmbr == datos["rol_nombre"]).first()
         if rol_nuevo is None:
             raise HTTPException(status_code=400, detail=f"Rol '{datos['rol_nombre']}' no existe")
+        if rol_nuevo.nmbr == "Usuario Empresa":
+            raise HTTPException(status_code=409, detail="Asigna el rol empresarial desde Empresas y proyectos")
 
         # Regla de negocio HU20: nadie edita su propio rol desde este módulo.
         # Se compara contra el id del JWT (HT-04), no contra el rol que dice
@@ -281,6 +295,7 @@ def actualizar_usuario(
             )
 
         datos["id_rl"] = rol_nuevo.id_rl
+        datos["scp"] = "global" if rol_nuevo.nmbr in {"Administrador", "Técnico CENERIS", "Tecnico CENERIS", "Administrador Comercial"} else "por_sede"
         del datos["rol_nombre"]
 
     # Correo: editable siempre que el nuevo valor no lo tenga OTRO usuario.
@@ -344,6 +359,9 @@ def _usuario_gestionable_o_error(db: Session, id_usr: int) -> Usuario:
     usuario = db.query(Usuario).filter(Usuario.id_usr == id_usr).first()
     if usuario is None:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+    if usuario.scp == "por_cliente":
+        raise HTTPException(status_code=409, detail="Gestiona los proyectos desde Empresas y proyectos")
 
     if usuario.rol.nmbr in ROLES_CON_ACCESO_TOTAL:
         raise HTTPException(

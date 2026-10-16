@@ -56,8 +56,8 @@ export default function PanelComercial() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                   </svg>
                 </div>
-                <h2 className="font-semibold text-gray-900 dark:text-white">Ubicaciones</h2>
-                <p className="text-sm text-gray-600 dark:text-gray-300">Gestiona las ubicaciones asociadas a tus clientes.</p>
+                <h2 className="font-semibold text-gray-900 dark:text-white">Proyectos</h2>
+                <p className="text-sm text-gray-600 dark:text-gray-300">Gestiona los proyectos asociadas a tus clientes.</p>
               </Link>
 
               <Link

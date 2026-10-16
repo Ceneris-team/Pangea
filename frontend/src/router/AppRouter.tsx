@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { AuthProvider } from "../context/AuthContext";
+import { AuthProvider, useAuth } from "../context/AuthContext";
 import { ThemeProvider } from "../context/ThemeContext";
 import ProtectedRoute from "../components/ProtectedRoute";
 import Login from "../pages/Login";
@@ -11,6 +11,8 @@ import PanelTecnico from "../pages/PanelTecnico";
 import PanelUsuario from "../pages/PanelUsuario";
 import PanelComercial from "../pages/PanelComercial";
 import PlanesSuscripciones from "../pages/PlanesSuscripciones";
+import Empresas from "../pages/Empresas";
+import Clientes from "../pages/Clientes";
 import Usuarios from "../pages/Usuarios";
 import Ubicaciones from "../pages/Ubicaciones";
 import Dispositivos from "../pages/Dispositivos";
@@ -18,6 +20,7 @@ import DetalleUbicacion from "../pages/DetalleUbicacion";
 import MapaUbicacionesPage from "../pages/MapaUbicacionesPage";
 import MapaEstacionesPage from "../pages/MapaEstacionesPage";
 import { ROLES } from "../config/roles";
+import { esCeneris } from "../config/espacios";
 import ConexionesFTP from "../pages/ConexionesFTP";
 import ConsultaDatos from "../pages/ConsultaDatos";
 import Graficos from "../pages/Graficos";
@@ -29,14 +32,19 @@ import DetallePanel from "../pages/DetallePanel";
 
 // HU06: "Solo los roles Técnico CENERIS y Administrador tienen acceso a
 // este módulo." El backend lo exige igual vía require_permiso('Ingesta').
-const ROLES_MAPEOS = [ROLES.ADMINISTRADOR, ROLES.TECNICO_CENERIS] as const;
+const ROLES_MAPEOS = [ROLES.ADMINISTRADOR, ROLES.TECNICO_CENERIS, ROLES.USUARIO_EMPRESA] as const;
 
 // HU05: "Solo los roles Técnico CENERIS y Administrador tienen acceso a
 // este módulo." El backend lo exige igual (_requerir_tecnico_o_admin).
-const ROLES_CONEXIONES_FTP = [ROLES.ADMINISTRADOR, ROLES.TECNICO_CENERIS] as const;
+const ROLES_CONEXIONES_FTP = [ROLES.ADMINISTRADOR, ROLES.TECNICO_CENERIS, ROLES.USUARIO_EMPRESA] as const;
 
 // HU09: mismo módulo de permisos ('Ingesta') y mismos roles que HU06.
-const ROLES_COLA_INGESTA = [ROLES.ADMINISTRADOR, ROLES.TECNICO_CENERIS] as const;
+const ROLES_COLA_INGESTA = [ROLES.ADMINISTRADOR, ROLES.TECNICO_CENERIS, ROLES.USUARIO_EMPRESA] as const;
+
+function InicioEntorno() {
+  const { rol } = useAuth();
+  return <Navigate to={esCeneris(rol) ? "/ubicaciones" : "/paneles"} replace />;
+}
 
 export default function AppRouter() {
   return (
@@ -45,6 +53,8 @@ export default function AppRouter() {
       <AuthProvider>
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/clientes" element={<ProtectedRoute rolesPermitidos={[ROLES.ADMINISTRADOR, ROLES.TECNICO_CENERIS]}><Clientes /></ProtectedRoute>} />
+          <Route path="/entorno" element={<ProtectedRoute rolesPermitidos={[ROLES.ADMINISTRADOR, ROLES.TECNICO_CENERIS, ROLES.USUARIO_EMPRESA]}><InicioEntorno /></ProtectedRoute>} />
           {/* HU02: flujo de recuperación de contraseña, accesible sin sesión */}
           <Route path="/olvide-contrasena" element={<OlvideContrasena />} />
           <Route path="/restablecer-contrasena" element={<RestablecerContrasena />} />
@@ -103,6 +113,15 @@ export default function AppRouter() {
             element={
               <ProtectedRoute rolesPermitidos={[ROLES.ADMINISTRADOR, ROLES.ADMINISTRADOR_COMERCIAL]}>
                 <PlanesSuscripciones />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/empresas"
+            element={
+              <ProtectedRoute requiereAdministracionEmpresa rolesPermitidos={[ROLES.ADMINISTRADOR, ROLES.TECNICO_CENERIS, ROLES.USUARIO_EMPRESA]}>
+                <Empresas />
               </ProtectedRoute>
             }
           />
@@ -180,7 +199,7 @@ export default function AppRouter() {
           <Route
             path="/conexiones-ftp"
             element={
-              <ProtectedRoute rolesPermitidos={ROLES_CONEXIONES_FTP}>
+              <ProtectedRoute requiereOperacion rolesPermitidos={ROLES_CONEXIONES_FTP}>
                 <ConexionesFTP />
               </ProtectedRoute>
             }
@@ -233,7 +252,7 @@ export default function AppRouter() {
           <Route
             path="/parametros"
             element={
-              <ProtectedRoute rolesPermitidos={ROLES_MAPEOS}>
+              <ProtectedRoute requiereOperacion rolesPermitidos={ROLES_MAPEOS}>
                 <Parametros />
               </ProtectedRoute>
             }
@@ -243,7 +262,7 @@ export default function AppRouter() {
           <Route
             path="/cola-ingesta"
             element={
-              <ProtectedRoute rolesPermitidos={ROLES_COLA_INGESTA}>
+              <ProtectedRoute requiereOperacion rolesPermitidos={ROLES_COLA_INGESTA}>
                 <ColaIngesta />
               </ProtectedRoute>
             }

@@ -1,48 +1,13 @@
-"""
-HT-09: Middleware de autorización en FastAPI.
+"""Autorización por módulo y alcance de empresa/proyecto.
 
-Valida, para cada endpoint del PMV, que el usuario autenticado (HT-04) tenga
-permiso sobre el módulo y la acción solicitados según la matriz de HT-03
-(tabla `prms_usr_sd`, Usuario-Sede-Rol-Permiso). Si el permiso es
-insuficiente devuelve 403 (distinto del 401 que ya cubre HT-04 para tokens
-inválidos o expirados), y registra el intento denegado tanto en el logger
-`auditoria.autorizacion` como en `lg_adtr` (HT-11 CA5: "los accesos
-denegados de HT-09 aparecen en el mismo histórico" que las ediciones de
-HU20/HU21).
+CENERIS (administrador y técnico globales) administra los módulos operativos
+sobre cualquier cliente. Los miembros empresariales usan su rol vigente en
+usr_clnt: administrador y técnico operan; lector consulta y personaliza sus
+propios tableros. Los permisos por sede se conservan para cuentas anteriores.
 
-Uso en un endpoint:
-
-    from fastapi import Depends
-    from app.security.permisos import require_permiso, LECTURA, EDICION
-
-    @router.post("/ubicaciones")
-    def crear_ubicacion(usuario: dict = Depends(require_permiso("Ubicaciones", EDICION))):
-        ...
-
-Para endpoints que operan sobre un recurso de una sede concreta (p. ej.
-listar/añadir dispositivos de una sede), además hay que llamar a
-verificar_sede() para que un usuario con scope "por_sede" no pueda tocar
-sedes ajenas aunque tenga permiso de edición en la suya:
-
-    @router.get("/dispositivos")
-    def listar_dispositivos(
-        sede_id: int,
-        db: Session = Depends(get_db),
-        usuario: dict = Depends(require_permiso("Dispositivos", LECTURA)),
-    ):
-        verificar_sede(usuario, sede_id, db, modulo="Dispositivos", accion=LECTURA)
-        ...
-
-HISTORIAL: la primera versión de este archivo (adda9bb) usaba una matriz
-rol -> módulo -> acciones hardcodeada en Python (MATRIZ_PERMISOS) como
-implementación provisional, a falta de conectar con HT-03. Se elimina sin
-dejarla como fallback: además de estar duplicada con `prms_usr_sd`, incluía
-un módulo "Mediciones" que nunca fue válido según el CHECK constraint real
-de HT-03 (`mdl IN ('Usuarios','Ubicaciones','Dispositivos','Ingesta',
-'Tableros','Alarmas','Comercial')`), prueba de que había quedado
-desalineada del modelo real. La matriz de permisos ahora vive solo en la
-base de datos (tabla `prms_usr_sd`), editable sin tocar código, que es lo
-que pedía HT-03 CA4 desde el principio.
+require_permiso valida la acción. verificar_sede y filtrar_sedes aplican el
+alcance a recursos individuales y listados. Cada endpoint debe usar ambos
+controles: el permiso de módulo nunca sustituye el filtro de empresa/proyecto.
 """
 
 import logging
@@ -51,9 +16,11 @@ from fastapi import Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import LogAuditoria, PermisoUsuarioSede
+from app.models import LogAuditoria, PermisoUsuarioSede, Sede
+from app.services.contratos import exigir_funcionalidad, exigir_operacion
 
 from .dependencies import get_current_user
+from .entorno import permiso_del_entorno, sedes_permitidas
 
 logger = logging.getLogger("auditoria.autorizacion")
 
@@ -94,7 +61,7 @@ def tiene_permiso(db: Session, id_usr: int, id_sd: int | None, modulo: str, acci
     """
     query = db.query(PermisoUsuarioSede).filter(
         PermisoUsuarioSede.id_usr == id_usr,
-        PermisoUsuarioSede.mdl == modulo,
+        PermisoUsuarioSede.mdl == ("Ingesta" if modulo == "Catalogo" else modulo),
     )
     if id_sd is not None:
         query = query.filter(PermisoUsuarioSede.id_sd == id_sd)
@@ -161,7 +128,10 @@ def require_permiso(modulo: str, accion: str):
     ) -> dict:
         id_usr = int(usuario["sub"])
         id_sd = usuario.get("sede_id")
-        if not tiene_permiso(db, id_usr, id_sd, modulo, accion):
+        permiso = permiso_del_entorno(db, usuario, modulo, accion)
+        if permiso is None:
+            permiso = tiene_permiso(db, id_usr, id_sd, modulo, accion)
+        if not permiso:
             _registrar_acceso_denegado(db, usuario, modulo, accion)
             raise HTTPException(
                 status_code=403, detail="No tienes permiso para realizar esta acción"
@@ -191,7 +161,8 @@ def require_alguno_permiso(*modulos_acciones: tuple[str, str]):
         id_usr = int(usuario["sub"])
         id_sd = usuario.get("sede_id")
         for modulo, accion in modulos_acciones:
-            if tiene_permiso(db, id_usr, id_sd, modulo, accion):
+            permiso = permiso_del_entorno(db, usuario, modulo, accion)
+            if permiso is True or (permiso is None and tiene_permiso(db, id_usr, id_sd, modulo, accion)):
                 return usuario
         modulos = "/".join(modulo for modulo, _ in modulos_acciones)
         _registrar_acceso_denegado(db, usuario, modulos, "|".join(a for _, a in modulos_acciones))
@@ -214,8 +185,25 @@ def verificar_sede(
     que usó para cargar el recurso cuya sede está verificando-, así que no
     hay motivo para que un llamado nuevo pueda "olvidarse" de pasarla y
     dejar ese acceso denegado fuera del histórico de auditoría."""
-    if usuario.get("scope") == "global":
-        return
-    if usuario.get("sede_id") != sede_id_recurso:
+    ids = sedes_permitidas(db, usuario)
+    if ids is not None and sede_id_recurso not in ids:
         _registrar_acceso_denegado(db, usuario, modulo or "(sede)", accion or "acceso_sede")
         raise HTTPException(status_code=403, detail="No tienes acceso a recursos de esta sede")
+    if accion == EDICION and modulo in {"Ubicaciones", "Dispositivos", "Ingesta", "Alarmas"}:
+        sede = db.get(Sede, sede_id_recurso)
+        if sede is not None:
+            exigir_operacion(db, sede.id_clnt)
+
+
+def require_funcionalidad(codigo: str, modulo: str, accion: str = LECTURA):
+    """Todo módulo comercial nuevo exige rol, ámbito y derecho contratado."""
+    def dependencia(usuario: dict = Depends(require_permiso(modulo, accion)), db: Session = Depends(get_db)):
+        cliente_id = usuario.get("cliente_id")
+        if cliente_id is None and usuario.get("sede_id"):
+            sede = db.get(Sede, usuario["sede_id"])
+            cliente_id = sede.id_clnt if sede else None
+        if cliente_id is None:
+            raise HTTPException(403, "Selecciona una empresa para usar esta funcionalidad")
+        exigir_funcionalidad(db, cliente_id, codigo)
+        return usuario
+    return dependencia

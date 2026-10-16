@@ -1,75 +1,43 @@
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
-import Sidebar from "../components/layout/Sidebar";
-import Topbar from "../components/layout/Topbar";
+import DashboardLayout from "../components/layout/DashboardLayout";
+import { apiFetch } from "../services/api";
+
+type Empresa = { id_clnt: number; proyectos_total: number; consumo: { usuarios: number; dispositivos: number; ubicaciones: number } };
+const secciones = [
+  { ruta: "/usuarios", numero: "01", titulo: "Gestión de usuarios", descripcion: "Consulta las cuentas del sistema y administra el equipo CENERIS." },
+  { ruta: "/empresas", numero: "02", titulo: "Empresas y proyectos", descripcion: "Registra clientes, organiza sus proyectos y gestiona sus administradores y usuarios." },
+  { ruta: "/planes-suscripciones", numero: "03", titulo: "Planes y suscripciones", descripcion: "Define límites y precios, asigna planes y consulta las suscripciones de cada empresa." },
+  { ruta: "/clientes", numero: "04", titulo: "Entorno de clientes", descripcion: "Entra a una empresa para trabajar con sus datos, gráficos, dispositivos y conexiones." },
+];
 
 export default function PanelAdmin() {
-  const { nombreCompleto, rol, logout } = useAuth();
-
-  return (
-    <div className="font-sans">
-      <div className="flex h-screen bg-transparent transition-colors duration-300 overflow-hidden">
-
-        {/* SIDEBAR */}
-        <Sidebar onLogout={logout} activo="panel" rol={rol} />
-
-        {/* ÁREA PRINCIPAL */}
-        <div className="flex-1 flex flex-col overflow-hidden">
-
-          {/* TOP NAVBAR */}
-          <div className="flex justify-end p-4 md:p-6 pb-0">
-            <Topbar
-            nombreCompleto={nombreCompleto}
-            rol={rol}
-            />
-          </div>
-
-          {/* CONTENIDO */}
-          <main className="flex-1 overflow-y-auto p-6 md:p-8">
-            <header className="mb-6">
-              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-                Hola, {nombreCompleto ?? "Administrador"}
-              </h1>
-              <p className="text-sm text-gray-600 dark:text-gray-300">
-                Bienvenido al panel de Pangea 4.0.
-              </p>
-            </header>
-
-            {/* Accesos rápidos (placeholder básico) */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              <Link
-                to="/usuarios"
-                className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl shadow-sm border border-black/10 dark:border-white/10 p-6 hover:border-[#ccff00] transition-colors"
-              >
-                <div className="w-10 h-10 rounded-lg bg-[#ccff00]/20 flex items-center justify-center mb-3">
-                  <svg className="w-5 h-5 text-[#5a7000] dark:text-[#ccff00]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
-                </div>
-                <h2 className="font-semibold text-gray-900 dark:text-white">Gestión de Usuarios</h2>
-                <p className="text-sm text-gray-600 dark:text-gray-300">Ver, buscar y filtrar usuarios registrados.</p>
-              </Link>
-
-              <Link
-                to="/ubicaciones"
-                className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl shadow-sm border border-black/10 dark:border-white/10 p-6 hover:border-[#ccff00] transition-colors"
-              >
-                <div className="w-10 h-10 rounded-lg bg-[#ccff00]/20 flex items-center justify-center mb-3">
-                  <svg className="w-5 h-5 text-[#5a7000] dark:text-[#ccff00]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a2 2 0 01-2.828 0l-4.243-4.243a8 8 0 1111.314 0z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
-                </div>
-                <h2 className="font-semibold text-gray-900 dark:text-white">Gestión de Ubicaciones</h2>
-                <p className="text-sm text-gray-600 dark:text-gray-300">Estaciones de monitoreo registradas.</p>
-              </Link>
-
-              <div className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl shadow-sm border border-black/10 dark:border-white/10 p-6 opacity-60">
-                <div className="w-10 h-10 rounded-lg bg-black/5 dark:bg-white/10 flex items-center justify-center mb-3">
-                  <svg className="w-5 h-5 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 3v2m6-2v2M5 8h14M5 8a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2v-9a2 2 0 00-2-2M5 8V6a2 2 0 012-2h10a2 2 0 012 2v2" /></svg>
-                </div>
-                <h2 className="font-semibold text-gray-900 dark:text-white">Dispositivos</h2>
-                <p className="text-sm text-gray-600 dark:text-gray-300">Próximamente (HU10 / HU11).</p>
-              </div>
-            </div>
-          </main>
-        </div>
-      </div>
+  const [empresas, setEmpresas] = useState<Empresa[] | null>(null);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    let vigente = true;
+    apiFetch<Empresa[]>("/empresas").then((data) => { if (vigente) setEmpresas(data); })
+      .catch(() => { if (vigente) setError("No se pudo cargar el resumen de empresas"); });
+    return () => { vigente = false; };
+  }, []);
+  const resumen = [
+    ["Empresas activas", empresas?.length],
+    ["Proyectos activos", empresas?.reduce((n, e) => n + e.consumo.ubicaciones, 0)],
+    ["Dispositivos activos", empresas?.reduce((n, e) => n + e.consumo.dispositivos, 0)],
+    ["Usuarios de clientes activos", empresas?.reduce((n, e) => n + e.consumo.usuarios, 0)],
+  ] as const;
+  return <DashboardLayout activo="panel">
+    <div className="mx-auto max-w-6xl space-y-7">
+      <header><p className="text-xs font-semibold uppercase tracking-widest text-lime-700 dark:text-lime-300">CENERIS · Vista global</p>
+        <h1 className="mt-2 text-3xl font-bold text-gray-950 dark:text-white">Administración de Pangea</h1>
+        <p className="mt-2 max-w-3xl text-gray-600 dark:text-gray-300">Gestiona la plataforma y entra al entorno de cada cliente cuando necesites trabajar con sus proyectos.</p>
+      </header>
+      {error && <p role="alert" className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">{resumen.map(([label, valor]) => <div key={label} className="rounded-2xl border border-black/10 bg-white/70 p-5 dark:border-white/10 dark:bg-[#1a202c]/90"><p className="text-xs text-gray-500 dark:text-gray-400">{label}</p><p className="mt-2 text-3xl font-bold text-gray-950 dark:text-white">{valor ?? "—"}</p></div>)}</div>
+      <div className="grid gap-5 md:grid-cols-2">{secciones.map((s) => <Link key={s.ruta} to={s.ruta} className="group rounded-2xl border border-black/10 bg-white/70 p-6 transition hover:border-lime-500 dark:border-white/10 dark:bg-[#1a202c]/90 dark:hover:border-lime-400">
+        <div className="flex items-start justify-between"><span className="rounded-lg bg-lime-500/15 px-3 py-1.5 text-sm font-semibold text-lime-800 dark:text-lime-300">{s.numero}</span><span aria-hidden="true" className="text-xl text-gray-500 group-hover:text-lime-600 dark:text-gray-400">↗</span></div>
+        <h2 className="mt-5 text-xl font-semibold text-gray-950 dark:text-white">{s.titulo}</h2><p className="mt-2 text-sm leading-6 text-gray-600 dark:text-gray-300">{s.descripcion}</p>
+      </Link>)}</div>
     </div>
-  );
+  </DashboardLayout>;
 }

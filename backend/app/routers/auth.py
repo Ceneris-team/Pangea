@@ -23,7 +23,7 @@ from slowapi.util import get_remote_address
 from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
-from app.models import PermisoUsuarioSede, TokenRecuperacion, Usuario
+from app.models import PermisoUsuarioSede, TokenRecuperacion, Usuario, UsuarioCliente
 from app.security.dependencies import COOKIE_NOMBRE, get_current_user, get_token_crudo
 from app.security.hashing import hash_password, verify_password
 from app.security.jwt_auth import EXPIRATION_MINUTES, create_access_token
@@ -116,6 +116,15 @@ def _resolver_sede_id_login(db: Session, usuario: Usuario) -> int | None:
         haya decidido así.
     """
     if usuario.scp == "global":
+        return None
+
+    if usuario.scp == "por_cliente":
+        membresia = db.query(UsuarioCliente.id_mmb).filter(
+            UsuarioCliente.id_usr == usuario.id_usr,
+            UsuarioCliente.estd == "Activo",
+        ).first()
+        if membresia is None:
+            raise HTTPException(status_code=403, detail="Tu cuenta no tiene una empresa activa asignada")
         return None
 
     ids_sd = {
@@ -232,7 +241,12 @@ def crear_ticket_websocket(
     security/ws_tickets.py y _autenticar_websocket en
     routers/mapa_cliente.py.
     """
-    return {"ticket": emitir_ticket(token_crudo)}
+    import json
+    contenido = token_crudo
+    if usuario_token.get("cliente_id") is not None:
+        contenido = json.dumps({"token": token_crudo, "cliente_id": usuario_token["cliente_id"],
+                                "proyecto_id": usuario_token.get("proyecto_id")})
+    return {"ticket": emitir_ticket(contenido)}
 
 
 @router.get("/perfil")
@@ -250,11 +264,23 @@ def mi_perfil(
     if usuario is None:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
+    from app.services.contratos import exigir_operacion
+
+    operacion_habilitada = True
+    if usuario_token.get("cliente_id") is not None:
+        try:
+            exigir_operacion(db, usuario_token["cliente_id"])
+        except HTTPException:
+            operacion_habilitada = False
     return {
         "nombre_completo": usuario.nmbr_cmplt,
         "correo": usuario.crr,
         "rol": usuario.rol.nmbr,
         "scope": usuario.scp,
+        "cliente_id": usuario_token.get("cliente_id"),
+        "proyecto_id": usuario_token.get("proyecto_id"),
+        "rol_empresa": usuario_token.get("rol_empresa"),
+        "operacion_habilitada": operacion_habilitada,
         "estado": usuario.estd,
         "debe_cambiar_contrasena": usuario.dbe_cmbr_pswrd,
         "zona_horaria": usuario.zn_hrr,

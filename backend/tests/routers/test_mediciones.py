@@ -306,12 +306,12 @@ class TestCA1SelectorDeParametros:
         mapear_parametro(db_session, otro_dispositivo, otro_parametro)
 
         rol_admin = fabrica.rol("Administrador")
-        admin = fabrica.usuario(rol=rol_admin)
+        admin = fabrica.usuario(rol=rol_admin, scp="global")
         agregar_permiso(
             db_session, admin, escenario_basico["sede"], "Tableros", "Lectura", rol_admin
         )
         app.dependency_overrides[get_current_user] = lambda: usuario_jwt(
-            admin, rol_admin.nmbr, sede_id=escenario_basico["sede"].id_sd
+            admin, rol_admin.nmbr, scope="global"
         )
 
         resp = client.get("/mediciones/parametros")
@@ -519,10 +519,10 @@ class TestCA3FiltroPorUbicacionYAislamiento:
         crear_ubicacion(db_session, otra_sede, nombre="Ubicacion Admin")
 
         rol_admin = fabrica.rol("Administrador")
-        admin = fabrica.usuario(rol=rol_admin)
+        admin = fabrica.usuario(rol=rol_admin, scp="global")
         agregar_permiso(db_session, admin, otra_sede, "Ubicaciones", "Lectura", rol_admin)
         app.dependency_overrides[get_current_user] = lambda: usuario_jwt(
-            admin, rol_admin.nmbr, sede_id=otra_sede.id_sd
+            admin, rol_admin.nmbr, scope="global"
         )
 
         resp = client.get("/ubicaciones", params={"por_pagina": 100})

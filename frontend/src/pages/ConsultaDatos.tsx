@@ -265,7 +265,7 @@ export default function ConsultaDatos() {
               <div>
                 <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Consulta de Datos</h1>
                 <p className="text-sm text-gray-600 dark:text-gray-300">
-                  Selecciona los parámetros y ubicaciones que quieres consultar para personalizar la vista de telemetría.
+                  Selecciona los parámetros y proyectos que quieres consultar para personalizar la vista de telemetría.
                 </p>
               </div>
 
@@ -302,7 +302,7 @@ export default function ConsultaDatos() {
             {sinUbicacionesAsignadas && (
               <div className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl shadow-sm border border-black/10 dark:border-white/10 p-8 text-center">
                 <p className="text-sm text-gray-600 dark:text-gray-300">
-                  No tienes ubicaciones asignadas. Contacta al administrador.
+                  No tienes proyectos asignados. Contacta al administrador.
                 </p>
               </div>
             )}
@@ -320,7 +320,7 @@ export default function ConsultaDatos() {
                   <thead className="text-xs text-gray-600 dark:text-gray-300 uppercase bg-black/5 dark:bg-white/5 border-b border-black/10 dark:border-white/10">
                     <tr>
                       <th className="px-6 py-4 font-bold tracking-wider">Parámetro</th>
-                      <th className="px-6 py-4 font-bold tracking-wider">Ubicación</th>
+                      <th className="px-6 py-4 font-bold tracking-wider">Proyecto</th>
                       <th className="px-6 py-4 font-bold tracking-wider">Valor</th>
                       <th className="px-6 py-4 font-bold tracking-wider">Fecha</th>
                     </tr>
@@ -418,10 +418,10 @@ export default function ConsultaDatos() {
               </fieldset>
 
               <fieldset className="pt-6 border-t border-black/10 dark:border-white/10">
-                <legend className="text-sm font-bold text-gray-700 dark:text-gray-200 mb-3">Ubicaciones</legend>
+                <legend className="text-sm font-bold text-gray-700 dark:text-gray-200 mb-3">Proyectos</legend>
                 <div className="flex flex-wrap gap-2">
                   {ubicaciones.length === 0 && (
-                    <span className="text-sm text-gray-500 dark:text-gray-400">No hay ubicaciones disponibles.</span>
+                    <span className="text-sm text-gray-500 dark:text-gray-400">No hay proyectos disponibles.</span>
                   )}
                   {ubicaciones.map((u) => {
                     const activo = seleccionUbicaciones.includes(u.id_ubccn);
