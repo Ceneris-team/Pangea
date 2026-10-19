@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.models import (
     Cliente,
+    Cobro,
     ComplementoComercial,
     FuncionalidadComercial,
     LimitePlan,
@@ -21,7 +22,7 @@ from app.models import (
 
 RECURSOS = ("ubicaciones", "dispositivos", "usuarios")
 MESES = {"Mensual": 1, "Trimestral": 3, "Anual": 12}
-ESTADOS_CONTRATO = {"Activa", "Programada", "Suspendida", "Cancelada", "Reemplazada"}
+ESTADOS_CONTRATO = {"Activa", "Programada", "Suspendida", "Cancelada", "Reemplazada", "Vencida"}
 
 
 def auditar(db, actor, accion, entidad, antes=None, despues=None):
@@ -51,7 +52,9 @@ def ultimo_contrato(db, cliente_id, hoy):
     # aunque Beat se encuentre temporalmente detenido.
     return db.query(Suscripcion).filter(
         Suscripcion.id_clnt == cliente_id,
-        Suscripcion.estd.in_(["Activa", "Programada", "Suspendida", "Cancelada"]),
+        # PP-320: un contrato 'Vencida' sigue siendo el último de la empresa,
+        # para que la vista comercial muestre "Vencida" y no "Sin suscripción".
+        Suscripcion.estd.in_(["Activa", "Programada", "Suspendida", "Cancelada", "Vencida"]),
         Suscripcion.fch_inc <= hoy,
     ).order_by(Suscripcion.fch_inc.desc(), Suscripcion.id_sscrpcn.desc()).first()
 
@@ -59,7 +62,7 @@ def ultimo_contrato(db, cliente_id, hoy):
 def estado_contrato(db, contrato, hoy):
     if contrato is None:
         return "Sin suscripción"
-    if contrato.estd in {"Reemplazada", "Cancelada", "Suspendida", "Anulada"}:
+    if contrato.estd in {"Reemplazada", "Cancelada", "Suspendida", "Anulada", "Vencida"}:
         return contrato.estd
     if contrato.fch_inc > hoy:
         return "Programada"
@@ -229,6 +232,51 @@ def aplicar_programadas(db, hoy, cliente_id=None):
         auditar(db, actor, "activar_programada", "Suscripcion", despues={"cliente_id": cliente_id, "suscripcion_id": programada.id_sscrpcn})
         total += 1
     return total
+
+
+def vencer_sin_cobro(db, hoy):
+    """PP-320: pasa a 'Vencida' los contratos activos que terminaron sus días
+    de gracia sin un cobro registrado.
+
+    Los derechos ya se cortan por fecha en HTTP (estado_contrato); esto deja
+    el estado guardado al día y devuelve lo vencido para avisar al
+    Administrador Comercial (PP-321). Un contrato con cobro no se toca.
+    """
+    from app.services.ingesta.usuario_sistema import resolver_id_usuario_sistema
+
+    candidatos = (
+        db.query(Suscripcion)
+        .filter(Suscripcion.estd == "Activa", Suscripcion.fch_vncmnt < hoy)
+        .order_by(Suscripcion.id_sscrpcn)
+        .all()
+    )
+    vencidos = []
+    actor = None
+    for contrato in candidatos:
+        condiciones = condiciones_de(db, contrato)
+        if hoy <= contrato.fch_vncmnt + timedelta(days=condiciones.get("dias_gracia", 0)):
+            continue
+        if db.query(Cobro.id_cbr).filter(Cobro.id_sscrpcn == contrato.id_sscrpcn).first():
+            continue
+        # Mismo candado que registrar_contrato y aplicar_programadas: si en
+        # paralelo se renovó o canceló el contrato, se respeta ese cambio.
+        cliente = db.query(Cliente).filter(Cliente.id_clnt == contrato.id_clnt).with_for_update().one()
+        db.refresh(contrato)
+        if contrato.estd != "Activa":
+            continue
+        contrato.estd = "Vencida"
+        actor = actor or {"sub": str(resolver_id_usuario_sistema(db))}
+        detalle = {
+            "cliente_id": cliente.id_clnt,
+            "suscripcion_id": contrato.id_sscrpcn,
+            "fecha_vencimiento": contrato.fch_vncmnt.isoformat(),
+            "dias_gracia": condiciones.get("dias_gracia", 0),
+        }
+        auditar(db, actor, "vencer_sin_cobro", "Suscripcion", {"estado": "Activa"},
+                {**detalle, "estado": "Vencida"})
+        vencidos.append({**detalle, "empresa": cliente.rzn_scl, "ruc": cliente.rc,
+                         "plan": condiciones.get("plan_nombre")})
+    return vencidos
 
 
 def huella_solicitud(body):

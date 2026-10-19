@@ -73,6 +73,13 @@ celery_app.conf.beat_schedule = {
         "task": "app.tasks.suscripciones.activar_suscripciones_programadas",
         "schedule": 60.0,
     },
+    # PP-320/321: una vez al día, pasada la medianoche (timezone de arriba,
+    # misma hora que Lima), vence los contratos sin cobro y avisa al
+    # Administrador Comercial. Si un día falla, al siguiente los recoge.
+    "vencer-suscripciones-sin-cobro-diario": {
+        "task": "app.tasks.suscripciones.vencer_suscripciones_sin_cobro",
+        "schedule": crontab(hour=0, minute=30),
+    },
     "sondear-conexiones-ftp-cada-minuto": {
         "task": "app.tasks.ingesta.sondear_conexiones_ftp",
         "schedule": 60.0,
