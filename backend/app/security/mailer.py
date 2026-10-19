@@ -36,10 +36,27 @@ def enviar_correo_recuperacion(correo: str, token: str) -> None:
         logger.info("SMTP no configurado; enlace de recuperación para %s: %s", correo, enlace)
         return
 
+    _enviar([correo], asunto, cuerpo)
+
+
+def enviar_correo(destinatarios: list[str], asunto: str, cuerpo: str) -> None:
+    """Correo de texto plano para avisos internos (p. ej. PP-321).
+
+    Sin SMTP configurado se registra en el log, igual que la recuperación.
+    """
+    if not SMTP_HOST:
+        logger.info(
+            "SMTP no configurado; correo para %s | %s\n%s", ", ".join(destinatarios), asunto, cuerpo
+        )
+        return
+    _enviar(destinatarios, asunto, cuerpo)
+
+
+def _enviar(destinatarios: list[str], asunto: str, cuerpo: str) -> None:
     mensaje = EmailMessage()
     mensaje["Subject"] = asunto
     mensaje["From"] = SMTP_FROM
-    mensaje["To"] = correo
+    mensaje["To"] = ", ".join(destinatarios)
     mensaje.set_content(cuerpo)
 
     with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as servidor:
