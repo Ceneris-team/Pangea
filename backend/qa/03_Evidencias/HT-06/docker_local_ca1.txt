@@ -1,0 +1,17 @@
+﻿== docker compose --profile full ps (2026-10-28T11:10:45)
+pangea-api-1 | pangea-api | Up About a minute
+pangea-beat-1 | pangea-beat | Up About a minute
+pangea-db-1 | postgres:16 | Up About a minute
+pangea-redis-1 | redis:7 | Up About a minute
+pangea-worker-1 | pangea-worker | Up About a minute
+
+== GET http://127.0.0.1:8000/docs -> 200
+
+== worker: errores de BD
+worker-1  | [2026-10-28 16:10:10,581: ERROR/ForkPoolWorker-4] Task app.tasks.suscripciones.activar_suscripciones_programadas[5c52aa25-3c0e-4f8a-bef5-b8e27a33eca0] raised unexpected: OperationalError('(psycopg2.OperationalError) connection to server at "db" (172.18.0.2), port 5432 failed: FATAL:  password authentication failed for user "pangea"\n')
+worker-1  | psycopg2.OperationalError: connection to server at "db" (172.18.0.2), port 5432 failed: FATAL:  password authentication failed for user "pangea"
+worker-1  | sqlalchemy.exc.OperationalError: (psycopg2.OperationalError) connection to server at "db" (172.18.0.2), port 5432 failed: FATAL:  password authentication failed for user "pangea"
+
+== db: FATAL
+db-1  | 2026-10-28 16:10:10.556 UTC [70] FATAL:  password authentication failed for user "pangea"
+db-1  | 2026-10-28 16:10:10.591 UTC [71] FATAL:  password authentication failed for user "pangea"

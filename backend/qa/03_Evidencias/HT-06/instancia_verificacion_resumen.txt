@@ -1,0 +1,23 @@
+QA HT-06 (PP-411) - verificacion de solo lectura en la instancia Lightsail "Servidores-ceneris"
+Fecha: 2026-10-28 16:25 UTC. Ubuntu 22.04.5. Script: verificar_instancia.sh. Resumen fiel de la salida (sin valores de variables).
+
+CA1 - contenedores en ejecucion (15):
+  ceneris-v2-web-1, ceneris-formativo-web_formativo-1, dispositivos_client, dispositivos_server,
+  dispositivos_nginx, django_app (proy_monitoreo-web), glpi, rustdesk-hbbs, rustdesk-hbbr, mysql,
+  monitoreo_mariadb, control_dispositivos_db, ceneris-v2-db-1, ceneris-formativo-db_formativa-1, cool_curie.
+  Imagenes locales: ninguna llamada "pangea" (ni api, worker ni beat).
+  No hay contenedor beat ni worker de Celery, ni redis.
+
+CA2 - puertos escuchando: no hay puerto de Pangea (8000/API) ni de su base.
+
+CA3 - volumenes Docker: ninguno de Pangea.
+
+CA4 - cron del sistema: solo GLPI y tareas de ceneris-web-v2. Sin respaldo de Pangea.
+      "no hay contenedor beat".
+
+CA5 - archivos .env en la instancia: Proy_Monitoreo, ceneris-web-v2, CERVEMANT. No hay containers.json de Pangea.
+
+Conclusion: en esta instancia NO esta desplegado Pangea.
+Observacion ajena a Pangea (para el responsable de la instancia): hay bases de datos publicadas en 0.0.0.0
+(puertos 5437 y 3307); el firewall de Lightsail debe restringirlas. 45 actualizaciones pendientes, reinicio
+requerido y swap al 80 %.

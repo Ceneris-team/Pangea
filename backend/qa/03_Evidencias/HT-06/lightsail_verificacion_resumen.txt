@@ -1,0 +1,36 @@
+QA HT-06 (PP-411) - verificacion de solo lectura de Lightsail (AWS CloudShell, us-east-1)
+Fecha: 2026-10-28 16:30 UTC. Script: verificar_lightsail.sh. Resumen fiel de la salida; host de la BD abreviado.
+
+CA1 - Container Service
+  Servicio: pangea-api | estado RUNNING | potencia small | escala 1.
+  Con el nombre "pangea-app" (supuesto del script) el despliegue no existe: el nombre real es "pangea-api".
+  Detalle del despliegue (imagenes, comandos, variables): pendiente de repetir con pangea-api.
+
+CA2 - Base de datos
+  Nombre: pangea-db | postgres 16.15 | estado available | puerto 5432 | host ls-9826f642...us-east-1.rds.amazonaws.com
+  publiclyAccessible = True
+  Conexion TCP desde CloudShell (fuera de la red privada de Lightsail) -> ABIERTO desde internet.
+  RESULTADO: FALLA el CA2 (la BD debe ser privada y no accesible desde fuera).
+
+CA3 - Object Storage
+  Bucket: pangea-storage-prod | estado OK | versionado NeverEnabled | creado 2026-09-04.
+  El bucket existe; el codigo del repositorio no lo usa (sin boto3). Contenido: no verificado.
+
+CA4 - Respaldos
+  respaldoAuto (nativo de Lightsail) = True.
+  Snapshots manuales: pangea-pre-b948aac-20261020 (2026-10-20, available). No hay respaldo semanal hacia Object Storage.
+
+Instancias de la cuenta (no son de Pangea): Ceneris-server, TTSQL_PRUEBA, Servidores-ceneris, Ceneris-Core, Ubuntu-1,
+  Server_Antapaccay, Servidor_Prueba, Ceneris. No hay un servicio ni una BD de Pangea para desarrollo o staging.
+
+--- Repeticion con el nombre correcto del servicio (pangea-api), 2026-10-28 18:32 UTC ---
+CA1 - despliegue ACTIVO version 7 (2026-10-20): 4 contenedores en el servicio pangea-api
+  api    imagen :pangea-api.api-b948aac.16, puerto 8000 HTTP
+  beat   misma imagen, comando celery -A app.core.celery_app beat --loglevel=info
+  worker misma imagen, comando celery -A app.core.celery_app worker --loglevel=info --concurrency=2
+  redis  imagen redis:7, puerto 6379 TCP (dentro del mismo servicio, sin volumen)
+  No existe contenedor de receptor FTP/TCP.
+  Versiones 5 y 6 (inactivas) usaban imagenes separadas por componente (api.10/beat.12/worker.11 y api.13/beat.15/worker.14).
+CA5 - variables de entorno (solo nombres): CELERY_BROKER_URL, CELERY_RESULT_BACKEND, CORS_ALLOWED_ORIGINS, DATABASE_URL,
+  FRONTEND_URL, FTP_CREDENTIAL_KEY, JWT_SECRET, PLAN_LIMITS_REQUIRE_SUBSCRIPTION, RATELIMIT_STORAGE_URL.
+  Ningun contenedor tiene variables de Object Storage (sin BUCKET, S3 ni AWS_*): la app no escribe en pangea-storage-prod.
