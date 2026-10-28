@@ -1,0 +1,67 @@
+﻿
+=== 10 usuarios simultáneos (think 5s) -> NO APROBADO
+peticiones: 201  (1.1/s)   errores: 0.00 %
+latencia: mediana 43 ms | p95 12892 ms | p99 26427 ms | max 27793 ms
+
+por pantalla (mediana / p95, ms):
+  GET /health                         12 / 3523
+  GET /auth/perfil                    57 / 12977
+  GET /mapa-cliente                  536 / 4812
+  GET /mediciones/parametros          71 / 5539
+  GET /mediciones 24h                 76 / 9536
+  GET /mediciones 7d grafico         572 / 3860
+  GET /ubicaciones                    20 / 5771
+  GET /dispositivos                   23 / 13440
+  GET /dispositivos/{id}              20 / 27622
+  GET /ingesta/metricas               11 / 24034
+time="2026-10-14T12:24:30-05:00" level=error msg="thresholds on metrics 'http_req_duration' have been crossed"
+
+=== 25 usuarios simultáneos (think 5s) -> APROBADO
+peticiones: 752  (4.2/s)   errores: 0.00 %
+latencia: mediana 17 ms | p95 1197 ms | p99 2181 ms | max 3185 ms
+
+por pantalla (mediana / p95, ms):
+  GET /health                          4 / 389
+  GET /auth/perfil                     5 / 39
+  GET /mapa-cliente                  185 / 523
+  GET /mediciones/parametros           9 / 316
+  GET /mediciones 24h                 35 / 310
+  GET /mediciones 7d grafico         731 / 2132
+  GET /ubicaciones                    13 / 1064
+  GET /dispositivos                   13 / 847
+  GET /dispositivos/{id}              10 / 912
+  GET /ingesta/metricas               10 / 604
+
+=== 50 usuarios simultáneos (think 5s) -> APROBADO
+peticiones: 1503  (8.8/s)   errores: 0.00 %
+latencia: mediana 17 ms | p95 1337 ms | p99 3293 ms | max 6198 ms
+
+por pantalla (mediana / p95, ms):
+  GET /health                          5 / 140
+  GET /auth/perfil                     7 / 128
+  GET /mapa-cliente                  203 / 887
+  GET /mediciones/parametros           8 / 316
+  GET /mediciones 24h                 31 / 775
+  GET /mediciones 7d grafico         923 / 3594
+  GET /ubicaciones                    13 / 1033
+  GET /dispositivos                   12 / 686
+  GET /dispositivos/{id}              10 / 734
+  GET /ingesta/metricas                7 / 149
+
+=== 100 usuarios simultáneos (think 5s) -> NO APROBADO
+peticiones: 2033  (12.0/s)   errores: 0.00 %
+latencia: mediana 39 ms | p95 11274 ms | p99 24879 ms | max 36354 ms
+
+por pantalla (mediana / p95, ms):
+  GET /health                         17 / 5124
+  GET /auth/perfil                     7 / 330
+  GET /mapa-cliente                  443 / 1763
+  GET /mediciones/parametros          32 / 5004
+  GET /mediciones 24h                418 / 17475
+  GET /mediciones 7d grafico        5156 / 32149
+  GET /ubicaciones                    50 / 18734
+  GET /dispositivos                   20 / 6321
+  GET /dispositivos/{id}               8 / 933
+  GET /ingesta/metricas                8 / 330
+time="2026-10-14T12:34:45-05:00" level=error msg="thresholds on metrics 'http_req_duration' have been crossed"
+Resultados en C:\Users\COMERCIAL\Desktop\Proyectos\pangea\Pangea\backend\tests\carga\k6\resultados\local-4workers

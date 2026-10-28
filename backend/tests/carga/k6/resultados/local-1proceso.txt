@@ -1,0 +1,217 @@
+﻿
+=== 10 usuarios simultáneos (think 5s) -> NO APROBADO
+peticiones: 303  (1.8/s)   errores: 0.00 %
+latencia: mediana 18 ms | p95 2117 ms | p99 3320 ms | max 4265 ms
+
+por pantalla (mediana / p95, ms):
+  GET /health                          4 / 14
+  GET /auth/perfil                     6 / 59
+  GET /mapa-cliente                  248 / 555
+  GET /mediciones/parametros          14 / 609
+  GET /mediciones 24h                 48 / 840
+  GET /mediciones 7d grafico        1407 / 3773
+  GET /ubicaciones                    22 / 2469
+  GET /dispositivos                   14 / 1422
+  GET /dispositivos/{id}              10 / 56
+  GET /ingesta/metricas               13 / 52
+k6 : time="2026-10-14T12:08:23-05:00" level=error msg="thresholds on metrics 'http_req_duration' have been crossed"
+En C:\Users\COMERCIAL\Desktop\Proyectos\pangea\Pangea\backend\tests\carga\k6\correr_niveles.ps1: 24 Carácter: 5
++     k6 run --quiet `
++     ~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (time="2026-10-1...e been crossed":String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+
+=== 25 usuarios simultáneos (think 5s) -> NO APROBADO
+peticiones: 553  (3.2/s)   errores: 0.00 %
+latencia: mediana 38 ms | p95 6198 ms | p99 10834 ms | max 13696 ms
+
+por pantalla (mediana / p95, ms):
+  GET /health                          6 / 19
+  GET /auth/perfil                    12 / 88
+  GET /mapa-cliente                  240 / 994
+  GET /mediciones/parametros          17 / 2055
+  GET /mediciones 24h                505 / 4877
+  GET /mediciones 7d grafico        4780 / 11213
+  GET /ubicaciones                  2117 / 8554
+  GET /dispositivos                   21 / 3223
+  GET /dispositivos/{id}              15 / 2176
+  GET /ingesta/metricas               15 / 62
+k6 : time="2026-10-14T12:11:49-05:00" level=error msg="thresholds on metrics 'http_req_duration' have been crossed"
+En C:\Users\COMERCIAL\Desktop\Proyectos\pangea\Pangea\backend\tests\carga\k6\correr_niveles.ps1: 24 Carácter: 5
++     k6 run --quiet `
++     ~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (time="2026-10-1...e been crossed":String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+
+=== 50 usuarios simultáneos (think 5s) -> NO APROBADO
+peticiones: 1003  (6.6/s)   errores: 0.00 %
+latencia: mediana 35 ms | p95 10427 ms | p99 17177 ms | max 20872 ms
+
+por pantalla (mediana / p95, ms):
+  GET /health                          5 / 34
+  GET /auth/perfil                     6 / 55
+  GET /mapa-cliente                  406 / 1606
+  GET /mediciones/parametros          59 / 3382
+  GET /mediciones 24h               2600 / 13987
+  GET /mediciones 7d grafico        7554 / 18395
+  GET /ubicaciones                  3210 / 12861
+  GET /dispositivos                   14 / 5218
+  GET /dispositivos/{id}               7 / 1336
+  GET /ingesta/metricas                7 / 35
+k6 : time="2026-10-14T12:14:51-05:00" level=error msg="thresholds on metrics 'http_req_duration' have been crossed"
+En C:\Users\COMERCIAL\Desktop\Proyectos\pangea\Pangea\backend\tests\carga\k6\correr_niveles.ps1: 24 Carácter: 5
++     k6 run --quiet `
++     ~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (time="2026-10-1...e been crossed":String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+k6 : time="2026-10-14T12:16:57-05:00" level=warning msg="Request Failed" error="Get \"http://127.0.0.1:8077/mediciones?
+ubicacion_ids=8&fecha_inicio=2026-10-07T17:15:57.586Z&fecha_fin=2026-10-14T17:15:57.586Z&por_pagina=5000\": request 
+timeout"
+En C:\Users\COMERCIAL\Desktop\Proyectos\pangea\Pangea\backend\tests\carga\k6\correr_niveles.ps1: 24 Carácter: 5
++     k6 run --quiet `
++     ~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (time="2026-10-1...equest timeout":String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+time="2026-10-14T12:16:57-05:00" level=warning msg="Request Failed" error="Get 
+\"http://127.0.0.1:8077/ubicaciones?por_pagina=100\": request timeout"
+time="2026-10-14T12:16:57-05:00" level=warning msg="Request Failed" error="Get \"http://127.0.0.1:8077/mediciones?ubica
+cion_ids=4&fecha_inicio=2026-10-07T17:15:57.649Z&fecha_fin=2026-10-14T17:15:57.649Z&por_pagina=5000\": request timeout"
+time="2026-10-14T12:16:57-05:00" level=warning msg="Request Failed" error="Get 
+\"http://127.0.0.1:8077/dispositivos?por_pagina=100\": request timeout"
+time="2026-10-14T12:16:58-05:00" level=warning msg="Request Failed" error="Get \"http://127.0.0.1:8077/mediciones?ubica
+cion_ids=5&fecha_inicio=2026-10-07T17:15:58.535Z&fecha_fin=2026-10-14T17:15:58.535Z&por_pagina=5000\": request timeout"
+time="2026-10-14T12:16:58-05:00" level=warning msg="Request Failed" error="Get \"http://127.0.0.1:8077/mediciones?ubica
+cion_ids=7&fecha_inicio=2026-10-07T17:15:58.755Z&fecha_fin=2026-10-14T17:15:58.755Z&por_pagina=5000\": request timeout"
+time="2026-10-14T12:16:58-05:00" level=warning msg="Request Failed" error="Get 
+\"http://127.0.0.1:8077/dispositivos/24\": request timeout"
+time="2026-10-14T12:16:59-05:00" level=warning msg="Request Failed" error="Get \"http://127.0.0.1:8077/mediciones?ubica
+cion_ids=8&fecha_inicio=2026-10-07T17:15:59.414Z&fecha_fin=2026-10-14T17:15:59.414Z&por_pagina=5000\": request timeout"
+time="2026-10-14T12:16:59-05:00" level=warning msg="Request Failed" error="Get 
+\"http://127.0.0.1:8077/ubicaciones?por_pagina=100\": request timeout"
+time="2026-10-14T12:17:00-05:00" level=warning msg="Request Failed" error="Get 
+\"http://127.0.0.1:8077/ubicaciones?por_pagina=100\": request timeout"
+time="2026-10-14T12:17:00-05:00" level=warning msg="Request Failed" error="Get \"http://127.0.0.1:8077/mediciones?ubica
+cion_ids=6&fecha_inicio=2026-10-07T17:16:00.893Z&fecha_fin=2026-10-14T17:16:00.893Z&por_pagina=5000\": request timeout"
+time="2026-10-14T12:17:01-05:00" level=warning msg="Request Failed" error="Get \"http://127.0.0.1:8077/mediciones?ubica
+cion_ids=9&fecha_inicio=2026-10-07T17:16:01.343Z&fecha_fin=2026-10-14T17:16:01.343Z&por_pagina=5000\": request timeout"
+time="2026-10-14T12:17:01-05:00" level=warning msg="Request Failed" error="Get 
+\"http://127.0.0.1:8077/ubicaciones?por_pagina=100\": request timeout"
+time="2026-10-14T12:17:01-05:00" level=warning msg="Request Failed" error="Get \"http://127.0.0.1:8077/mediciones?ubica
+cion_ids=8&fecha_inicio=2026-10-07T17:16:01.542Z&fecha_fin=2026-10-14T17:16:01.542Z&por_pagina=5000\": request timeout"
+time="2026-10-14T12:17:28-05:00" level=warning msg="Request Failed" error="Get \"http://127.0.0.1:8077/mediciones?ubica
+cion_ids=8&fecha_inicio=2026-10-07T17:16:28.750Z&fecha_fin=2026-10-14T17:16:28.750Z&por_pagina=5000\": request timeout"
+time="2026-10-14T12:17:29-05:00" level=warning msg="Request Failed" error="Get \"http://127.0.0.1:8077/mediciones?ubica
+cion_ids=1&fecha_inicio=2026-10-07T17:16:29.893Z&fecha_fin=2026-10-14T17:16:29.893Z&por_pagina=5000\": request timeout"
+time="2026-10-14T12:17:30-05:00" level=warning msg="Request Failed" error="Get 
+\"http://127.0.0.1:8077/ubicaciones?por_pagina=100\": request timeout"
+time="2026-10-14T12:17:31-05:00" level=warning msg="Request Failed" error="Get \"http://127.0.0.1:8077/mediciones?ubica
+cion_ids=10&fecha_inicio=2026-10-07T17:16:31.068Z&fecha_fin=2026-10-14T17:16:31.068Z&por_pagina=5000\": request 
+timeout"
+time="2026-10-14T12:17:31-05:00" level=warning msg="Request Failed" error="Get \"http://127.0.0.1:8077/mediciones?ubica
+cion_ids=7&fecha_inicio=2026-10-07T17:16:31.275Z&fecha_fin=2026-10-14T17:16:31.275Z&por_pagina=5000\": request timeout"
+time="2026-10-14T12:17:31-05:00" level=warning msg="Request Failed" error="Get \"http://127.0.0.1:8077/mediciones?ubica
+cion_ids=5&fecha_inicio=2026-10-07T17:16:31.597Z&fecha_fin=2026-10-14T17:16:31.597Z&por_pagina=5000\": request timeout"
+time="2026-10-14T12:17:31-05:00" level=warning msg="Request Failed" error="Get 
+\"http://127.0.0.1:8077/ubicaciones?por_pagina=100\": request timeout"
+time="2026-10-14T12:17:32-05:00" level=warning msg="Request Failed" error="Get \"http://127.0.0.1:8077/mediciones?ubica
+cion_ids=8&fecha_inicio=2026-10-07T17:16:32.141Z&fecha_fin=2026-10-14T17:16:32.141Z&por_pagina=5000\": request timeout"
+time="2026-10-14T12:17:32-05:00" level=warning msg="Request Failed" error="Get \"http://127.0.0.1:8077/mediciones?ubica
+cion_ids=3&fecha_inicio=2026-10-07T17:16:32.344Z&fecha_fin=2026-10-14T17:16:32.344Z&por_pagina=5000\": request timeout"
+time="2026-10-14T12:17:32-05:00" level=warning msg="Request Failed" error="Get 
+\"http://127.0.0.1:8077/dispositivos?por_pagina=100\": request timeout"
+time="2026-10-14T12:17:33-05:00" level=warning msg="Request Failed" error="Get 
+\"http://127.0.0.1:8077/ubicaciones?por_pagina=100\": request timeout"
+time="2026-10-14T12:17:34-05:00" level=warning msg="Request Failed" error="Get 
+\"http://127.0.0.1:8077/ubicaciones?por_pagina=100\": request timeout"
+time="2026-10-14T12:17:34-05:00" level=warning msg="Request Failed" error="Get 
+\"http://127.0.0.1:8077/dispositivos?por_pagina=100\": request timeout"
+time="2026-10-14T12:17:35-05:00" level=warning msg="Request Failed" error="Get 
+\"http://127.0.0.1:8077/ubicaciones?por_pagina=100\": request timeout"
+time="2026-10-14T12:17:35-05:00" level=warning msg="Request Failed" error="Get 
+\"http://127.0.0.1:8077/ubicaciones?por_pagina=100\": request timeout"
+time="2026-10-14T12:17:35-05:00" level=warning msg="Request Failed" error="Get 
+\"http://127.0.0.1:8077/dispositivos?por_pagina=100\": request timeout"
+time="2026-10-14T12:17:36-05:00" level=warning msg="Request Failed" error="Get 
+\"http://127.0.0.1:8077/ubicaciones?por_pagina=100\": request timeout"
+time="2026-10-14T12:17:36-05:00" level=warning msg="Request Failed" error="Get \"http://127.0.0.1:8077/mediciones?ubica
+cion_ids=9&fecha_inicio=2026-10-07T17:16:36.896Z&fecha_fin=2026-10-14T17:16:36.896Z&por_pagina=5000\": request timeout"
+time="2026-10-14T12:17:38-05:00" level=warning msg="Request Failed" error="Get 
+\"http://127.0.0.1:8077/dispositivos?por_pagina=100\": request timeout"
+time="2026-10-14T12:17:39-05:00" level=warning msg="Request Failed" error="Get 
+\"http://127.0.0.1:8077/ubicaciones?por_pagina=100\": request timeout"
+time="2026-10-14T12:17:39-05:00" level=warning msg="Request Failed" error="Get 
+\"http://127.0.0.1:8077/ubicaciones?por_pagina=100\": request timeout"
+time="2026-10-14T12:17:40-05:00" level=warning msg="Request Failed" error="Get 
+\"http://127.0.0.1:8077/ubicaciones?por_pagina=100\": request timeout"
+time="2026-10-14T12:17:40-05:00" level=warning msg="Request Failed" error="Get 
+\"http://127.0.0.1:8077/ubicaciones?por_pagina=100\": request timeout"
+time="2026-10-14T12:17:41-05:00" level=warning msg="Request Failed" error="Get 
+\"http://127.0.0.1:8077/dispositivos?por_pagina=100\": request timeout"
+time="2026-10-14T12:17:41-05:00" level=warning msg="Request Failed" error="Get \"http://127.0.0.1:8077/mediciones?ubica
+cion_ids=10&fecha_inicio=2026-10-07T17:16:41.762Z&fecha_fin=2026-10-14T17:16:41.762Z&por_pagina=5000\": request 
+timeout"
+time="2026-10-14T12:17:42-05:00" level=warning msg="Request Failed" error="Get 
+\"http://127.0.0.1:8077/ubicaciones?por_pagina=100\": request timeout"
+time="2026-10-14T12:17:45-05:00" level=warning msg="Request Failed" error="Get 
+\"http://127.0.0.1:8077/ubicaciones?por_pagina=100\": request timeout"
+time="2026-10-14T12:17:45-05:00" level=warning msg="Request Failed" error="Get 
+\"http://127.0.0.1:8077/ubicaciones?por_pagina=100\": request timeout"
+time="2026-10-14T12:18:01-05:00" level=warning msg="Request Failed" error="Get 
+\"http://127.0.0.1:8077/ubicaciones?por_pagina=100\": request timeout"
+time="2026-10-14T12:18:04-05:00" level=warning msg="Request Failed" error="Get 
+\"http://127.0.0.1:8077/ubicaciones?por_pagina=100\": request timeout"
+time="2026-10-14T12:18:04-05:00" level=warning msg="Request Failed" error="Get 
+\"http://127.0.0.1:8077/dispositivos?por_pagina=100\": request timeout"
+time="2026-10-14T12:18:04-05:00" level=warning msg="Request Failed" error="Get 
+\"http://127.0.0.1:8077/dispositivos?por_pagina=100\": request timeout"
+time="2026-10-14T12:18:04-05:00" level=warning msg="Request Failed" error="Get 
+\"http://127.0.0.1:8077/ubicaciones?por_pagina=100\": request timeout"
+time="2026-10-14T12:18:04-05:00" level=warning msg="Request Failed" error="Get 
+\"http://127.0.0.1:8077/dispositivos?por_pagina=100\": request timeout"
+time="2026-10-14T12:18:05-05:00" level=warning msg="Request Failed" error="Get 
+\"http://127.0.0.1:8077/ubicaciones?por_pagina=100\": request timeout"
+time="2026-10-14T12:18:05-05:00" level=warning msg="Request Failed" error="Get 
+\"http://127.0.0.1:8077/ubicaciones?por_pagina=100\": request timeout"
+time="2026-10-14T12:18:05-05:00" level=warning msg="Request Failed" error="Get 
+\"http://127.0.0.1:8077/dispositivos?por_pagina=100\": request timeout"
+time="2026-10-14T12:18:05-05:00" level=warning msg="Request Failed" error="Get 
+\"http://127.0.0.1:8077/dispositivos?por_pagina=100\": request timeout"
+time="2026-10-14T12:18:05-05:00" level=warning msg="Request Failed" error="Get 
+\"http://127.0.0.1:8077/ingesta/metricas\": request timeout"
+time="2026-10-14T12:18:05-05:00" level=warning msg="Request Failed" error="Get 
+\"http://127.0.0.1:8077/ubicaciones?por_pagina=100\": request timeout"
+time="2026-10-14T12:18:06-05:00" level=warning msg="Request Failed" error="Get 
+\"http://127.0.0.1:8077/dispositivos?por_pagina=100\": request timeout"
+time="2026-10-14T12:18:07-05:00" level=warning msg="Request Failed" error="Get 
+\"http://127.0.0.1:8077/ubicaciones?por_pagina=100\": request timeout"
+time="2026-10-14T12:18:07-05:00" level=warning msg="Request Failed" error="Get 
+\"http://127.0.0.1:8077/dispositivos?por_pagina=100\": request timeout"
+time="2026-10-14T12:18:09-05:00" level=warning msg="Request Failed" error="Get 
+\"http://127.0.0.1:8077/ubicaciones?por_pagina=100\": request timeout"
+time="2026-10-14T12:18:09-05:00" level=warning msg="Request Failed" error="Get 
+\"http://127.0.0.1:8077/dispositivos?por_pagina=100\": request timeout"
+time="2026-10-14T12:18:19-05:00" level=warning msg="Request Failed" error="Get 
+\"http://127.0.0.1:8077/ubicaciones?por_pagina=100\": request timeout"
+
+=== 100 usuarios simultáneos (think 5s) -> NO APROBADO
+peticiones: 732  (4.1/s)   errores: 21.58 %
+latencia: mediana 399 ms | p95 60000 ms | p99 60001 ms | max 60001 ms
+
+por pantalla (mediana / p95, ms):
+  GET /health                        149 / 279
+  GET /auth/perfil                     5 / 35
+  GET /mapa-cliente                  236 / 1394
+  GET /mediciones/parametros          37 / 897
+  GET /mediciones 24h               3390 / 40071
+  GET /mediciones 7d grafico       41417 / 60000
+  GET /ubicaciones                 57231 / 60001
+  GET /dispositivos                58538 / 60000
+  GET /dispositivos/{id}           57374 / 59794
+  GET /ingesta/metricas            60000 / 60000
+time="2026-10-14T12:18:22-05:00" level=error msg="thresholds on metrics 'http_req_duration, http_req_failed' have been 
+crossed"
+Resultados en C:\Users\COMERCIAL\Desktop\Proyectos\pangea\Pangea\backend\tests\carga\k6\resultados\local-1proceso
