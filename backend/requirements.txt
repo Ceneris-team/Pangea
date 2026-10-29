@@ -15,6 +15,7 @@ pyjwt
 cryptography
 slowapi
 python-dotenv
+boto3  # HT-06 (PP-127/PP-129): cliente S3 para Lightsail Object Storage
 pydantic[email]
 python-multipart  # HU06: FastAPI lo exige para leer multipart/form-data (vista previa del .dat de muestra)
 pytest
