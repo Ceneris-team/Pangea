@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import Sidebar from "../components/layout/Sidebar";
 import Topbar from "../components/layout/Topbar";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../hooks/useAuth";
 import { apiFetch } from "../services/api";
 import { useSearchParams } from "react-router-dom";
 import { ROLES } from "../config/roles";
@@ -70,7 +70,11 @@ export default function PlanesSuscripciones() {
   }, []);
 
   useEffect(() => {
-    recargar().catch((e: Error) => setError(e.message)).finally(() => setCargando(false));
+    let activo = true;
+    queueMicrotask(() => {
+      if (activo) recargar().catch((e: Error) => setError(e.message)).finally(() => setCargando(false));
+    });
+    return () => { activo = false; };
   }, [recargar]);
 
   async function ejecutar(accion: () => Promise<{ mensaje: string }>) {

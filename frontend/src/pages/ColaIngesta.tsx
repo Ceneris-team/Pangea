@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { apiFetch, ApiError } from "../services/api";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../hooks/useAuth";
 import Sidebar from "../components/layout/Sidebar";
 import Topbar from "../components/layout/Topbar";
 
@@ -180,12 +180,12 @@ export default function ColaIngesta() {
   }, [pagina, estadoFiltro, dataloggerFiltro]);
 
   useEffect(() => {
-    if (idSeleccionado === null) {
-      setDetalle(null);
-      return;
-    }
     let cancelado = false;
-    setDetalleError(null);
+    if (idSeleccionado === null) {
+      queueMicrotask(() => { if (!cancelado) setDetalle(null); });
+      return () => { cancelado = true; };
+    }
+    queueMicrotask(() => { if (!cancelado) setDetalleError(null); });
     apiFetch<ArchivoIngestaDetalle>(`/ingesta/cola/${idSeleccionado}`)
       .then((res) => {
         if (!cancelado) setDetalle(res);
@@ -199,14 +199,16 @@ export default function ColaIngesta() {
   }, [idSeleccionado]);
 
   useEffect(() => {
-    if (idSeleccionado === null || detalle?.estado !== "Procesado") {
-      setRegistros(null);
-      setRegistrosError(null);
-      return;
-    }
     let cancelado = false;
-    setRegistrosLoading(true);
-    setRegistrosError(null);
+    if (idSeleccionado === null || detalle?.estado !== "Procesado") {
+      queueMicrotask(() => {
+        if (!cancelado) { setRegistros(null); setRegistrosError(null); }
+      });
+      return () => { cancelado = true; };
+    }
+    queueMicrotask(() => {
+      if (!cancelado) { setRegistrosLoading(true); setRegistrosError(null); }
+    });
     apiFetch<RegistrosIngestaResponse>(`/ingesta/cola/${idSeleccionado}/registros`)
       .then((res) => {
         if (!cancelado) setRegistros(res);
@@ -226,14 +228,16 @@ export default function ColaIngesta() {
   // "registros" (solo Procesado), acá interesa sobre todo un archivo
   // Fallido con varios reintentos-.
   useEffect(() => {
-    if (idSeleccionado === null) {
-      setIntentos(null);
-      setIntentosError(null);
-      return;
-    }
     let cancelado = false;
-    setIntentosLoading(true);
-    setIntentosError(null);
+    if (idSeleccionado === null) {
+      queueMicrotask(() => {
+        if (!cancelado) { setIntentos(null); setIntentosError(null); }
+      });
+      return () => { cancelado = true; };
+    }
+    queueMicrotask(() => {
+      if (!cancelado) { setIntentosLoading(true); setIntentosError(null); }
+    });
     apiFetch<IntentoProcesamiento[]>(`/ingesta/cola/${idSeleccionado}/intentos`)
       .then((res) => {
         if (!cancelado) setIntentos(res);

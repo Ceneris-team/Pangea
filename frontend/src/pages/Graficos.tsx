@@ -1,53 +1,38 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import KpisAmpliados from "../components/KpisAmpliados";
+import { acotarZoom, crearActualizadorSerial, type CambioRangoGrafico } from "./actualizacionGraficos";
+import { NOMBRES_VISTA, VISTAS_SERIE, type VistaSerie } from "../components/configuracionSerieUtils";
+import ComparacionDataloggers from "../components/ComparacionDataloggers";
+import { agruparSeriesComparables, nombreFuente, colorDatalogger, type FuenteSerie, type SerieTelemetria, type DatosSerie } from "./seriesTelemetria";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useSearchParams } from "react-router-dom";
 import { apiFetch, ApiError } from "../services/api";
-import { useAuth } from "../context/AuthContext";
-import { useTheme } from "../context/ThemeContext";
+import { useAuth } from "../hooks/useAuth";
+import { useTheme } from "../hooks/useTheme";
 import Sidebar from "../components/layout/Sidebar";
 import Topbar from "../components/layout/Topbar";
 import DrawerPanel from "../components/layout/DrawerPanel";
-import SelectorRangoFechasTimeline from "../components/SelectorRangoFechasTimeline";
+import SelectorRangoFechasTimeline, { type ControlTimeline } from "../components/SelectorRangoFechasTimeline";
 import {
-  claseColumnasGrilla,
   construirQuery,
-  COLORES_SERIE,
-  barrasDeDelta,
   etiquetaDeIntervalo,
   formatearFechaCorta,
-  intervaloParaRango,
   pathDeEscalon,
   pathDeLinea,
-  tilesDeResumen,
   type DispositivoItem,
   type HoverInfo,
   type ListadoMediciones,
   type MedicionNumerica,
   type ParametroItem,
-  type TipoGrafico,
   type UbicacionItem,
   type Vista,
 } from "./graficosUtils";
 import type { RangoFechas } from "../utils/fechas";
 
-/**
- * HU15: visualización de telemetría en gráficos interactivos. El usuario
- * selecciona parámetros (aplican al instante, sin botón "APLICAR") y un
- * rango de fechas con el selector tipo línea de tiempo; por cada parámetro
- * elegido se dibuja un gráfico independiente (una línea por ubicación, con
- * leyenda), y puede alternar entre tipo línea/área o ver los mismos datos
- * en tabla ("VER TABLA"). La grilla de gráficos usa 1 columna con 1-3
- * parámetros, 2 columnas con 4-6, y 3 columnas (en pantallas grandes) con
- * 7-8.
- *
- * Los tipos, constantes y funciones puras (construirQuery, pathDeLinea,
- * etc.) viven en graficosUtils.ts y no acá: un módulo que mezcla
- * componentes React con funciones sueltas rompe el "Fast Refresh
- * boundary" de Vite/React, y en dev eso puede dejar el navegador
- * ejecutando una mezcla de código viejo y nuevo entre ediciones en
- * caliente -se vio en vivo un TypeError en una firma de función que en
- * el archivo real ya no existía-.
- */
+/** Telemetría por proyecto, datalogger y formato. La clasificación del
+ * mapeo define la vista inicial; cada serie conserva su propio selector.
+ * Los KPI y las barras usan los registros completos y una referencia
+ * anterior al rango. La reducción de puntos solo afecta al dibujo. */
 
 export default function Graficos() {
   const { nombreCompleto, rol, logout, zonaHoraria } = useAuth();
@@ -67,6 +52,10 @@ export default function Graficos() {
   const ubicacionId = ubicacionIdParam !== null ? Number(ubicacionIdParam) : null;
   const ubicacionIdValida = ubicacionId !== null && Number.isFinite(ubicacionId);
 
+  const [catalogoSeries, setCatalogoSeries] = useState<{ ubicacion: number; items: SerieTelemetria[] } | null>(null);
+  const proyectoDeParametros = useRef<number | null>(null);
+  const [errorCatalogo, setErrorSeries] = useState<{ ubicacion: number; mensaje: string } | null>(null);
+  const errorSeries = errorCatalogo?.ubicacion === ubicacionId ? errorCatalogo.mensaje : null;
   const [parametros, setParametros] = useState<ParametroItem[]>([]);
   const [ubicaciones, setUbicaciones] = useState<UbicacionItem[]>([]);
 
@@ -86,29 +75,33 @@ export default function Graficos() {
 
   // La controla por completo SelectorRangoFechasTimeline (rango rápido,
   // arrastre de manijas, auto-actualización cada 60s siguiendo "ahora").
-  const [rangoFechas, setRangoFechas] = useState<RangoFechas | null>(null);
+  const controlTimeline = useRef<ControlTimeline>(null);
+  const actualizarDatos = useCallback(() => controlTimeline.current?.actualizar(), []);
+  const [consultaRango, setConsultaRango] = useState<{ rango: RangoFechas; ambito: number; revision: number } | null>(null);
+  const rangoFechas = consultaRango?.rango ?? null;
+  const cambiarRango = useCallback((rango: RangoFechas, cambio: CambioRangoGrafico) => {
+    setConsultaRango(actual => ({ rango, ambito: (actual?.ambito ?? 0) + (cambio.motivo === "seleccion" ? 1 : 0), revision: (actual?.revision ?? 0) + 1 }));
+  }, []);
 
-  const [tipoGrafico, setTipoGrafico] = useState<TipoGrafico>("linea");
   const [vista, setVista] = useState<Vista>("grafico");
 
-  const [mediciones, setMediciones] = useState<ListadoMediciones | null>(null);
+  const ambitoTabla = JSON.stringify([ubicacionId, parametrosSeleccionados, dispositivosSeleccionados, consultaRango?.ambito]);
+  const [respuestaTabla, setRespuestaTabla] = useState<{ ambito: string; datos: ListadoMediciones } | null>(null);
+  const mediciones = respuestaTabla?.ambito === ambitoTabla ? respuestaTabla.datos : null;
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [hover, setHover] = useState<HoverInfo | null>(null);
 
   // Solo tiene sentido graficar parámetros numéricos (línea/área).
   const parametrosGraficables = useMemo(
-    () => parametros.filter((p) => p.tipo_dato === "numerico"),
-    [parametros],
+    () => parametros.filter((p) => p.tipo_dato === "numerico" && catalogoSeries?.ubicacion === ubicacionId && catalogoSeries.items.some(s => s.id_prmtr === p.id_prmtr)),
+    [parametros, catalogoSeries, ubicacionId],
   );
 
   useEffect(() => {
     apiFetch<{ items: ParametroItem[] }>("/mediciones/parametros")
       .then((res) => {
         setParametros(res.items);
-        const primerNumerico = res.items.find((p) => p.tipo_dato === "numerico");
-        if (primerNumerico) setParametrosSeleccionados([primerNumerico.id_prmtr]);
       })
       .catch(() => setParametros([]));
   }, []);
@@ -129,20 +122,28 @@ export default function Graficos() {
   // selección de dataloggers de la ubicación anterior se descarta al
   // cambiar: los ids ya no aplican a la ubicación nueva.
   useEffect(() => {
-    setDispositivosSeleccionados([]);
-    setPanelDataloggersAbierto(false);
-    if (!ubicacionIdValida) {
+    const controlador = new AbortController();
+    queueMicrotask(() => {
+      if (controlador.signal.aborted) return;
+      setDispositivosSeleccionados([]);
+      setPanelDataloggersAbierto(false);
       setDispositivos([]);
-      return;
-    }
+    });
+    if (!ubicacionIdValida) return () => controlador.abort();
     apiFetch<{ items: DispositivoItem[] }>("/dispositivos", {
-      params: { por_pagina: 100, id_ubccn: ubicacionId as number },
+      params: { por_pagina: 100, id_ubccn: ubicacionId as number }, signal: controlador.signal,
     })
-      .then((res) => setDispositivos(res.items))
-      .catch(() => setDispositivos([]));
+      .then(res => { if (!controlador.signal.aborted) setDispositivos(res.items); })
+      .catch(() => { if (!controlador.signal.aborted) setDispositivos([]); });
+    return () => controlador.abort();
   }, [ubicacionIdValida, ubicacionId]);
 
   useEffect(() => {
+    let cancelado = false;
+    if (vista !== "tabla") {
+      queueMicrotask(() => { if (!cancelado) setLoading(false); });
+      return () => { cancelado = true; };
+    }
     // La ubicación ahora es obligatoria (es el primer paso del flujo:
     // elegir ubicación antes de poder elegir sus dataloggers), así que
     // sin una elegida todavía no hay nada que pedir -antes se pedían
@@ -155,12 +156,19 @@ export default function Graficos() {
     // dibujado en pantalla aunque el selector ya mostrara "Selecciona
     // una ubicación...", sin pertenecer a ningún filtro activo.
     if (parametrosSeleccionados.length === 0 || rangoFechas === null || !ubicacionIdValida) {
-      setMediciones(null);
-      return;
+      queueMicrotask(() => {
+        if (cancelado) return;
+        setRespuestaTabla(null);
+        setLoading(false);
+        setError(null);
+      });
+      return () => { cancelado = true; };
     }
-    let cancelado = false;
-    setLoading(true);
-    setError(null);
+    queueMicrotask(() => {
+      if (cancelado) return;
+      setLoading(true);
+      setError(null);
+    });
 
     apiFetch<ListadoMediciones>(
       construirQuery(
@@ -171,7 +179,7 @@ export default function Graficos() {
       ),
     )
       .then((res) => {
-        if (!cancelado) setMediciones(res);
+        if (!cancelado) setRespuestaTabla({ ambito: ambitoTabla, datos: res });
       })
       .catch((err) => {
         if (cancelado) return;
@@ -184,7 +192,31 @@ export default function Graficos() {
     return () => {
       cancelado = true;
     };
-  }, [parametrosSeleccionados, rangoFechas, ubicacionId, ubicacionIdValida, dispositivosSeleccionados]);
+  }, [parametrosSeleccionados, rangoFechas, ubicacionId, ubicacionIdValida, dispositivosSeleccionados, vista, ambitoTabla]);
+
+  useEffect(() => {
+    if (!ubicacionIdValida) return;
+    let cancelado = false;
+    apiFetch<{ items: SerieTelemetria[] }>(`/mediciones/series?ubicacion_id=${ubicacionId}`)
+      .then(res => {
+        if (cancelado) return;
+        setCatalogoSeries({ ubicacion: ubicacionId!, items: res.items });
+        setErrorSeries(null);
+        if (proyectoDeParametros.current !== ubicacionId) {
+          proyectoDeParametros.current = ubicacionId;
+          setParametrosSeleccionados(prev => {
+            const validos = prev.filter(id => res.items.some(s => s.id_prmtr === id));
+            return validos.length ? validos : res.items.length ? [res.items[0].id_prmtr] : [];
+          });
+        }
+      })
+      .catch(err => { if (!cancelado) setErrorSeries({ ubicacion: ubicacionId!, mensaje: err instanceof ApiError ? err.message : "No se pudieron cargar las series" }); });
+    return () => { cancelado = true; };
+  }, [ubicacionId, ubicacionIdValida, rangoFechas]);
+  const seriesVisibles = catalogoSeries?.ubicacion === ubicacionId ? catalogoSeries.items.filter(s =>
+    parametrosSeleccionados.includes(s.id_prmtr) && (!dispositivosSeleccionados.length || dispositivosSeleccionados.includes(s.id_dspstv))) : [];
+
+  const gruposComparables = agruparSeriesComparables(seriesVisibles);
 
   const toggleParametro = (id: number) => {
     setParametrosSeleccionados((actual) => (actual.includes(id) ? actual.filter((v) => v !== id) : [...actual, id]));
@@ -216,7 +248,7 @@ export default function Graficos() {
   // datos, solo se están actualizando), los refrescos dejan la grilla
   // anterior en pantalla -sin desmontarla- hasta que llegan los datos
   // nuevos.
-  const cargandoPrimeraVez = loading && mediciones === null;
+  const cargandoPrimeraVez = vista === "tabla" && loading && mediciones === null;
 
   // El backend devuelve más reciente primero; para la línea de tiempo se
   // necesita orden cronológico ascendente. Solo valores numéricos son
@@ -227,20 +259,6 @@ export default function Graficos() {
       .sort((a, b) => new Date(a.fch_hr).getTime() - new Date(b.fch_hr).getTime());
   }, [mediciones]);
 
-  // Un gráfico por cada parámetro seleccionado (aunque todavía no tenga
-  // datos), en el orden del catálogo para que no salte con la selección:
-  // así N parámetros elegidos siempre producen N gráficos.
-  const parametrosARenderizar = useMemo(() => {
-    const porParametro = new Map<number, MedicionNumerica[]>();
-    for (const item of itemsOrdenados) {
-      const lista = porParametro.get(item.id_prmtr);
-      if (lista) lista.push(item);
-      else porParametro.set(item.id_prmtr, [item]);
-    }
-    return parametrosGraficables
-      .filter((p) => parametrosSeleccionados.includes(p.id_prmtr))
-      .map((p) => ({ parametro: p, items: porParametro.get(p.id_prmtr) ?? [] }));
-  }, [itemsOrdenados, parametrosGraficables, parametrosSeleccionados]);
 
   return (
     <div className="font-sans">
@@ -362,7 +380,7 @@ export default function Graficos() {
 
               {ubicacionIdValida && (
                 <div className="mt-6 pt-6 border-t border-black/10 dark:border-white/10">
-                  <SelectorRangoFechasTimeline zonaHoraria={zonaHoraria} onCambiarRango={setRangoFechas} />
+                  <SelectorRangoFechasTimeline controlRef={controlTimeline} zonaHoraria={zonaHoraria} onCambiarRango={cambiarRango} />
                 </div>
               )}
             </div>
@@ -374,27 +392,7 @@ export default function Graficos() {
             )}
 
             {ubicacionIdValida && (
-              <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
-                <div className="flex items-center gap-1 bg-black/5 dark:bg-white/5 rounded-xl p-1">
-                  <button
-                    type="button"
-                    onClick={() => setTipoGrafico("linea")}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                      tipoGrafico === "linea" ? "bg-[#ccff00] text-gray-900" : "text-gray-600 dark:text-gray-300"
-                    }`}
-                  >
-                    Línea
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setTipoGrafico("area")}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                      tipoGrafico === "area" ? "bg-[#ccff00] text-gray-900" : "text-gray-600 dark:text-gray-300"
-                    }`}
-                  >
-                    Área
-                  </button>
-
+              <div className="flex items-center justify-end mb-4 flex-wrap gap-3">
                   {/* Refresco en segundo plano (auto-actualización cada
                       60s de SelectorRangoFechasTimeline, mientras siga
                       "hasta ahora"): antes esto ocultaba toda la grilla
@@ -403,13 +401,12 @@ export default function Graficos() {
                       y el navegador perdiera la posición de scroll -acá
                       solo se avisa sin tapar nada de lo que ya está
                       dibujado-. */}
-                  {loading && !cargandoPrimeraVez && (
+                  {vista === "tabla" && loading && !cargandoPrimeraVez && (
                     <span className="flex items-center gap-1.5 pl-3 text-xs text-gray-500 dark:text-gray-400">
                       <span className="w-1.5 h-1.5 rounded-full bg-[#ccff00] animate-pulse" />
                       Actualizando…
                     </span>
                   )}
-                </div>
 
                 <button
                   type="button"
@@ -426,15 +423,14 @@ export default function Graficos() {
                 este aviso una serie recortada es indistinguible de una con
                 pocos datos reales -que es justo lo que confunde al ver
                 "MEDICIONES 5" al abrir varios gráficos a la vez-. */}
-            {!cargandoPrimeraVez && respuestaTruncada && (
+            {vista === "tabla" && !cargandoPrimeraVez && respuestaTruncada && (
               <div className="mb-6 p-4 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-300/50 dark:border-amber-800/40 text-amber-800 dark:text-amber-300 text-sm">
                 Mostrando {mediciones?.items.length ?? 0} de {mediciones?.total ?? 0} mediciones del
-                rango. Los gráficos dibujan solo esa parte: reduce el rango de fechas o la cantidad
-                de parámetros seleccionados para verlas completas.
+                rango en esta tabla. Consulta todos los registros desde Consulta de datos.
               </div>
             )}
 
-            {error && (
+            {vista === "tabla" && error && (
               <div className="mb-6 p-4 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm border border-red-200 dark:border-red-800/30">
                 {error}
               </div>
@@ -494,20 +490,16 @@ export default function Graficos() {
               </div>
             )}
 
-            {!cargandoPrimeraVez && vista === "grafico" && parametrosARenderizar.length > 0 && (
-              <div className={`grid ${claseColumnasGrilla(parametrosARenderizar.length)} gap-6`}>
-                {parametrosARenderizar.map(({ parametro, items }) => (
-                  <GraficoDeParametro
-                    key={parametro.id_prmtr}
-                    parametro={parametro}
-                    items={items}
-                    tipoGrafico={tipoGrafico}
-                    zonaHoraria={zonaHoraria}
-                    hover={hover?.parametroId === parametro.id_prmtr ? hover : null}
-                    onHover={setHover}
-                  />
-                ))}
+            {vista === "grafico" && errorSeries && <p role="alert" className="text-red-500">{errorSeries}</p>}
+            {vista === "grafico" && rangoFechas && (
+              <div className="grid grid-cols-1 gap-6">
+                {gruposComparables.map(grupo => <VisualizacionComparada
+                  key={grupo.clave} grupo={grupo.series} rangoFechas={rangoFechas} zonaHoraria={zonaHoraria}
+                  ambitoRango={consultaRango?.ambito ?? 0} revisionRefresco={consultaRango?.revision ?? 0} onActualizar={actualizarDatos} />)}
               </div>
+            )}
+            {vista === "grafico" && catalogoSeries?.ubicacion === ubicacionId && !seriesVisibles.length && (
+              <p className="py-8 text-sm text-gray-500">No hay series numéricas mapeadas para esta selección.</p>
             )}
           </main>
         </div>
@@ -535,7 +527,7 @@ export default function Graficos() {
       >
         <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
           {ubicaciones.find((u) => u.id_ubccn === ubicacionId)?.nmbr ?? ""} tiene {dispositivos.length}{" "}
-          dataloggers. Sin ninguno marcado se muestran todos juntos.
+          dataloggers. Sin ninguno marcado se muestran todos, con indicadores separados.
         </p>
         <div className="flex flex-col gap-1">
           {dispositivos.map((d) => (
@@ -558,85 +550,206 @@ export default function Graficos() {
   );
 }
 
-interface GraficoDeParametroProps {
-  parametro: ParametroItem;
-  items: MedicionNumerica[];
-  tipoGrafico: TipoGrafico;
-  zonaHoraria: string;
-  hover: HoverInfo | null;
-  onHover: (hover: HoverInfo | null) => void;
+interface SolicitudGrupo {
+  rango: RangoFechas;
+}
+interface RespuestaGrupo {
+  fuentes: FuenteSerie[];
+  errores: string[];
+}
+interface EstadoGrupo {
+  ambito: string;
+  consulta: { rango: RangoFechas; fuentes: FuenteSerie[]; revision: number } | null;
+  errores: string[];
+  cargando: boolean;
+  desactualizado: boolean;
 }
 
-function GraficoDeParametro({ parametro, items, tipoGrafico, zonaHoraria, hover, onHover }: GraficoDeParametroProps) {
-  const { esOscuro } = useTheme();
+function VisualizacionComparada({ grupo, rangoFechas, zonaHoraria, ambitoRango, revisionRefresco, onActualizar }: {
+  onActualizar: () => void;
+  grupo: SerieTelemetria[]; rangoFechas: RangoFechas; zonaHoraria: string; ambitoRango: number; revisionRefresco: number;
+}) {
+  const [estado, setEstado] = useState<EstadoGrupo | null>(null);
+  const [intento, setIntento] = useState(0);
+  const [presentacion, setPresentacion] = useState<VistaSerie>(grupo.every(s => s.configuracion.vista === grupo[0].configuracion.vista)
+    ? grupo[0].configuracion.vista : VISTAS_SERIE[grupo[0].configuracion.significado][0]);
+  const [ocultas, setOcultas] = useState<number[]>([]);
+  const [resumenAbierto, setResumenAbierto] = useState(false);
+  const actualizador = useRef<ReturnType<typeof crearActualizadorSerial<SolicitudGrupo, RespuestaGrupo>> | null>(null);
+  const revisionDatos = useRef(0);
+  const ambito = JSON.stringify([grupo, zonaHoraria, ambitoRango]);
+  const solicitud = JSON.stringify(rangoFechas);
 
-  // Serie por DISPOSITIVO (no por ubicación), hasta 4 (paleta categórica
-  // validada). El resto se agrupa como "Otras" en vez de generar un color
-  // nuevo por índice.
-  //
-  // Antes se agrupaba por id_ubccn, pero una Ubicación puede tener más de
-  // un Dispositivo -dos dataloggers midiendo el mismo parámetro en la
-  // misma estación es un caso real ("Estacion Prueba" tiene dos-, no
-  // hipotético-: agrupar por ubicación mezclaba sus lecturas en una sola
-  // línea, así que un sensor con fallas (ceros intercalados) contaminaba
-  // visualmente al otro que medía bien.
-  const { series, otrosDispositivos } = useMemo(() => {
-    const porDispositivo = new Map<number, { nombre: string; items: MedicionNumerica[] }>();
-    // Cuántas ubicaciones distintas hay entre los puntos: si es una sola,
-    // el nombre de la ubicación ya lo dice el título de la tarjeta del
-    // gráfico (fuera de este componente) y repetirlo en cada serie sería
-    // ruido; con más de una, hace falta para no perder de qué estación es
-    // cada dispositivo.
-    const ubicacionesDistintas = new Set(items.map((i) => i.id_ubccn)).size;
-    for (const item of items) {
-      const entry = porDispositivo.get(item.id_dspstv);
-      if (entry) {
-        entry.items.push(item);
-      } else {
-        const nombre =
-          ubicacionesDistintas > 1
-            ? `${item.ubicacion_nombre} · ${item.dispositivo_nombre}`
-            : item.dispositivo_nombre;
-        porDispositivo.set(item.id_dspstv, { nombre, items: [item] });
-      }
-    }
-    const todas = [...porDispositivo.values()];
-    return { series: todas.slice(0, 4), otrosDispositivos: todas.slice(4).map((s) => s.nombre) };
-  }, [items]);
+  useEffect(() => {
+    let montado = true;
+    const [fuentes, zona] = JSON.parse(ambito) as [SerieTelemetria[], string, number];
+    const controlador = crearActualizadorSerial<SolicitudGrupo, RespuestaGrupo>({
+      ejecutar: async ({ rango }, signal) => {
+        const params = new URLSearchParams({ fecha_inicio: rango.inicio, fecha_fin: rango.fin, zona_horaria: zona });
+        const respuestas = await Promise.allSettled(fuentes.map(async serie => {
+          const peticion = new AbortController();
+          const cancelar = () => peticion.abort();
+          signal.addEventListener("abort", cancelar, { once: true });
+          if (signal.aborted) cancelar();
+          let agotado = false;
+          const limite = setTimeout(() => { agotado = true; peticion.abort(); }, 90_000);
+          try {
+            return { serie, datos: await apiFetch<DatosSerie>(`/mediciones/series/${serie.id_serie}?${params}`, { signal: peticion.signal }) };
+          } catch (error) {
+            if (agotado) throw new ApiError("La consulta tardó demasiado. Vuelve a intentarlo.", 408);
+            throw error;
+          } finally {
+            clearTimeout(limite);
+            signal.removeEventListener("abort", cancelar);
+          }
+        }));
+        const resultado: RespuestaGrupo = { fuentes: [], errores: [] };
+        respuestas.forEach((respuesta, i) => {
+          if (respuesta.status === "fulfilled") resultado.fuentes.push(respuesta.value);
+          else resultado.errores.push(`${nombreFuente(fuentes[i])}: ${respuesta.reason instanceof ApiError ? respuesta.reason.message : "No se pudieron cargar sus datos"}`);
+        });
+        return resultado;
+      },
+      alIniciar: () => queueMicrotask(() => {
+        if (montado) setEstado(prev => prev?.ambito === ambito ? { ...prev, cargando: true }
+          : { ambito, consulta: null, errores: [], cargando: true, desactualizado: false });
+      }),
+      alCompletar: (resultado, { rango }) => {
+        const revision = ++revisionDatos.current;
+        setEstado(prev => {
+          const anterior = prev?.ambito === ambito ? prev.consulta : null;
+          // Un fallo no reemplaza una consulta válida por datos incompletos
+          // ni mezcla estadísticas de períodos distintos entre equipos.
+          const conservar = resultado.errores.length > 0 && !!anterior?.fuentes.length;
+          return { ambito, cargando: true, errores: resultado.errores, desactualizado: conservar,
+            consulta: conservar ? anterior : { rango, fuentes: resultado.fuentes, revision } };
+        });
+      },
+      alFallar: () => setEstado(prev => ({ ambito, consulta: prev?.ambito === ambito ? prev.consulta : null,
+        errores: ["No se pudo actualizar esta consulta."], cargando: false, desactualizado: true })),
+      alTerminar: () => setEstado(prev => prev?.ambito === ambito ? { ...prev, cargando: false } : prev),
+    });
+    actualizador.current = controlador;
+    return () => { montado = false; controlador.cancelar(); actualizador.current = null; };
+  }, [ambito]);
+
+  useEffect(() => {
+    actualizador.current?.pedir({ rango: JSON.parse(solicitud) as RangoFechas });
+  }, [solicitud, ambito, revisionRefresco, intento]);
+
+  const actual = estado?.ambito === ambito ? estado : null;
+  const consulta = actual?.consulta;
+  return <section className="min-w-0" aria-label={`Comparación de ${grupo[0].parametro_nombre}`}>
+    <div className="min-h-5 text-xs text-gray-500 mb-2" role="status">
+      {actual?.cargando ? consulta?.fuentes.length ? "Actualizando comparación…" : `Cargando ${grupo[0].parametro_nombre}…`
+        : actual?.desactualizado ? "Se conserva la última consulta disponible; hay datos pendientes de actualizar."
+        : consulta ? `Consulta hasta ${new Date(consulta.rango.fin).toLocaleString("es", { timeZone: zonaHoraria, dateStyle: "short", timeStyle: "medium" })}` : "Cargando comparación…"}
+    </div>
+    {!!actual?.errores.length && <div className="mb-3 text-sm text-red-600 dark:text-red-400" role="alert">
+      {actual.errores.map(error => <p key={error}>{error}</p>)}
+      <button type="button" className="mt-2 underline" onClick={() => setIntento(n => n + 1)}>Reintentar actualización</button>
+    </div>}
+    {!!consulta?.fuentes.length && <GraficoDeParametro
+      serie={grupo[0]} datos={consulta.fuentes[0].datos} fuentes={consulta.fuentes} comparacion={grupo.length > 1}
+      presentacion={presentacion} setPresentacion={setPresentacion} ocultas={ocultas} setOcultas={setOcultas}
+      resumenAbierto={resumenAbierto} setResumenAbierto={setResumenAbierto} revisionDatos={consulta.revision}
+      onActualizar={onActualizar} actualizando={actual?.cargando ?? false} desactualizado={actual?.desactualizado ?? false}
+      zonaHoraria={zonaHoraria} rangoFechas={consulta.rango} />}
+  </section>;
+}
+
+function GraficoDeParametro({ serie, datos, zonaHoraria, rangoFechas, presentacion, setPresentacion, fuentes, comparacion = false, ocultas = [], setOcultas, resumenAbierto, setResumenAbierto, revisionDatos, onActualizar, actualizando, desactualizado }: {
+  onActualizar: () => void; actualizando: boolean; desactualizado: boolean;
+  resumenAbierto: boolean; setResumenAbierto: (abierto: boolean) => void; revisionDatos: number;
+  fuentes?: FuenteSerie[]; comparacion?: boolean; ocultas?: number[]; setOcultas?: (ids: number[]) => void;
+  presentacion: VistaSerie; setPresentacion: (vista: VistaSerie) => void;
+  serie: SerieTelemetria; datos: DatosSerie; zonaHoraria: string; rangoFechas: RangoFechas;
+}) {
+  const { esOscuro } = useTheme();
+  const [hoverGuardado, setHoverGuardado] = useState<{ revision: number; valor: HoverInfo | null } | null>(null);
+  const hover = hoverGuardado?.revision === revisionDatos ? hoverGuardado.valor : null;
+  const onHover = (valor: HoverInfo | null) => setHoverGuardado({ revision: revisionDatos, valor });
+  const idPanel = useId();
+  const mostrarResumen = comparacion && resumenAbierto;
+  const vistaKpi = presentacion === "kpi";
+  function cambiarPanel(resumen: boolean) {
+    setResumenAbierto(resumen);
+    onHover(null);
+  }
+  function aislarFuente(id: number) {
+    setOcultas?.((fuentes ?? [{ serie, datos }]).filter(f => f.serie.id_serie !== id).map(f => f.serie.id_serie));
+    cambiarPanel(false);
+    if (vistaKpi) setPresentacion(VISTAS_SERIE[serie.configuracion.significado].find(v => v !== "kpi") ?? "linea");
+  }
+  const tipoGrafico = presentacion === "area" ? "area" : "linea";
+  const fuentesCompletas = fuentes ?? [{ serie, datos }];
+  const fuentesVisibles = fuentesCompletas.filter(f => !ocultas.includes(f.serie.id_serie));
+  const items = fuentesVisibles.flatMap(f => f.datos.items);
+  const parametro = { id_prmtr: serie.id_prmtr, nmbr: serie.parametro_nombre, undd: serie.undd };
+  const series = fuentesVisibles.map(f => ({ id: f.serie.id_serie, nombre: nombreFuente(f.serie),
+    color: colorDatalogger(f.serie.id_dspstv), items: f.datos.items, barras: f.datos.resumen.barras }));
 
   const unidad = items[0]?.undd ?? parametro.undd;
-  const tipoVisualizacion = parametro.tipo_visualizacion ?? "continuo";
+  const significado = serie.configuracion.significado;
+  const tipoVisualizacion = significado === "estado" ? "estado" : significado === "contador" || significado === "secuencia" ? "contador" : "continuo";
+  const resumen = datos.resumen;
+  const formatoNumero = new Intl.NumberFormat("es", { maximumFractionDigits: 6 });
+  const etiquetaKpi = { continuo: "Última lectura", contador: "Eventos en el período", secuencia: "Tramas recibidas", estado: "Activaciones en el período", desconocido: "Última lectura" }[significado];
 
-  const tiles = useMemo(() => {
-    // Una serie por dispositivo y cada una ordenada por tiempo: en un
-    // contador cada datalogger lleva su propia cuenta, y mezclarlas hacía
-    // que el salto de una a otra se sumara como si fuera un incremento
-    // real. El orden importa porque "inicial"/"actual" y las transiciones
-    // se leen de los extremos, e `items` no viene cronológico.
-    const seriesDeValores = series.map((s) =>
-      [...s.items]
-        .sort((a, b) => new Date(a.fch_hr).getTime() - new Date(b.fch_hr).getTime())
-        .map((i) => i.vlr),
-    );
-    return tilesDeResumen(seriesDeValores, unidad, tipoVisualizacion);
-  }, [series, unidad, tipoVisualizacion]);
+  const numero = (v: number | null) => v === null ? "—" : formatoNumero.format(v);
+  const tiles = tipoVisualizacion === "continuo" ? [
+    { etiqueta: "Lecturas únicas", valor: String(resumen.lecturas) },
+    { etiqueta: "Mínimo", valor: numero(resumen.minimo) },
+    { etiqueta: "Promedio", valor: numero(resumen.promedio) },
+    { etiqueta: "Máximo", valor: numero(resumen.maximo) },
+  ] : [
+    { etiqueta: "Lecturas únicas", valor: String(resumen.lecturas) },
+    { etiqueta: significado === "secuencia" ? "Último consecutivo" : "Último valor", valor: numero(resumen.ultimo) },
+    { etiqueta: etiquetaKpi, valor: numero(resumen.valor) },
+    { etiqueta: "Calidad del conteo", valor: resumen.parcial ? "Parcial" : "Disponible" },
+  ];
 
   // Geometría del SVG: simple, sin librerías, siguiendo specs de marca fina
   // (línea 2px, extremos redondeados, grilla recesiva).
-  const ANCHO = 900;
-  const ALTO = 320;
+  const [pantallaCompleta, setPantallaCompleta] = useState(false);
+  const [altoMarcador, setAltoMarcador] = useState(0);
+  const [anchoGrafico, setAnchoGrafico] = useState(900);
+  const [altoGrafico, setAltoGrafico] = useState(320);
+  const ANCHO = anchoGrafico;
+  const ALTO = altoGrafico;
   const PAD = { top: 16, right: 16, bottom: 32, left: 48 };
 
   // Zoom sobre el eje X (tiempo): un rango activo restringe minT/maxT sin
   // tocar la escala del eje Y. null = rango completo original. El zoom es
   // independiente de la pantalla completa y se conserva al salir de ella.
-  const [zoomT, setZoomT] = useState<{ min: number; max: number } | null>(null);
+  const [zoomGuardado, setZoomT] = useState<{ min: number; max: number } | null>(null);
+  const zoomT = acotarZoom(zoomGuardado, rangoFechas);
   const [seleccion, setSeleccion] = useState<{ x1: number; x2: number } | null>(null);
   const [arrastrando, setArrastrando] = useState(false);
 
-  const [pantallaCompleta, setPantallaCompleta] = useState(false);
   const contenedorRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
+  const areaGraficoRef = useRef<HTMLDivElement>(null);
+  const botonAmpliarRef = useRef<HTMLButtonElement>(null);
+  const scrollAnterior = useRef<{ elemento: HTMLElement; posicion: number } | null>(null);
+  const hayDatos = items.length > 0;
+
+  useEffect(() => {
+    const contenedor = contenedorRef.current;
+    if (!contenedor) return;
+    const area = areaGraficoRef.current;
+    const observador = new ResizeObserver(() => {
+      if (!contenedor.isConnected) return;
+      const estilo = getComputedStyle(contenedor);
+      const ancho = Math.max(280, Math.round((area?.clientWidth ?? contenedor.clientWidth - parseFloat(estilo.paddingLeft) - parseFloat(estilo.paddingRight))));
+      setAnchoGrafico(ancho);
+      setAltoGrafico(pantallaCompleta && area ? Math.max(240, area.clientHeight) : ancho < 500 ? 260 : 320);
+    });
+    observador.observe(contenedor);
+    if (area) observador.observe(area);
+    return () => observador.disconnect();
+  }, [pantallaCompleta, mostrarResumen, vistaKpi, hayDatos]);
+
 
   // Posición en pantalla (no en el viewBox del SVG) del tooltip de hover,
   // recalculada vía efecto -no durante el render, que es donde React ya
@@ -644,9 +757,10 @@ function GraficoDeParametro({ parametro, items, tipoGrafico, zonaHoraria, hover,
   // página se desplaza/redimensiona mientras el tooltip sigue abierto.
   const [posicionTooltip, setPosicionTooltip] = useState<{ left: number; top: number } | null>(null);
   useEffect(() => {
+    let cancelado = false;
     if (!hover) {
-      setPosicionTooltip(null);
-      return;
+      queueMicrotask(() => { if (!cancelado) setPosicionTooltip(null); });
+      return () => { cancelado = true; };
     }
     const puntoActivo = hover;
     function recalcular() {
@@ -661,40 +775,65 @@ function GraficoDeParametro({ parametro, items, tipoGrafico, zonaHoraria, hover,
     window.addEventListener("scroll", recalcular, true);
     window.addEventListener("resize", recalcular);
     return () => {
+      cancelado = true;
       window.removeEventListener("scroll", recalcular, true);
       window.removeEventListener("resize", recalcular);
     };
-  }, [hover]);
+  }, [hover, ANCHO, ALTO]);
 
   useEffect(() => {
-    function onFullscreenChange() {
-      setPantallaCompleta(document.fullscreenElement === contenedorRef.current);
-    }
-    document.addEventListener("fullscreenchange", onFullscreenChange);
-    return () => document.removeEventListener("fullscreenchange", onFullscreenChange);
-  }, []);
-
-  async function alternarPantallaCompleta() {
-    try {
-      if (document.fullscreenElement) {
-        await document.exitFullscreen();
-      } else {
-        await contenedorRef.current?.requestFullscreen();
+    if (!pantallaCompleta) return;
+    const contenedor = contenedorRef.current;
+    if (!contenedor) return;
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const fondo = [...document.body.children].filter((el): el is HTMLElement => el instanceof HTMLElement && el !== contenedor);
+    const estados = fondo.map(el => ({ el, inert: el.inert }));
+    fondo.forEach(el => { el.inert = true; });
+    botonAmpliarRef.current?.focus({ preventScroll: true });
+    const teclado = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault(); e.stopPropagation();
+        setPantallaCompleta(false);
+      } else if (e.key === "Tab") {
+        const controles = [...contenedor.querySelectorAll<HTMLElement>('button:not(:disabled), select:not(:disabled), input:not(:disabled), a[href], [tabindex="0"]')]
+          .filter(el => el.getClientRects().length > 0);
+        const primero = controles[0], ultimo = controles.at(-1);
+        if (e.shiftKey && (document.activeElement === primero || !contenedor.contains(document.activeElement))) {
+          e.preventDefault(); ultimo?.focus();
+        } else if (!e.shiftKey && (document.activeElement === ultimo || !contenedor.contains(document.activeElement))) {
+          e.preventDefault(); primero?.focus();
+        }
       }
-    } catch {
-      // El navegador puede rechazar la solicitud (falta de gesto del
-      // usuario, política de permisos); no hay nada más que hacer aquí.
+    };
+    document.addEventListener("keydown", teclado, true);
+    return () => {
+      document.removeEventListener("keydown", teclado, true);
+      document.body.style.overflow = overflow;
+      estados.forEach(({ el, inert }) => { el.inert = inert; });
+      if (scrollAnterior.current?.elemento.isConnected) scrollAnterior.current.elemento.scrollTop = scrollAnterior.current.posicion;
+      document.getElementById(`${idPanel}-ampliar`)?.focus({ preventScroll: true });
+    };
+  }, [pantallaCompleta, idPanel]);
+
+  function alternarPantallaCompleta() {
+    onHover(null);
+    if (!pantallaCompleta) {
+      setAltoMarcador(contenedorRef.current?.getBoundingClientRect().height ?? 0);
+      const main = contenedorRef.current?.closest("main");
+      scrollAnterior.current = main ? { elemento: main, posicion: main.scrollTop } : null;
     }
+    setPantallaCompleta(!pantallaCompleta);
   }
 
   const todosLosValores = items.map((i) => i.vlr);
-  const todosLosTiempos = items.map((i) => new Date(i.fch_hr).getTime());
   // El eje Y siempre refleja el rango completo de valores: el zoom es
   // exclusivo del eje X (tiempo), sin alterar esta escala.
   const minVlr = todosLosValores.length ? Math.min(...todosLosValores) : 0;
-  const maxVlr = todosLosValores.length ? Math.max(...todosLosValores) : 1;
-  const minTOriginal = todosLosTiempos.length ? Math.min(...todosLosTiempos) : 0;
-  const maxTOriginal = todosLosTiempos.length ? Math.max(...todosLosTiempos) : 1;
+  const maxVlrDatos = todosLosValores.length ? Math.max(...todosLosValores) : 1;
+  const maxVlr = maxVlrDatos === minVlr ? minVlr + Math.max(Math.abs(minVlr) * 0.01, 1) : maxVlrDatos;
+  const minTOriginal = new Date(rangoFechas.inicio).getTime();
+  const maxTOriginal = new Date(rangoFechas.fin).getTime();
   const rangoVlr = maxVlr - minVlr || 1;
 
   // Decimales para las etiquetas del eje Y: los suficientes para que las
@@ -728,19 +867,9 @@ function GraficoDeParametro({ parametro, items, tipoGrafico, zonaHoraria, hover,
   // por intervalo ("cuántas veces se abrió la puerta el martes"), que es
   // la pregunta que se le hace, y no como el número corrido del equipo.
   // El toggle Área deja ver el acumulado en escalón cuando hace falta.
-  const modoDelta = tipoVisualizacion === "contador" && tipoGrafico === "linea";
-  const intervaloDelta = intervaloParaRango(rangoT);
-
-  // Una barra por bucket y por serie. Se calcula sobre los items dentro
-  // del zoom para que al acercarse el intervalo se recalcule más fino.
-  const seriesDeBarras = useMemo(() => {
-    if (!modoDelta) return [];
-    return series.map((s) => ({
-      nombre: s.nombre,
-      barras: barrasDeDelta(s.items.filter(enRangoZoom), intervaloDelta, zonaHoraria),
-    }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [series, modoDelta, intervaloDelta, zonaHoraria, minT, maxT]);
+  const modoDelta = presentacion === "barras";
+  const intervaloDelta = resumen.intervalo;
+  const seriesDeBarras = modoDelta ? series : [];
 
   // Escala propia: los deltas son de otra magnitud que el acumulado (12
   // eventos vs. un contador en 30.071), así que reusar la escala del
@@ -754,6 +883,15 @@ function GraficoDeParametro({ parametro, items, tipoGrafico, zonaHoraria, hover,
   }
   function xDeTiempo(t: number) {
     return PAD.left + ((t - minT) / rangoT) * (ANCHO - PAD.left - PAD.right);
+  }
+
+  function modificarZoom(factor: number) {
+    const total = maxTOriginal - minTOriginal;
+    const ancho = Math.min(total, Math.max(1000, (maxT - minT) * factor));
+    if (ancho >= total) { setZoomT(null); return; }
+    const inicio = Math.max(minTOriginal, Math.min((minT + maxT - ancho) / 2, maxTOriginal - ancho));
+    setZoomT({ min: inicio, max: inicio + ancho });
+    onHover(null);
   }
 
   function coordenadaSvgX(clientX: number): number {
@@ -805,41 +943,45 @@ function GraficoDeParametro({ parametro, items, tipoGrafico, zonaHoraria, hover,
   const colorTextoEje = esOscuro ? "rgba(255,255,255,0.4)" : "rgba(0,0,0,0.45)";
   const colorFondoContraste = esOscuro ? "#0b1220" : "#ffffff";
 
-  return (
+  const contenido = (
     <div
       ref={contenedorRef}
+      role={pantallaCompleta ? "dialog" : undefined} aria-modal={pantallaCompleta ? true : undefined}
+      aria-labelledby={pantallaCompleta ? `${idPanel}-titulo` : undefined} tabIndex={pantallaCompleta ? -1 : undefined}
+      onKeyDown={e => {
+        if (!pantallaCompleta || mostrarResumen || vistaKpi || (e.target instanceof HTMLElement && e.target.matches("input, select, textarea"))) return;
+        if (["+", "=", "-"].includes(e.key)) { e.preventDefault(); modificarZoom(e.key === "-" ? 2 : 0.5); }
+      }}
       className={
         pantallaCompleta
-          ? "bg-white dark:bg-[#0b1220] p-6 h-screen w-screen flex flex-col"
+          ? "fixed inset-0 z-[100] bg-white dark:bg-[#0b1220] h-[100dvh] w-full flex flex-col overflow-hidden"
           : "bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl border border-black/10 dark:border-white/10 p-5"
       }
     >
-      <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
-        <h2 className="text-sm font-bold text-gray-900 dark:text-white">
-          {parametro.nmbr}{" "}
-          {modoDelta ? `— eventos ${etiquetaDeIntervalo(intervaloDelta)}` : "en el tiempo"}
+      <div className={`flex items-center justify-between flex-wrap gap-3 shrink-0 ${pantallaCompleta ? "p-4 md:px-8 md:py-5 border-b border-black/10 dark:border-white/10" : "mb-4"}`}>
+        <h2 id={`${idPanel}-titulo`} className={`${pantallaCompleta ? "text-lg md:text-xl" : "text-sm"} font-bold text-gray-900 dark:text-white`}>
+          <span className="block text-xs font-normal text-gray-500 dark:text-gray-400 mb-1">{serie.ubicacion_nombre} · {comparacion ? `${fuentesCompletas.length} fuentes comparadas` : `${serie.dispositivo_nombre} · Trama ${serie.tp_trm}`}</span>
+          {parametro.nmbr}{unidad && !["-", "N/A"].includes(unidad) ? ` (${unidad})` : ""}{modoDelta ? ` · ${etiquetaDeIntervalo(intervaloDelta)}` : ""}
         </h2>
 
         <div className="flex items-center gap-4 flex-wrap">
-          {series.length > 0 && (
-            <div className="flex items-center gap-4 flex-wrap">
-              {series.map((s, i) => (
-                <div
-                  key={s.nombre}
-                  className="flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-300"
-                >
-                  <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: COLORES_SERIE[i] }} />
-                  {s.nombre}
-                </div>
-              ))}
-              {otrosDispositivos.length > 0 && (
-                <span className="text-xs text-gray-500">+{otrosDispositivos.length} más sin graficar</span>
-              )}
-            </div>
-          )}
-
+          {!mostrarResumen && <label className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-2">Mostrar
+            <select aria-label={comparacion ? `Vista comparada de ${parametro.nmbr}` : `Vista de ${parametro.nmbr} en ${serie.dispositivo_nombre}`} value={presentacion}
+              onChange={e => { setPresentacion(e.target.value as VistaSerie); onHover(null); }}
+              className="rounded-lg border border-black/15 dark:border-white/20 bg-white dark:bg-[#1a202c] px-3 py-2 text-sm text-gray-900 dark:text-white">
+              {VISTAS_SERIE[significado].map(v => <option key={v} value={v}>{NOMBRES_VISTA[v]}</option>)}
+            </select>
+          </label>}
           <div className="flex items-center gap-2">
-            {zoomT && (
+            {pantallaCompleta && <button type="button" onClick={onActualizar} disabled={actualizando}
+              className="px-3 py-2 text-sm font-medium rounded-lg hover:bg-black/5 dark:hover:bg-white/10 disabled:opacity-50 text-gray-700 dark:text-gray-200">
+              {actualizando ? "Actualizando…" : "Actualizar"}
+            </button>}
+            {pantallaCompleta && !mostrarResumen && !vistaKpi && <div className="flex rounded-lg border border-black/15 dark:border-white/15">
+              <button type="button" aria-label="Alejar gráfico" onClick={() => modificarZoom(2)} disabled={!zoomT} className="px-3 py-1.5 text-lg disabled:opacity-40 dark:text-white">−</button>
+              <button type="button" aria-label="Acercar gráfico" onClick={() => modificarZoom(0.5)} className="px-3 py-1.5 text-lg dark:text-white">+</button>
+            </div>}
+            {!mostrarResumen && !vistaKpi && zoomT && (
               <button
                 type="button"
                 onClick={() => setZoomT(null)}
@@ -851,40 +993,104 @@ function GraficoDeParametro({ parametro, items, tipoGrafico, zonaHoraria, hover,
 
             <button
               type="button"
+              ref={botonAmpliarRef}
+              id={`${idPanel}-ampliar`}
               onClick={alternarPantallaCompleta}
-              title={pantallaCompleta ? "Salir de pantalla completa" : "Pantalla completa"}
-              aria-label={pantallaCompleta ? "Salir de pantalla completa" : "Pantalla completa"}
-              className="p-1.5 rounded-lg border border-black/20 dark:border-white/20 text-gray-700 dark:text-gray-200 hover:border-[#ccff00] hover:text-[#ccff00] transition-colors"
+              title={pantallaCompleta ? "Cerrar vista ampliada (Esc)" : "Ampliar visualización"}
+              aria-label={pantallaCompleta ? "Cerrar vista ampliada" : "Ampliar visualización"}
+              className="flex items-center gap-2 p-1.5 rounded-lg border border-black/20 dark:border-white/20 text-gray-700 dark:text-gray-200 hover:border-[#ccff00] hover:text-[#ccff00] transition-colors"
             >
               {pantallaCompleta ? (
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M8 3v3a2 2 0 0 1-2 2H3M21 8h-3a2 2 0 0 1-2-2V3M3 16h3a2 2 0 0 1 2 2v3M16 21v-3a2 2 0 0 1 2-2h3" />
+                  <path d="M6 6l12 12M18 6L6 18" />
                 </svg>
               ) : (
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3" />
                 </svg>
               )}
+              {pantallaCompleta && <span className="pr-1 text-sm">Cerrar</span>}
             </button>
           </div>
         </div>
       </div>
+      {pantallaCompleta && <div className="px-4 md:px-8 py-3 shrink-0 flex flex-wrap gap-x-5 gap-y-1 text-xs text-gray-500 dark:text-gray-400 border-b border-black/5 dark:border-white/5">
+        <span>{new Date(rangoFechas.inicio).toLocaleString("es", { timeZone: zonaHoraria, dateStyle: "medium", timeStyle: "short" })} — {new Date(rangoFechas.fin).toLocaleString("es", { timeZone: zonaHoraria, dateStyle: "medium", timeStyle: "short" })}</span>
+        <span>{zonaHoraria}</span>
+        <span role="status" className={desactualizado ? "text-amber-700 dark:text-amber-300" : ""}>{actualizando ? "Actualizando datos…" : desactualizado ? "No se pudo actualizar. Se conserva la última consulta." : "Consulta actualizada"}</span>
+      </div>}
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+      {comparacion && <div role="tablist" aria-label={`Contenido de ${parametro.nmbr}`} className={`flex gap-6 border-b border-black/10 dark:border-white/10 shrink-0 ${pantallaCompleta ? "px-4 md:px-8 pt-4" : "mb-5"}`}>
+        {[{ resumen: false, nombre: vistaKpi ? "KPI" : "Gráfico" }, { resumen: true, nombre: "Resumen por equipo" }].map((tab, indice) => <button
+          key={String(tab.resumen)} type="button" role="tab" id={`${idPanel}-${tab.resumen ? "resumen" : "grafico"}`}
+          aria-controls={`${idPanel}-contenido`} aria-selected={mostrarResumen === tab.resumen} tabIndex={mostrarResumen === tab.resumen ? 0 : -1}
+          onClick={() => cambiarPanel(tab.resumen)}
+          onKeyDown={e => {
+            if (!["ArrowRight", "ArrowLeft", "Home", "End"].includes(e.key)) return;
+            e.preventDefault();
+            const siguiente = e.key === "Home" ? 0 : e.key === "End" ? 1 : 1 - indice;
+            cambiarPanel(siguiente === 1);
+            (e.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[siguiente])?.focus();
+          }}
+          className={`pb-3 text-sm font-medium border-b-2 -mb-px transition-colors ${mostrarResumen === tab.resumen ? "border-[#809f00] dark:border-[#ccff00] text-gray-900 dark:text-white" : "border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"}`}>
+          {tab.nombre}
+        </button>)}
+      </div>}
+      <div role={comparacion ? "tabpanel" : undefined} id={`${idPanel}-contenido`}
+        className={pantallaCompleta ? "flex-1 min-h-0 flex flex-col overflow-y-auto overscroll-contain p-4 md:p-8" : undefined}
+        aria-labelledby={comparacion ? `${idPanel}-${mostrarResumen ? "resumen" : "grafico"}` : undefined}>
+      {comparacion && !mostrarResumen && !vistaKpi && <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mb-4" aria-label="Series visibles">
+        {fuentesCompletas.map(f => <button type="button" key={f.serie.id_serie} aria-pressed={!ocultas.includes(f.serie.id_serie)}
+          onClick={() => { onHover(null); setOcultas?.(ocultas.includes(f.serie.id_serie) ? ocultas.filter(id => id !== f.serie.id_serie) : [...ocultas, f.serie.id_serie]); }}
+          className={`flex items-center gap-2 text-xs py-1 ${ocultas.includes(f.serie.id_serie) ? "opacity-40 line-through" : "text-gray-700 dark:text-gray-200"}`}>
+          <span className="w-5 h-0.5" style={{ backgroundColor: colorDatalogger(f.serie.id_dspstv) }} />{nombreFuente(f.serie)}
+        </button>)}
+        {!!ocultas.length && <button type="button" onClick={() => { setOcultas?.([]); onHover(null); }} className="text-xs font-semibold underline">Mostrar todos</button>}
+      </div>}
+      {!comparacion && !serie.configuracion.confirmada && <p className="mb-4 text-xs text-amber-700 dark:text-amber-300">{significado === "desconocido" ? "Significado pendiente: se muestra el valor recibido sin interpretarlo como eventos." : "Clasificación sugerida por el encabezado. Pendiente de confirmar en los datos del datalogger."}</p>}
+      {!comparacion && resumen.parcial && <p className="mb-4 text-xs text-amber-700 dark:text-amber-300">Conteo parcial: falta la lectura anterior al rango o hubo una disminución sin regla de reinicio confirmada.</p>}
+      {!comparacion && resumen.sin_origen && <p className="mb-4 text-xs text-amber-700 dark:text-amber-300">Hay lecturas manuales sin formato identificado. Se excluyeron para no mezclar tramas.</p>}
+      {fuentesCompletas.some(f => f.datos.muestreado) && !mostrarResumen && !vistaKpi && !modoDelta && <p className="mb-3 text-xs text-gray-500">Se reducen los puntos del gráfico para facilitar la lectura. Los resúmenes y las barras usan todas las mediciones.</p>}
+      {mostrarResumen ? <ComparacionDataloggers fuentes={fuentesCompletas} zonaHoraria={zonaHoraria} etiquetaKpi={etiquetaKpi}
+        kpi={false} ampliado={pantallaCompleta} ocultas={ocultas} onSolo={aislarFuente} /> : vistaKpi ? (pantallaCompleta ? <KpisAmpliados fuentes={fuentesCompletas} etiqueta={etiquetaKpi} zonaHoraria={zonaHoraria} onEvolucion={aislarFuente} /> : comparacion ? <ComparacionDataloggers fuentes={fuentesCompletas} zonaHoraria={zonaHoraria} etiquetaKpi={etiquetaKpi}
+        kpi ocultas={ocultas} onSolo={aislarFuente} /> :
+        <div className="py-4 sm:py-6" aria-live="polite">
+          <p className="text-xs font-bold uppercase tracking-widest text-gray-500 dark:text-gray-400">{etiquetaKpi}</p>
+          <p className="mt-2 text-5xl sm:text-6xl font-semibold tabular-nums tracking-tight text-gray-900 dark:text-white">
+            {resumen.valor === null ? "—" : formatoNumero.format(resumen.valor)}
+            {significado === "continuo" && unidad && !["-", "N/A"].includes(unidad) && <span className="text-lg ml-2">{unidad}</span>}
+          </p>
+          <p className="mt-3 text-sm text-gray-500 dark:text-gray-400">
+            {significado === "secuencia" ? "Tramas únicas por fecha y consecutivo; los saltos no cuentan como acciones." : significado === "contador" ? "Incrementos del contador dentro del rango seleccionado." : significado === "estado" ? "Cambios observados de 0 a 1 dentro del rango." : "Valor más reciente dentro del rango seleccionado."}
+          </p>
+          {(significado === "contador" || significado === "secuencia") && <p className="mt-3 text-sm text-gray-600 dark:text-gray-300">
+            {significado === "secuencia" ? "Último consecutivo" : "Acumulado actual"}: {resumen.ultimo === null ? "—" : formatoNumero.format(resumen.ultimo)}
+          </p>}
+          <div className="mt-5 flex flex-wrap gap-x-5 gap-y-2 border-t border-black/10 dark:border-white/10 pt-4 text-xs text-gray-500 dark:text-gray-400">
+            <span>{resumen.lecturas.toLocaleString("es")} lecturas únicas</span>
+            {resumen.duplicados > 0 && <span>{resumen.duplicados} duplicados excluidos</span>}
+            {resumen.reinicios > 0 && <span>{resumen.reinicios} disminuciones del contador</span>}
+            {significado === "secuencia" && <span>{resumen.saltos_secuencia} posiciones saltadas</span>}
+            {resumen.ultima_lectura && <span>Última lectura: {formatearFechaCorta(resumen.ultima_lectura, zonaHoraria)}</span>}
+          </div>
+        </div>
+      ) : (
+      <>
+      {!comparacion && <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
         {tiles.map((tile) => (
           <div key={tile.etiqueta} className="bg-black/5 dark:bg-white/5 rounded-xl p-3">
             <div className="text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">{tile.etiqueta}</div>
             <div className="text-lg font-bold text-gray-900 dark:text-white mt-0.5">{tile.valor}</div>
           </div>
         ))}
-      </div>
+      </div>}
 
       {items.length === 0 ? (
         <div className="py-24 text-center text-gray-500 dark:text-gray-400 text-sm">
-          No hay mediciones registradas para este parámetro todavía.
+          {fuentesVisibles.length === 0 ? "Activa un datalogger en la leyenda para ver su serie." : "No hay mediciones registradas para este parámetro en el período seleccionado."}
         </div>
       ) : (
-        <div className={`relative w-full overflow-x-auto ${pantallaCompleta ? "flex-1 flex items-center" : ""}`}>
+        <div ref={areaGraficoRef} className={`relative w-full ${pantallaCompleta ? "flex-1 min-h-[240px]" : "overflow-x-auto"}`}>
           <svg
             ref={svgRef}
             viewBox={`0 0 ${ANCHO} ${ALTO}`}
@@ -893,7 +1099,9 @@ function GraficoDeParametro({ parametro, items, tipoGrafico, zonaHoraria, hover,
             // sin esto el navegador lo interpreta como una selección de
             // texto normal -resalta en azul las etiquetas del eje Y y
             // muestra su menú contextual de "copiar/buscar" al soltar-.
-            className="w-full h-auto min-w-[600px] cursor-crosshair select-none"
+            className={`${pantallaCompleta ? "absolute inset-0 w-full h-full" : "w-full h-auto"} cursor-crosshair select-none`}
+            onDoubleClick={() => { setZoomT(null); onHover(null); }}
+            role="img" aria-label={`Gráfico de ${parametro.nmbr}`}
             onMouseDown={iniciarSeleccion}
             onMouseMove={actualizarSeleccion}
             onMouseUp={finalizarSeleccion}
@@ -941,24 +1149,18 @@ function GraficoDeParametro({ parametro, items, tipoGrafico, zonaHoraria, hover,
                 dibujan lado a lado dentro de cada bucket para que dos
                 dataloggers no se tapen entre sí. */}
             {modoDelta &&
-              seriesDeBarras.map((s, i) => {
-                const color = COLORES_SERIE[i];
-                // Ancho del bucket en píxeles, derivado de dos buckets
-                // consecutivos reales (no de una constante): un mes dura
-                // distinto que otro, y así la barra no desborda.
-                const anchoBucket =
-                  s.barras.length > 1
-                    ? Math.abs(xDeTiempo(s.barras[1].t) - xDeTiempo(s.barras[0].t))
-                    : (ANCHO - PAD.left - PAD.right) / 12;
-                const anchoBarra = Math.max(
-                  1,
-                  (Math.min(anchoBucket, 64) * 0.7) / Math.max(seriesDeBarras.length, 1),
-                );
+              seriesDeBarras.map((s, indiceSerie) => {
+                const color = s.color;
+
                 return (
-                  <g key={`barras-${s.nombre}`}>
+                  <g key={`barras-${s.id}`} data-serie-id={s.id}>
                     {s.barras.map((b) => {
-                      const xBucket = xDeTiempo(b.t);
-                      const x = xBucket + i * anchoBarra;
+                      if (b.t_fin <= minT || b.t > maxT) return null;
+                      const izquierda = xDeTiempo(Math.max(b.t, minT));
+                      const derecha = xDeTiempo(Math.min(b.t_fin, maxT));
+                      const anchoGrupo = Math.min(80, derecha - izquierda) * 0.8;
+                      const anchoBarra = Math.max(0.5, anchoGrupo / seriesDeBarras.length);
+                      const x = izquierda + (derecha - izquierda - anchoGrupo) / 2 + indiceSerie * anchoBarra;
                       const y = yDeDelta(b.delta);
                       const alto = Math.max(1, ALTO - PAD.bottom - y);
                       if (x + anchoBarra < PAD.left || x > ANCHO - PAD.right) return null;
@@ -971,22 +1173,23 @@ function GraficoDeParametro({ parametro, items, tipoGrafico, zonaHoraria, hover,
                           height={alto}
                           fill={color}
                           fillOpacity={0.85}
-                        />
+                        ><title>{formatearFechaCorta(new Date(b.t).toISOString(), zonaHoraria)}: {formatoNumero.format(b.delta)} · {s.nombre}</title></rect>
                       );
                     })}
                   </g>
                 );
               })}
 
-            {!modoDelta && series.map((s, i) => {
-              const color = COLORES_SERIE[i];
+            {!modoDelta && series.map((s) => {
+              const color = s.color;
+
               const itemsVisibles = s.items.filter(enRangoZoom);
               const coords = itemsVisibles.map((item) => ({ x: xDe(item), y: yDe(item) }));
               // Un contador y un estado se mantienen planos entre lecturas
               // y saltan de golpe: la spline los dibujaría subiendo de a
               // poco, inventando valores intermedios que nunca se midieron.
               const trazo =
-                tipoVisualizacion === "continuo" ? pathDeLinea(coords) : pathDeEscalon(coords);
+                presentacion === "linea" || presentacion === "area" ? pathDeLinea(coords) : pathDeEscalon(coords);
               // Radio del punto visible, adaptado a cuánto espacio real
               // hay entre una medición y la siguiente. Con un radio fijo
               // (antes 3px siempre), una serie de varios cientos de
@@ -1003,7 +1206,7 @@ function GraficoDeParametro({ parametro, items, tipoGrafico, zonaHoraria, hover,
               const radioPunto = espacioPorPunto > 12 ? 3 : espacioPorPunto > 6 ? 2 : 0;
               // El punto resaltado solo se dibuja en la serie a la que
               // pertenece, para que su color coincida con el de su línea.
-              const indiceHover = hover
+              const indiceHover = hover && hover.serieId === s.id
                 ? itemsVisibles.findIndex((item) => item.id_registro === hover.item.id_registro)
                 : -1;
               const puntoEnHover = indiceHover >= 0 ? coords[indiceHover] : null;
@@ -1017,7 +1220,7 @@ function GraficoDeParametro({ parametro, items, tipoGrafico, zonaHoraria, hover,
                     ` L ${coords[coords.length - 1].x},${yBase} Z`
                   : "";
               return (
-                <g key={s.nombre}>
+                <g key={s.id} data-serie-id={s.id}>
                   {tipoGrafico === "area" && areaPath && <path d={areaPath} fill={color} fillOpacity={0.18} stroke="none" />}
                   <path d={trazo} fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
                   {/* Cada medición lleva un punto chico -guía visual de que
@@ -1027,7 +1230,7 @@ function GraficoDeParametro({ parametro, items, tipoGrafico, zonaHoraria, hover,
                       hover sin agrandar lo que se ve. El punto en hover se
                       resalta aparte, más abajo (línea guía + glow). */}
                   {itemsVisibles.map((item, indice) => {
-                    const puntoActivo = hover?.item.id_registro === item.id_registro;
+                    const puntoActivo = hover?.serieId === s.id && hover.item.id_registro === item.id_registro;
                     return (
                     <g key={item.id_registro}>
                       {!puntoActivo && radioPunto > 0 && (
@@ -1039,9 +1242,9 @@ function GraficoDeParametro({ parametro, items, tipoGrafico, zonaHoraria, hover,
                         r={6}
                         fill="transparent"
                         className="cursor-pointer"
-                        onMouseEnter={() => onHover({ parametroId: parametro.id_prmtr, x: coords[indice].x, y: coords[indice].y, item })}
+                        onMouseEnter={() => onHover({ serieId: s.id, parametroId: parametro.id_prmtr, x: coords[indice].x, y: coords[indice].y, item })}
                         onMouseLeave={() =>
-                          onHover(hover?.item.id_registro === item.id_registro ? null : hover)
+                          onHover(hover?.serieId === s.id && hover.item.id_registro === item.id_registro ? null : hover)
                         }
                       />
                     </g>
@@ -1112,7 +1315,7 @@ function GraficoDeParametro({ parametro, items, tipoGrafico, zonaHoraria, hover,
               // techo del gráfico- quedaba recortado a la mitad en vez de
               // mostrarse completo por encima de todo lo demás.
               <div
-                className="fixed pointer-events-none bg-white dark:bg-[#0b1220] border border-black/20 dark:border-white/20 rounded-lg px-3 py-2 text-xs text-gray-900 dark:text-white shadow-xl z-50"
+                role="tooltip" className="fixed pointer-events-none bg-white dark:bg-[#0b1220] border border-black/20 dark:border-white/20 rounded-lg px-3 py-2 text-xs text-gray-900 dark:text-white shadow-xl z-[150]"
                 style={{
                   left: posicionTooltip.left,
                   top: posicionTooltip.top,
@@ -1132,15 +1335,23 @@ function GraficoDeParametro({ parametro, items, tipoGrafico, zonaHoraria, hover,
                 </div>
                 {/* Solo el dispositivo: la ubicación ya está fija por
                     el selector obligatorio, repetirla sería ruido. */}
-                <div className="text-gray-500 dark:text-gray-400">{hover.item.dispositivo_nombre}</div>
+                <div className="text-gray-500 dark:text-gray-400">{series.find(s => s.id === hover.serieId)?.nombre ?? hover.item.dispositivo_nombre}</div>
                 <div className="text-gray-500 dark:text-gray-400">
-                  {formatearFechaCorta(hover.item.fch_hr, zonaHoraria)}
+                  {new Date(hover.item.fch_hr).toLocaleString("es", { timeZone: zonaHoraria, dateStyle: "medium", timeStyle: "medium" })}
                 </div>
               </div>,
               document.body,
             )}
         </div>
       )}
+      </>
+      )}
+      </div>
+      {pantallaCompleta && !mostrarResumen && !vistaKpi && <div className="shrink-0 border-t border-black/10 dark:border-white/10 px-4 md:px-8 py-3 flex flex-wrap justify-between gap-2 text-xs text-gray-500 dark:text-gray-400">
+        <span>Arrastra para acercar · Doble clic para restablecer · Teclas + y −</span>
+        <span>{fuentesVisibles.length} de {fuentesCompletas.length} series visibles</span>
+      </div>}
     </div>
   );
+  return pantallaCompleta ? <><div style={{ height: altoMarcador }} aria-hidden="true" />{createPortal(contenido, document.body)}</> : contenido;
 }

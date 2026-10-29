@@ -11,6 +11,7 @@ import { aValorDatetimeLocal, type RangoFechas } from "../utils/fechas";
  */
 
 interface SelectorRangoFechasProps {
+  plano?: boolean;
   seleccion: RangoFechas;
   onCambiarSeleccion: (rango: RangoFechas) => void;
   onAplicar: (rango: RangoFechas) => void;
@@ -18,6 +19,7 @@ interface SelectorRangoFechasProps {
 }
 
 export default function SelectorRangoFechas({
+  plano = false,
   seleccion,
   onCambiarSeleccion,
   onAplicar,
@@ -57,47 +59,51 @@ export default function SelectorRangoFechas({
   };
 
   return (
-    <fieldset className="flex-1">
+    <fieldset className="min-w-0">
       <legend className="text-sm font-bold text-gray-700 dark:text-gray-200 mb-2">
         Rango de fechas
       </legend>
-      <div className="flex flex-col sm:flex-row gap-3">
-        <label className="flex flex-col gap-1 text-sm text-gray-700 dark:text-gray-200">
+      <div className={plano ? "grid min-w-0 grid-cols-1 gap-3 min-[420px]:grid-cols-2" : "flex flex-col sm:flex-row gap-3"}>
+        <label className="flex min-w-0 flex-col gap-1 text-sm text-gray-700 dark:text-gray-200">
           Fecha inicio
           <input
             type="datetime-local"
             value={seleccion.inicio}
             max={maxDatetime}
             onChange={(e) => onCambiarSeleccion({ ...seleccion, inicio: e.target.value })}
-            className="rounded-lg border border-black/20 dark:border-white/20 bg-transparent px-3 py-1.5 text-sm text-gray-900 dark:text-white [color-scheme:light] dark:[color-scheme:dark]"
+            className="w-full min-w-0 rounded-xl border border-black/20 dark:border-white/20 bg-transparent px-3 py-2 text-sm text-gray-900 dark:text-white [color-scheme:light] dark:[color-scheme:dark]"
           />
         </label>
-        <label className="flex flex-col gap-1 text-sm text-gray-700 dark:text-gray-200">
+        <label className="flex min-w-0 flex-col gap-1 text-sm text-gray-700 dark:text-gray-200">
           Fecha fin
           <input
             type="datetime-local"
             value={seleccion.fin}
             max={maxDatetime}
             onChange={(e) => onCambiarSeleccion({ ...seleccion, fin: e.target.value })}
-            className="rounded-lg border border-black/20 dark:border-white/20 bg-transparent px-3 py-1.5 text-sm text-gray-900 dark:text-white [color-scheme:light] dark:[color-scheme:dark]"
+            className="w-full min-w-0 rounded-xl border border-black/20 dark:border-white/20 bg-transparent px-3 py-2 text-sm text-gray-900 dark:text-white [color-scheme:light] dark:[color-scheme:dark]"
           />
         </label>
       </div>
 
       {error && <p className="text-xs text-red-600 dark:text-red-400 mt-2">{error}</p>}
 
-      <div className="flex gap-2 mt-3">
+      <div className={plano ? "mt-4 flex flex-wrap items-center gap-2" : "flex gap-2 mt-3"}>
         <button
           type="button"
           onClick={handleAplicar}
-          className="px-4 py-2 rounded-xl bg-[#ccff00] text-gray-900 text-sm font-bold hover:brightness-95 transition-all"
+          className={plano
+            ? "min-w-32 px-5 py-2 rounded-xl bg-[#ccff00] text-gray-900 text-sm font-bold hover:brightness-95 transition-all"
+            : "px-4 py-2 rounded-xl bg-[#ccff00] text-gray-900 text-sm font-bold hover:brightness-95 transition-all"}
         >
           APLICAR
         </button>
         <button
           type="button"
           onClick={handleLimpiar}
-          className="px-4 py-2 rounded-xl border border-black/20 dark:border-white/20 text-gray-700 dark:text-gray-200 text-sm font-bold hover:bg-black/10 dark:hover:bg-white/10 transition-all"
+          className={plano
+            ? "px-3 py-2 rounded-xl text-gray-600 dark:text-gray-300 text-sm font-semibold hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+            : "px-4 py-2 rounded-xl border border-black/20 dark:border-white/20 text-gray-700 dark:text-gray-200 text-sm font-bold hover:bg-black/10 dark:hover:bg-white/10 transition-all"}
         >
           LIMPIAR FILTRO
         </button>

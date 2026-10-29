@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch, ApiError } from "../services/api";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../hooks/useAuth";
 import Sidebar from "../components/layout/Sidebar";
 import Topbar from "../components/layout/Topbar";
 import MapaEstacionesCliente, {
@@ -68,8 +68,7 @@ export default function MapaEstacionesPage() {
 
   useEffect(() => {
     let cancelado = false;
-    setCargando(true);
-    setError(null);
+    queueMicrotask(() => { if (!cancelado) { setCargando(true); setError(null); } });
 
     apiFetch<{ items: EstacionParaMapa[] }>("/mapa-cliente")
       .then((res) => {

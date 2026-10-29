@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from "react";
-import { aValorDatetimeLocal, type RangoFechas } from "../utils/fechas";
+import { useCallback, useEffect, useImperativeHandle, useRef, useState, type Ref } from "react";
+import type { RangoFechas } from "../utils/fechas";
+import type { CambioRangoGrafico } from "../pages/actualizacionGraficos";
 
 /**
  * HU15: selector de rango de fechas tipo línea de tiempo con dos manijas
@@ -44,110 +45,119 @@ function formatearEtiquetaHandle(fecha: Date, zonaHoraria: string): string {
 function calcularRango(rangoRapido: RangoRapido): RangoFechas {
   const fin = new Date();
   const inicio = new Date(fin.getTime() - SPANS_MS[rangoRapido]);
-  return { inicio: aValorDatetimeLocal(inicio), fin: aValorDatetimeLocal(fin) };
+  return { inicio: inicio.toISOString(), fin: fin.toISOString() };
 }
 
 interface Props {
+  controlRef?: Ref<ControlTimeline>;
   zonaHoraria: string;
-  onCambiarRango: (rango: RangoFechas) => void;
+  onCambiarRango: (rango: RangoFechas, cambio: CambioRangoGrafico) => void;
 }
 
-export default function SelectorRangoFechasTimeline({ zonaHoraria, onCambiarRango }: Props) {
+export interface ControlTimeline {
+  actualizar: () => void;
+}
+
+export default function SelectorRangoFechasTimeline({ zonaHoraria, onCambiarRango, controlRef }: Props) {
   const [rangoRapido, setRangoRapido] = useState<RangoRapido>("7d");
-  // true mientras el rango activo siga siendo "hasta ahora" (botón rápido
-  // sin arrastrar manijas): se recalcula cada 60s para incluir la hora
-  // actual (CA5). Arrastrar una manija o editar a mano lo desactiva.
   const [siguiendoAhora, setSiguiendoAhora] = useState(true);
   const [rango, setRango] = useState<RangoFechas>(() => calcularRango("7d"));
   const [arrastrando, setArrastrando] = useState<"inicio" | "fin" | null>(null);
-
+  const [dominioFin, setDominioFin] = useState(() => Date.now());
   const trackRef = useRef<HTMLDivElement>(null);
   const rangoRef = useRef(rango);
-  useEffect(() => {
-    rangoRef.current = rango;
-  }, [rango]);
+  const inicioFijo = useRef(false);
+  const inicioDelArrastre = useRef({ rango, siguiendoAhora: true });
+  const huboMovimiento = useRef(false);
 
-  // Notifica al padre solo en cambios confirmados (rango rápido, edición
-  // manual, fin de arrastre, tick de auto-actualización) — nunca en cada
-  // pixel movido durante el arrastre, para no disparar un fetch por frame.
-  useEffect(() => {
-    onCambiarRango(rango);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const publicar = useCallback((nuevo: RangoFechas, motivo: CambioRangoGrafico["motivo"]) => {
+    rangoRef.current = nuevo;
+    setRango(nuevo);
+    onCambiarRango(nuevo, { motivo });
+  }, [onCambiarRango]);
 
   useEffect(() => {
-    if (!siguiendoAhora) return;
-    const id = setInterval(() => {
-      const nuevo = calcularRango(rangoRapido);
-      setRango(nuevo);
-      onCambiarRango(nuevo);
-    }, INTERVALO_AUTOACTUALIZACION_MS);
-    return () => clearInterval(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [siguiendoAhora, rangoRapido]);
+    onCambiarRango(rangoRef.current, { motivo: "seleccion" });
+  }, [onCambiarRango]);
+
+  const refrescar = useCallback(() => {
+    const nuevo = siguiendoAhora
+      ? { inicio: inicioFijo.current ? rangoRef.current.inicio : calcularRango(rangoRapido).inicio, fin: new Date().toISOString() }
+      : { ...rangoRef.current };
+    if (siguiendoAhora) setDominioFin(Date.parse(nuevo.fin));
+    publicar(nuevo, "refresco");
+  }, [siguiendoAhora, rangoRapido, publicar]);
+
+  useImperativeHandle(controlRef, () => ({ actualizar: refrescar }), [refrescar]);
+
+  useEffect(() => {
+    if (!siguiendoAhora || arrastrando) return;
+    const alVolver = () => { if (document.visibilityState === "visible") refrescar(); };
+    const id = setInterval(() => { if (document.visibilityState === "visible") refrescar(); }, INTERVALO_AUTOACTUALIZACION_MS);
+    document.addEventListener("visibilitychange", alVolver);
+    window.addEventListener("online", alVolver);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", alVolver);
+      window.removeEventListener("online", alVolver);
+    };
+  }, [siguiendoAhora, arrastrando, refrescar]);
 
   const aplicarRangoRapido = (r: RangoRapido) => {
     setRangoRapido(r);
     setSiguiendoAhora(true);
+    inicioFijo.current = false;
     const nuevo = calcularRango(r);
-    setRango(nuevo);
-    onCambiarRango(nuevo);
+    setDominioFin(Date.parse(nuevo.fin));
+    publicar(nuevo, "seleccion");
   };
 
-  const actualizarDatos = () => {
-    const nuevo = siguiendoAhora ? calcularRango(rangoRapido) : { ...rangoRef.current };
-    setRango(nuevo);
-    onCambiarRango(nuevo);
-  };
-
-  const dominioFin = new Date().getTime();
   const dominioInicio = dominioFin - SPANS_MS[rangoRapido];
   const dominioSpan = dominioFin - dominioInicio || 1;
-
   const inicioMs = new Date(rango.inicio).getTime();
   const finMs = new Date(rango.fin).getTime();
-
-  const porcentajeDe = (t: number) => {
-    const acotado = Math.min(Math.max(t, dominioInicio), dominioFin);
-    return ((acotado - dominioInicio) / dominioSpan) * 100;
-  };
-
-  const tiempoDesdeClientX = (clientX: number): number => {
-    const el = trackRef.current;
-    if (!el) return dominioInicio;
-    const rect = el.getBoundingClientRect();
-    const frac = Math.min(Math.max((clientX - rect.left) / rect.width, 0), 1);
-    return dominioInicio + frac * dominioSpan;
-  };
+  const porcentajeDe = (t: number) => ((Math.min(Math.max(t, dominioInicio), dominioFin) - dominioInicio) / dominioSpan) * 100;
 
   useEffect(() => {
     if (!arrastrando) return;
-
     const onMove = (e: PointerEvent) => {
-      const t = tiempoDesdeClientX(e.clientX);
-      setSiguiendoAhora(false);
-      setRango((actual) => {
-        const actualInicioMs = new Date(actual.inicio).getTime();
-        const actualFinMs = new Date(actual.fin).getTime();
-        if (arrastrando === "inicio") {
-          return { inicio: aValorDatetimeLocal(new Date(Math.min(t, actualFinMs))), fin: actual.fin };
-        }
-        return { inicio: actual.inicio, fin: aValorDatetimeLocal(new Date(Math.max(t, actualInicioMs))) };
-      });
+      const rect = trackRef.current?.getBoundingClientRect();
+      if (!rect?.width) return;
+      const fraccion = Math.min(Math.max((e.clientX - rect.left) / rect.width, 0), 1);
+      const t = dominioInicio + fraccion * dominioSpan;
+      const actual = rangoRef.current;
+      const nuevo = arrastrando === "inicio"
+        ? { inicio: new Date(Math.min(t, Date.parse(actual.fin))).toISOString(), fin: actual.fin }
+        : { inicio: actual.inicio, fin: new Date(Math.max(t, Date.parse(actual.inicio))).toISOString() };
+      huboMovimiento.current ||= nuevo.inicio !== actual.inicio || nuevo.fin !== actual.fin;
+      // La referencia se escribe antes de pointerup, incluso si React aún no pintó el último movimiento.
+      rangoRef.current = nuevo;
+      setRango(nuevo);
     };
     const onUp = () => {
       setArrastrando(null);
-      onCambiarRango(rangoRef.current);
+      if (!huboMovimiento.current) return;
+      inicioFijo.current = true;
+      const seguir = arrastrando === "inicio" ? inicioDelArrastre.current.siguiendoAhora : Date.parse(rangoRef.current.fin) >= dominioFin - 1;
+      setSiguiendoAhora(seguir);
+      const nuevo = seguir ? { ...rangoRef.current, fin: new Date().toISOString() } : rangoRef.current;
+      if (seguir) setDominioFin(Date.parse(nuevo.fin));
+      publicar(nuevo, "seleccion");
     };
-
+    const onCancel = () => {
+      rangoRef.current = inicioDelArrastre.current.rango;
+      setRango(rangoRef.current);
+      setArrastrando(null);
+    };
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onCancel);
     return () => {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onCancel);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [arrastrando, dominioInicio, dominioSpan]);
+  }, [arrastrando, dominioInicio, dominioSpan, dominioFin, publicar]);
 
   const inicioPct = porcentajeDe(inicioMs);
   const finPct = porcentajeDe(finMs);
@@ -203,8 +213,27 @@ export default function SelectorRangoFechasTimeline({ zonaHoraria, onCambiarRang
                 {formatearEtiquetaHandle(new Date(t), zonaHoraria)}
               </span>
               <div
+                role="slider" tabIndex={0} aria-label={cual === "inicio" ? "Fecha de inicio" : "Fecha de fin"}
+                aria-valuemin={dominioInicio} aria-valuemax={dominioFin} aria-valuenow={t}
+                aria-valuetext={formatearEtiquetaHandle(new Date(t), zonaHoraria)}
+                onKeyDown={e => {
+                  if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) return;
+                  e.preventDefault();
+                  const paso = Math.max(60_000, dominioSpan / 100);
+                  const destino = e.key === "Home" ? dominioInicio : e.key === "End" ? dominioFin : t + (e.key === "ArrowRight" ? paso : -paso);
+                  const valor = Math.min(dominioFin, Math.max(dominioInicio, destino));
+                  const seguir = cual === "fin" && valor >= dominioFin - 1;
+                  const nuevo = cual === "inicio" ? { inicio: new Date(Math.min(valor, finMs)).toISOString(), fin: rango.fin }
+                    : { inicio: rango.inicio, fin: seguir ? new Date().toISOString() : new Date(Math.max(valor, inicioMs)).toISOString() };
+                  inicioFijo.current = true;
+                  if (cual === "fin") setSiguiendoAhora(seguir);
+                  if (seguir) setDominioFin(Date.parse(nuevo.fin));
+                  publicar(nuevo, "seleccion");
+                }}
                 onPointerDown={(e) => {
                   e.preventDefault();
+                  inicioDelArrastre.current = { rango: rangoRef.current, siguiendoAhora };
+                  huboMovimiento.current = false;
                   setArrastrando(cual);
                 }}
                 className="w-2 h-full -translate-x-1/2 bg-gray-700 dark:bg-white rounded cursor-ew-resize"
@@ -217,6 +246,7 @@ export default function SelectorRangoFechasTimeline({ zonaHoraria, onCambiarRang
       <div className="flex items-center justify-between mt-3 flex-wrap gap-3">
         <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
           🌐 {zonaHoraria}
+          <span className="ml-2">{siguiendoAhora ? "Actualización cada 60 s" : "Rango fijo"}</span>
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
@@ -238,7 +268,8 @@ export default function SelectorRangoFechasTimeline({ zonaHoraria, onCambiarRang
 
         <button
           type="button"
-          onClick={actualizarDatos}
+          onClick={refrescar}
+          disabled={arrastrando !== null}
           className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline"
         >
           Actualizar datos

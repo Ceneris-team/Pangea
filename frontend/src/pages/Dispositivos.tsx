@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { apiFetch, ApiError } from "../services/api";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../hooks/useAuth";
 import Sidebar from "../components/layout/Sidebar";
 import Topbar from "../components/layout/Topbar";
 import DrawerPanel from "../components/layout/DrawerPanel";
@@ -148,7 +148,7 @@ export default function Dispositivos() {
   }, []);
 
   useEffect(() => {
-    setPagina(1);
+    queueMicrotask(() => setPagina(1));
   }, [busqueda, idUbccn, estado, marca]);
 
   function cargarDispositivos() {
@@ -182,7 +182,13 @@ export default function Dispositivos() {
     };
   }
 
-  useEffect(cargarDispositivos, [busqueda, idUbccn, estado, marca, pagina]);
+  useEffect(() => {
+    let cancelado = false;
+    let limpiar: (() => void) | undefined;
+    queueMicrotask(() => { if (!cancelado) limpiar = cargarDispositivos(); });
+    return () => { cancelado = true; limpiar?.(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [busqueda, idUbccn, estado, marca, pagina]);
 
   // HU11: formulario de "Añadir dispositivo" como ventana emergente sobre
   // el listado (mismo patrón que Conexiones FTP y Parámetros).
@@ -360,8 +366,9 @@ export default function Dispositivos() {
   useEffect(() => {
     if (!dispositivoEstadisticas) return;
     let cancelado = false;
-    setCargandoEstadisticas(true);
-    setErrorEstadisticas(null);
+    queueMicrotask(() => {
+      if (!cancelado) { setCargandoEstadisticas(true); setErrorEstadisticas(null); }
+    });
 
     apiFetch<EstadisticasDispositivo>(`/dispositivos/${dispositivoEstadisticas.id_dspstv}/estadisticas`, {
       params: {

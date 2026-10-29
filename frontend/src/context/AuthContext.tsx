@@ -1,5 +1,6 @@
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { ApiError, apiFetch, limpiarDatosDeSesion } from "../services/api";
+import { AuthContext } from "./authContextValue";
 
 interface LoginResponse {
   access_token: string;
@@ -50,7 +51,7 @@ interface AuthState {
   zonaHoraria: string;
 }
 
-interface AuthContextValue extends AuthState {
+export interface AuthContextValue extends AuthState {
   actualizarAccesoComercial: (habilitada: boolean) => void;
   puedeOperar: boolean;
   isAuthenticated: boolean;
@@ -71,8 +72,6 @@ interface AuthContextValue extends AuthState {
 }
 
 const ZONA_HORARIA_DEFECTO = "America/Lima";
-
-const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 function readInitialState(): AuthState {
   // Ningún token que leer: solo los datos de UI que dejó el login
@@ -273,10 +272,4 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       {children}
     </AuthContext.Provider>
   );
-}
-
-export function useAuth(): AuthContextValue {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error("useAuth debe usarse dentro de <AuthProvider>");
-  return ctx;
 }

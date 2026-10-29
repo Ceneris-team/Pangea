@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAuth } from "../../context/AuthContext";
+import { useAuth } from "../../hooks/useAuth";
 import { apiFetch, ApiError } from "../../services/api";
 import SelectorZonaHoraria from "./SelectorZonaHoraria";
 
