@@ -16,29 +16,29 @@ TABLERO = "PP"
 HU = "HU-18"
 NOMBRE_HU = "Desactivar dispositivo"
 SUBTAREA_QA = "PP-413"
-VERSION = "v0.2 (borrador)"
-FECHA = "29/10/2026"
+VERSION = "v0.3"
+FECHA = "30/10/2026"
 RESPONSABLE = "Elliot (JS), Aseguramiento de Calidad (QA)"
-ENTORNO = "Local (BD de test, FTP local real y Edge), sin producción; pruebas del 28/10/2026"
-RAMAS = "qa-elliot (commit 61fdd71); el código de HU-18 está en main, dev y qa-elliot"
+ENTORNO = "Local (BD de test, FTP local real y Edge), sin producción; ronda 1 el 28/10 y ronda 2 el 30/10/2026"
+RAMAS = "qa-elliot (commit 27ac90a, con la corrección dccdb60 de Jareth integrada desde dev)"
 REVISA = "Product Owner"
 
-VEREDICTO = "NO APTO"
-RESUMEN = ("Informe en <b>borrador</b>, con un pendiente a la vista. CA1 y CA3 se cumplen, y CA2 en parte: el dispositivo pasa a Inactivo, "
-           "pero <b>el polling FTP sigue activo</b> (DEF-04, bloqueante, subtarea PP-190). Hay <b>1 defecto del producto</b> y "
-           "<b>3 observaciones para el PO</b> que no cambian el estado de PP-189.")
+VEREDICTO = "APTO CON OBSERVACIONES"
+RESUMEN = ("Ronda 2. CA1, CA2 y CA3 se cumplen: el dispositivo pasa a Inactivo, el mensaje es el esperado y <b>el polling FTP ya se detiene</b> "
+           "(DEF-04 corregido por Jareth en dccdb60 y verificado con un FTP local real). <b>0 defectos abiertos.</b> "
+           "Quedan <b>3 observaciones que decide el PO</b> (OBS-09, OBS-10 y OBS-13); no cambian el estado de ninguna subtarea.")
 
 KPIS = [
-    ("27 / 29", "casos funcionales<br/>aprobados", "fail"),
-    ("1", "defecto<br/>del producto", "fail"),
-    ("27 / 29", "pruebas automatizadas<br/>aprobadas", "fail"),
+    ("29 / 29", "casos funcionales<br/>aprobados", "ok"),
+    ("0", "defectos abiertos<br/>(1 corregido)", "ok"),
+    ("29 / 29", "pruebas automatizadas<br/>aprobadas", "ok"),
     ("6 / 6", "requisitos cubiertos<br/>(RTM)", "ok"),
     ("5", "observaciones<br/>(3 para el PO)", "warn"),
 ]
 
 SUBTAREAS = [
     ("PP-189", "HU-18 · Implementar acción «Desactivar» con confirmación", "Listo", "Modal, estado Inactivo, mensaje y botón Reactivar funcionan; roles correctos (CP-052 a 058). Solo observaciones del PO (OBS-09, OBS-10)."),
-    ("PP-190", "HU-18 · Detener polling FTP del dispositivo desactivado", "Por hacer", "Defecto DEF-04 (bloqueante): el sondeo sigue conectándose al FTP del dispositivo Inactivo (CP-039, CP-051)."),
+    ("PP-190", "HU-18 · Detener polling FTP del dispositivo desactivado", "Listo", "DEF-04 corregido por Jareth (dccdb60) y verificado en la ronda 2: CP-039 y CP-051 aprobados, también con FTP real."),
     ("PP-191", "HU-18 · Preservar historial de telemetría consultable", "Listo", "Tras desactivar, la telemetría se conserva y se consulta (CP-042 y 043)."),
     ("PP-413", "HU-18 · Validar criterios, flujos y errores", "Listo", "QA terminó: pruebas ejecutadas, evidencias y defectos registrados, e informe adjunto en esta subtarea."),
 ]
@@ -46,12 +46,12 @@ SUBTAREAS = [
 DEFECTOS_PRODUCTO = 1
 FALLOS = [
     ("Entorno", "La suscripción obligatoria (409 «modo consulta») impedía desactivar en la base de pruebas; también hubo un 403 y un 429 de login.", "Las bases y fixtures no tenían suscripción vigente, permiso de Tableros ni sesión reutilizada.", "Se creó una suscripción vigente de prueba, se agregó el permiso y se usó un solo login por rol."),
-    ("Producto (DEF-04)", "Al desactivar un dispositivo, el sondeo FTP sigue detectando sus archivos nuevos y los encola (CP-039, CP-051).", "sondear_conexiones_ftp (backend/app/tasks/ingesta.py) filtra por ConexionFTP.estd = 'Activa' y no mira Dispositivo.estd.", "Sin resolver: pasa a desarrollo (ronda 1). Corrección propuesta en la sección 7."),
+    ("Producto (DEF-04, ronda 1)", "Al desactivar un dispositivo, el sondeo FTP seguía detectando sus archivos nuevos y los encolaba (CP-039, CP-051).", "sondear_conexiones_ftp (backend/app/tasks/ingesta.py) filtraba solo por ConexionFTP.estd = 'Activa' y no miraba Dispositivo.estd.", "Corregido por Jareth (dccdb60): solo se sondean conexiones con un dispositivo Activo. Ronda 2: CP-039, CP-051 y RG-05 a RG-07 aprobados; DEF-04 cerrado."),
 ]
 
 COBERTURA = [
     ("CA1", "RQ-HU18-01 · Desactivar pide confirmación en un modal", "CP-052, 053", "Aprobado", "OBS-10"),
-    ("CA2", "RQ-HU18-02 · Confirmar pasa a Inactivo y detiene la ingesta", "CP-030 a 034, 038 a 040, 051, 054", "Fallido", "DEF-04, OBS-09"),
+    ("CA2", "RQ-HU18-02 · Confirmar pasa a Inactivo y detiene la ingesta", "CP-030 a 034, 038 a 040, 051, 054", "Aprobado", "OBS-09; DEF-04 cerrado"),
     ("CA3", "RQ-HU18-03 · El listado muestra Inactivo con «Reactivar»", "CP-035, 055", "Aprobado", "—"),
     ("Detalles", "RQ-HU18-04 · Historial de telemetría preservado", "CP-042, 043", "Aprobado", "—"),
     ("", "RQ-HU18-05 · Solo CENERIS y Administrador desactivan", "CP-044 a 050, 057, 058", "Aprobado", "—"),
@@ -65,22 +65,22 @@ ESPERADO = []
 ESPERADO_PIE = ""
 
 HERRAMIENTAS = [
-    ("pytest + pytest-html", "API y reglas de negocio con BD real de test", "Es la herramienta del backend; cubre estados, mensajes, roles, sondeo e historial.", 20, 1),
-    ("pytest + pyftpdlib", "Integración con FTP local real", "Prueba el sondeo de Celery sin simular la conexión; confirma DEF-04.", 0, 1),
+    ("pytest + pytest-html", "API y reglas de negocio con BD real de test", "Es la herramienta del backend; cubre estados, mensajes, roles, sondeo e historial.", 21, 0),
+    ("pytest + pyftpdlib", "Integración con FTP local real", "Prueba el sondeo de Celery sin simular la conexión; comprueba la corrección de DEF-04.", 1, 0),
     ("Playwright (Edge)", "UI y flujos de punta a punta", "Valida modal, mensaje, Reactivar y ocultar acciones al Cliente Final.", 7, 0),
 ]
-HERRAMIENTAS_NOTA = ("Regresión de las suites existentes: 160 aprobadas y 51 fallidas, por fixtures sin suscripción (OBS-11), no por HU-18. "
+HERRAMIENTAS_NOTA = ("Regresión de las suites existentes: 160 aprobadas y 54 fallidas, por fixtures sin suscripción (OBS-11), no por HU-18; tests/tasks pasa completo. Playwright no se reejecutó en la ronda 2 (dccdb60 no cambia la UI). "
                      "Descartadas: Locust y k6 (la HU no pide carga), OWASP ZAP, Lighthouse y axe (no se piden). "
                      "No se usó producción ni un datalogger real (OBS-13).")
 
 EVIDENCIAS = [
-    ("pytest-html", 20, 1, "extracto: primeras 10 de 21 filas",
+    ("pytest-html", 21, 0, "extracto: primeras 10 de 21 filas",
      "qa/03_Evidencias/HU18/EV-HU18-INF-05_captura-informe-pytest.png", 0.72,
      "EV-HU18-INF-05. HTML completo: backend/qa/03_Evidencias/HU18/pytest_hu18.html"),
-    ("pytest-html (FTP real)", 0, 1, "CP-051: el sondeo sigue ingiriendo tras desactivar",
+    ("pytest-html (FTP real)", 1, 0, "CP-051: tras desactivar, el sondeo ya no ingiere",
      "qa/03_Evidencias/HU18/EV-HU18-INF-06_captura-informe-ftp-real.png", 0.72,
      "EV-HU18-INF-06. HTML completo: backend/qa/03_Evidencias/HU18/pytest_hu18_ftp_real.html"),
-    ("Playwright", 7, 0, "lista completa de las 7 pruebas de UI",
+    ("Playwright", 7, 0, "lista completa de las 7 pruebas de UI (ronda 1)",
      "qa/03_Evidencias/HU18/EV-HU18-INF-07_captura-informe-playwright.png", 0.72,
      "EV-HU18-INF-07. HTML completo: backend/qa/03_Evidencias/HU18/playwright/index.html"),
 ]
@@ -88,17 +88,17 @@ EVIDENCIAS = [
 OBSERVACIONES = [
     ("OBS-09", "PP-189: con la regla de suscripción, desactivar devuelve 409 «modo consulta» si la empresa no tiene suscripción vigente. ¿Es intencional?", "PO"),
     ("OBS-10", "PP-189: el botón del modal se llama «Desactivar» (con cuenta regresiva), no «CONFIRMAR» como dice CA2. ¿Se acepta?", "PO"),
-    ("OBS-11", "51 de 211 tests existentes fallan por no crear suscripción en sus fixtures; falta un fixture común en tests/conftest.py.", "Dev"),
+    ("OBS-11", "54 de 214 tests existentes fallan por no crear suscripción en sus fixtures; falta un fixture común en tests/conftest.py.", "Dev"),
     ("OBS-12", "QA levantó Postgres, Redis y cuentas de prueba solo en local; se descartan al terminar.", "QA"),
-    ("OBS-13", "No se probó en producción ni con un datalogger real; repetir el polling en el servidor de pruebas tras corregir DEF-04.", "PO"),
+    ("OBS-13", "No se probó en producción ni con un datalogger real; repetir el polling en el servidor de pruebas cuando esté disponible.", "PO"),
 ]
 
-CONCLUSION = ("<b>NO APTO (borrador).</b> CA1 y CA3 se cumplen y CA2 en parte: la desactivación y el mensaje funcionan, pero el sondeo FTP no se detiene "
-              "(DEF-04). Estado propuesto: PP-189 y PP-191 Listo; PP-190 Por hacer; PP-413 Listo (QA terminó y adjunta este informe). "
-              "<b>Alcance real</b>: no se probó producción, un datalogger real, ni el job de procesamiento tras la corrección; el worker no se ejecutó.")
+CONCLUSION = ("<b>APTO CON OBSERVACIONES.</b> CA1, CA2 y CA3 se cumplen; DEF-04 quedó corregido (dccdb60) y verificado con pytest, con un FTP local real y en "
+              "regresión. Estado propuesto: PP-189, PP-190, PP-191 y PP-413 en Listo (QA terminó y adjunta este informe). "
+              "<b>Alcance real</b>: no se probó producción ni un datalogger real, el worker no se ejecutó y Playwright no se reejecutó en la ronda 2 (sin cambios de UI).")
 PENDIENTES = [
-    ("Corregir sondear_conexiones_ftp para que solo sondee conexiones con un dispositivo Activo (DEF-04, PP-190) y reprobar CP-039 y CP-051.", "Dev"),
     ("Decidir si desactivar debe poder hacerse en modo consulta (OBS-09) y si el botón se llama CONFIRMAR (OBS-10).", "PO"),
+    ("Repetir la prueba de polling en el servidor de pruebas cuando esté disponible (OBS-13).", "PO"),
     ("Agregar un fixture común con suscripción vigente en tests/conftest.py (OBS-11).", "Dev"),
     ("Cambiar los estados de las subtareas en Jira según la sección 1.", "QA"),
 ]
