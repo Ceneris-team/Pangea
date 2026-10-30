@@ -1,6 +1,9 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+
+from app.services.visualizacion import ConfigVisualizacion
 
 
 def _validar_ruta_remota(valor: str) -> str:
@@ -818,9 +821,7 @@ class ParametroCrear(BaseModel):
     @classmethod
     def _tipo_visualizacion_valido(cls, valor: str) -> str:
         if valor not in TIPOS_VISUALIZACION:
-            raise ValueError(
-                "tipo_visualizacion debe ser " + ", ".join(TIPOS_VISUALIZACION)
-            )
+            raise ValueError("tipo_visualizacion debe ser " + ", ".join(TIPOS_VISUALIZACION))
         return valor
 
 
@@ -860,9 +861,7 @@ class ParametroActualizar(BaseModel):
         if valor is None:
             return valor
         if valor not in TIPOS_VISUALIZACION:
-            raise ValueError(
-                "tipo_visualizacion debe ser " + ", ".join(TIPOS_VISUALIZACION)
-            )
+            raise ValueError("tipo_visualizacion debe ser " + ", ".join(TIPOS_VISUALIZACION))
         return valor
 
 
@@ -900,6 +899,7 @@ class MapeoColumnaItem(BaseModel):
 
     indc_clmn: int = Field(ge=0)
     id_prmtr: int
+    visualizacion: ConfigVisualizacion | None = None
 
 
 class MapeoColumnaDetalle(MapeoColumnaItem):
@@ -1102,6 +1102,11 @@ class AuditoriaListItem(BaseModel):
 # HU23 - Listar paneles
 
 
+class PanelProyectoItem(BaseModel):
+    id_ubccn: int
+    nmbr: str
+
+
 class PanelListItem(BaseModel):
     """HU23 CA1: nombre, fecha de creación y el id necesario para las
     acciones del listado (abrir el panel, CA2)."""
@@ -1111,15 +1116,13 @@ class PanelListItem(BaseModel):
     id_pnl: int
     nmbr: str
     fch_crcn: datetime
+    vsbldd: Literal["Privado", "Empresa"] = "Privado"
+    es_propietario: bool = True
+    proyectos: list[PanelProyectoItem] = Field(default_factory=list)
 
 
 class PanelDetalle(PanelListItem):
-    """HU23 CA2: lo que se muestra al abrir un panel desde el listado.
-
-    Hoy son los mismos campos que PanelListItem -las ubicaciones y
-    widgets asociados (HU26/HU34) están fuera de alcance de HU23-, pero
-    es un schema propio porque ese contenido se agregará ACÁ, no en el
-    listado."""
+    """HU23 CA2: datos básicos del panel; /contenido devuelve ubicaciones y widgets."""
 
 
 # HU24 - Crear panel
@@ -1133,6 +1136,8 @@ def _validar_nombre_panel(valor: str) -> str:
     recortado = valor.strip()
     if not recortado:
         raise ValueError("El nombre es obligatorio")
+    if not all(caracter.isalnum() or caracter == " " for caracter in recortado):
+        raise ValueError("El nombre solo puede contener letras, números y espacios")
     return recortado
 
 
@@ -1178,3 +1183,26 @@ class PanelActualizado(BaseModel):
     id_pnl: int
     nmbr: str
     fch_crcn: datetime
+
+
+class PanelVisibilidad(BaseModel):
+    vsbldd: Literal["Privado", "Empresa"]
+
+
+class PanelUbicacionAgregar(BaseModel):
+    id_ubccn: int = Field(gt=0)
+
+
+class PanelUbicacionesAgregar(BaseModel):
+    ids: list[int] = Field(min_length=1)
+
+
+class WidgetGuardar(BaseModel):
+    tp: Literal["linea", "area", "tarjeta", "tabla"]
+    id_prmtr: int = Field(gt=0)
+    id_ubccn: int = Field(gt=0)
+    ancho: Literal[1, 2] = 1
+
+
+class WidgetsReordenar(BaseModel):
+    ids: list[int]

@@ -49,6 +49,7 @@ from app.models.mapeo_dispositivo import (
     Parametro,
 )
 from app.services.ingesta.parser import ConfiguracionParseo
+from app.services.visualizacion import sugerir_visualizacion
 
 logger = logging.getLogger(__name__)
 
@@ -711,7 +712,18 @@ def construir_mapeo(
                 _normalizar_nombre_columna(nombre_columna)
             )
             if parametro is not None:
-                db.add(MapeoColumna(id_mp=id_mp, indc_clmn=indice, id_prmtr=parametro.id_prmtr))
+                db.add(
+                    MapeoColumna(
+                        id_mp=id_mp,
+                        indc_clmn=indice,
+                        id_prmtr=parametro.id_prmtr,
+                        visualizacion=(
+                            None
+                            if parametro.orgn_crcn == "Manual"
+                            else sugerir_visualizacion(nombre_columna, parametro.undd)
+                        ),
+                    )
+                )
                 mapeo[nombre_columna] = parametro.nmbr
                 logger.info(
                     "HU50: columna '%s' (índice %s) de mp_frmt id=%s auto-mapeada "
@@ -821,7 +833,12 @@ def construir_mapeo(
                     continue
 
                 db.add(
-                    MapeoColumna(id_mp=id_mp, indc_clmn=indice, id_prmtr=parametro_nuevo.id_prmtr)
+                    MapeoColumna(
+                        id_mp=id_mp,
+                        indc_clmn=indice,
+                        id_prmtr=parametro_nuevo.id_prmtr,
+                        visualizacion=sugerir_visualizacion(nombre_columna, muestras=muestras),
+                    )
                 )
                 mapeo[nombre_columna] = parametro_nuevo.nmbr
                 logger.info(

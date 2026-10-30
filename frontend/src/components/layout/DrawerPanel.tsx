@@ -31,6 +31,7 @@ interface DrawerPanelProps {
   titulo: string;
   children: React.ReactNode;
   ancho?: keyof typeof ANCHOS;
+  panelClassName?: string;
   /** Contenido fijo al pie del panel (botones Guardar/Cancelar), fuera
    *  del área con scroll -para que siempre queden visibles sin tener que
    *  bajar hasta el final de un formulario largo-. */
@@ -43,6 +44,7 @@ export default function DrawerPanel({
   titulo,
   children,
   ancho = "md",
+  panelClassName = "",
   pie,
 }: DrawerPanelProps) {
   const panelRef = useRef<HTMLDivElement>(null);
@@ -82,7 +84,7 @@ export default function DrawerPanel({
         aria-hidden={!abierto}
         inert={!abierto}
         tabIndex={-1}
-        className={`fixed top-0 right-0 h-full w-full ${ANCHOS[ancho]} bg-white dark:bg-[#1a202c] shadow-2xl z-50 transition-transform duration-300 flex flex-col ${
+        className={`fixed top-0 right-0 h-full w-full ${ANCHOS[ancho]} bg-white dark:bg-[#1a202c] shadow-2xl z-50 transition-transform duration-300 flex flex-col ${panelClassName} ${
           abierto ? "translate-x-0" : "translate-x-full"
         }`}
       >

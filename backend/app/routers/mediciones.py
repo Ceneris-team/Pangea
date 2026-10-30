@@ -34,14 +34,9 @@ from app.models import (
     Telemetria,
     Ubicacion,
 )
+from app.routers.series_mediciones import router as series_router
 from app.schemas import MedicionListItem, ParametroListItem
 from app.security.permisos import LECTURA, require_permiso
-from app.services.cache import consultas as cache
-from app.services.cache.downsampling import (
-    MAXIMO_PUNTOS_DEFECTO,
-    muestrear,
-    rango_es_amplio,
-)
 
 # HU 21: el filtro "qué ubicaciones ve este usuario" se movió a
 # security/ubicaciones_permitidas.py para que HU 17 (mapa del Cliente
@@ -49,10 +44,21 @@ from app.services.cache.downsampling import (
 # al que tenía la función privada que vivía acá.
 from app.security.ubicaciones_permitidas import (  # noqa: F401  (ROLES_... se reexporta)
     ROLES_CON_ACCESO_TOTAL,
+)
+from app.security.ubicaciones_permitidas import (
     ubicaciones_permitidas as _ubicaciones_permitidas,
+)
+from app.services.cache import consultas as cache
+from app.services.cache.downsampling import (
+    MAXIMO_PUNTOS_DEFECTO,
+    muestrear,
+    rango_es_amplio,
 )
 
 router = APIRouter(prefix="/mediciones", tags=["Mediciones"])
+
+
+router.include_router(series_router)
 
 # HT-16 CA3: paginación por cursor keyset sobre (fch_hr, origen, id_registro).
 # "origen" desempata entre Telemetria y EventoTexto -dos tablas distintas
@@ -199,8 +205,8 @@ def listar_mediciones(
     # HT-16 CA3: cursor opaco (ver _codificar_cursor/_decodificar_cursor)
     # para pedir "la página siguiente" sin OFFSET. Coexiste con pagina/
     # por_pagina en vez de reemplazarlos: el MODO CURSOR solo se activa
-    # cuando el rango pedido NO es amplio y no hay frecuencia_muestreo
-    # activo (ver más abajo, "modo_cursor") -son los casos donde HT-16
+    # cuando el rango pedido NO es amplio (o la tabla pide sin_muestreo)
+    # y no hay frecuencia_muestreo activo (ver más abajo, "modo_cursor") -son los casos donde HT-16
     # midió el problema real (miles de filas sin LIMIT en SQL). Cuando el
     # rango es amplio o hay downsampling, la respuesta ya pasa por
     # muestrear() sobre la serie completa (HT-10), que por diseño necesita
@@ -215,6 +221,9 @@ def listar_mediciones(
     # Configurable por petición para que la gráfica pueda pedir menos
     # puntos que el default según su ancho real en pantalla.
     max_puntos: int = Query(default=MAXIMO_PUNTOS_DEFECTO, ge=1, le=50000),
+    # La tabla de consulta necesita acceder a cada registro del rango.
+    # Las gráficas conservan el muestreo automático por defecto.
+    sin_muestreo: bool = Query(default=False),
     # HU32: filtros avanzados. valor_min/valor_max son comparaciones
     # numéricas -solo tienen sentido sobre Telemetria.vlr (decimal); un
     # EventoTexto.vlr es texto ("Puerta Abierta") y no se filtra por
@@ -268,6 +277,7 @@ def listar_mediciones(
         pagina=pagina,
         por_pagina=por_pagina,
         max_puntos=max_puntos,
+        sin_muestreo=sin_muestreo,
         valor_min=valor_min,
         valor_max=valor_max,
         frecuencia_muestreo=frecuencia_muestreo,
@@ -287,9 +297,11 @@ def listar_mediciones(
     # (ver _enriquecer más abajo), el planner sí llega a un top-N heapsort
     # sobre cada partición relevante (~60ms para el mismo dataset). Ver
     # backend/docs/ht16-rendimiento-consultas.md para el EXPLAIN completo.
-    ids_dispositivos_query = db.query(Dispositivo.id_dspstv).join(
-        Ubicacion, Ubicacion.id_ubccn == Dispositivo.id_ubccn
-    ).filter(Ubicacion.id_ubccn.in_(ids_ubicaciones_permitidas))
+    ids_dispositivos_query = (
+        db.query(Dispositivo.id_dspstv)
+        .join(Ubicacion, Ubicacion.id_ubccn == Dispositivo.id_ubccn)
+        .filter(Ubicacion.id_ubccn.in_(ids_ubicaciones_permitidas))
+    )
     if ubicacion_ids:
         ids_solicitadas = set(ubicacion_ids) & ids_ubicaciones_permitidas
         ids_dispositivos_query = ids_dispositivos_query.filter(
@@ -357,9 +369,7 @@ def listar_mediciones(
                 dt.datetime(2000, 1, 1, tzinfo=dt.timezone.utc),
             )
             query = query.distinct(modelo.id_dspstv, modelo.id_prmtr, bucket)
-            return query.order_by(
-                modelo.id_dspstv, modelo.id_prmtr, bucket, modelo.fch_hr.desc()
-            )
+            return query.order_by(modelo.id_dspstv, modelo.id_prmtr, bucket, modelo.fch_hr.desc())
         # El ORDER BY se baja a SQL (antes se ordenaba en Python sobre la
         # lista completa) para que el planner pueda resolverlo por índice.
         # Desempate por id_lctr/id_evnt (ver el otro order_by con el mismo
@@ -370,14 +380,14 @@ def listar_mediciones(
         columna_id = modelo.id_lctr if modelo is Telemetria else modelo.id_evnt
         return query.order_by(modelo.fch_hr.desc(), columna_id.desc())
 
-    # HT-16 CA3: el modo cursor solo aplica al caso "tabla" -sin downsampling
-    # posible-, que es donde HT-16 midió el problema real. rango_es_amplio
-    # también es el criterio que decide si HT-10 va a muestrear, así que
-    # reusarlo acá mantiene un solo lugar con la regla "qué es un rango
-    # amplio" (ver services/cache/downsampling.py). Con frecuencia_muestreo
+    # HT-16 CA3: el modo cursor aplica cuando no habrá downsampling
+    # automático. La tabla puede pedir sin_muestreo incluso para rangos
+    # amplios; las gráficas conservan el muestreo de HT-10. Con frecuencia_muestreo
     # activo tampoco aplica: ese camino ya usa DISTINCT ON+bucket, que no
     # tiene una columna de desempate (id) estable para un cursor keyset.
-    modo_cursor = not rango_es_amplio(fecha_inicio, fecha_fin) and frecuencia_muestreo is None
+    modo_cursor = (
+        sin_muestreo or not rango_es_amplio(fecha_inicio, fecha_fin)
+    ) and frecuencia_muestreo is None
 
     if modo_cursor:
         cursor_fch_hr = cursor_origen = cursor_id = None
@@ -423,12 +433,16 @@ def listar_mediciones(
         # corta al tamaño real, sin traer más que 2*(por_pagina+1) filas
         # jamás -acotado, a diferencia del .all() de antes que traía TODO
         # el resultado filtrado sin importar la página pedida-.
-        mediciones = _con_cursor(Telemetria, _ORIGEN_TELEMETRIA, Telemetria.id_lctr).limit(
-            por_pagina + 1
-        ).all()
-        eventos = _con_cursor(EventoTexto, _ORIGEN_EVENTO, EventoTexto.id_evnt).limit(
-            por_pagina + 1
-        ).all()
+        mediciones = (
+            _con_cursor(Telemetria, _ORIGEN_TELEMETRIA, Telemetria.id_lctr)
+            .limit(por_pagina + 1)
+            .all()
+        )
+        eventos = (
+            _con_cursor(EventoTexto, _ORIGEN_EVENTO, EventoTexto.id_evnt)
+            .limit(por_pagina + 1)
+            .all()
+        )
 
         candidatos = [(t.fch_hr, _ORIGEN_TELEMETRIA, t.id_lctr, "t", t) for t in mediciones] + [
             (e.fch_hr, _ORIGEN_EVENTO, e.id_evnt, "e", e) for e in eventos
@@ -471,7 +485,11 @@ def listar_mediciones(
         # límites están documentados en services/cache/downsampling.py.
         downsampling_aplicado = False
         total_sin_muestrear = len(items)
-        if rango_es_amplio(fecha_inicio, fecha_fin) and total_sin_muestrear > max_puntos:
+        if (
+            not sin_muestreo
+            and rango_es_amplio(fecha_inicio, fecha_fin)
+            and total_sin_muestrear > max_puntos
+        ):
             items = muestrear(items, max_puntos)
             downsampling_aplicado = True
 
@@ -484,8 +502,8 @@ def listar_mediciones(
         "pagina": pagina,
         "por_pagina": por_pagina,
         # HT-16 CA3: siguiente cursor opaco, solo en modo_cursor. None
-        # cuando no hay más filas o cuando el rango amplio/downsampling
-        # sigue con el contrato de pagina/por_pagina de siempre.
+        # cuando no hay más filas o cuando la consulta usa
+        # pagina/por_pagina en lugar de cursor.
         "next_cursor": next_cursor,
         # CA3: el frontend necesita poder decir "mostrando una muestra de
         # N puntos de M" en la gráfica; sin estos dos campos, una serie

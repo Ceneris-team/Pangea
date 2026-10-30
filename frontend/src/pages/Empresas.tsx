@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import DashboardLayout from "../components/layout/DashboardLayout";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../hooks/useAuth";
 import { ROLES } from "../config/roles";
 import { ApiError, apiFetch, abrirEntorno } from "../services/api";
 import DetalleSuscripcion from "../components/comercial/DetalleSuscripcion";
@@ -98,7 +98,7 @@ export default function Empresas() {
 
   useEffect(() => {
     if (!empresaId || !empresa) {
-      setProyectos([]); setMiembros([]);
+      queueMicrotask(() => { setProyectos([]); setMiembros([]); });
       return;
     }
     let cancelado = false;
@@ -112,7 +112,7 @@ export default function Empresas() {
       setMiembros(listaMiembros);
     }).catch((err) => { if (!cancelado) setError(mensajeError(err)); });
     return () => { cancelado = true; };
-  }, [empresaId, empresa?.rol_empresa, ceneris, puedeOperar]);
+  }, [empresaId, empresa, ceneris, puedeOperar]);
 
   function elegirEmpresa(id: number | null) {
     setError(""); setAviso(""); setContrasenaNueva(""); setEditando(null);

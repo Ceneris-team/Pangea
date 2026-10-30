@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { apiFetch, ApiError } from "../services/api";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../hooks/useAuth";
 import Sidebar from "../components/layout/Sidebar";
 import Topbar from "../components/layout/Topbar";
 import DrawerPanel from "../components/layout/DrawerPanel";
@@ -110,7 +110,9 @@ export default function Parametros() {
   }
 
   useEffect(() => {
-    cargarParametros();
+    let cancelado = false;
+    queueMicrotask(() => { if (!cancelado) cargarParametros(); });
+    return () => { cancelado = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pagina, busqueda, soloPendientes]);
 

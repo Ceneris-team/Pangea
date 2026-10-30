@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiFetch, ApiError } from "../services/api";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../hooks/useAuth";
 import Sidebar from "../components/layout/Sidebar";
 import Topbar from "../components/layout/Topbar";
 import MapaUbicaciones, {
@@ -55,8 +55,7 @@ export default function MapaUbicacionesPage() {
 
   useEffect(() => {
     let cancelado = false;
-    setCargando(true);
-    setError(null);
+    queueMicrotask(() => { if (!cancelado) { setCargando(true); setError(null); } });
 
     // Dos llamadas en paralelo, una por recurso -no N+1-. Van separadas
     // porque "Ubicaciones" y "Dispositivos" son módulos de permiso

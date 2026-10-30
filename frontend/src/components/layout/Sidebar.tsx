@@ -1,4 +1,4 @@
-import { useAuth } from "../../context/AuthContext";
+import { useAuth } from "../../hooks/useAuth";
 import { motion, MotionConfig } from "framer-motion";
 import { Link, useLocation } from "react-router-dom";
 import { esAdministracion, esCeneris } from "../../config/espacios";

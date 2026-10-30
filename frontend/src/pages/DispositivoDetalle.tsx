@@ -1,8 +1,10 @@
+import ConfiguracionSerie from "../components/ConfiguracionSerie";
+import { CONFIG_VACIA, type ConfigSerie } from "../components/configuracionSerieUtils";
 import DashboardLayout from "../components/layout/DashboardLayout";
 import { useCallback, useEffect, useState, type ChangeEvent, type FormEvent } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { apiFetch, apiUpload, ApiError } from "../services/api";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../hooks/useAuth";
 import Sidebar from "../components/layout/Sidebar";
 import Topbar from "../components/layout/Topbar";
 import DrawerPanel from "../components/layout/DrawerPanel";
@@ -93,6 +95,7 @@ interface Parametro {
 }
 
 interface MapeoColumnaDetalle {
+  visualizacion: ConfigSerie | null;
   indc_clmn: number;
   id_prmtr: number;
   parametro_nombre: string;
@@ -250,6 +253,7 @@ export default function DispositivoDetalle() {
   // indice de columna -> id_prmtr. Es la tabla de asignación de la
   // pestaña Datos, misma estructura que usaba ConfigurarMapeo (HU06).
   const [asignaciones, setAsignaciones] = useState<Record<number, number>>({});
+  const [visualizaciones, setVisualizaciones] = useState<Record<number, ConfigSerie>>({});
 
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
@@ -280,7 +284,7 @@ export default function DispositivoDetalle() {
     apiFetch<Parametro[]>("/parametros")
       .then(setParametros)
       .catch(() => setParametros([]));
-  }, []);
+  }, [puedeEditar]);
 
   useEffect(() => {
     if (!id) return;
@@ -301,7 +305,7 @@ export default function DispositivoDetalle() {
     apiFetch<{ items: ConexionFTPOption[] }>("/conexiones-ftp", { params: { por_pagina: 100 } })
       .then((res) => setConexiones(res.items))
       .catch(() => setConexiones([]));
-  }, []);
+  }, [puedeEditar]);
 
   function abrirEdicion() {
     if (!dispositivo) return;
@@ -383,6 +387,7 @@ export default function DispositivoDetalle() {
           setMapeo(null);
           setFormato(FORMATO_VACIO);
           setAsignaciones({});
+          setVisualizaciones({});
           return;
         }
         // El listado no trae las columnas; el detalle sí.
@@ -398,6 +403,7 @@ export default function DispositivoDetalle() {
           columna_fecha: FORMATO_VACIO.columna_fecha,
           indice_columna_fecha: FORMATO_VACIO.indice_columna_fecha,
         });
+        setVisualizaciones(Object.fromEntries(detalle.columnas.map(c => [c.indc_clmn, c.visualizacion ?? CONFIG_VACIA])));
         setAsignaciones(
           Object.fromEntries(detalle.columnas.map((c) => [c.indc_clmn, c.id_prmtr]))
         );
@@ -409,7 +415,9 @@ export default function DispositivoDetalle() {
   }, [id, tipoTrama, puedeEditar]);
 
   useEffect(() => {
-    cargarMapeo();
+    let cancelado = false;
+    queueMicrotask(() => { if (!cancelado) cargarMapeo(); });
+    return () => { cancelado = true; };
   }, [cargarMapeo]);
 
   /** Guarda Formato y Datos juntos: los dos editan el mismo registro de
@@ -434,6 +442,7 @@ export default function DispositivoDetalle() {
         .map(([indice, idParametro]) => ({
           indc_clmn: Number(indice),
           id_prmtr: Number(idParametro),
+          visualizacion: visualizaciones[Number(indice)] ?? null,
         }));
 
       const comun = {
@@ -798,6 +807,8 @@ export default function DispositivoDetalle() {
 
               {pestana === "datos" && (
                 <PestanaDatos
+                  visualizaciones={visualizaciones}
+                  setVisualizaciones={setVisualizaciones}
                   formato={formato}
                   setFormato={setFormato}
                   asignaciones={asignaciones}
@@ -1035,6 +1046,7 @@ function PestanaFormato({
 /* ---------------------------------------------------------------- */
 
 function PestanaDatos({
+  visualizaciones, setVisualizaciones,
   formato,
   setFormato,
   asignaciones,
@@ -1050,6 +1062,8 @@ function PestanaDatos({
   onColumnaPendienteResuelta,
   avisar,
 }: {
+  visualizaciones: Record<number, ConfigSerie>;
+  setVisualizaciones: React.Dispatch<React.SetStateAction<Record<number, ConfigSerie>>>;
   formato: FormatoForm;
   setFormato: React.Dispatch<React.SetStateAction<FormatoForm>>;
   asignaciones: Record<number, number>;
@@ -1335,13 +1349,14 @@ function PestanaDatos({
             <tr>
               <th className="px-4 py-3 font-bold">N° de columna</th>
               <th className="px-4 py-3 font-bold">Parámetro estándar</th>
+              <th className="px-4 py-3 font-bold">Visualización de este datalogger</th>
               <th className="px-4 py-3 font-bold text-right">Acciones</th>
             </tr>
           </thead>
           <tbody>
             {indices.length === 0 && (
               <tr>
-                <td colSpan={3} className="px-4 py-6 text-center">
+                <td colSpan={4} className="px-4 py-6 text-center">
                   Todavía no hay columnas asignadas para esta trama.
                 </td>
               </tr>
@@ -1357,7 +1372,7 @@ function PestanaDatos({
                 <td className="px-4 py-3">
                   <select
                     value={asignaciones[indice] || ""}
-                    onChange={(e) => asignar(indice, Number(e.target.value))}
+                    onChange={(e) => { asignar(indice, Number(e.target.value)); setVisualizaciones(prev => ({ ...prev, [indice]: CONFIG_VACIA })); }}
                     disabled={!puedeEditar}
                     className={inputClase}
                   >
@@ -1368,6 +1383,11 @@ function PestanaDatos({
                       </option>
                     ))}
                   </select>
+                </td>
+                <td className="px-4 py-3 align-top">
+                  {parametros.find(p => p.id_prmtr === asignaciones[indice])?.tipo_dato === "numerico" && <ConfiguracionSerie
+                    valor={visualizaciones[indice] ?? CONFIG_VACIA} disabled={!puedeEditar} clase={inputClase}
+                    onChange={valor => setVisualizaciones(prev => ({ ...prev, [indice]: valor }))} />}
                 </td>
                 <td className="px-4 py-3 text-right">
                   <button
@@ -1676,13 +1696,15 @@ function PestanaLogs({
 
   useEffect(() => {
     if (!idDispositivo) return;
-    setCargando(true);
+    let cancelado = false;
+    queueMicrotask(() => { if (!cancelado) setCargando(true); });
     apiFetch<LogIngesta[]>(`/dispositivos/${idDispositivo}/logs`)
-      .then(setLogs)
+      .then(res => { if (!cancelado) setLogs(res); })
       .catch((err) =>
-        avisar(err instanceof ApiError ? err.message : "No se pudieron cargar los logs", false)
+        { if (!cancelado) avisar(err instanceof ApiError ? err.message : "No se pudieron cargar los logs", false); }
       )
-      .finally(() => setCargando(false));
+      .finally(() => { if (!cancelado) setCargando(false); });
+    return () => { cancelado = true; };
     // avisar viene del padre y cambia en cada render; incluirla dispararía
     // el efecto en bucle.
     // eslint-disable-next-line react-hooks/exhaustive-deps

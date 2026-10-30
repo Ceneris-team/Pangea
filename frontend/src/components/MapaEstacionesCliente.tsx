@@ -6,7 +6,7 @@ import {
   GOOGLE_MAPS_LIBRARIES,
   GOOGLE_MAPS_LOADER_ID,
 } from "../config/googleMaps";
-import { useTheme } from "../context/ThemeContext";
+import { useTheme } from "../hooks/useTheme";
 
 /**
  * HU17 - Ver datos en mapa (rol Cliente Final).
@@ -57,6 +57,7 @@ export interface EstacionParaMapa {
 
 interface Props {
   estaciones: EstacionParaMapa[];
+  onSeleccionarEstacion?: (id: number) => void;
   /** id_ubccn que acaba de recibir un dato nuevo por WebSocket. Sirve
    *  para resaltar el marcador un instante: sin señal visual, una
    *  actualización en vivo es indistinguible de que no pase nada (CA3). */
@@ -78,12 +79,16 @@ const COLOR_SEMAFORO: Record<string, string> = {
   verde: "#16a34a",
   amarillo: "#eab308",
   rojo: "#dc2626",
+  sin_datos: "#64748b",
+  desactualizada: "#d97706",
 };
 
 const ETIQUETA_SEMAFORO: Record<string, string> = {
   verde: "Normal",
   amarillo: "Atención",
   rojo: "Crítico",
+  sin_datos: "Sin datos",
+  desactualizada: "Lectura antigua",
 };
 
 function colorDe(semaforo: string): string {
@@ -139,6 +144,7 @@ function formatearValor(valor: number | string | null): string {
 
 export default function MapaEstacionesCliente({
   estaciones,
+  onSeleccionarEstacion,
   destelloEn,
   destelloSecuencia,
 }: Props) {
@@ -165,9 +171,10 @@ export default function MapaEstacionesCliente({
   const [destellando, setDestellando] = useState<number | null>(null);
   useEffect(() => {
     if (destelloEn == null) return;
-    setDestellando(destelloEn);
+    let activo = true;
+    queueMicrotask(() => { if (activo) setDestellando(destelloEn); });
     const timer = window.setTimeout(() => setDestellando(null), 2000);
-    return () => window.clearTimeout(timer);
+    return () => { activo = false; window.clearTimeout(timer); };
     // destelloSecuencia entra como dependencia a propósito: permite que
     // dos datos seguidos de la MISMA estación destellen las dos veces.
   }, [destelloEn, destelloSecuencia]);
@@ -257,7 +264,7 @@ export default function MapaEstacionesCliente({
             scaledSize: new google.maps.Size(34, 34),
             anchor: new google.maps.Point(17, 17),
           }}
-          onClick={() => setSeleccionada(estacion.id_ubccn)}
+          onClick={() => { setSeleccionada(estacion.id_ubccn); onSeleccionarEstacion?.(estacion.id_ubccn); }}
         />
       ))}
 

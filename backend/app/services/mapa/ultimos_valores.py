@@ -23,7 +23,9 @@ from sqlalchemy.orm import Session
 from app.models import Dispositivo, EventoTexto, Parametro, Telemetria, Ubicacion
 
 
-def _ultimos_por_modelo(db: Session, modelo, ids_ubicaciones: list) -> dict:
+def _ultimos_por_modelo(
+    db: Session, modelo, ids_ubicaciones: list, id_dispositivo: int | None = None
+) -> dict:
     """Último valor de cada (ubicación, parámetro) para UN modelo de
     lectura (Telemetria o EventoTexto).
 
@@ -43,7 +45,7 @@ def _ultimos_por_modelo(db: Session, modelo, ids_ubicaciones: list) -> dict:
     if not ids_ubicaciones:
         return {}
 
-    ultimas = (
+    consulta_ultimas = (
         db.query(
             modelo.id_dspstv.label("id_dspstv"),
             modelo.id_prmtr.label("id_prmtr"),
@@ -51,15 +53,19 @@ def _ultimos_por_modelo(db: Session, modelo, ids_ubicaciones: list) -> dict:
         )
         .join(Dispositivo, Dispositivo.id_dspstv == modelo.id_dspstv)
         .filter(Dispositivo.id_ubccn.in_(ids_ubicaciones))
-        .group_by(modelo.id_dspstv, modelo.id_prmtr)
-        .subquery()
     )
+    if id_dispositivo is not None:
+        consulta_ultimas = consulta_ultimas.filter(Dispositivo.id_dspstv == id_dispositivo)
+    ultimas = consulta_ultimas.group_by(modelo.id_dspstv, modelo.id_prmtr).subquery()
 
     filas = (
         db.query(
             Dispositivo.id_ubccn,
+            Dispositivo.id_dspstv,
+            Parametro.id_prmtr,
             Parametro.nmbr,
             Parametro.undd,
+            Dispositivo.nmbr,
             modelo.vlr,
             modelo.fch_hr,
         )
@@ -78,20 +84,34 @@ def _ultimos_por_modelo(db: Session, modelo, ids_ubicaciones: list) -> dict:
     # parámetro (ej. dos sensores de temperatura). El panel muestra un
     # valor por parámetro, así que gana el más reciente entre ellos.
     resultado: dict = {}
-    for id_ubccn, nombre_parametro, unidad, valor, fch_hr in filas:
+    for (
+        id_ubccn,
+        id_dspstv,
+        id_prmtr,
+        nombre_parametro,
+        unidad,
+        dispositivo_nombre,
+        valor,
+        fch_hr,
+    ) in filas:
         por_ubicacion = resultado.setdefault(id_ubccn, {})
         anterior = por_ubicacion.get(nombre_parametro)
         if anterior is None or fch_hr > anterior["fch_hr"]:
             por_ubicacion[nombre_parametro] = {
+                "id_prmtr": id_prmtr,
+                "id_dspstv": id_dspstv,
                 "parametro": nombre_parametro,
                 "unidad": unidad,
+                "dispositivo_nombre": dispositivo_nombre,
                 "valor": valor,
                 "fch_hr": fch_hr,
             }
     return resultado
 
 
-def ultimos_valores_por_ubicacion(db: Session, ids_ubicaciones: list) -> dict:
+def ultimos_valores_por_ubicacion(
+    db: Session, ids_ubicaciones: list, id_dispositivo: int | None = None
+) -> dict:
     """{id_ubccn: {nombre_parametro: {parametro, unidad, valor, fch_hr}}}
     combinando mediciones numéricas (tlmtr) y eventos de texto (evnt_txt).
 
@@ -99,8 +119,8 @@ def ultimos_valores_por_ubicacion(db: Session, ids_ubicaciones: list) -> dict:
     prmtr.tipo_dato lo determina y es único por parámetro- gana el más
     reciente, mismo criterio que entre dispositivos.
     """
-    numericos = _ultimos_por_modelo(db, Telemetria, ids_ubicaciones)
-    textos = _ultimos_por_modelo(db, EventoTexto, ids_ubicaciones)
+    numericos = _ultimos_por_modelo(db, Telemetria, ids_ubicaciones, id_dispositivo)
+    textos = _ultimos_por_modelo(db, EventoTexto, ids_ubicaciones, id_dispositivo)
 
     combinado: dict = {}
     for parcial in (numericos, textos):
