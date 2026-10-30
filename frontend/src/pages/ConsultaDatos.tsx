@@ -6,6 +6,7 @@ import Sidebar from "../components/layout/Sidebar";
 import Topbar from "../components/layout/Topbar";
 import DrawerPanel from "../components/layout/DrawerPanel";
 import SelectorRangoFechas from "../components/SelectorRangoFechas";
+import ExportacionesPanel from "../components/ExportacionesPanel";
 import { formatearFechaHoraEnZona, rangoUltimas24Horas, type RangoFechas } from "../utils/fechas";
 
 interface ParametroItem {
@@ -374,6 +375,19 @@ export default function ConsultaDatos() {
                 </button>
               )}
             </header>
+
+            {!sinUbicacionesAsignadas && !errorUbicaciones && <ExportacionesPanel
+              idInicial={Number(searchParams.get("exportacion")) || undefined}
+              filtros={{
+                fecha_inicio: new Date(filtroFechas.inicio).toISOString(),
+                fecha_fin: new Date(filtroFechas.fin).toISOString(),
+                ubicacion_ids: filtroUbicaciones,
+                parametro_ids: filtroParametros,
+                valor_min: filtroAvanzados.valorMin || null,
+                valor_max: filtroAvanzados.valorMax || null,
+                frecuencia_muestreo: filtroAvanzados.frecuenciaMuestreo ? Number(filtroAvanzados.frecuenciaMuestreo) : null,
+              }}
+            />}
 
             {errorUbicaciones && (
               <div role="alert" className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm rounded-xl">
