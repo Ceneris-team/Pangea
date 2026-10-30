@@ -1,0 +1,24 @@
+✔ una respuesta lenta se publica y los ticks pendientes se reducen al más reciente (13.5912ms)
+✔ cambiar de filtros cancela la conexión, la cola y los resultados antiguos (1.6757ms)
+✔ un error permite procesar el refresco siguiente y terminar el indicador de carga (1.3595ms)
+✔ actualizar manualmente el mismo rango vuelve a consultar (1.0513ms)
+✔ el zoom se conserva dentro de la ventana móvil (0.4669ms)
+✔ un zoom que sale de la ventana se acota o se restaura al rango completo (0.2477ms)
+✔ mover un widget conserva los demás y envía el orden completo (4.0052ms)
+✔ soltar fuera del panel no modifica el orden (0.7668ms)
+✔ separa lecturas antiguas de estaciones que nunca enviaron datos (1.7009ms)
+✔ resumen operativo respeta el umbral elegido (1.9044ms)
+✔ seis dataloggers con dos parámetros generan dos grupos con seis fuentes (6.3896ms)
+✔ no compara unidades diferentes ni confunde mV con MV (0.4739ms)
+✔ no mezcla contador de eventos, secuencia y estado aunque compartan parámetro (0.2115ms)
+✔ mantiene separados encabezados con significado desconocido (0.2218ms)
+✔ conserva formatos y reglas de reinicio propios de cada fuente al comparar (0.2774ms)
+✔ no mezcla proyectos distintos (0.2111ms)
+ℹ tests 16
+ℹ suites 0
+ℹ pass 16
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 294.0042
