@@ -14,6 +14,7 @@ import { useEffect, useState } from "react";
 interface ConfirmarEliminacionModalProps {
   titulo: string;
   mensaje: string;
+  error?: string | null;
   segundosEspera?: number;
   confirmando?: boolean;
   onConfirmar: () => void;
@@ -31,6 +32,7 @@ interface ConfirmarEliminacionModalProps {
 export default function ConfirmarEliminacionModal({
   titulo,
   mensaje,
+  error,
   segundosEspera = 3,
   confirmando = false,
   onConfirmar,
@@ -52,7 +54,7 @@ export default function ConfirmarEliminacionModal({
   return (
     <div
       className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
-      onClick={onCancelar}
+      onClick={() => { if (!confirmando) onCancelar(); }}
     >
       <div
         className="bg-white dark:bg-[#2d3748] rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 max-w-md w-full p-6"
@@ -90,10 +92,17 @@ export default function ConfirmarEliminacionModal({
           </div>
         </div>
 
+        {error && (
+          <p role="alert" className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700 dark:bg-red-900/20 dark:text-red-300">
+            {error}
+          </p>
+        )}
+
         <div className="flex justify-end gap-3 mt-5">
           <button
             type="button"
             onClick={onCancelar}
+            disabled={confirmando}
             className="px-4 py-2.5 text-sm font-medium text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-all"
           >
             Cancelar

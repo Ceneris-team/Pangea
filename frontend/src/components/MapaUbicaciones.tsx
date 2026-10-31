@@ -7,7 +7,7 @@ import {
   GOOGLE_MAPS_LIBRARIES,
   GOOGLE_MAPS_LOADER_ID,
 } from "../config/googleMaps";
-import { useTheme } from "../context/ThemeContext";
+import { useTheme } from "../hooks/useTheme";
 
 /**
  * HU22 - Ver ubicaciones en mapa.

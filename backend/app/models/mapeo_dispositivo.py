@@ -10,6 +10,7 @@ from sqlalchemy import (
     UniqueConstraint,
     text,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 
 from app.database import Base
 
@@ -116,9 +117,7 @@ class Parametro(Base):
             "estd IN ('Activo','Pendiente de revision','Fusionado')",
             name="prmtr_estd_check",
         ),
-        CheckConstraint(
-            "orgn_crcn IN ('Manual','Automatico')", name="prmtr_orgncrcn_check"
-        ),
+        CheckConstraint("orgn_crcn IN ('Manual','Automatico')", name="prmtr_orgncrcn_check"),
         CheckConstraint(
             "tipo_visualizacion IN ('continuo','contador','estado')",
             name="prmtr_tipovisualizacion_check",
@@ -165,6 +164,7 @@ class MapeoColumna(Base):
     id_mp = Column(Integer, ForeignKey("mp_frmt.id_mp"), nullable=False)
     indc_clmn = Column(Integer, nullable=False)
     id_prmtr = Column(Integer, ForeignKey("prmtr.id_prmtr"), nullable=False)
+    visualizacion = Column(JSONB, nullable=True)
 
 
 class MapeoColumnaPendiente(Base):
@@ -185,9 +185,7 @@ class MapeoColumnaPendiente(Base):
 
     __tablename__ = "mp_clmn_pendiente"
     __table_args__ = (
-        CheckConstraint(
-            "estd IN ('Pendiente','Resuelta','Ignorada')", name="mpclmnpnd_estd_check"
-        ),
+        CheckConstraint("estd IN ('Pendiente','Resuelta','Ignorada')", name="mpclmnpnd_estd_check"),
         UniqueConstraint("id_mp", "indc_clmn", name="uq_mpclmnpnd_mp_indccolmn"),
         Index("idx_mpclmnpnd_mp_estd", "id_mp", "estd"),
     )

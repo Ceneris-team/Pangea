@@ -17,7 +17,9 @@ export default function DetalleSuscripcion({ clienteId, gestionar = false, onCam
   async function cargar() { setHistorial(await apiFetch<Historial>(`/comercial/clientes/${clienteId}/historial`)); }
   useEffect(() => {
     let vigente = true;
-    setHistorial(null); setError(""); setSeleccion(null);
+    queueMicrotask(() => {
+      if (vigente) { setHistorial(null); setError(""); setSeleccion(null); }
+    });
     apiFetch<Historial>(`/comercial/clientes/${clienteId}/historial`).then(data => { if (vigente) setHistorial(data); })
       .catch(e => { if (vigente) setError(e instanceof Error ? e.message : "No se pudo cargar el historial"); });
     return () => { vigente = false; };

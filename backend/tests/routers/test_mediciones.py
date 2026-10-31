@@ -174,7 +174,9 @@ def crear_medicion(db_session, dispositivo, parametro, sede, valor=10.0, fecha=N
     return medicion
 
 
-def crear_evento_texto(db_session, dispositivo, parametro, sede, valor="Puerta Abierta", fecha=None):
+def crear_evento_texto(
+    db_session, dispositivo, parametro, sede, valor="Puerta Abierta", fecha=None
+):
     evento = EventoTexto(
         fch_hr=fecha or dt.datetime.now(dt.timezone.utc),
         id_dspstv=dispositivo.id_dspstv,
@@ -548,9 +550,7 @@ class TestFiltroPorDispositivo:
         # parámetro -el escenario exacto de "Estacion Prueba" con dos
         # dataloggers-.
         conexion_2 = crear_conexion(db_session, sede, nombre="Datalogger 2")
-        dispositivo_2 = crear_dispositivo(
-            db_session, ubicacion, conexion_2, nombre="CR1000-2"
-        )
+        dispositivo_2 = crear_dispositivo(db_session, ubicacion, conexion_2, nombre="CR1000-2")
         mapear_parametro(db_session, dispositivo_2, parametro, indice=1)
         crear_medicion(db_session, dispositivo_2, parametro, sede, valor=99.0)
 
@@ -575,7 +575,9 @@ class TestFiltroPorDispositivo:
         conexion_ajena = crear_conexion(db_session, sede, nombre="Datalogger Ajeno")
         dispositivo_ajeno = crear_dispositivo(db_session, ubicacion_ajena, conexion_ajena)
         mapear_parametro(db_session, dispositivo_ajeno, escenario_basico["parametro"], indice=1)
-        crear_medicion(db_session, dispositivo_ajeno, escenario_basico["parametro"], sede, valor=77.0)
+        crear_medicion(
+            db_session, dispositivo_ajeno, escenario_basico["parametro"], sede, valor=77.0
+        )
 
         resp = client.get(
             "/mediciones",
@@ -775,15 +777,30 @@ class TestHU32FiltrosAvanzados:
 
         # Dentro del rango de fechas Y dentro del rango de valor.
         crear_medicion(
-            db_session, dispositivo, parametro, sede, valor=30.0, fecha=ahora - dt.timedelta(hours=1)
+            db_session,
+            dispositivo,
+            parametro,
+            sede,
+            valor=30.0,
+            fecha=ahora - dt.timedelta(hours=1),
         )
         # Dentro del rango de fechas, pero FUERA del rango de valor.
         crear_medicion(
-            db_session, dispositivo, parametro, sede, valor=999.0, fecha=ahora - dt.timedelta(hours=1)
+            db_session,
+            dispositivo,
+            parametro,
+            sede,
+            valor=999.0,
+            fecha=ahora - dt.timedelta(hours=1),
         )
         # Dentro del rango de valor, pero FUERA del rango de fechas.
         crear_medicion(
-            db_session, dispositivo, parametro, sede, valor=30.0, fecha=ahora - dt.timedelta(days=10)
+            db_session,
+            dispositivo,
+            parametro,
+            sede,
+            valor=30.0,
+            fecha=ahora - dt.timedelta(days=10),
         )
 
         resp = client.get(
@@ -858,7 +875,12 @@ class TestHU32FiltrosAvanzados:
         base = ahora - dt.timedelta(hours=2)
         for i in range(4):
             crear_medicion(
-                db_session, dispositivo, parametro, sede, valor=float(i), fecha=base + dt.timedelta(minutes=5 * i)
+                db_session,
+                dispositivo,
+                parametro,
+                sede,
+                valor=float(i),
+                fecha=base + dt.timedelta(minutes=5 * i),
             )
 
         resp = client.get(
@@ -978,9 +1000,7 @@ class TestRegresionOrdenCronologico:
         # que un sort incorrecto (o una lista que llegue de SQL en un
         # orden inesperado) sea visible en la secuencia final, no solo en
         # los conjuntos de valores.
-        crear_medicion(
-            db_session, dispositivo, parametro_num, sede, valor=1.0, fecha=base
-        )
+        crear_medicion(db_session, dispositivo, parametro_num, sede, valor=1.0, fecha=base)
         crear_evento_texto(
             db_session,
             dispositivo,
@@ -990,7 +1010,12 @@ class TestRegresionOrdenCronologico:
             fecha=base + dt.timedelta(minutes=10),
         )
         crear_medicion(
-            db_session, dispositivo, parametro_num, sede, valor=2.0, fecha=base + dt.timedelta(minutes=20)
+            db_session,
+            dispositivo,
+            parametro_num,
+            sede,
+            valor=2.0,
+            fecha=base + dt.timedelta(minutes=20),
         )
         crear_evento_texto(
             db_session,
@@ -1040,9 +1065,7 @@ class TestHT16PaginacionPorCursor:
             "fecha_fin": (base + dt.timedelta(hours=1)).isoformat(),
         }
 
-    def test_pagina_siguiente_no_repite_ni_salta_filas(
-        self, client, db_session, escenario_basico
-    ):
+    def test_pagina_siguiente_no_repite_ni_salta_filas(self, client, db_session, escenario_basico):
         dispositivo = escenario_basico["dispositivo"]
         parametro = escenario_basico["parametro"]
         sede = escenario_basico["sede"]
@@ -1065,7 +1088,11 @@ class TestHT16PaginacionPorCursor:
 
         pagina_2 = client.get(
             "/mediciones",
-            params={**self._rango_reciente(base), "por_pagina": 2, "cursor": pagina_1["next_cursor"]},
+            params={
+                **self._rango_reciente(base),
+                "por_pagina": 2,
+                "cursor": pagina_1["next_cursor"],
+            },
         ).json()
         assert len(pagina_2["items"]) == 2
 
@@ -1075,7 +1102,11 @@ class TestHT16PaginacionPorCursor:
 
         pagina_3 = client.get(
             "/mediciones",
-            params={**self._rango_reciente(base), "por_pagina": 2, "cursor": pagina_2["next_cursor"]},
+            params={
+                **self._rango_reciente(base),
+                "por_pagina": 2,
+                "cursor": pagina_2["next_cursor"],
+            },
         ).json()
         assert len(pagina_3["items"]) == 1
         assert pagina_3["next_cursor"] is None
@@ -1126,7 +1157,11 @@ class TestHT16PaginacionPorCursor:
 
         for i in range(1, 4):
             crear_medicion(
-                db_session, dispositivo, parametro, sede, valor=float(i),
+                db_session,
+                dispositivo,
+                parametro,
+                sede,
+                valor=float(i),
                 fecha=base - dt.timedelta(minutes=i),
             )
 
@@ -1139,13 +1174,21 @@ class TestHT16PaginacionPorCursor:
         # lo existente -llega DESPUÉS de la página 1 en el orden del
         # cursor, así que no debe aparecer en la página 2-.
         crear_medicion(
-            db_session, dispositivo, parametro, sede, valor=999.0,
+            db_session,
+            dispositivo,
+            parametro,
+            sede,
+            valor=999.0,
             fecha=base + dt.timedelta(seconds=30),
         )
 
         pagina_2 = client.get(
             "/mediciones",
-            params={**self._rango_reciente(base), "por_pagina": 2, "cursor": pagina_1["next_cursor"]},
+            params={
+                **self._rango_reciente(base),
+                "por_pagina": 2,
+                "cursor": pagina_1["next_cursor"],
+            },
         ).json()
         ids_pagina_2 = {i["id_registro"] for i in pagina_2["items"]}
 
@@ -1159,6 +1202,45 @@ class TestHT16PaginacionPorCursor:
         # datos", es que este modo no lo calcula-.
         resp = client.get("/mediciones").json()
         assert resp["next_cursor"] is None
+
+    def test_tabla_recorre_rango_amplio_sin_perder_registros_por_muestreo(
+        self, client, db_session, escenario_basico
+    ):
+        dispositivo = escenario_basico["dispositivo"]
+        parametro = escenario_basico["parametro"]
+        sede = escenario_basico["sede"]
+        base = dt.datetime.now(dt.timezone.utc).replace(microsecond=0)
+        for i in range(1, 5):
+            crear_medicion(
+                db_session,
+                dispositivo,
+                parametro,
+                sede,
+                valor=float(i),
+                fecha=base - dt.timedelta(minutes=i),
+            )
+
+        params = {
+            "fecha_inicio": (base - dt.timedelta(days=31)).isoformat(),
+            "fecha_fin": (base + dt.timedelta(hours=1)).isoformat(),
+            "por_pagina": 2,
+            "max_puntos": 2,
+        }
+        grafica = client.get("/mediciones", params=params).json()
+        assert grafica["downsampling"] is True
+        assert grafica["total"] == 2
+
+        params_tabla = {**params, "sin_muestreo": True}
+        pagina = client.get("/mediciones", params=params_tabla).json()
+        assert pagina["downsampling"] is False
+        assert pagina["total"] == 5
+        ids = [item["id_registro"] for item in pagina["items"]]
+        while pagina["next_cursor"] is not None:
+            pagina = client.get(
+                "/mediciones", params={**params_tabla, "cursor": pagina["next_cursor"]}
+            ).json()
+            ids.extend(item["id_registro"] for item in pagina["items"])
+        assert len(ids) == len(set(ids)) == 5
 
 
 class TestDenegadoSinPermiso:

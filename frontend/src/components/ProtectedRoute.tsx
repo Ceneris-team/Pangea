@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Navigate, useLocation } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../hooks/useAuth";
 import { esCeneris, esModuloOperativo } from "../config/espacios";
 import { ROLES, rutaPorRol } from "../config/roles";
 

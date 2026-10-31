@@ -1,14 +1,13 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { ThemeContext } from "./themeContextValue";
 
 type Tema = "light" | "dark";
 
-interface ThemeContextValue {
+export interface ThemeContextValue {
   tema: Tema;
   esOscuro: boolean;
   toggleTema: () => void;
 }
-
-const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
 
 const CLAVE_TEMA = "pangea_tema";
 
@@ -37,10 +36,4 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       {children}
     </ThemeContext.Provider>
   );
-}
-
-export function useTheme(): ThemeContextValue {
-  const ctx = useContext(ThemeContext);
-  if (!ctx) throw new Error("useTheme debe usarse dentro de <ThemeProvider>");
-  return ctx;
 }

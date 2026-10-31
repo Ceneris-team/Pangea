@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import "./Login.css";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../hooks/useAuth";
 import { rutaPorRol } from "../config/roles";
 import { ApiError } from "../services/api";
 import loginBg2 from "../assets/login_2.jpg";

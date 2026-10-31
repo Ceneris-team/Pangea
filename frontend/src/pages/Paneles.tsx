@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { apiFetch, ApiError } from "../services/api";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../hooks/useAuth";
 import { ROLES } from "../config/roles";
 import Sidebar from "../components/layout/Sidebar";
 import Topbar from "../components/layout/Topbar";
@@ -12,10 +12,14 @@ interface PanelListItem {
   id_pnl: number;
   nmbr: string;
   fch_crcn: string;
+  vsbldd: "Privado" | "Empresa";
+  es_propietario: boolean;
+  proyectos: { id_ubccn: number; nmbr: string }[];
 }
 
 interface ListadoPaneles {
   items: PanelListItem[];
+  proyecto_activo: { id_ubccn: number; nmbr: string } | null;
 }
 
 interface PanelCreado {
@@ -25,6 +29,7 @@ interface PanelCreado {
 }
 
 const NOMBRE_MAX_LARGO = 100;
+const NOMBRE_VALIDO = /^[\p{L}\p{N} ]+$/u;
 
 const INPUT_CLASE =
   "bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block w-full p-2.5 outline-none";
@@ -96,7 +101,12 @@ export default function Paneles() {
       .finally(() => setLoading(false));
   }
 
-  useEffect(cargarPaneles, [busqueda]);
+  useEffect(() => {
+    let cancelado = false;
+    queueMicrotask(() => { if (!cancelado) cargarPaneles(); });
+    return () => { cancelado = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [busqueda]);
 
   // CA1: "si el usuario no tiene paneles creados" se refiere a que no
   // existe NINGUNO, no a que la búsqueda no encontró nada -por eso el
@@ -113,21 +123,39 @@ export default function Paneles() {
   /** HU25 CA4: elimina PERMANENTEMENTE el panel (no hay soft-delete, a
    *  diferencia de Dispositivos.tsx) y refresca el listado. */
   async function confirmarEliminarPanel() {
-    if (!panelAEliminar) return;
+    if (!panelAEliminar || eliminandoId !== null) return;
     setEliminandoId(panelAEliminar.id_pnl);
     setErrorEliminar(null);
     try {
-      await apiFetch<{ mensaje: string }>(`/paneles/${panelAEliminar.id_pnl}`, {
+      const respuesta = await apiFetch<{ mensaje: string }>(`/paneles/${panelAEliminar.id_pnl}`, {
         method: "DELETE",
       });
       setPanelAEliminar(null);
-      setMensajeExito("Panel eliminado correctamente");
+      setMensajeExito(respuesta.mensaje);
       cargarPaneles();
     } catch (err) {
       setErrorEliminar(err instanceof ApiError ? err.message : "No se pudo eliminar el panel");
     } finally {
       setEliminandoId(null);
     }
+  }
+
+  async function duplicarPanel(panel: PanelListItem) {
+    try {
+      const respuesta = await apiFetch<{ mensaje: string }>(`/paneles/${panel.id_pnl}/duplicar`, { method: "POST" });
+      setMensajeExito(respuesta.mensaje);
+      cargarPaneles();
+    } catch (err) { setError(err instanceof ApiError ? err.message : "No se pudo duplicar el panel"); }
+  }
+
+  async function cambiarVisibilidad(panel: PanelListItem) {
+    try {
+      const respuesta = await apiFetch<{ mensaje: string }>(`/paneles/${panel.id_pnl}/visibilidad`, {
+        method: "PUT", body: { vsbldd: panel.vsbldd === "Privado" ? "Empresa" : "Privado" },
+      });
+      setMensajeExito(respuesta.mensaje);
+      cargarPaneles();
+    } catch (err) { setError(err instanceof ApiError ? err.message : "No se pudo cambiar la visibilidad"); }
   }
 
   // HU24/HU25: crear y editar panel viven como drawer lateral, en vez de
@@ -162,6 +190,10 @@ export default function Paneles() {
 
     if (!nombrePanel.trim()) {
       setErrorPanel("El nombre del panel es obligatorio");
+      return;
+    }
+    if (!NOMBRE_VALIDO.test(nombrePanel.trim())) {
+      setErrorPanel("El nombre solo puede contener letras, números y espacios");
       return;
     }
 
@@ -251,6 +283,10 @@ export default function Paneles() {
               </div>
             )}
 
+            {data && <div className="mb-4 rounded-xl border border-[#a3ca00]/40 bg-[#ccff00]/10 px-4 py-3 text-sm text-gray-700 dark:text-gray-200">
+              {data.proyecto_activo ? <><strong>Proyecto activo: {data.proyecto_activo.nmbr}.</strong> Aquí aparecen los paneles vinculados a este proyecto; sus datos y gráficos se limitan a él.</> : <><strong>Vista general.</strong> Aquí aparecen los paneles de los proyectos a los que tienes acceso.</>}
+            </div>}
+
             <div className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl shadow-sm border border-black/10 dark:border-white/10">
               {/* Barra de búsqueda */}
               <div className="p-5 flex flex-col lg:flex-row gap-3 items-center justify-between border-b border-black/10 dark:border-white/10">
@@ -284,7 +320,7 @@ export default function Paneles() {
 
               {sinPanelesCreados ? (
                 <div className="flex flex-col items-center justify-center gap-4 py-16 px-6 text-center">
-                  <p className="text-gray-600 dark:text-gray-300">Aún no tienes paneles creados</p>
+                  <p className="text-gray-600 dark:text-gray-300">{data?.proyecto_activo ? `Aún no hay paneles para ${data.proyecto_activo.nmbr}` : "Aún no tienes paneles creados"}</p>
                   {ROLES_PUEDEN_GESTIONAR.includes(rol ?? "") && (
                     <button
                       onClick={abrirCrearPanel}
@@ -300,6 +336,7 @@ export default function Paneles() {
                     <thead className="text-xs text-gray-600 dark:text-gray-300 uppercase bg-black/5 dark:bg-white/5 border-b border-black/10 dark:border-white/10">
                       <tr>
                         <th className="px-6 py-4 font-bold tracking-wider">Nombre</th>
+                        <th className="px-6 py-4 font-bold tracking-wider">Proyectos del panel</th>
                         <th className="px-6 py-4 font-bold tracking-wider">Fecha de creación</th>
                         <th className="px-6 py-4 font-bold tracking-wider text-right">Acciones</th>
                       </tr>
@@ -307,7 +344,7 @@ export default function Paneles() {
                     <tbody>
                       {loading && (
                         <tr>
-                          <td colSpan={3} className="px-6 py-8 text-center text-gray-600 dark:text-gray-300">
+                          <td colSpan={4} className="px-6 py-8 text-center text-gray-600 dark:text-gray-300">
                             <div className="flex justify-center items-center gap-2">
                               <div className="w-4 h-4 rounded-full bg-[#ccff00] animate-bounce"></div>
                               <span>Cargando datos...</span>
@@ -318,7 +355,7 @@ export default function Paneles() {
 
                       {!loading && data?.items.length === 0 && (
                         <tr>
-                          <td colSpan={3} className="px-6 py-8 text-center text-gray-600 dark:text-gray-300">
+                          <td colSpan={4} className="px-6 py-8 text-center text-gray-600 dark:text-gray-300">
                             No se encontraron paneles con ese criterio.
                           </td>
                         </tr>
@@ -338,6 +375,10 @@ export default function Paneles() {
                               >
                                 {p.nmbr}
                               </Link>
+                              {p.vsbldd === "Empresa" && <span className="ml-2 rounded-full bg-[#ccff00]/20 px-2 py-0.5 text-[11px] font-semibold text-[#5a7000] dark:text-[#ccff00]">Compartido con empresa</span>}
+                            </td>
+                            <td className="px-6 py-4">
+                              {p.proyectos.length ? <div className="flex flex-wrap gap-1">{p.proyectos.map((proyecto) => <span key={proyecto.id_ubccn} className="rounded-full border border-black/10 bg-black/5 px-2 py-0.5 text-xs dark:border-white/10 dark:bg-white/5">{proyecto.nmbr}</span>)}</div> : <span className="text-xs text-gray-500">Sin proyecto asignado</span>}
                             </td>
                             <td className="px-6 py-4">{formatearFecha(p.fch_crcn)}</td>
                             <td className="px-6 py-4 text-right">
@@ -348,8 +389,10 @@ export default function Paneles() {
                                 >
                                   Abrir
                                 </Link>
-                                {ROLES_PUEDEN_GESTIONAR.includes(rol ?? "") && (
+                                {p.es_propietario && ROLES_PUEDEN_GESTIONAR.includes(rol ?? "") && (
                                   <>
+                                    <button type="button" onClick={() => void duplicarPanel(p)} className="rounded-lg border border-black/20 px-3 py-1.5 text-xs text-gray-700 hover:bg-black/5 dark:border-white/20 dark:text-gray-200 dark:hover:bg-white/10">Duplicar</button>
+                                    <button type="button" onClick={() => void cambiarVisibilidad(p)} className="rounded-lg border border-black/20 px-3 py-1.5 text-xs text-gray-700 hover:bg-black/5 dark:border-white/20 dark:text-gray-200 dark:hover:bg-white/10">{p.vsbldd === "Empresa" ? "Hacer privado" : "Compartir con empresa"}</button>
                                     {/* HU25 CA1: abre el drawer de edición con el nombre precargado. */}
                                     <button
                                       type="button"
@@ -360,7 +403,7 @@ export default function Paneles() {
                                     </button>
                                     {/* HU25 CA3: abre el diálogo de confirmación, no elimina directo. */}
                                     <button
-                                      onClick={() => setPanelAEliminar(p)}
+                                    onClick={() => { setErrorEliminar(null); setPanelAEliminar(p); }}
                                       className="inline-flex items-center justify-center px-3 py-1.5 text-sm font-medium text-red-600 dark:text-red-400 bg-transparent border border-red-200 dark:border-red-800/40 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-all"
                                     >
                                       Eliminar
@@ -387,10 +430,12 @@ export default function Paneles() {
       {panelAEliminar && (
         <ConfirmarEliminacionModal
           titulo={`Eliminar panel '${panelAEliminar.nmbr}'`}
-          mensaje="Esta acción eliminará el panel junto con todas sus proyectos y widgets asociados. Los datos de telemetría no se ven afectados. Esta acción no se puede deshacer."
+          mensaje="Esta acción eliminará el panel junto con todas sus ubicaciones y widgets asociados. Los datos de telemetría no se ven afectados. Esta acción no se puede deshacer."
+          error={errorEliminar}
           confirmando={eliminandoId === panelAEliminar.id_pnl}
           onConfirmar={confirmarEliminarPanel}
-          onCancelar={() => setPanelAEliminar(null)}
+          onCancelar={() => { setErrorEliminar(null); setPanelAEliminar(null); }}
+          textoAccion="Confirmar"
         />
       )}
 
@@ -398,7 +443,7 @@ export default function Paneles() {
           un campo (Nombre) para ambos casos. */}
       <DrawerPanel
         abierto={panelDrawerAbierto}
-        onCerrar={() => setPanelDrawerAbierto(false)}
+        onCerrar={() => { if (!guardandoPanel) setPanelDrawerAbierto(false); }}
         titulo={panelEnEdicion ? "Editar panel" : "Crear panel"}
       >
         <form onSubmit={handleSubmitPanel} className="flex flex-col h-full">
@@ -407,6 +452,9 @@ export default function Paneles() {
               ? "Modifica el nombre de tu tablero personalizado."
               : "Dale un nombre a tu nuevo tablero personalizado."}
           </p>
+          {!panelEnEdicion && <p className="mb-5 rounded-xl border border-[#a3ca00]/30 bg-[#ccff00]/10 p-3 text-sm text-gray-700 dark:text-gray-200">
+            {data?.proyecto_activo ? `Se creará en ${data.proyecto_activo.nmbr}. Al abrirlo verás los datos y gráficos de ese proyecto.` : "Se creará sin un proyecto inicial. Después podrás añadir uno o varios proyectos."}
+          </p>}
 
           {errorPanel && (
             <div className="mb-4 p-3 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm">
@@ -429,7 +477,7 @@ export default function Paneles() {
               className={INPUT_CLASE}
             />
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              {nombrePanel.length}/{NOMBRE_MAX_LARGO}
+              Solo letras, números y espacios · {nombrePanel.length}/{NOMBRE_MAX_LARGO}
             </p>
           </div>
 
@@ -437,6 +485,7 @@ export default function Paneles() {
             <button
               type="button"
               onClick={() => setPanelDrawerAbierto(false)}
+              disabled={guardandoPanel}
               className="flex-1 px-4 py-2.5 text-sm font-medium rounded-xl border border-black/20 dark:border-white/20 text-gray-700 dark:text-gray-200 hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
             >
               Cancelar

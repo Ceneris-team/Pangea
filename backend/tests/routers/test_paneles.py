@@ -6,8 +6,7 @@ Corre contra la Postgres real de test (ver tests/conftest.py).
 Cobertura por CA:
   CA1  listado con nombre y fecha de creación de TODOS los paneles del
        usuario autenticado, ordenado por fecha de creación descendente
-  CA2  el listado no expone paneles de otro usuario (no se comparten en
-       v1.0)
+  CA2  el listado no expone paneles privados de otro usuario
   CA3  búsqueda por nombre/fragmento, insensible a mayúsculas
   Estado vacío: un usuario sin paneles recibe una lista vacía (el mensaje
        "Aún no tienes paneles creados" y el botón "Crear panel" son de
@@ -29,7 +28,7 @@ from fastapi.testclient import TestClient
 from app.database import get_db
 from app.main import app
 from app.main import limiter as limiter_app
-from app.models import Panel, PanelUbicacion, Parametro, Ubicacion, Widget
+from app.models import Panel, PanelUbicacion, Parametro, PermisoUbicacion, Ubicacion, Widget
 from app.models.suscripcion import PermisoUsuarioSede
 from app.routers.auth import limiter as limiter_auth
 from app.security.dependencies import get_current_user
@@ -163,7 +162,9 @@ def test_listar_paneles_devuelve_nombre_y_fecha(client, db_session, cliente_con_
     assert "id_pnl" in items[0]
 
 
-def test_listar_paneles_ordena_por_fecha_creacion_descendente(client, db_session, cliente_con_edicion_tableros):
+def test_listar_paneles_ordena_por_fecha_creacion_descendente(
+    client, db_session, cliente_con_edicion_tableros
+):
     usuario, sede = cliente_con_edicion_tableros
     ahora = datetime.now(timezone.utc)
     crear_panel(db_session, usuario, sede, "Panel más antiguo", fch_crcn=ahora - timedelta(days=2))
@@ -176,7 +177,9 @@ def test_listar_paneles_ordena_por_fecha_creacion_descendente(client, db_session
     assert nombres == ["Panel más reciente", "Panel intermedio", "Panel más antiguo"]
 
 
-def test_listar_paneles_usuario_sin_paneles_devuelve_lista_vacia(client, cliente_con_edicion_tableros):
+def test_listar_paneles_usuario_sin_paneles_devuelve_lista_vacia(
+    client, cliente_con_edicion_tableros
+):
     respuesta = client.get("/paneles")
 
     assert respuesta.status_code == 200
@@ -184,11 +187,13 @@ def test_listar_paneles_usuario_sin_paneles_devuelve_lista_vacia(client, cliente
 
 
 # ---------------------------------------------------------------------------
-# CA2 (regla de negocio) - Paneles no compartidos entre usuarios
+# CA2 (regla de negocio) - Los paneles privados son del propietario
 # ---------------------------------------------------------------------------
 
 
-def test_listar_paneles_no_incluye_paneles_de_otro_usuario(client, db_session, cliente_con_edicion_tableros):
+def test_listar_paneles_no_incluye_paneles_de_otro_usuario(
+    client, db_session, cliente_con_edicion_tableros
+):
     usuario, sede = cliente_con_edicion_tableros
     crear_panel(db_session, usuario, sede, "Panel propio")
 
@@ -220,7 +225,9 @@ def test_buscar_paneles_por_fragmento_de_nombre(client, db_session, cliente_con_
     assert nombres == {"Estación Norte", "Estación Sur"}
 
 
-def test_buscar_paneles_es_insensible_a_mayusculas(client, db_session, cliente_con_edicion_tableros):
+def test_buscar_paneles_es_insensible_a_mayusculas(
+    client, db_session, cliente_con_edicion_tableros
+):
     usuario, sede = cliente_con_edicion_tableros
     crear_panel(db_session, usuario, sede, "Panel ABC")
 
@@ -229,7 +236,9 @@ def test_buscar_paneles_es_insensible_a_mayusculas(client, db_session, cliente_c
     assert len(respuesta.json()["items"]) == 1
 
 
-def test_buscar_paneles_sin_coincidencias_devuelve_lista_vacia(client, db_session, cliente_con_edicion_tableros):
+def test_buscar_paneles_sin_coincidencias_devuelve_lista_vacia(
+    client, db_session, cliente_con_edicion_tableros
+):
     usuario, sede = cliente_con_edicion_tableros
     crear_panel(db_session, usuario, sede, "Panel ABC")
 
@@ -281,7 +290,9 @@ def test_obtener_panel_inexistente_devuelve_404(client, cliente_con_edicion_tabl
     assert respuesta.status_code == 404
 
 
-def test_obtener_panel_de_otro_usuario_devuelve_404(client, db_session, cliente_con_edicion_tableros):
+def test_obtener_panel_de_otro_usuario_devuelve_404(
+    client, db_session, cliente_con_edicion_tableros
+):
     _, sede = cliente_con_edicion_tableros
 
     fabrica_otro = Fabrica(db_session)
@@ -323,7 +334,9 @@ def test_crear_panel_devuelve_201_y_mensaje(client, db_session, cliente_con_edic
     assert guardado.nmbr == "Panel de temperatura"
 
 
-def test_crear_panel_lo_agrega_al_listado_del_usuario(client, db_session, cliente_con_edicion_tableros):
+def test_crear_panel_lo_agrega_al_listado_del_usuario(
+    client, db_session, cliente_con_edicion_tableros
+):
     """CA2: '...lo agrega al listado de paneles del usuario'."""
     client.post("/paneles", json={"nmbr": "Panel nuevo"})
 
@@ -333,7 +346,9 @@ def test_crear_panel_lo_agrega_al_listado_del_usuario(client, db_session, client
     assert nombres == ["Panel nuevo"]
 
 
-def test_crear_panel_queda_sin_ubicaciones_ni_widgets(client, db_session, cliente_con_edicion_tableros):
+def test_crear_panel_queda_sin_ubicaciones_ni_widgets(
+    client, db_session, cliente_con_edicion_tableros
+):
     """CA3: el panel nace vacío -HU26/HU34 están fuera de alcance-. Se
     verifica indirectamente: GET /paneles/{id} (que sí incluiría ese
     contenido cuando exista) hoy solo trae nombre y fecha."""
@@ -342,10 +357,14 @@ def test_crear_panel_queda_sin_ubicaciones_ni_widgets(client, db_session, client
     detalle = client.get(f"/paneles/{creado['id_pnl']}")
 
     assert detalle.status_code == 200
-    assert detalle.json() == creado
+    assert {clave: detalle.json()[clave] for clave in creado} == creado
+    assert detalle.json()["es_propietario"] is True
+    assert detalle.json()["vsbldd"] == "Privado"
 
 
-def test_crear_panel_nombre_duplicado_devuelve_409(client, db_session, cliente_con_edicion_tableros):
+def test_crear_panel_nombre_duplicado_devuelve_409(
+    client, db_session, cliente_con_edicion_tableros
+):
     client.post("/paneles", json={"nmbr": "Panel repetido"})
 
     respuesta = client.post("/paneles", json={"nmbr": "Panel repetido"})
@@ -354,7 +373,9 @@ def test_crear_panel_nombre_duplicado_devuelve_409(client, db_session, cliente_c
     assert respuesta.json()["detail"] == "Ya tienes un panel con ese nombre"
 
 
-def test_crear_panel_nombre_duplicado_es_insensible_a_mayusculas(client, cliente_con_edicion_tableros):
+def test_crear_panel_nombre_duplicado_es_insensible_a_mayusculas(
+    client, cliente_con_edicion_tableros
+):
     client.post("/paneles", json={"nmbr": "Panel Repetido"})
 
     respuesta = client.post("/paneles", json={"nmbr": "panel repetido"})
@@ -400,6 +421,20 @@ def test_crear_panel_nombre_de_100_caracteres_es_aceptado(client, cliente_con_ed
     respuesta = client.post("/paneles", json={"nmbr": "A" * 100})
 
     assert respuesta.status_code == 201
+
+
+def test_crear_panel_acepta_letras_acentuadas_numeros_y_espacios(
+    client, cliente_con_edicion_tableros
+):
+    respuesta = client.post("/paneles", json={"nmbr": "Medición estación 2"})
+
+    assert respuesta.status_code == 201
+
+
+def test_crear_panel_rechaza_simbolos(client, cliente_con_edicion_tableros):
+    respuesta = client.post("/paneles", json={"nmbr": "Panel #1"})
+
+    assert respuesta.status_code == 422
 
 
 def test_crear_panel_recorta_espacios_del_nombre(client, db_session, cliente_con_edicion_tableros):
@@ -534,9 +569,7 @@ def test_crear_panel_con_login_real_guarda_la_sede_del_jwt(client_https, db_sess
 
     assert respuesta.status_code == 201
     guardado = (
-        db_session.query(Panel)
-        .filter(Panel.id_pnl == respuesta.json()["panel"]["id_pnl"])
-        .one()
+        db_session.query(Panel).filter(Panel.id_pnl == respuesta.json()["panel"]["id_pnl"]).one()
     )
     assert guardado.id_sd == sede.id_sd
     assert guardado.id_usr == usuario.id_usr
@@ -586,7 +619,9 @@ def test_editar_panel_nombre_vacio_es_rechazado(client, db_session, cliente_con_
     assert respuesta.status_code == 422
 
 
-def test_editar_panel_nombre_duplicado_devuelve_409(client, db_session, cliente_con_edicion_tableros):
+def test_editar_panel_nombre_duplicado_devuelve_409(
+    client, db_session, cliente_con_edicion_tableros
+):
     usuario, sede = cliente_con_edicion_tableros
     crear_panel(db_session, usuario, sede, "Panel A")
     panel_b = crear_panel(db_session, usuario, sede, "Panel B")
@@ -628,7 +663,9 @@ def test_editar_panel_inexistente_devuelve_404(client, cliente_con_edicion_table
     assert respuesta.status_code == 404
 
 
-def test_editar_panel_de_otro_usuario_devuelve_404(client, db_session, cliente_con_edicion_tableros):
+def test_editar_panel_de_otro_usuario_devuelve_404(
+    client, db_session, cliente_con_edicion_tableros
+):
     _, sede = cliente_con_edicion_tableros
     fabrica_otro = Fabrica(db_session)
     rol_otro = fabrica_otro.rol("Cliente Final")
@@ -716,7 +753,9 @@ def test_eliminar_panel_lo_retira_del_listado(client, db_session, cliente_con_ed
     assert nombres == ["Panel que queda"]
 
 
-def test_eliminar_panel_borra_el_registro_de_la_bd(client, db_session, cliente_con_edicion_tableros):
+def test_eliminar_panel_borra_el_registro_de_la_bd(
+    client, db_session, cliente_con_edicion_tableros
+):
     usuario, sede = cliente_con_edicion_tableros
     panel = crear_panel(db_session, usuario, sede, "Panel a eliminar")
     id_pnl = panel.id_pnl
@@ -759,8 +798,319 @@ def test_eliminar_panel_borra_en_cascada_ubicaciones_y_widgets_asociados(
     assert db_session.query(Widget).filter(Widget.id_wdgt == id_wdgt).first() is None
     # La ubicación y el parámetro NO son del panel -son recursos
     # compartidos de otros módulos-, así que sobreviven igual.
-    assert db_session.query(Ubicacion).filter(Ubicacion.id_ubccn == ubicacion.id_ubccn).first() is not None
-    assert db_session.query(Parametro).filter(Parametro.id_prmtr == parametro.id_prmtr).first() is not None
+    assert (
+        db_session.query(Ubicacion).filter(Ubicacion.id_ubccn == ubicacion.id_ubccn).first()
+        is not None
+    )
+    assert (
+        db_session.query(Parametro).filter(Parametro.id_prmtr == parametro.id_prmtr).first()
+        is not None
+    )
+
+
+def test_contenido_panel_permite_agregar_ubicacion_visible_y_crear_widget(
+    client, db_session, cliente_con_edicion_tableros
+):
+    usuario, sede = cliente_con_edicion_tableros
+    panel = crear_panel(db_session, usuario, sede, "Panel widgets")
+    ubicacion = crear_ubicacion(db_session, sede)
+    parametro = crear_parametro(db_session)
+    db_session.add(PermisoUbicacion(id_usr=usuario.id_usr, id_ubccn=ubicacion.id_ubccn))
+    db_session.flush()
+
+    disponibles = client.get(f"/paneles/{panel.id_pnl}/ubicaciones/disponibles")
+    assert disponibles.status_code == 200
+    assert disponibles.json()["items"] == [{"id_ubccn": ubicacion.id_ubccn, "nmbr": ubicacion.nmbr}]
+
+    alta_ubicacion = client.post(
+        f"/paneles/{panel.id_pnl}/ubicaciones", json={"id_ubccn": ubicacion.id_ubccn}
+    )
+    assert alta_ubicacion.status_code == 201
+    alta_widget = client.post(
+        f"/paneles/{panel.id_pnl}/widgets",
+        json={
+            "tp": "linea",
+            "id_prmtr": parametro.id_prmtr,
+            "id_ubccn": ubicacion.id_ubccn,
+        },
+    )
+    assert alta_widget.status_code == 201
+    assert alta_widget.json()["mensaje"] == "Widget creado correctamente"
+    assert alta_widget.json()["widget"]["pscn"] == 0
+
+    contenido = client.get(f"/paneles/{panel.id_pnl}/contenido")
+    assert contenido.status_code == 200
+    assert contenido.json()["ubicaciones"] == [
+        {
+            "id_ubccn": ubicacion.id_ubccn,
+            "nmbr": ubicacion.nmbr,
+            "dscrpcn": None,
+            "lttd": -12.0464,
+            "lngtd": -77.0428,
+            "estd": "Activa",
+            "semaforo": "sin_datos",
+            "ultima_lectura": None,
+            "ultimos_valores": [],
+        }
+    ]
+    assert contenido.json()["dispositivos"] == []
+    assert contenido.json()["widgets"] == [alta_widget.json()["widget"]]
+
+
+def test_anadir_varias_ubicaciones_es_atomico_y_evitar_duplicados(
+    client, db_session, cliente_con_edicion_tableros
+):
+    usuario, sede = cliente_con_edicion_tableros
+    panel = crear_panel(db_session, usuario, sede, "Panel varias")
+    ubicaciones = [crear_ubicacion(db_session, sede, f"Ubicación {i}") for i in range(3)]
+    for ubicacion in ubicaciones:
+        db_session.add(PermisoUbicacion(id_usr=usuario.id_usr, id_ubccn=ubicacion.id_ubccn))
+    db_session.flush()
+    ruta = f"/paneles/{panel.id_pnl}/ubicaciones/lote"
+    ids = [u.id_ubccn for u in ubicaciones]
+
+    respuesta = client.post(ruta, json={"ids": ids[:2]})
+    assert respuesta.status_code == 201
+    assert respuesta.json()["mensaje"] == "Ubicaciones añadidas correctamente"
+    assert [u["id_ubccn"] for u in respuesta.json()["ubicaciones"]] == ids[:2]
+    assert client.post(ruta, json={"ids": [ids[0], ids[2]]}).status_code == 409
+    assert client.post(ruta, json={"ids": [ids[2], ids[2]]}).status_code == 422
+    contenido = client.get(f"/paneles/{panel.id_pnl}/contenido").json()
+    assert {u["id_ubccn"] for u in contenido["ubicaciones"]} == set(ids[:2])
+
+
+def test_compartir_panel_da_lectura_solo_a_la_misma_sede(
+    client, db_session, fabrica, cliente_con_edicion_tableros
+):
+    dueno, sede = cliente_con_edicion_tableros
+    panel = crear_panel(db_session, dueno, sede, "Panel de equipo")
+    ubicacion = crear_ubicacion(db_session, sede)
+    db_session.add(PermisoUbicacion(id_usr=dueno.id_usr, id_ubccn=ubicacion.id_ubccn))
+    db_session.flush()
+    assert (
+        client.post(
+            f"/paneles/{panel.id_pnl}/ubicaciones", json={"id_ubccn": ubicacion.id_ubccn}
+        ).status_code
+        == 201
+    )
+    rol = dueno.rol
+    otro = fabrica.usuario(rol=rol)
+    agregar_permiso(db_session, otro, sede, "Tableros", "Lectura", rol)
+    db_session.add(PermisoUbicacion(id_usr=otro.id_usr, id_ubccn=ubicacion.id_ubccn))
+    db_session.flush()
+    app.dependency_overrides[get_current_user] = lambda: usuario_jwt(
+        otro, rol.nmbr, sede_id=sede.id_sd
+    )
+    assert client.get(f"/paneles/{panel.id_pnl}").status_code == 404
+    assert client.get("/paneles").json()["items"] == []
+
+    app.dependency_overrides[get_current_user] = lambda: usuario_jwt(
+        dueno, rol.nmbr, sede_id=sede.id_sd
+    )
+    assert (
+        client.put(f"/paneles/{panel.id_pnl}/visibilidad", json={"vsbldd": "Empresa"}).status_code
+        == 200
+    )
+    app.dependency_overrides[get_current_user] = lambda: usuario_jwt(
+        otro, rol.nmbr, sede_id=sede.id_sd
+    )
+    listado = client.get("/paneles").json()["items"]
+    assert len(listado) == 1 and listado[0]["es_propietario"] is False
+    assert listado[0]["vsbldd"] == "Empresa"
+    assert client.get(f"/paneles/{panel.id_pnl}").json()["es_propietario"] is False
+    assert (
+        client.get(f"/paneles/{panel.id_pnl}/contenido").json()["ubicaciones"][0]["id_ubccn"]
+        == ubicacion.id_ubccn
+    )
+    assert (
+        client.put(f"/paneles/{panel.id_pnl}/visibilidad", json={"vsbldd": "Privado"}).status_code
+        == 403
+    )
+
+    app.dependency_overrides[get_current_user] = lambda: usuario_jwt(
+        dueno, rol.nmbr, sede_id=sede.id_sd
+    )
+    assert (
+        client.put(f"/paneles/{panel.id_pnl}/visibilidad", json={"vsbldd": "Privado"}).status_code
+        == 200
+    )
+    app.dependency_overrides[get_current_user] = lambda: usuario_jwt(
+        otro, rol.nmbr, sede_id=sede.id_sd
+    )
+    assert client.get("/paneles").json()["items"] == []
+    assert client.get(f"/paneles/{panel.id_pnl}").status_code == 404
+
+    app.dependency_overrides[get_current_user] = lambda: usuario_jwt(
+        dueno, rol.nmbr, sede_id=sede.id_sd
+    )
+    assert (
+        client.put(f"/paneles/{panel.id_pnl}/visibilidad", json={"vsbldd": "Empresa"}).status_code
+        == 200
+    )
+
+    sede_ajena = fabrica.sede()
+    ajeno = fabrica.usuario(rol=rol)
+    agregar_permiso(db_session, ajeno, sede_ajena, "Tableros", "Lectura", rol)
+    app.dependency_overrides[get_current_user] = lambda: usuario_jwt(
+        ajeno, rol.nmbr, sede_id=sede_ajena.id_sd
+    )
+    assert client.get("/paneles").json()["items"] == []
+    assert client.get(f"/paneles/{panel.id_pnl}").status_code in {403, 404}
+
+
+def test_duplicar_panel_copia_configuracion_y_conserva_privacidad(
+    client, db_session, cliente_con_edicion_tableros
+):
+    usuario, sede = cliente_con_edicion_tableros
+    panel = crear_panel(db_session, usuario, sede, "Monitoreo")
+    ubicacion = crear_ubicacion(db_session, sede)
+    parametro = crear_parametro(db_session)
+    db_session.add(PermisoUbicacion(id_usr=usuario.id_usr, id_ubccn=ubicacion.id_ubccn))
+    db_session.flush()
+    client.post(f"/paneles/{panel.id_pnl}/ubicaciones", json={"id_ubccn": ubicacion.id_ubccn})
+    client.post(
+        f"/paneles/{panel.id_pnl}/widgets",
+        json={
+            "tp": "tabla",
+            "id_prmtr": parametro.id_prmtr,
+            "id_ubccn": ubicacion.id_ubccn,
+            "ancho": 2,
+        },
+    )
+    client.put(f"/paneles/{panel.id_pnl}/visibilidad", json={"vsbldd": "Empresa"})
+    respuesta = client.post(f"/paneles/{panel.id_pnl}/duplicar")
+    assert respuesta.status_code == 201, respuesta.text
+    copia_id = respuesta.json()["panel"]["id_pnl"]
+    assert respuesta.json()["panel"]["nmbr"] == "Copia de Monitoreo"
+    assert client.get(f"/paneles/{copia_id}").json()["vsbldd"] == "Privado"
+    contenido = client.get(f"/paneles/{copia_id}/contenido").json()
+    assert [u["id_ubccn"] for u in contenido["ubicaciones"]] == [ubicacion.id_ubccn]
+    assert [(w["tp"], w["ancho"]) for w in contenido["widgets"]] == [("tabla", 2)]
+    assert (
+        client.post(f"/paneles/{panel.id_pnl}/duplicar").json()["panel"]["nmbr"]
+        == "Copia de Monitoreo 2"
+    )
+
+
+def test_widget_exige_ubicacion_anadida_y_tipo_valido(
+    client, db_session, cliente_con_edicion_tableros
+):
+    usuario, sede = cliente_con_edicion_tableros
+    panel = crear_panel(db_session, usuario, sede, "Panel validaciones")
+    ubicacion = crear_ubicacion(db_session, sede)
+    parametro = crear_parametro(db_session)
+    db_session.add(PermisoUbicacion(id_usr=usuario.id_usr, id_ubccn=ubicacion.id_ubccn))
+    db_session.flush()
+    ruta = f"/paneles/{panel.id_pnl}/widgets"
+    body = {"tp": "area", "id_prmtr": parametro.id_prmtr, "id_ubccn": ubicacion.id_ubccn}
+
+    assert client.post(ruta, json=body).status_code == 422
+    client.post(f"/paneles/{panel.id_pnl}/ubicaciones", json={"id_ubccn": ubicacion.id_ubccn})
+    assert client.post(ruta, json={**body, "tp": "medidor"}).status_code == 422
+    tabla = client.post(ruta, json={**body, "tp": "tabla", "ancho": 2})
+    assert tabla.status_code == 201
+    assert tabla.json()["widget"]["ancho"] == 2
+    assert client.post(ruta, json=body).status_code == 201
+    assert (
+        client.post(
+            f"/paneles/{panel.id_pnl}/ubicaciones", json={"id_ubccn": ubicacion.id_ubccn}
+        ).status_code
+        == 409
+    )
+
+
+def test_widget_editar_eliminar_y_reordenar_persiste(
+    client, db_session, cliente_con_edicion_tableros
+):
+    usuario, sede = cliente_con_edicion_tableros
+    panel = crear_panel(db_session, usuario, sede, "Panel orden")
+    ubicacion = crear_ubicacion(db_session, sede)
+    parametro = crear_parametro(db_session)
+    db_session.add(PermisoUbicacion(id_usr=usuario.id_usr, id_ubccn=ubicacion.id_ubccn))
+    db_session.flush()
+    client.post(f"/paneles/{panel.id_pnl}/ubicaciones", json={"id_ubccn": ubicacion.id_ubccn})
+    ruta = f"/paneles/{panel.id_pnl}/widgets"
+    body = {"tp": "linea", "id_prmtr": parametro.id_prmtr, "id_ubccn": ubicacion.id_ubccn}
+    primero = client.post(ruta, json=body).json()["widget"]["id_wdgt"]
+    segundo = client.post(ruta, json=body).json()["widget"]["id_wdgt"]
+
+    assert client.put(f"{ruta}/orden", json={"ids": [segundo, primero]}).status_code == 200
+    assert client.put(f"{ruta}/orden", json={"ids": [segundo, segundo]}).status_code == 422
+    assert [
+        w["id_wdgt"] for w in client.get(f"/paneles/{panel.id_pnl}/contenido").json()["widgets"]
+    ] == [segundo, primero]
+
+    editado = client.put(f"{ruta}/{primero}", json={**body, "tp": "tarjeta"})
+    assert editado.status_code == 200
+    assert editado.json()["mensaje"] == "Widget actualizado correctamente"
+    assert editado.json()["widget"]["tp"] == "tarjeta"
+    borrado = client.delete(f"{ruta}/{segundo}")
+    assert borrado.status_code == 200
+    assert borrado.json()["mensaje"] == "Widget eliminado correctamente"
+    assert [
+        w["id_wdgt"] for w in client.get(f"/paneles/{panel.id_pnl}/contenido").json()["widgets"]
+    ] == [primero]
+
+
+def test_quitar_ubicacion_borra_sus_widgets_sin_borrar_recursos(
+    client, db_session, cliente_con_edicion_tableros
+):
+    usuario, sede = cliente_con_edicion_tableros
+    panel = crear_panel(db_session, usuario, sede, "Panel quitar")
+    ubicacion = crear_ubicacion(db_session, sede)
+    parametro = crear_parametro(db_session)
+    db_session.add(PermisoUbicacion(id_usr=usuario.id_usr, id_ubccn=ubicacion.id_ubccn))
+    db_session.flush()
+    client.post(f"/paneles/{panel.id_pnl}/ubicaciones", json={"id_ubccn": ubicacion.id_ubccn})
+    client.post(
+        f"/paneles/{panel.id_pnl}/widgets",
+        json={
+            "tp": "linea",
+            "id_prmtr": parametro.id_prmtr,
+            "id_ubccn": ubicacion.id_ubccn,
+        },
+    )
+
+    respuesta = client.delete(f"/paneles/{panel.id_pnl}/ubicaciones/{ubicacion.id_ubccn}")
+    assert respuesta.status_code == 200
+    assert respuesta.json()["mensaje"] == "Ubicación retirada del panel"
+    assert client.get(f"/paneles/{panel.id_pnl}/contenido").json() == {
+        "proyecto_activo": None,
+        "ubicaciones": [],
+        "dispositivos": [],
+        "widgets": [],
+    }
+    assert db_session.get(Ubicacion, ubicacion.id_ubccn) is not None
+    assert db_session.get(Parametro, parametro.id_prmtr) is not None
+
+
+def test_panel_no_permite_anadir_ubicacion_sin_acceso_ni_modificar_panel_ajeno(
+    client, db_session, cliente_con_edicion_tableros
+):
+    usuario, sede = cliente_con_edicion_tableros
+    panel = crear_panel(db_session, usuario, sede, "Panel acceso")
+    ubicacion = crear_ubicacion(db_session, sede)
+    assert (
+        client.post(
+            f"/paneles/{panel.id_pnl}/ubicaciones", json={"id_ubccn": ubicacion.id_ubccn}
+        ).status_code
+        == 404
+    )
+    fabrica_otro = Fabrica(db_session)
+    otro_usuario = fabrica_otro.usuario(rol=fabrica_otro.rol("Cliente Final"))
+    panel_ajeno = crear_panel(db_session, otro_usuario, sede, "Panel ajeno con widgets")
+    assert client.get(f"/paneles/{panel_ajeno.id_pnl}/contenido").status_code == 404
+    assert (
+        client.post(
+            f"/paneles/{panel_ajeno.id_pnl}/widgets",
+            json={
+                "tp": "linea",
+                "id_prmtr": 1,
+                "id_ubccn": ubicacion.id_ubccn,
+            },
+        ).status_code
+        == 404
+    )
 
 
 def test_eliminar_panel_inexistente_devuelve_404(client, cliente_con_edicion_tableros):
@@ -769,7 +1119,9 @@ def test_eliminar_panel_inexistente_devuelve_404(client, cliente_con_edicion_tab
     assert respuesta.status_code == 404
 
 
-def test_eliminar_panel_de_otro_usuario_devuelve_404(client, db_session, cliente_con_edicion_tableros):
+def test_eliminar_panel_de_otro_usuario_devuelve_404(
+    client, db_session, cliente_con_edicion_tableros
+):
     _, sede = cliente_con_edicion_tableros
     fabrica_otro = Fabrica(db_session)
     rol_otro = fabrica_otro.rol("Cliente Final")

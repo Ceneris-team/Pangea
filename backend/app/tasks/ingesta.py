@@ -7,7 +7,7 @@ from app.database import SessionLocal
 from app.ingesta.ftp_receptor import descargar_archivo_dat, listar_archivos_dat
 from app.models.archivo_ingesta import ArchivoIngesta
 from app.models.intento_procesamiento import IntentoProcesamiento
-from app.models.mapeo_dispositivo import Parametro
+from app.models.mapeo_dispositivo import Dispositivo, Parametro
 from app.models.ubicacion_conexion import ConexionFTP
 from app.security.auditoria import limpiar_contexto_auditoria, marcar_contexto_auditoria
 from app.services.cache.invalidacion import invalidar_por_lectura
@@ -443,7 +443,16 @@ def sondear_conexiones_ftp() -> dict:
         ahora = dt.datetime.now(dt.timezone.utc)
         conexiones = (
             db.query(ConexionFTP)
-            .filter(ConexionFTP.estd == "Activa", ConexionFTP.prtcl == "FTP")
+            .filter(
+                ConexionFTP.estd == "Activa",
+                ConexionFTP.prtcl == "FTP",
+                db.query(Dispositivo.id_dspstv)
+                .filter(
+                    Dispositivo.id_cnxn == ConexionFTP.id_cnxn,
+                    Dispositivo.estd == "Activo",
+                )
+                .exists(),
+            )
             .all()
         )
 
