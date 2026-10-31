@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import Sidebar, { type SeccionActiva } from "./Sidebar";
 import Topbar from "./Topbar";
-import { useAuth } from "../../context/AuthContext";
+import { useAuth } from "../../hooks/useAuth";
 
 interface DashboardLayoutProps {
   children: ReactNode;

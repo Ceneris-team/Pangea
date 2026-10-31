@@ -109,6 +109,7 @@ export function useMapaEnVivo(onLectura: (evento: EventoLectura) => void) {
   }, [onLectura]);
 
   const socketRef = useRef<WebSocket | null>(null);
+  const conectarRef = useRef<() => void>(() => {});
   const intentosRef = useRef(0);
   const timerReconexionRef = useRef<number | null>(null);
   const timerLatidoRef = useRef<number | null>(null);
@@ -196,7 +197,7 @@ export function useMapaEnVivo(onLectura: (evento: EventoLectura) => void) {
       const retardo = Math.min(RETARDO_BASE_MS * 2 ** intento, RETARDO_MAXIMO_MS);
       intentosRef.current = intento + 1;
       setEstado("reconectando");
-      timerReconexionRef.current = window.setTimeout(conectar, retardo);
+      timerReconexionRef.current = window.setTimeout(() => conectarRef.current(), retardo);
     };
 
     socket.onerror = () => {
@@ -207,10 +208,16 @@ export function useMapaEnVivo(onLectura: (evento: EventoLectura) => void) {
   }, [limpiarTimers]);
 
   useEffect(() => {
+    conectarRef.current = conectar;
+  }, [conectar]);
+
+  useEffect(() => {
+    let activo = true;
     desmontadoRef.current = false;
-    conectar();
+    queueMicrotask(() => { if (activo) void conectar(); });
 
     return () => {
+      activo = false;
       desmontadoRef.current = true;
       limpiarTimers();
       // 1000 = cierre normal: le dice al backend que esto es una salida

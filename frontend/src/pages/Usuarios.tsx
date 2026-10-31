@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { apiFetch, ApiError } from "../services/api";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../hooks/useAuth";
 import Sidebar from "../components/layout/Sidebar";
 import Topbar from "../components/layout/Topbar";
 import DrawerPanel from "../components/layout/DrawerPanel";
@@ -392,13 +392,12 @@ export default function Usuarios() {
   }, [idResaltado, data]);
 
   useEffect(() => {
-    setPagina(1);
+    queueMicrotask(() => setPagina(1));
   }, [busqueda, rol, estado]);
 
   useEffect(() => {
     let cancelado = false;
-    setLoading(true);
-    setError(null);
+    queueMicrotask(() => { if (!cancelado) { setLoading(true); setError(null); } });
 
     apiFetch<ListadoPaginado>("/usuarios", {
       params: {

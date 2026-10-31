@@ -1,11 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { apiFetch, ApiError } from "../services/api";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../hooks/useAuth";
 import Sidebar from "../components/layout/Sidebar";
 import Topbar from "../components/layout/Topbar";
 import DrawerPanel from "../components/layout/DrawerPanel";
 import SelectorRangoFechas from "../components/SelectorRangoFechas";
+import ExportacionesPanel from "../components/ExportacionesPanel";
 import { formatearFechaHoraEnZona, rangoUltimas24Horas, type RangoFechas } from "../utils/fechas";
 
 interface ParametroItem {
@@ -31,6 +32,12 @@ interface MedicionItem {
 interface ListadoMediciones {
   total: number;
   items: MedicionItem[];
+  next_cursor: string | null;
+}
+
+interface ListadoUbicaciones {
+  total: number;
+  items: UbicacionItem[];
 }
 
 // HU32: valor mínimo/máximo (decimales) y frecuencia de muestreo
@@ -54,6 +61,8 @@ function construirQuery(
   filtrosAvanzados: FiltrosAvanzados,
 ): string {
   const params = new URLSearchParams();
+  // La tabla recorre todas las páginas; el muestreo automático es para gráficas.
+  params.append("sin_muestreo", "true");
   parametroIds.forEach((id) => params.append("parametro_ids", String(id)));
   ubicacionIds.forEach((id) => params.append("ubicacion_ids", String(id)));
   if (rangoFechas) {
@@ -117,11 +126,16 @@ export default function ConsultaDatos() {
 
   const [mediciones, setMediciones] = useState<ListadoMediciones | null>(null);
   const [loading, setLoading] = useState(false);
+  const [cargandoMas, setCargandoMas] = useState(false);
+  const [paginaCargada, setPaginaCargada] = useState(1);
+  const [usaCursor, setUsaCursor] = useState(false);
+  const peticionActual = useRef(0);
   const [error, setError] = useState<string | null>(null);
 
   // HU21: hasta que /ubicaciones responda no se sabe si el usuario tiene
   // ubicaciones asignadas; sin esto el mensaje parpadearía en cada carga.
   const [cargandoUbicaciones, setCargandoUbicaciones] = useState(true);
+  const [errorUbicaciones, setErrorUbicaciones] = useState<string | null>(null);
 
   // Los filtros (parámetros, ubicaciones, rango de fechas) ya no viven
   // apilados en la pantalla principal -diecisiete parámetros más siete
@@ -137,22 +151,57 @@ export default function ConsultaDatos() {
       .then((res) => setParametros(res.items))
       .catch(() => setParametros([]));
 
-    apiFetch<{ items: UbicacionItem[] }>("/ubicaciones", { params: { por_pagina: 100 } })
-      .then((res) => setUbicaciones(res.items))
-      .catch(() => setUbicaciones([]))
-      .finally(() => setCargandoUbicaciones(false));
+    let cancelado = false;
+    async function cargarUbicaciones() {
+      try {
+        const todas: UbicacionItem[] = [];
+        let pagina = 1;
+        let total = 0;
+        do {
+          const res = await apiFetch<ListadoUbicaciones>("/ubicaciones", {
+            params: { pagina, por_pagina: 100 },
+          });
+          todas.push(...res.items);
+          total = res.total;
+          if (res.items.length === 0 && todas.length < total) {
+            throw new Error("El listado de proyectos no avanzó de página.");
+          }
+          pagina += 1;
+        } while (todas.length < total);
+        if (!cancelado) setUbicaciones(todas);
+      } catch {
+        if (!cancelado) setErrorUbicaciones("No se pudieron cargar los proyectos disponibles.");
+      } finally {
+        if (!cancelado) setCargandoUbicaciones(false);
+      }
+    }
+    void cargarUbicaciones();
+    return () => { cancelado = true; };
   }, []);
+
+  const queryMediciones = construirQuery(
+    filtroParametros, filtroUbicaciones, filtroFechas, filtroAvanzados,
+  );
 
   useEffect(() => {
     let cancelado = false;
-    setLoading(true);
-    setError(null);
+    peticionActual.current += 1;
+    queueMicrotask(() => {
+      if (cancelado) return;
+      setLoading(true);
+      setCargandoMas(false);
+      setPaginaCargada(1);
+      setUsaCursor(false);
+      setMediciones(null);
+      setError(null);
+    });
 
-    apiFetch<ListadoMediciones>(
-      construirQuery(filtroParametros, filtroUbicaciones, filtroFechas, filtroAvanzados),
-    )
+    apiFetch<ListadoMediciones>(queryMediciones)
       .then((res) => {
-        if (!cancelado) setMediciones(res);
+        if (!cancelado) {
+          setMediciones(res);
+          setUsaCursor(Boolean(res.next_cursor));
+        }
       })
       .catch((err) => {
         if (cancelado) return;
@@ -165,7 +214,38 @@ export default function ConsultaDatos() {
     return () => {
       cancelado = true;
     };
-  }, [filtroParametros, filtroUbicaciones, filtroFechas, filtroAvanzados]);
+  }, [queryMediciones]);
+
+  const hayMasMediciones = mediciones !== null && (
+    usaCursor ? mediciones.next_cursor !== null : mediciones.items.length < mediciones.total
+  );
+
+  const cargarMasMediciones = async () => {
+    if (!mediciones || !hayMasMediciones || loading || cargandoMas) return;
+    const idPeticion = peticionActual.current;
+    const siguientePagina = paginaCargada + 1;
+    const separador = queryMediciones.includes("?") ? "&" : "?";
+    const siguienteQuery = usaCursor
+      ? `${queryMediciones}${separador}cursor=${encodeURIComponent(mediciones.next_cursor!)}`
+      : `${queryMediciones}${separador}pagina=${siguientePagina}`;
+    setCargandoMas(true);
+    setError(null);
+    try {
+      const res = await apiFetch<ListadoMediciones>(siguienteQuery);
+      if (idPeticion !== peticionActual.current) return;
+      setMediciones((actual) => actual && ({
+        ...res,
+        items: [...actual.items, ...res.items],
+      }));
+      setPaginaCargada(siguientePagina);
+    } catch (err) {
+      if (idPeticion === peticionActual.current) {
+        setError(err instanceof ApiError ? err.message : "No se pudieron cargar más registros.");
+      }
+    } finally {
+      if (idPeticion === peticionActual.current) setCargandoMas(false);
+    }
+  };
 
   const toggleSeleccion = (lista: number[], setLista: (v: number[]) => void, id: number) => {
     setLista(lista.includes(id) ? lista.filter((v) => v !== id) : [...lista, id]);
@@ -180,7 +260,7 @@ export default function ConsultaDatos() {
    *  registradas, así que una lista vacía solo puede significar o que no hay
    *  ninguna ubicación en el sistema o que a este usuario no le asignaron
    *  ninguna. En ambos casos no hay nada que consultar. */
-  const sinUbicacionesAsignadas = !cargandoUbicaciones && ubicaciones.length === 0;
+  const sinUbicacionesAsignadas = !cargandoUbicaciones && !errorUbicaciones && ubicaciones.length === 0;
 
   // Conteo de filtros YA APLICADOS (no la selección en curso dentro del
   // panel) para el badge del botón "Filtros": deja ver de un vistazo que
@@ -277,7 +357,7 @@ export default function ConsultaDatos() {
                   Gráficos. Este botón es el único punto de entrada;
                   muestra cuántos filtros hay aplicados sin necesidad de
                   abrir el panel. */}
-              {!sinUbicacionesAsignadas && (
+              {!sinUbicacionesAsignadas && !errorUbicaciones && (
                 <button
                   type="button"
                   onClick={() => setPanelFiltrosAbierto(true)}
@@ -296,6 +376,25 @@ export default function ConsultaDatos() {
               )}
             </header>
 
+            {!sinUbicacionesAsignadas && !errorUbicaciones && <ExportacionesPanel
+              idInicial={Number(searchParams.get("exportacion")) || undefined}
+              filtros={{
+                fecha_inicio: new Date(filtroFechas.inicio).toISOString(),
+                fecha_fin: new Date(filtroFechas.fin).toISOString(),
+                ubicacion_ids: filtroUbicaciones,
+                parametro_ids: filtroParametros,
+                valor_min: filtroAvanzados.valorMin || null,
+                valor_max: filtroAvanzados.valorMax || null,
+                frecuencia_muestreo: filtroAvanzados.frecuenciaMuestreo ? Number(filtroAvanzados.frecuenciaMuestreo) : null,
+              }}
+            />}
+
+            {errorUbicaciones && (
+              <div role="alert" className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm rounded-xl">
+                {errorUbicaciones}
+              </div>
+            )}
+
             {/* HU21: un Cliente Final sin ninguna ubicación asignada ve el
                 módulo vacío con este mensaje exacto, en lugar de unos filtros
                 y una tabla que nunca podrían devolver nada. */}
@@ -307,7 +406,7 @@ export default function ConsultaDatos() {
               </div>
             )}
 
-            {!sinUbicacionesAsignadas && (
+            {!sinUbicacionesAsignadas && !errorUbicaciones && (
             <>
             <div className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl shadow-sm border border-black/10 dark:border-white/10">
               {error && (
@@ -341,9 +440,9 @@ export default function ConsultaDatos() {
                       </tr>
                     )}
                     {!loading &&
-                      mediciones?.items.map((m) => (
+                      mediciones?.items.map((m, indice) => (
                         <tr
-                          key={m.id_registro}
+                          key={`${m.id_registro}-${indice}`}
                           className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm border-b border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
                         >
                           <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">{m.parametro_nombre}</td>
@@ -358,6 +457,23 @@ export default function ConsultaDatos() {
                   </tbody>
                 </table>
               </div>
+              {!loading && mediciones && mediciones.total > 0 && (
+                <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-4 border-t border-black/10 dark:border-white/10">
+                  <p className="text-sm text-gray-600 dark:text-gray-300">
+                    Mostrando {mediciones.items.length} de {mediciones.total} registros
+                  </p>
+                  {hayMasMediciones && (
+                    <button
+                      type="button"
+                      onClick={() => void cargarMasMediciones()}
+                      disabled={cargandoMas}
+                      className="px-4 py-2 rounded-xl bg-[#ccff00] text-gray-900 text-sm font-bold hover:brightness-95 disabled:opacity-50"
+                    >
+                      {cargandoMas ? "Cargando..." : "Cargar más"}
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
             </>
             )}
@@ -372,9 +488,11 @@ export default function ConsultaDatos() {
         abierto={panelFiltrosAbierto}
         onCerrar={() => setPanelFiltrosAbierto(false)}
         titulo="Filtros"
+        panelClassName="rounded-l-3xl overflow-hidden border-l border-black/10 dark:border-white/10"
       >
-            <div className="flex flex-col gap-6">
-              <fieldset>
+            <div className="min-w-0">
+              <div className="min-w-0 pb-5 border-b border-black/10 dark:border-white/10">
+              <fieldset className="min-w-0">
                 <legend className="text-sm font-bold text-gray-700 dark:text-gray-200 mb-3">Parámetros</legend>
                 <div className="flex flex-wrap gap-2">
                   {parametros.length === 0 && (
@@ -390,7 +508,7 @@ export default function ConsultaDatos() {
                     return (
                       <label
                         key={p.id_prmtr}
-                        className={`inline-flex items-center gap-1.5 pl-3 pr-3.5 py-1.5 rounded-full text-sm font-medium cursor-pointer border transition-colors ${
+                        className={`inline-flex items-center gap-1.5 pl-3 pr-3.5 py-1.5 rounded-xl text-sm font-medium cursor-pointer border transition-colors ${
                           activo
                             ? "bg-[#ccff00]/20 text-[#5a7000] dark:text-[#ccff00] border-[#8fb300]/40 dark:border-[#ccff00]/30"
                             : "bg-black/5 dark:bg-white/5 text-gray-600 dark:text-gray-300 border-transparent hover:bg-black/10 dark:hover:bg-white/10"
@@ -417,7 +535,7 @@ export default function ConsultaDatos() {
                 </div>
               </fieldset>
 
-              <fieldset className="pt-6 border-t border-black/10 dark:border-white/10">
+              <fieldset className="min-w-0 mt-5">
                 <legend className="text-sm font-bold text-gray-700 dark:text-gray-200 mb-3">Proyectos</legend>
                 <div className="flex flex-wrap gap-2">
                   {ubicaciones.length === 0 && (
@@ -428,7 +546,7 @@ export default function ConsultaDatos() {
                     return (
                       <label
                         key={u.id_ubccn}
-                        className={`inline-flex items-center gap-1.5 pl-3 pr-3.5 py-1.5 rounded-full text-sm font-medium cursor-pointer border transition-colors ${
+                        className={`inline-flex items-center gap-1.5 pl-3 pr-3.5 py-1.5 rounded-xl text-sm font-medium cursor-pointer border transition-colors ${
                           activo
                             ? "bg-[#ccff00]/20 text-[#5a7000] dark:text-[#ccff00] border-[#8fb300]/40 dark:border-[#ccff00]/30"
                             : "bg-black/5 dark:bg-white/5 text-gray-600 dark:text-gray-300 border-transparent hover:bg-black/10 dark:hover:bg-white/10"
@@ -452,21 +570,22 @@ export default function ConsultaDatos() {
                 </div>
               </fieldset>
 
-              <div className="flex gap-2">
+              <div className="mt-4 flex flex-wrap items-center gap-2">
                 <button
                   type="button"
                   onClick={handleAplicar}
-                  className="flex-1 px-4 py-2.5 rounded-xl bg-[#ccff00] text-gray-900 text-sm font-bold hover:brightness-95 transition-all"
+                  className="min-w-32 px-5 py-2 rounded-xl bg-[#ccff00] text-gray-900 text-sm font-bold hover:brightness-95 transition-all"
                 >
                   APLICAR
                 </button>
                 <button
                   type="button"
                   onClick={handleLimpiar}
-                  className="flex-1 px-4 py-2.5 rounded-xl border border-black/20 dark:border-white/20 text-gray-700 dark:text-gray-200 text-sm font-bold hover:bg-black/10 dark:hover:bg-white/10 transition-all"
+                  className="px-3 py-2 rounded-xl text-gray-600 dark:text-gray-300 text-sm font-semibold hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
                 >
-                  LIMPIAR
+                  LIMPIAR FILTROS
                 </button>
+              </div>
               </div>
 
               {/* HU12: rango de fechas con su propio par Aplicar/Limpiar,
@@ -474,8 +593,9 @@ export default function ConsultaDatos() {
                   documentada en SelectorRangoFechas.tsx, no algo que
                   cambie acá: "LIMPIAR FILTROS" (HU13/DEC-11) solo
                   controla parámetros y ubicaciones-. */}
-              <div className="pt-6 border-t border-black/10 dark:border-white/10">
+              <div className="min-w-0 py-5 border-b border-black/10 dark:border-white/10">
                 <SelectorRangoFechas
+                  plano
                   seleccion={seleccionFechas}
                   onCambiarSeleccion={setSeleccionFechas}
                   onAplicar={handleAplicarFechas}
@@ -486,12 +606,12 @@ export default function ConsultaDatos() {
               {/* HU32: filtros avanzados (valor mín/máx, frecuencia de
                   muestreo), con su propio par APLICAR/LIMPIAR -tercer
                   bloque independiente, mismo patrón que HU13 y HU12 arriba-. */}
-              <fieldset className="pt-6 border-t border-black/10 dark:border-white/10">
+              <fieldset className="min-w-0 pt-5">
                 <legend className="text-sm font-bold text-gray-700 dark:text-gray-200 mb-3">
                   Filtros avanzados
                 </legend>
-                <div className="flex flex-col sm:flex-row gap-3">
-                  <label className="flex flex-col gap-1 text-sm text-gray-700 dark:text-gray-200">
+                <div className="grid min-w-0 grid-cols-1 gap-3 min-[380px]:grid-cols-2">
+                  <label className="flex min-w-0 flex-col gap-1 text-sm text-gray-700 dark:text-gray-200">
                     Valor mínimo
                     <input
                       type="number"
@@ -501,10 +621,10 @@ export default function ConsultaDatos() {
                       onChange={(e) =>
                         setSeleccionAvanzados({ ...seleccionAvanzados, valorMin: e.target.value })
                       }
-                      className="rounded-lg border border-black/20 dark:border-white/20 bg-transparent px-3 py-1.5 text-sm text-gray-900 dark:text-white"
+                      className="w-full min-w-0 rounded-xl border border-black/20 dark:border-white/20 bg-transparent px-3 py-2 text-sm text-gray-900 dark:text-white"
                     />
                   </label>
-                  <label className="flex flex-col gap-1 text-sm text-gray-700 dark:text-gray-200">
+                  <label className="flex min-w-0 flex-col gap-1 text-sm text-gray-700 dark:text-gray-200">
                     Valor máximo
                     <input
                       type="number"
@@ -514,10 +634,10 @@ export default function ConsultaDatos() {
                       onChange={(e) =>
                         setSeleccionAvanzados({ ...seleccionAvanzados, valorMax: e.target.value })
                       }
-                      className="rounded-lg border border-black/20 dark:border-white/20 bg-transparent px-3 py-1.5 text-sm text-gray-900 dark:text-white"
+                      className="w-full min-w-0 rounded-xl border border-black/20 dark:border-white/20 bg-transparent px-3 py-2 text-sm text-gray-900 dark:text-white"
                     />
                   </label>
-                  <label className="flex flex-col gap-1 text-sm text-gray-700 dark:text-gray-200">
+                  <label className="flex min-w-0 flex-col gap-1 text-sm text-gray-700 dark:text-gray-200 min-[380px]:col-span-2">
                     Frecuencia de muestreo (min)
                     <input
                       type="number"
@@ -531,7 +651,7 @@ export default function ConsultaDatos() {
                           frecuenciaMuestreo: e.target.value,
                         })
                       }
-                      className="rounded-lg border border-black/20 dark:border-white/20 bg-transparent px-3 py-1.5 text-sm text-gray-900 dark:text-white"
+                      className="w-full min-w-0 rounded-xl border border-black/20 dark:border-white/20 bg-transparent px-3 py-2 text-sm text-gray-900 dark:text-white"
                     />
                   </label>
                 </div>
@@ -540,18 +660,18 @@ export default function ConsultaDatos() {
                   <p className="text-xs text-red-600 dark:text-red-400 mt-2">{errorAvanzados}</p>
                 )}
 
-                <div className="flex gap-2 mt-3">
+                <div className="mt-4 flex flex-wrap items-center gap-2">
                   <button
                     type="button"
                     onClick={handleAplicarAvanzados}
-                    className="px-4 py-2 rounded-xl bg-[#ccff00] text-gray-900 text-sm font-bold hover:brightness-95 transition-all"
+                    className="px-5 py-2 rounded-xl bg-[#ccff00] text-gray-900 text-sm font-bold hover:brightness-95 transition-all"
                   >
                     APLICAR FILTROS
                   </button>
                   <button
                     type="button"
                     onClick={handleLimpiarAvanzados}
-                    className="px-4 py-2 rounded-xl border border-black/20 dark:border-white/20 text-gray-700 dark:text-gray-200 text-sm font-bold hover:bg-black/10 dark:hover:bg-white/10 transition-all"
+                    className="px-3 py-2 rounded-xl text-gray-600 dark:text-gray-300 text-sm font-semibold hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
                   >
                     LIMPIAR FILTROS AVANZADOS
                   </button>

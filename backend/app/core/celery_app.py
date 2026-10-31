@@ -19,6 +19,8 @@ celery_app = Celery(
         "app.tasks.notificaciones",
         "app.tasks.particiones",
         "app.tasks.suscripciones",
+        "app.tasks.respaldos",
+        "app.tasks.exportaciones",
     ],
 )
 
@@ -29,6 +31,9 @@ celery_app.conf.update(
     timezone="America/Bogota",
     enable_utc=True,
     task_track_started=True,
+    task_routes={
+        "app.tasks.exportaciones.generar_exportacion": {"queue": "exportaciones"},
+    },
 )
 
 # HT-05 CA4 - Límite de concurrencia del worker
@@ -69,6 +74,10 @@ celery_app.conf.update(
 # posible, así que ninguna frcnc_mnts configurada por debajo de eso puede
 # cumplirse igual.
 celery_app.conf.beat_schedule = {
+    "mantener-exportaciones-cada-minuto": {
+        "task": "app.tasks.exportaciones.mantener_exportaciones",
+        "schedule": 60.0,
+    },
     "activar-suscripciones-programadas": {
         "task": "app.tasks.suscripciones.activar_suscripciones_programadas",
         "schedule": 60.0,
@@ -101,5 +110,15 @@ celery_app.conf.beat_schedule = {
     "reencolar-pendientes-atascados-cada-30-min": {
         "task": "app.tasks.ingesta.reencolar_pendientes_atascados",
         "schedule": 1800.0,
+    },
+    # HT-06 (PP-129): respaldo extendido de la base hacia Object Storage.
+    # Semanal -el CA pide "semanalmente"-, los domingos a las 02:00 (hora
+    # baja de ingesta, antes del job de particiones de las 03:00 para no
+    # competir por recursos). La retención de 12 meses la aplica la propia
+    # tarea tras subir el dump (ver app/services/respaldos.py). timezone del
+    # scheduler = America/Bogota (ver arriba).
+    "respaldo-extendido-semanal": {
+        "task": "app.tasks.respaldos.respaldo_semanal",
+        "schedule": crontab(hour=2, minute=0, day_of_week="sunday"),
     },
 }

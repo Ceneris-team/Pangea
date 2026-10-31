@@ -50,6 +50,7 @@ export class ApiError extends Error {
 }
 
 interface ApiOptions {
+  signal?: AbortSignal;
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   body?: unknown;
   params?: Record<string, string | number | undefined>;
@@ -102,6 +103,7 @@ export async function apiFetch<T>(path: string, options: ApiOptions = {}): Promi
   }
 
   const res = await fetch(url.toString(), {
+    signal: options.signal,
     method: options.method ?? "GET",
     credentials: "include",
     headers: {

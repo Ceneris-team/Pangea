@@ -2,7 +2,7 @@ import { estadoProyecto } from "../config/terminologia";
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { apiFetch, ApiError } from "../services/api";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../hooks/useAuth";
 import Sidebar from "../components/layout/Sidebar";
 import Topbar from "../components/layout/Topbar";
 
@@ -47,8 +47,7 @@ export default function DetalleUbicacion() {
   useEffect(() => {
     if (!id) return;
     let cancelado = false;
-    setCargando(true);
-    setError(null);
+    queueMicrotask(() => { if (!cancelado) { setCargando(true); setError(null); } });
 
     Promise.all([
       apiFetch<UbicacionDetalle>(`/ubicaciones/${id}`),

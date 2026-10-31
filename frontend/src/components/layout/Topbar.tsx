@@ -2,9 +2,9 @@ import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { esAdministracion, esCeneris } from "../../config/espacios";
 import { volverAdministracion } from "../../services/api";
-import { useTheme } from "../../context/ThemeContext";
+import { useTheme } from "../../hooks/useTheme";
 import { apiFetch } from "../../services/api";
-import { useAuth } from "../../context/AuthContext";
+import { useAuth } from "../../hooks/useAuth";
 import DrawerPanel from "./DrawerPanel";
 import PerfilConfiguracion from "../perfil/PerfilConfiguracion";
 
@@ -57,7 +57,7 @@ export default function Topbar({ nombreCompleto, rol }: TopbarProps) {
   }, [puedeVerSolicitudes, clienteId, pathname]);
 
   useEffect(() => {
-    if (administracion || !clienteId) { setAvisoSuscripcion(null); return; }
+    if (administracion || !clienteId) { queueMicrotask(() => setAvisoSuscripcion(null)); return; }
     let vigente = true;
     const cargar = () => apiFetch<{ aviso: string | null; operacion_habilitada: boolean }>("/comercial/mi-acceso")
       .then(data => { if (vigente) { setAvisoSuscripcion(data.aviso); actualizarAccesoComercial(data.operacion_habilitada); } }).catch(() => {});

@@ -81,6 +81,7 @@ from app.security.permisos import (
 )
 from app.services.ingesta.parser import ConfiguracionParseo, parsear_dat
 from app.services.ingesta.validador import es_valor_numerico
+from app.services.visualizacion import configuracion_columna
 from app.tasks.ingesta import normalizar_contenido_dat
 
 router = APIRouter(prefix="/mapeos", tags=["Mapeos de formato"])
@@ -338,6 +339,7 @@ def _columnas_detalle(db: Session, id_mp: int) -> list[MapeoColumnaDetalle]:
             id_prmtr=columna.id_prmtr,
             parametro_nombre=parametro.nmbr,
             parametro_unidad=parametro.undd,
+            visualizacion=configuracion_columna(columna, parametro),
         )
         for columna, parametro in filas
     ]
@@ -401,9 +403,7 @@ def listar_parametros(
     # debe volver a aparecer en NINGÚN selector -ni el de mapeos, ni el
     # de destino de otra fusión-, así que se excluye siempre, no solo
     # cuando se filtra por estado.
-    query = (
-        db.query(Parametro).filter(Parametro.estd != "Fusionado").order_by(Parametro.nmbr)
-    )
+    query = db.query(Parametro).filter(Parametro.estd != "Fusionado").order_by(Parametro.nmbr)
     if q:
         query = query.filter(Parametro.nmbr.ilike(f"%{q}%"))
     if estd:
@@ -489,9 +489,7 @@ def actualizar_parametro(
         db.commit()
     except IntegrityError:
         db.rollback()
-        raise HTTPException(
-            status_code=409, detail=f"Ya existe un parámetro llamado '{body.nmbr}'"
-        )
+        raise HTTPException(status_code=409, detail=f"Ya existe un parámetro llamado '{body.nmbr}'")
     db.refresh(parametro)
     return ParametroListItem.model_validate(parametro)
 
@@ -548,9 +546,7 @@ def activar_parametro(
         parametro.dscrpcn = body.dscrpcn.strip() or None
     if body.tipo_dato is not None:
         if body.tipo_dato not in ("numerico", "texto"):
-            raise HTTPException(
-                status_code=422, detail="tipo_dato debe ser 'numerico' o 'texto'"
-            )
+            raise HTTPException(status_code=422, detail="tipo_dato debe ser 'numerico' o 'texto'")
         parametro.tipo_dato = body.tipo_dato
 
     parametro.estd = "Activo"
@@ -597,9 +593,7 @@ def fusionar_parametro(
     origen = db.query(Parametro).filter(Parametro.id_prmtr == id_prmtr).first()
     if origen is None:
         raise HTTPException(status_code=404, detail="Parámetro a fusionar no encontrado")
-    destino = (
-        db.query(Parametro).filter(Parametro.id_prmtr == body.id_prmtr_destino).first()
-    )
+    destino = db.query(Parametro).filter(Parametro.id_prmtr == body.id_prmtr_destino).first()
     if destino is None:
         raise HTTPException(status_code=404, detail="Parámetro destino no encontrado")
     if origen.estd == "Fusionado":
@@ -819,9 +813,7 @@ def resolver_columna_pendiente(
     if pendiente is None:
         raise HTTPException(status_code=404, detail="Columna pendiente no encontrada")
     if pendiente.estd != "Pendiente":
-        raise HTTPException(
-            status_code=409, detail="Esta columna ya fue resuelta o ignorada"
-        )
+        raise HTTPException(status_code=409, detail="Esta columna ya fue resuelta o ignorada")
 
     formato = db.query(MapeoFormato).filter(MapeoFormato.id_mp == pendiente.id_mp).first()
     if formato is None:
@@ -832,9 +824,7 @@ def resolver_columna_pendiente(
 
     parametro = db.query(Parametro).filter(Parametro.id_prmtr == body.id_prmtr).first()
     if parametro is None:
-        raise HTTPException(
-            status_code=422, detail=f"El parámetro {body.id_prmtr} no existe"
-        )
+        raise HTTPException(status_code=422, detail=f"El parámetro {body.id_prmtr} no existe")
 
     ya_existe_columna = (
         db.query(MapeoColumna)
@@ -881,9 +871,7 @@ def ignorar_columna_pendiente(
     if pendiente is None:
         raise HTTPException(status_code=404, detail="Columna pendiente no encontrada")
     if pendiente.estd != "Pendiente":
-        raise HTTPException(
-            status_code=409, detail="Esta columna ya fue resuelta o ignorada"
-        )
+        raise HTTPException(status_code=409, detail="Esta columna ya fue resuelta o ignorada")
 
     formato = db.query(MapeoFormato).filter(MapeoFormato.id_mp == pendiente.id_mp).first()
     if formato is None:
@@ -999,6 +987,7 @@ def crear_mapeo(
                 id_mp=formato.id_mp,
                 indc_clmn=columna.indc_clmn,
                 id_prmtr=columna.id_prmtr,
+                visualizacion=columna.visualizacion.model_dump() if columna.visualizacion else None,
             )
         )
 
@@ -1064,6 +1053,10 @@ def actualizar_mapeo(
     if body.columnas is not None:
         _validar_indices_unicos(body.columnas)
         _validar_parametros_existen(db, body.columnas)
+        configuraciones_previas = {
+            (c.indc_clmn, c.id_prmtr): c.visualizacion
+            for c in db.query(MapeoColumna).filter(MapeoColumna.id_mp == formato.id_mp).all()
+        }
         db.query(MapeoColumna).filter(MapeoColumna.id_mp == formato.id_mp).delete()
         for columna in body.columnas:
             db.add(
@@ -1071,6 +1064,15 @@ def actualizar_mapeo(
                     id_mp=formato.id_mp,
                     indc_clmn=columna.indc_clmn,
                     id_prmtr=columna.id_prmtr,
+                    visualizacion=(
+                        columna.visualizacion.model_dump()
+                        if columna.visualizacion
+                        else (
+                            configuraciones_previas.get((columna.indc_clmn, columna.id_prmtr))
+                            if "visualizacion" not in columna.model_fields_set
+                            else None
+                        )
+                    ),
                 )
             )
 
@@ -1271,7 +1273,9 @@ async def vista_previa(
     # La vista previa muestra el valor CRUDO (sin castear a float), así que
     # el decimal no cambia lo que se ve; se valida igual para que el
     # formulario avise del conflicto coma/coma acá y no recién al guardar.
-    _validar_delimitadores_compatibles(_validar_delimitador(dlmtdr), _validar_delimitador_decimal(dlmtdr_dcml))
+    _validar_delimitadores_compatibles(
+        _validar_delimitador(dlmtdr), _validar_delimitador_decimal(dlmtdr_dcml)
+    )
     contenido = _decodificar_dat(await archivo.read())
     return _construir_vista_previa(
         db, contenido, dlmtdr, fl_inc_dts, frmt_fch, columna_fecha, asignaciones, dlmtdr_dcml
@@ -1313,7 +1317,9 @@ def _conexion_del_dispositivo(db: Session, usuario: dict, id_dspstv: int) -> Con
     return cnxn
 
 
-@router_dispositivos_mapeo.get("/{id_dspstv}/archivos-ftp", response_model=list[ArchivoFtpDisponible])
+@router_dispositivos_mapeo.get(
+    "/{id_dspstv}/archivos-ftp", response_model=list[ArchivoFtpDisponible]
+)
 def listar_archivos_ftp_dispositivo(
     id_dspstv: int,
     db: Session = Depends(get_db),
@@ -1349,7 +1355,9 @@ def vista_previa_ftp(
     .dat ya recibido por FTP (ver listar_archivos_ftp_dispositivo) en vez
     de subida a mano. Tampoco se persiste: se descarga a memoria, se
     interpreta y se descarta."""
-    _validar_delimitadores_compatibles(_validar_delimitador(dlmtdr), _validar_delimitador_decimal(dlmtdr_dcml))
+    _validar_delimitadores_compatibles(
+        _validar_delimitador(dlmtdr), _validar_delimitador_decimal(dlmtdr_dcml)
+    )
     cnxn = _conexion_del_dispositivo(db, usuario, id_dspstv)
     try:
         if nombre_archivo not in listar_archivos_dat(cnxn):
@@ -1408,7 +1416,11 @@ def _parsear_asignaciones(db: Session, asignaciones: str, total_columnas: int) -
         for p in db.query(Parametro).filter(Parametro.id_prmtr.in_(set(pares.values()))).all()
     }
     return {
-        indice: (parametros[id_prmtr].nmbr, parametros[id_prmtr].undd, parametros[id_prmtr].tipo_dato)
+        indice: (
+            parametros[id_prmtr].nmbr,
+            parametros[id_prmtr].undd,
+            parametros[id_prmtr].tipo_dato,
+        )
         for indice, id_prmtr in pares.items()
         if id_prmtr in parametros
     }

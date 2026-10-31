@@ -23,6 +23,25 @@ SMTP_FROM = os.environ.get("SMTP_FROM", "no-reply@pangea.local")
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5173")
 
 
+def enviar_correo_exportacion(correo: str, enlace: str, expira_en) -> None:
+    if not SMTP_HOST:
+        raise RuntimeError("SMTP no configurado para notificar exportaciones")
+    mensaje = EmailMessage()
+    mensaje["Subject"] = "Tu exportación está lista - Pangea"
+    mensaje["From"] = SMTP_FROM
+    mensaje["To"] = correo
+    mensaje.set_content(
+        "Tu exportación está lista. Inicia sesión en Pangea y abre la empresa y el proyecto donde la solicitaste.\n\n"
+        f"{enlace}\n\nDisponible hasta {expira_en.isoformat()}.\n"
+        "El acceso a los datos se comprobará de nuevo antes de descargar."
+    )
+    with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=20) as servidor:
+        servidor.starttls()
+        if SMTP_USER and SMTP_PASSWORD:
+            servidor.login(SMTP_USER, SMTP_PASSWORD)
+        servidor.send_message(mensaje)
+
+
 def enviar_correo_recuperacion(correo: str, token: str) -> None:
     enlace = f"{FRONTEND_URL}/restablecer-contrasena?token={token}"
     asunto = "Recupera tu contraseña - Pangea"

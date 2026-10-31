@@ -68,6 +68,7 @@ export interface ListadoMediciones {
   /** HT-10 CA3: true si el backend muestreó la serie por rango amplio. */
   downsampling?: boolean;
   total_sin_muestrear?: number;
+  next_cursor?: string | null;
   items: MedicionItem[];
 }
 
@@ -79,6 +80,7 @@ export type TipoGrafico = "linea" | "area";
 export type Vista = "grafico" | "tabla";
 
 export interface HoverInfo {
+  serieId?: number;
   parametroId: number;
   x: number;
   y: number;

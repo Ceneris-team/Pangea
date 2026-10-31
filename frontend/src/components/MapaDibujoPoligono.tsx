@@ -295,7 +295,7 @@ export default function MapaDibujoPoligono({ valor, onChange, centroLat, centroL
       }
     )?.PlaceAutocompleteElement;
     if (!Elemento) {
-      setBusquedaDisponible(false);
+      queueMicrotask(() => setBusquedaDisponible(false));
       return;
     }
 

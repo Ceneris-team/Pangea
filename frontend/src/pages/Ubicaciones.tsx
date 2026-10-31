@@ -2,7 +2,7 @@ import { estadoProyecto } from "../config/terminologia";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { apiFetch, ApiError } from "../services/api";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../hooks/useAuth";
 import { ROLES } from "../config/roles";
 import Sidebar from "../components/layout/Sidebar";
 import Topbar from "../components/layout/Topbar";
@@ -107,7 +107,7 @@ export default function Ubicaciones() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setPagina(1);
+    queueMicrotask(() => setPagina(1));
   }, [busqueda, estado]);
 
   // Nombrada (no solo dentro del useEffect) para poder recargar el
@@ -133,7 +133,12 @@ export default function Ubicaciones() {
       .finally(() => setLoading(false));
   }
 
-  useEffect(cargarUbicaciones, [busqueda, estado, pagina]);
+  useEffect(() => {
+    let cancelado = false;
+    queueMicrotask(() => { if (!cancelado) cargarUbicaciones(); });
+    return () => { cancelado = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [busqueda, estado, pagina]);
 
   const totalPaginas = data ? Math.max(1, Math.ceil(data.total / data.por_pagina)) : 1;
   const inicioRango = data ? (data.pagina - 1) * data.por_pagina + 1 : 0;
@@ -209,21 +214,29 @@ export default function Ubicaciones() {
   // CA4)-.
   const [searchParams, setSearchParams] = useSearchParams();
   useEffect(() => {
+    let cancelado = false;
     if (searchParams.get("crear") === "1" && puedeOperar) {
-      abrirCrear();
       const siguiente = new URLSearchParams(searchParams);
       siguiente.delete("crear");
-      setSearchParams(siguiente, { replace: true });
-      return;
+      queueMicrotask(() => {
+        if (cancelado) return;
+        abrirCrear();
+        setSearchParams(siguiente, { replace: true });
+      });
+      return () => { cancelado = true; };
     }
     const idParam = searchParams.get("editar");
     const id = idParam !== null ? Number(idParam) : null;
     if (id !== null && Number.isFinite(id)) {
-      abrirEditar(id);
       const siguiente = new URLSearchParams(searchParams);
       siguiente.delete("editar");
-      setSearchParams(siguiente, { replace: true });
+      queueMicrotask(() => {
+        if (cancelado) return;
+        abrirEditar(id);
+        setSearchParams(siguiente, { replace: true });
+      });
     }
+    return () => { cancelado = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

@@ -49,7 +49,13 @@ export default function SolicitudesSuscripcion({ comercial = false, clientes = [
       setOpciones(op); setMiPlan(contrato);
     }
   }, [comercial]);
-  useEffect(() => { cargar().catch(e => setError(e.message)).finally(() => setCargando(false)); }, [cargar]);
+  useEffect(() => {
+    let activo = true;
+    queueMicrotask(() => {
+      if (activo) cargar().catch(e => setError(e.message)).finally(() => setCargando(false));
+    });
+    return () => { activo = false; };
+  }, [cargar]);
   async function ejecutar(tarea: () => Promise<unknown>, exito: string) {
     if (ocupado) return false;
     setOcupado(true); setError(""); setMensaje("");

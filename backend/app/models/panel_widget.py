@@ -13,17 +13,21 @@ from app.database import Base
 
 
 class Panel(Base):
-    """HU 23-25, HT-13."""
+    """Panel personalizado con ubicaciones (HU26) y widgets (HU34)."""
 
     __tablename__ = "pnl"
     __table_args__ = (
         UniqueConstraint("id_usr", "nmbr", name="uq_pnl_usr_nombre"),
         Index("idx_pnl_sd", "id_sd"),
+        Index("idx_pnl_ubccn_origen", "id_ubccn_origen"),
     )
 
     id_pnl = Column(Integer, primary_key=True, autoincrement=True)
     id_usr = Column(Integer, ForeignKey("usr.id_usr"), nullable=False)
     id_sd = Column(Integer, ForeignKey("sd.id_sd"), nullable=False)
+    id_ubccn_origen = Column(
+        Integer, ForeignKey("ubccn.id_ubccn", ondelete="SET NULL"), nullable=True
+    )
     nmbr = Column(String(150), nullable=False)
     vsbldd = Column(String(20), nullable=False, server_default="Privado")
     fch_crcn = Column(TIMESTAMP(timezone=True), nullable=False, server_default=text("NOW()"))
@@ -51,3 +55,4 @@ class Widget(Base):
     id_prmtr = Column(Integer, ForeignKey("prmtr.id_prmtr"), nullable=False)
     id_ubccn = Column(Integer, ForeignKey("ubccn.id_ubccn"), nullable=False)
     pscn = Column(Integer, nullable=False, server_default="0")
+    ancho = Column(Integer, nullable=False, server_default="1")
