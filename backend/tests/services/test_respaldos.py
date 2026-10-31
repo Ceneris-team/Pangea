@@ -30,14 +30,23 @@ def test_clave_respaldo_incluye_prefijo_y_fecha(monkeypatch):
 
 def test_clave_respaldo_respeta_prefijo_configurado(monkeypatch):
     monkeypatch.setenv("BACKUP_PREFIX", "backups/pangea/")
-    assert respaldos.clave_respaldo(dt.date(2026, 3, 9)) == "backups/pangea/pangea-2026-03-09.sql.gz.enc"
+    assert (
+        respaldos.clave_respaldo(dt.date(2026, 3, 9))
+        == "backups/pangea/pangea-2026-03-09.sql.gz.enc"
+    )
 
 
 def test_expirados_solo_marca_los_mas_viejos_que_el_limite():
     limite = dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc)
     objetos = [
-        {"Key": "respaldos/viejo.enc", "LastModified": dt.datetime(2025, 6, 1, tzinfo=dt.timezone.utc)},
-        {"Key": "respaldos/nuevo.enc", "LastModified": dt.datetime(2026, 6, 1, tzinfo=dt.timezone.utc)},
+        {
+            "Key": "respaldos/viejo.enc",
+            "LastModified": dt.datetime(2025, 6, 1, tzinfo=dt.timezone.utc),
+        },
+        {
+            "Key": "respaldos/nuevo.enc",
+            "LastModified": dt.datetime(2026, 6, 1, tzinfo=dt.timezone.utc),
+        },
         {"Key": "respaldos/sin-fecha.enc"},
     ]
     assert respaldos._expirados(objetos, limite) == ["respaldos/viejo.enc"]
@@ -48,12 +57,20 @@ def test_aplicar_retencion_borra_los_expirados(monkeypatch):
     monkeypatch.setenv("BACKUP_RETENTION_DAYS", "365")
     hoy = dt.date(2026, 1, 1)
     objetos = [
-        {"Key": "respaldos/viejo.enc", "LastModified": dt.datetime(2024, 12, 1, tzinfo=dt.timezone.utc)},
-        {"Key": "respaldos/reciente.enc", "LastModified": dt.datetime(2025, 12, 20, tzinfo=dt.timezone.utc)},
+        {
+            "Key": "respaldos/viejo.enc",
+            "LastModified": dt.datetime(2024, 12, 1, tzinfo=dt.timezone.utc),
+        },
+        {
+            "Key": "respaldos/reciente.enc",
+            "LastModified": dt.datetime(2025, 12, 20, tzinfo=dt.timezone.utc),
+        },
     ]
     borrados = []
     monkeypatch.setattr(respaldos.object_storage, "listar", lambda prefijo: objetos)
-    monkeypatch.setattr(respaldos.object_storage, "eliminar", lambda claves: borrados.extend(claves))
+    monkeypatch.setattr(
+        respaldos.object_storage, "eliminar", lambda claves: borrados.extend(claves)
+    )
 
     resultado = respaldos.aplicar_retencion(hoy)
 

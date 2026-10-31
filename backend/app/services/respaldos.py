@@ -105,7 +105,15 @@ def generar_respaldo_cifrado(ruta_destino: str) -> None:
     )
     with open(ruta_destino, "wb") as salida:
         cifrar = subprocess.Popen(
-            ["openssl", "enc", "-aes-256-cbc", "-pbkdf2", "-salt", "-pass", "env:BACKUP_ENCRYPTION_KEY"],
+            [
+                "openssl",
+                "enc",
+                "-aes-256-cbc",
+                "-pbkdf2",
+                "-salt",
+                "-pass",
+                "env:BACKUP_ENCRYPTION_KEY",
+            ],
             stdin=comprimir.stdout,
             stdout=salida,
             stderr=subprocess.PIPE,
