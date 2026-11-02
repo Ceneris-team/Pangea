@@ -9,6 +9,8 @@ import { ROLES } from "../config/roles";
 import ContratoFormulario from "../components/comercial/ContratoFormulario";
 import DetalleSuscripcion from "../components/comercial/DetalleSuscripcion";
 import RegistrarClienteFormulario from "../components/comercial/RegistrarClienteFormulario";
+import AsignarPlanFormulario from "../components/comercial/AsignarPlanFormulario";
+import { fechaVisible } from "../components/comercial/asignacionPlan";
 import SolicitudesSuscripcion from "../components/comercial/SolicitudesSuscripcion";
 import { type Limites, type Plan, type Cliente, type Catalogo } from "../types/comercial";
 
@@ -42,6 +44,8 @@ export default function PlanesSuscripciones() {
   const puedeGestionar = rol === ROLES.ADMINISTRADOR_COMERCIAL || rol === ROLES.ADMINISTRADOR;
   // HU65: "Solo el rol Administrador Comercial puede registrar clientes en este módulo".
   const puedeRegistrarCliente = rol === ROLES.ADMINISTRADOR_COMERCIAL;
+  // HU45: "Solo el rol Administrador Comercial puede asignar planes a clientes".
+  const puedeAsignarPlan = rol === ROLES.ADMINISTRADOR_COMERCIAL;
   const [parametros, setParametros] = useSearchParams();
   const vista = ["suscripciones", "solicitudes"].includes(parametros.get("vista") ?? "") ? parametros.get("vista")! : "planes";
   const [planes, setPlanes] = useState<Plan[]>([]);
@@ -58,6 +62,7 @@ export default function PlanesSuscripciones() {
   const [asignando, setAsignando] = useState<number | null>(null);
   const [registrandoCliente, setRegistrandoCliente] = useState(false);
   const [clienteNuevo, setClienteNuevo] = useState<number | null>(null);
+  const [asignandoPlan, setAsignandoPlan] = useState<number | null>(null);
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState("");
@@ -121,6 +126,7 @@ export default function PlanesSuscripciones() {
 
   function abrirSuscripcion(idCliente?: number) {
     setAsignando(idCliente ?? clientes.find((cliente) => cliente.plan_id === null)?.id_clnt ?? clientes[0]?.id_clnt ?? null);
+    setAsignandoPlan(null);
     setError("");
   }
 
@@ -139,10 +145,25 @@ export default function PlanesSuscripciones() {
     setMensaje(mensajeRegistro);
   }
 
-  // HU65 CA3: ASIGNAR PLAN abre el contrato de HU45 con el cliente ya elegido.
+  // HU45 CA1: "Asignar plan" sobre un cliente abre el formulario simple (plan + fecha de inicio).
+  function abrirAsignacionPlan(idCliente: number) {
+    setAsignandoPlan(idCliente);
+    setAsignando(null);
+    setRegistrandoCliente(false);
+    setError("");
+  }
+
+  async function planAsignado(mensajeAsignacion: string) {
+    await recargar();
+    setAsignandoPlan(null);
+    setHistorialCliente(null);
+    setMensaje(mensajeAsignacion);
+  }
+
+  // HU65 CA3: ASIGNAR PLAN lleva al flujo de HU45 con el cliente recién registrado.
   function asignarPlanAlNuevo() {
     if (clienteNuevo === null) return;
-    abrirSuscripcion(clienteNuevo);
+    abrirAsignacionPlan(clienteNuevo);
     setClienteNuevo(null);
     setMensaje("");
   }
@@ -230,6 +251,7 @@ export default function PlanesSuscripciones() {
                     </div>
                   </div>
                   {registrandoCliente && <RegistrarClienteFormulario onCancelar={() => setRegistrandoCliente(false)} onRegistrado={clienteRegistrado} />}
+                  {asignandoPlan !== null && clientes.find((c) => c.id_clnt === asignandoPlan) && <AsignarPlanFormulario key={asignandoPlan} cliente={clientes.find((c) => c.id_clnt === asignandoPlan)!} planes={planes} onCancelar={() => setAsignandoPlan(null)} onAsignado={planAsignado} />}
                   {asignando !== null && <div className="space-y-3">
                     <label className="block max-w-md">Empresa<select aria-label="Empresa del contrato" className={campo} value={asignando} onChange={e => setAsignando(Number(e.target.value))}>{clientes.map(c => <option key={c.id_clnt} value={c.id_clnt}>{c.nombre}</option>)}</select></label>
                     {clientes.find(c => c.id_clnt === asignando) && <ContratoFormulario key={asignando} cliente={clientes.find(c => c.id_clnt === asignando)!} planes={planes} catalogo={catalogo} onCancelar={() => setAsignando(null)} onGuardado={async () => { await recargar(); setAsignando(null); setHistorialCliente(null); setMensaje("Suscripción guardada correctamente"); }} />}
@@ -238,7 +260,7 @@ export default function PlanesSuscripciones() {
                   {clientesFiltrados.length === 0 && <p className={tarjeta}>No hay clientes con ese criterio.</p>}
                   <div className="grid gap-4 lg:grid-cols-2">{clientesFiltrados.map((cliente) => <article key={cliente.id_clnt} className={tarjeta}>
                     <div className="flex flex-wrap items-start justify-between gap-2"><div><h3 className="font-bold">{cliente.nombre}</h3><p className="text-xs text-gray-500 dark:text-gray-400">RUC {cliente.ruc}</p></div><div className="flex flex-wrap gap-2"><span className="rounded-full bg-gray-200 px-3 py-1 text-sm dark:bg-white/10">{cliente.plan_nombre || "Sin plan"}</span><span className={`rounded-full px-3 py-1 text-sm ${cliente.estado_suscripcion === "Vigente" ? "bg-lime-500/20 text-lime-800 dark:text-lime-300" : "bg-amber-500/20 text-amber-800 dark:text-amber-300"}`}>{cliente.estado_suscripcion}</span></div></div>
-                    {cliente.fecha_vencimiento && <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">Vencimiento: {cliente.fecha_vencimiento}</p>}
+                    {cliente.fecha_vencimiento && <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">Inicio: {fechaVisible(cliente.fecha_inicio)} · Vencimiento: {fechaVisible(cliente.fecha_vencimiento)}</p>}
                     {cliente.condiciones && <p className="mt-2 text-sm">{cliente.condiciones.moneda} {cliente.condiciones.precio_acordado} / {cliente.condiciones.periodicidad.toLowerCase()} · revisión contratada {cliente.condiciones.revision_plan}</p>}
                     {cliente.aviso_vencimiento && <p className="mt-2 text-sm font-semibold text-amber-700 dark:text-amber-300">Revisar renovación. Al vencer y finalizar la gracia, la empresa quedará en modo consulta.</p>}
                     {cliente.programada && <p className="mt-2 text-sm font-semibold text-lime-700 dark:text-lime-300">Programada: {cliente.programada.condiciones.plan_nombre} desde {cliente.programada.fecha_inicio}</p>}
@@ -247,6 +269,7 @@ export default function PlanesSuscripciones() {
                       <Cupo titulo="Dispositivos" uso={cliente.consumo.dispositivos} limite={cliente.limites?.dispositivos} />
                       <Cupo titulo="Usuarios activos" uso={cliente.consumo.usuarios} limite={cliente.limites?.usuarios} />
                     </div>
+                    {puedeAsignarPlan && <button type="button" className="mr-3 mt-5 rounded-xl bg-[#ccff00] px-3 py-2 text-sm font-semibold text-gray-950 hover:bg-[#b9eb00]" onClick={() => abrirAsignacionPlan(cliente.id_clnt)}>Asignar plan</button>}
                     {puedeGestionar && <button type="button" className="mt-5 rounded-xl border border-gray-300 px-3 py-2 text-sm font-semibold hover:border-lime-500 dark:border-white/20" onClick={() => { abrirSuscripcion(cliente.id_clnt); }}>Gestionar suscripción</button>}
                     <button type="button" className="ml-3 mt-3 text-sm font-semibold underline" onClick={() => setHistorialCliente(historialCliente === cliente.id_clnt ? null : cliente.id_clnt)}>Condiciones e historial</button>
                   </article>)}</div>
