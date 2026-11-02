@@ -34,6 +34,7 @@ from app.services.contratos import (
     contrato_dict,
     preparar_condiciones,
     registrar_contrato,
+    ultimo_contrato,
     validar_funcionalidades,
     validar_operacion,
 )
@@ -310,6 +311,74 @@ def asignar_suscripcion(
     db.commit()
     return {"mensaje": "Suscripción programada correctamente" if contrato.estd == "Programada" else "Suscripción asignada correctamente" if creado else "Suscripción ya registrada",
             "suscripcion_id": contrato.id_sscrpcn, "cliente": resumen_cliente(db, db.get(Cliente, id_clnt))}
+
+
+# HU45 - Asignar plan a cliente (PP-309, PP-310)
+#
+# Entrada simple del Administrador Comercial: solo plan y fecha de inicio.
+# Reutiliza el motor de contratos (services/contratos.registrar_contrato),
+# que ya garantiza "un cliente solo puede tener un plan activo a la vez":
+# al asignar uno nuevo con inicio hoy, el anterior queda "Reemplazada"; con
+# inicio futuro, el nuevo queda "Programada" y reemplaza al actual en esa
+# fecha. PUT /clientes/{id}/suscripcion sigue siendo la entrada completa
+# (periodicidad, precio, gracia, cupos acordados) de «Gestionar suscripción».
+DIAS_VIGENCIA_PLAN = 30  # "La fecha de vencimiento se calcula sumando 30 días calendario"
+MSG_PLAN_ASIGNADO = "Plan asignado correctamente"
+MSG_PLAN_ACTUALIZADO = "Plan actualizado correctamente"
+
+
+class PlanAsignar(BaseModel):
+    plan_id: int
+    fecha_inicio: date
+
+
+def fecha_vencimiento_plan(fecha_inicio: date) -> date:
+    return fecha_inicio + timedelta(days=DIAS_VIGENCIA_PLAN)
+
+
+@router.post("/clientes/{id_clnt}/plan")
+def asignar_plan(
+    id_clnt: int,
+    body: PlanAsignar,
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(require_permiso("Comercial", EDICION)),
+):
+    """HU45 CA2/CA4: asocia el plan, calcula el vencimiento (+30 días) y
+    reemplaza el plan anterior si lo había. Solo el Administrador Comercial."""
+    if usuario.get("rol") != "Administrador Comercial" or usuario.get("scope") != "global":
+        raise HTTPException(status_code=403, detail="Solo el Administrador Comercial puede asignar planes")
+    hoy = fecha_comercial()
+    if body.fecha_inicio < hoy:
+        raise HTTPException(status_code=422, detail="La fecha de inicio no puede ser anterior a hoy")
+    if db.get(Cliente, id_clnt) is None:
+        raise HTTPException(status_code=404, detail="Cliente no encontrado")
+
+    # Se decide antes de escribir: después, el contrato nuevo ya es el último.
+    tenia_plan = ultimo_contrato(db, id_clnt, hoy) is not None
+    contrato, creado = registrar_contrato(
+        db,
+        id_clnt,
+        SuscripcionAsignar(
+            plan_id=body.plan_id,
+            fecha_inicio=body.fecha_inicio,
+            fecha_vencimiento=fecha_vencimiento_plan(body.fecha_inicio),
+            motivo="Asignación de plan (HU45)",
+        ),
+        usuario,
+    )
+    db.commit()
+    if not creado:
+        mensaje = "El cliente ya tiene ese plan con esa fecha de inicio"
+    else:
+        mensaje = MSG_PLAN_ACTUALIZADO if tenia_plan else MSG_PLAN_ASIGNADO
+    return {
+        "mensaje": mensaje,
+        "suscripcion_id": contrato.id_sscrpcn,
+        "estado": contrato.estd,
+        "fecha_inicio": contrato.fch_inc,
+        "fecha_vencimiento": contrato.fch_vncmnt,
+        "cliente": resumen_cliente(db, db.get(Cliente, id_clnt)),
+    }
 
 
 @router.post("/clientes/{id_clnt}/suscripcion/preview")
