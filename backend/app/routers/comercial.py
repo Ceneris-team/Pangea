@@ -28,6 +28,7 @@ from app.security.dependencies import get_current_user
 from app.security.permisos import EDICION, LECTURA, require_permiso
 from app.services import clientes as servicio_clientes
 from app.services import cobros as servicio_cobros
+from app.services import vencimientos as servicio_vencimientos
 from app.services.contratos import (
     aplicar_programadas,
     auditar,
@@ -431,6 +432,21 @@ def listar_cobros(
     if db.get(Cliente, id_clnt) is None:
         raise HTTPException(status_code=404, detail="Cliente no encontrado")
     return servicio_cobros.historial_cobros(db, id_clnt)
+
+
+# PP-68 - Consultar vencimientos (PP-314, PP-315, PP-316). Reglas en services/vencimientos.py.
+@router.get("/vencimientos")
+def consultar_vencimientos(
+    rango: str = "todos",
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(require_permiso("Comercial", LECTURA)),
+):
+    """CA1/CA2: clientes con suscripción activa, del vencimiento más próximo
+    al más lejano, filtrados por rango de días restantes. "Solo el rol
+    Administrador Comercial tiene acceso a esta sección"."""
+    if usuario.get("rol") != "Administrador Comercial" or usuario.get("scope") != "global":
+        raise HTTPException(status_code=403, detail="Solo el Administrador Comercial puede consultar los vencimientos")
+    return servicio_vencimientos.vencimientos(db, fecha_comercial(), rango)
 
 
 @router.post("/clientes/{id_clnt}/suscripcion/preview")
