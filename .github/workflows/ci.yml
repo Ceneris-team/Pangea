@@ -46,10 +46,10 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: "pip"
-          cache-dependency-path: backend/requirements-dev.txt
+          cache-dependency-path: backend/requirements.txt
 
       - name: Instalar dependencias de desarrollo
-        run: pip install -r requirements-dev.txt
+        run: pip install -r requirements.txt ruff black
 
       # CA2: el job falla (bloquea el pipeline) si ruff encuentra errores.
       - name: ruff check

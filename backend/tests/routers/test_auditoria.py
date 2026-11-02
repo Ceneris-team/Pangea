@@ -168,6 +168,7 @@ class TestCA1AuditoriaAutomatica:
     def test_conceder_permisos_genera_un_registro(self, client, db_session, fabrica, admin_editor):
         _, sede, _ = admin_editor
         objetivo = fabrica.usuario(rol=fabrica.rol("Cliente Final"))
+        agregar_permiso(db_session, objetivo, sede, "Tableros", "Lectura", objetivo.rol)
         from app.models import Ubicacion
 
         ubicacion = Ubicacion(

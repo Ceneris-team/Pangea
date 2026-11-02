@@ -23,6 +23,7 @@ from app.models import (
 from app.security.dependencies import get_current_user
 from app.security.entorno import es_ceneris
 from app.security.hashing import generar_password_temporal, hash_password
+from app.services.clientes import registrar_cliente
 from app.services.limites_plan import comprobar_cupo, resumen_cliente, suscripcion_vigente
 
 router = APIRouter(prefix="/empresas", tags=["Empresas y proyectos"])
@@ -113,10 +114,10 @@ def _validar_asignaciones(db: Session, cliente_id: int, rol: str, ids: list[int]
     return solicitados
 
 
-def _auditar(db: Session, actor: dict, accion: str, entidad: str, datos: dict) -> None:
+def _auditar(db: Session, actor: dict, accion: str, entidad: str, datos: dict, anterior: dict | None = None) -> None:
     db.add(LogAuditoria(
         id_usr=int(actor["sub"]), id_sd=None, accn=accion,
-        entdd=entidad, vlrs_nvs=datos,
+        entdd=entidad, vlrs_antrrs=anterior, vlrs_nvs=datos,
     ))
 
 
@@ -174,18 +175,13 @@ def crear_empresa(
 ):
     if actor["rol"] != "Administrador" or actor["scope"] != "global":
         raise HTTPException(status_code=403, detail="Solo CENERIS puede registrar empresas")
-    nombre = body.nombre.strip()
-    if not nombre:
-        raise HTTPException(status_code=422, detail="Indica la razón social")
-    cliente = Cliente(rzn_scl=nombre, rc=body.ruc, crr_cntct=body.correo_contacto.lower())
-    db.add(cliente)
-    try:
-        db.flush()
-        _auditar(db, actor, "crear", "Empresa", {"cliente_id": cliente.id_clnt})
-        db.commit()
-    except IntegrityError:
-        db.rollback()
-        raise HTTPException(status_code=409, detail="Ya existe una empresa con ese RUC") from None
+    # Misma regla de alta que «Registrar cliente» de Planes y Suscripciones
+    # (HU65): el RUC repetido se detecta antes de insertar.
+    cliente = registrar_cliente(
+        db, razon_social=body.nombre, ruc=body.ruc, correo=body.correo_contacto
+    )
+    _auditar(db, actor, "crear", "Empresa", {"cliente_id": cliente.id_clnt})
+    db.commit()
     return {"id_clnt": cliente.id_clnt, "nombre": cliente.rzn_scl}
 
 
@@ -204,6 +200,7 @@ def listar_proyectos(
                    .filter(Sede.id_clnt == cliente_id).group_by(Dispositivo.id_ubccn).all())
     return [{
         "id_ubccn": p.id_ubccn, "nombre": p.nmbr, "descripcion": p.dscrpcn,
+        "sede": db.get(Sede, p.id_sd).nmbr,
         "estado": p.estd, "dispositivos_total": conteos.get(p.id_ubccn, 0),
     } for p in query.order_by(Ubicacion.nmbr).all()]
 
@@ -299,6 +296,7 @@ def crear_usuario_empresa(
         db.add(UsuarioProyecto(id_mmb=miembro.id_mmb, id_ubccn=id_pryct))
     _auditar(db, actor, "crear", "MiembroEmpresa", {
         "cliente_id": cliente_id, "miembro_id": miembro.id_mmb,
+        "usuario_id": usuario.id_usr, "estado": "Activo",
         "rol": body.rol, "proyecto_ids": sorted(proyecto_ids),
     })
     try:
@@ -319,12 +317,21 @@ def actualizar_usuario_empresa(
     db.query(Cliente).filter(Cliente.id_clnt == cliente_id).with_for_update().one()
     if body.estado not in {"Activo", "Inactivo"}:
         raise HTTPException(status_code=422, detail="Estado no válido")
-    proyecto_ids = _validar_asignaciones(db, cliente_id, body.rol, body.proyecto_ids)
     miembro = db.query(UsuarioCliente).filter(
         UsuarioCliente.id_mmb == miembro_id, UsuarioCliente.id_clnt == cliente_id
     ).with_for_update().first()
     if miembro is None:
         raise HTTPException(status_code=404, detail="Miembro no encontrado")
+    anteriores = {id_proyecto for (id_proyecto,) in db.query(UsuarioProyecto.id_ubccn).filter(
+        UsuarioProyecto.id_mmb == miembro_id,
+    ).all()}
+    if body.estado == "Inactivo":
+        # Retirar acceso no debe depender de que los proyectos sigan activos.
+        if body.rol != miembro.rol_emp:
+            raise HTTPException(422, "Desactiva la membresía sin modificar su rol")
+        proyecto_ids = anteriores
+    else:
+        proyecto_ids = _validar_asignaciones(db, cliente_id, body.rol, body.proyecto_ids)
     if miembro.rol_emp == "Administrador" and miembro.estd == "Activo" and (
         body.rol != "Administrador" or body.estado != "Activo"
     ):
@@ -340,15 +347,25 @@ def actualizar_usuario_empresa(
         if suscripcion_vigente(db, cliente_id) is None:
             raise HTTPException(status_code=409, detail="La empresa necesita una suscripción vigente")
         comprobar_cupo(db, cliente_id, "usuarios")
-    anterior = {"rol": miembro.rol_emp, "estado": miembro.estd}
+    anterior = {
+        "cliente_id": cliente_id, "miembro_id": miembro_id, "usuario_id": miembro.id_usr,
+        "rol": miembro.rol_emp, "estado": miembro.estd, "proyecto_ids": sorted(anteriores),
+    }
     miembro.rol_emp = body.rol
     miembro.estd = body.estado
-    db.query(UsuarioProyecto).filter(UsuarioProyecto.id_mmb == miembro.id_mmb).delete()
-    for id_pryct in proyecto_ids:
+    db.query(UsuarioProyecto).filter(
+        UsuarioProyecto.id_mmb == miembro.id_mmb,
+        UsuarioProyecto.id_ubccn.in_(anteriores - proyecto_ids),
+    ).delete(synchronize_session="fetch")
+    for id_pryct in proyecto_ids - anteriores:
         db.add(UsuarioProyecto(id_mmb=miembro.id_mmb, id_ubccn=id_pryct))
     _auditar(db, actor, "actualizar", "MiembroEmpresa", {
-        "cliente_id": cliente_id, "miembro_id": miembro_id, "anterior": anterior,
+        "cliente_id": cliente_id, "miembro_id": miembro_id, "usuario_id": miembro.id_usr,
         "rol": body.rol, "estado": body.estado, "proyecto_ids": sorted(proyecto_ids),
-    })
-    db.commit()
+    }, anterior=anterior)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(409, "No se pudo guardar el acceso. Vuelve a intentarlo") from None
     return {"miembro": _miembro_dict(db, miembro)}

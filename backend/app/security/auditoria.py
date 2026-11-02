@@ -46,7 +46,7 @@ from sqlalchemy import event, inspect
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import LogAuditoria, MapeoFormato, PermisoUbicacion, Usuario
+from app.models import LogAuditoria, MapeoFormato, PermisoUbicacion, Sede, Ubicacion, Usuario
 from app.security.dependencies import get_current_user
 
 # Nunca debe aparecer un hash de contraseña en un registro de auditoría:
@@ -216,14 +216,27 @@ def _before_flush(session: Session, flush_context, instances) -> None:
     for id_usr_afectado in ids_usr_afectados:
         antes_ids = bajas.get(id_usr_afectado, set())
         despues_ids = altas.get(id_usr_afectado, set())
+        conjunto_antes = {id_ubccn for (id_ubccn,) in session.query(PermisoUbicacion.id_ubccn).filter(
+            PermisoUbicacion.id_usr == id_usr_afectado,
+        ).all()}
+        conjunto_despues = (conjunto_antes - antes_ids) | despues_ids
+        empresas = dict(session.query(Ubicacion.id_ubccn, Sede.id_clnt).join(
+            Sede, Sede.id_sd == Ubicacion.id_sd,
+        ).filter(Ubicacion.id_ubccn.in_(conjunto_antes | conjunto_despues)).all())
+        afectado = session.get(Usuario, id_usr_afectado)
+        identidad = {"usuario_id": id_usr_afectado, "rol": afectado.rol.nmbr, "estado": afectado.estd}
         _registrar_evento(
             session,
             contexto,
             "permisos_ubicacion",
             "actualizar_permisos",
             id_usr_afectado,
-            {"ubicaciones_quitadas": sorted(antes_ids)} if antes_ids else {},
-            {"ubicaciones_agregadas": sorted(despues_ids)} if despues_ids else {},
+            {**identidad, "ubicacion_ids": sorted(conjunto_antes),
+             "empresa_ids": sorted({empresas[id_] for id_ in conjunto_antes}),
+             "ubicaciones_quitadas": sorted(antes_ids)},
+            {**identidad, "ubicacion_ids": sorted(conjunto_despues),
+             "empresa_ids": sorted({empresas[id_] for id_ in conjunto_despues}),
+             "ubicaciones_agregadas": sorted(despues_ids)},
         )
 
     # HU49 CA5: alta automática de mp_frmt (trama nueva auto-detectada,

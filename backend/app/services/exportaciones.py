@@ -84,6 +84,7 @@ def validar_solicitud(db, usuario, body: ExportacionCrear):
         sede_id=usuario.get("sede_id"),
         scope=usuario["scope"],
         rol=usuario["rol"],
+        rol_empresa=usuario.get("rol_empresa"),
     )
     return filtros
 
@@ -110,6 +111,12 @@ def revalidar_acceso(db, exportacion):
         filtros.get("proyecto_id"),
     )
     permitido = permiso_del_entorno(db, usuario, "Tableros", LECTURA)
+    if cuenta.scp == "por_cliente" and "rol_empresa" not in filtros:
+        raise HTTPException(
+            403, "Solicita una nueva exportación para validar tus permisos actuales"
+        )
+    if "rol_empresa" in filtros and usuario.get("rol_empresa") != filtros["rol_empresa"]:
+        raise HTTPException(403, "Tu rol en la empresa cambió. Solicita una nueva exportación")
     if permitido is None:
         permitido = tiene_permiso(db, cuenta.id_usr, usuario.get("sede_id"), "Tableros", LECTURA)
     if not permitido or not set(filtros["ubicacion_ids"]) <= set(
@@ -206,7 +213,7 @@ def _lecturas(db, modelo, filtros, lote):
 
 
 def celda_csv(valor):
-    if isinstance(valor, str) and valor.lstrip(" \t\r\n").startswith(("=", "+", "-", "@")):
+    if isinstance(valor, str) and valor.lstrip().startswith(("=", "+", "-", "@")):
         return "'" + valor
     return valor
 

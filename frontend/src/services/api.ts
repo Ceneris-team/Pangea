@@ -50,6 +50,8 @@ export class ApiError extends Error {
 }
 
 interface ApiOptions {
+  /** Consulta de vigencia independiente del proyecto que pueda haber sido revocado. */
+  sinEntorno?: boolean;
   signal?: AbortSignal;
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   body?: unknown;
@@ -108,7 +110,7 @@ export async function apiFetch<T>(path: string, options: ApiOptions = {}): Promi
     credentials: "include",
     headers: {
       "Content-Type": "application/json",
-      ...headersEntorno(),
+      ...(options.sinEntorno ? {} : headersEntorno()),
     },
     body: options.body ? JSON.stringify(options.body) : undefined,
   });
@@ -161,6 +163,9 @@ async function manejarRespuesta<T>(
   }
 
   if (!res.ok) {
+    if (res.status === 403 && path !== "/auth/acceso") {
+      window.dispatchEvent(new Event("pangea:acceso-rechazado"));
+    }
     const data = await res.json().catch(() => null);
     throw new ApiError(data?.detail ?? "Ocurrió un error inesperado", res.status);
   }

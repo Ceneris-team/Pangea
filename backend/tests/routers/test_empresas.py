@@ -129,6 +129,40 @@ def test_asignaciones_son_proyectos_reales_y_rechazan_otra_empresa(escenario):
     assert cliente.post(f"/empresas/{andina.id_clnt}/proyectos", json={"nombre": "Grupo"}).status_code == 405
 
 
+def test_revocar_membresia_con_proyecto_inactivo_y_auditar_conjunto_completo(escenario):
+    from app.models import LogAuditoria
+
+    cliente, _, andina, _, proyectos, _, db = escenario
+    creado = _crear_miembro(cliente, andina.id_clnt, "Lector", "revocar.inactivo@test.example", "Lector", [proyectos[0].id_ubccn]).json()["miembro"]
+    proyectos[0].estd = "Inactiva"
+    db.flush()
+    ruta = f"/empresas/{andina.id_clnt}/usuarios/{creado['id_mmb']}"
+    cuerpo = {"rol": "Lector", "estado": "Inactivo", "proyecto_ids": creado["proyecto_ids"]}
+    assert cliente.patch(ruta, json=cuerpo).status_code == 200
+    log = db.query(LogAuditoria).filter_by(entdd="MiembroEmpresa", accn="actualizar").one()
+    assert log.vlrs_antrrs["proyecto_ids"] == creado["proyecto_ids"]
+    assert log.vlrs_nvs["proyecto_ids"] == creado["proyecto_ids"]
+    assert log.vlrs_antrrs["estado"] == "Activo"
+    assert log.vlrs_nvs["estado"] == "Inactivo"
+    assert log.vlrs_nvs["usuario_id"] == creado["id_usr"]
+    assert cliente.patch(ruta, json={**cuerpo, "estado": "Activo"}).status_code == 422
+
+
+def test_guardado_invalido_es_atomico_y_guardado_repetido_no_duplica(escenario):
+    from app.models import UsuarioProyecto
+
+    cliente, _, andina, _, proyectos, ajeno, db = escenario
+    miembro = _crear_miembro(cliente, andina.id_clnt, "Lector", "guardar.atomico@test.example", "Lector", [proyectos[0].id_ubccn]).json()["miembro"]
+    ruta = f"/empresas/{andina.id_clnt}/usuarios/{miembro['id_mmb']}"
+    for ids in ([], [ajeno.id_ubccn]):
+        assert cliente.patch(ruta, json={"rol": "Lector", "estado": "Activo", "proyecto_ids": ids}).status_code == 422
+        assert db.query(UsuarioProyecto.id_ubccn).filter_by(id_mmb=miembro["id_mmb"]).scalar() == proyectos[0].id_ubccn
+    cuerpo = {"rol": "Lector", "estado": "Activo", "proyecto_ids": [proyectos[1].id_ubccn] * 2}
+    for _ in range(2):
+        assert cliente.patch(ruta, json=cuerpo).status_code == 200
+    assert db.query(UsuarioProyecto).filter_by(id_mmb=miembro["id_mmb"]).count() == 1
+
+
 def test_usuarios_anteriores_aparecen_en_empresa_sin_duplicar_membresias(escenario, fabrica):
     cliente, _, andina, _, proyectos, _, db = escenario
     sede_id = proyectos[0].id_sd

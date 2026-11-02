@@ -25,6 +25,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.database import get_db
 from app.models import PermisoUsuarioSede, TokenRecuperacion, Usuario, UsuarioCliente
 from app.security.dependencies import COOKIE_NOMBRE, get_current_user, get_token_crudo
+from app.security.estado_acceso import estado_acceso
 from app.security.hashing import hash_password, verify_password
 from app.security.jwt_auth import EXPIRATION_MINUTES, create_access_token
 from app.security.mailer import enviar_correo_recuperacion
@@ -32,6 +33,16 @@ from app.security.password_policy import MSG_POLITICA_INVALIDA, es_password_vali
 from app.security.ws_tickets import emitir_ticket
 
 router = APIRouter(prefix="/auth", tags=["Autenticación"])
+
+
+@router.get("/acceso")
+def consultar_acceso(
+    response: Response, usuario: dict = Depends(get_current_user), db: Session = Depends(get_db),
+):
+    response.headers["Cache-Control"] = "no-store"
+    return estado_acceso(db, usuario)
+
+
 RATELIMIT_STORAGE_URL = os.environ.get("RATELIMIT_STORAGE_URL", "redis://localhost:6379/1")
 limiter = Limiter(key_func=get_remote_address, storage_uri=RATELIMIT_STORAGE_URL)
 MAX_INTENTOS = 5

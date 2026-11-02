@@ -118,6 +118,13 @@ class UbicacionPermisoItem(BaseModel):
     id_ubccn: int
     nmbr: str
     tiene_acceso: bool
+    id_clnt: int
+    empresa: str
+    id_sd: int
+    sede: str
+    estado: str
+    puede_asignar: bool
+    motivo_restriccion: str | None = None
 
 
 class PermisosUbicacionPanel(BaseModel):

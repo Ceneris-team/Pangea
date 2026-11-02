@@ -3,6 +3,7 @@ import { AuthProvider } from "../context/AuthContext";
 import { useAuth } from "../hooks/useAuth";
 import { ThemeProvider } from "../context/ThemeContext";
 import ProtectedRoute from "../components/ProtectedRoute";
+import VigenciaAcceso from "../components/VigenciaAcceso";
 import Login from "../pages/Login";
 import OlvideContrasena from "../pages/OlvideContrasena";
 import RestablecerContrasena from "../pages/RestablecerContrasena";
@@ -30,6 +31,8 @@ import Parametros from "../pages/Parametros";
 import ColaIngesta from "../pages/ColaIngesta";
 import Paneles from "../pages/Paneles";
 import DetallePanel from "../pages/DetallePanel";
+import Alarmas from "../pages/Alarmas";
+import CrearAlarma from "../pages/CrearAlarma";
 
 // HU06: "Solo los roles Técnico CENERIS y Administrador tienen acceso a
 // este módulo." El backend lo exige igual vía require_permiso('Ingesta').
@@ -52,6 +55,7 @@ export default function AppRouter() {
     <BrowserRouter>
       <ThemeProvider>
       <AuthProvider>
+        <VigenciaAcceso>
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/clientes" element={<ProtectedRoute rolesPermitidos={[ROLES.ADMINISTRADOR, ROLES.TECNICO_CENERIS]}><Clientes /></ProtectedRoute>} />
@@ -296,8 +300,31 @@ export default function AppRouter() {
             }
           />
 
+          {/* HU27 (PP-72): listado de alarmas. Sin restricción de rol extra:
+              el backend exige permiso sobre 'Alarmas' y cada usuario solo
+              ve las suyas (Alarma.id_usr). */}
+          <Route
+            path="/alarmas"
+            element={
+              <ProtectedRoute>
+                <Alarmas />
+              </ProtectedRoute>
+            }
+          />
+          {/* HU28 (PP-73): alta de alarma en dos pasos (datos generales y
+              condiciones de HU29). */}
+          <Route
+            path="/alarmas/nueva"
+            element={
+              <ProtectedRoute>
+                <CrearAlarma />
+              </ProtectedRoute>
+            }
+          />
+
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
+        </VigenciaAcceso>
       </AuthProvider>
       </ThemeProvider>
     </BrowserRouter>

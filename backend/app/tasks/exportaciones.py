@@ -2,6 +2,7 @@ import datetime as dt
 import logging
 import os
 import tempfile
+import time
 from pathlib import Path
 from uuid import uuid4
 
@@ -149,35 +150,45 @@ def mantener_exportaciones():
     db = SessionLocal()
     limpiadas = 0
     try:
-        # Lotes acotados; SKIP LOCKED permite más de una instancia de Beat.
-        vencidas = (
-            db.query(Exportacion)
-            .filter(
-                Exportacion.objeto_clave.is_not(None),
-                Exportacion.fch_exprcn <= ahora(),
-                Exportacion.estd != "En proceso",
+        # Recorre todos los lotes: los fallos del primero no bloquean los siguientes.
+        # Las transacciones cortas liberan cada lote y permiten otros consumidores.
+        ultimo_id = 0
+        plazo = time.monotonic() + 240
+        while time.monotonic() < plazo:
+            vencidas = (
+                db.query(Exportacion)
+                .filter(
+                    Exportacion.id_exprtcn > ultimo_id,
+                    Exportacion.objeto_clave.is_not(None),
+                    Exportacion.fch_exprcn <= ahora(),
+                    Exportacion.estd != "En proceso",
+                )
+                .order_by(Exportacion.id_exprtcn)
+                .limit(100)
+                .with_for_update(skip_locked=True)
+                .all()
             )
-            .order_by(Exportacion.id_exprtcn)
-            .limit(100)
-            .with_for_update(skip_locked=True)
-            .all()
-        )
-        for exportacion in vencidas:
-            try:
-                AlmacenExportaciones(exportacion.objeto_bucket).eliminar(
-                    exportacion.objeto_clave, exportacion.objeto_version
-                )
-            except Exception:
-                logger.exception(
-                    "No se pudo limpiar exportación id=%s; se reintentará", exportacion.id_exprtcn
-                )
-                continue
-            exportacion.objeto_clave = None
-            exportacion.objeto_version = None
-            exportacion.url_dscrg = None
-            exportacion.estd = "Expirada"
-            limpiadas += 1
-        db.commit()
+            if not vencidas:
+                db.commit()
+                break
+            for exportacion in vencidas:
+                ultimo_id = exportacion.id_exprtcn
+                try:
+                    AlmacenExportaciones(exportacion.objeto_bucket).eliminar(
+                        exportacion.objeto_clave, exportacion.objeto_version
+                    )
+                except Exception:
+                    logger.exception(
+                        "No se pudo limpiar exportación id=%s; se reintentará",
+                        exportacion.id_exprtcn,
+                    )
+                    continue
+                exportacion.objeto_clave = None
+                exportacion.objeto_version = None
+                exportacion.url_dscrg = None
+                exportacion.estd = "Expirada"
+                limpiadas += 1
+            db.commit()
 
         atascadas = (
             db.query(Exportacion)

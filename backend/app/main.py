@@ -7,6 +7,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
 from app.routers import (
+    alarmas,
     auditoria,
     auth,
     comercial,
@@ -67,6 +68,8 @@ app.include_router(dispositivos.router)
 app.include_router(mapa_cliente.router)
 # HU23: listar paneles (Tableros Personalizables, E05).
 app.include_router(panel.router)
+# HU27/HU28 (PP-73): listar y crear alarmas (Gestión de Alarmas y Notificaciones).
+app.include_router(alarmas.router)
 
 
 @app.get("/")
