@@ -14,16 +14,18 @@ const boton = "rounded-xl bg-[#ccff00] px-4 py-2 font-semibold text-gray-950 hov
  * CA2/CA4: CONFIRMAR ASIGNACIÓN; la página muestra "Plan asignado correctamente"
  * o "Plan actualizado correctamente" según lo que responda la API.
  */
-export default function AsignarPlanFormulario({ cliente, planes, onCancelar, onAsignado }: {
+export default function AsignarPlanFormulario({ cliente, planes, onCancelar, onAsignado, inicioSugerido }: {
   cliente: Cliente;
   planes: Plan[];
   onCancelar: () => void;
   onAsignado: (mensaje: string) => Promise<void>;
+  /** PP-68 "Renovar": fecha de inicio propuesta (el día siguiente al vencimiento). */
+  inicioSugerido?: string;
 }) {
   const hoy = fechaLima();
   const disponibles = planesActivos(planes);
   const [planId, setPlanId] = useState("");
-  const [inicio, setInicio] = useState(hoy);
+  const [inicio, setInicio] = useState(inicioSugerido ?? hoy);
   const [errores, setErrores] = useState<{ plan?: string; fecha?: string }>({});
   const [error, setError] = useState("");
   const [ocupado, setOcupado] = useState(false);
@@ -59,6 +61,9 @@ export default function AsignarPlanFormulario({ cliente, planes, onCancelar, onA
       <p className="text-sm text-gray-600 dark:text-gray-300">
         {cliente.plan_nombre ? `Plan actual: ${cliente.plan_nombre}. El plan nuevo lo reemplazará.` : "El cliente todavía no tiene plan."}
       </p>
+      {inicioSugerido && inicioSugerido > hoy && <p className="text-sm text-gray-600 dark:text-gray-300">
+        Renovación: empieza el {fechaVisible(inicioSugerido)}, al día siguiente del vencimiento actual, y queda programada hasta esa fecha.
+      </p>}
     </div>
     {error && <div role="alert" className="rounded-xl border border-red-400/50 bg-red-500/10 p-3 text-red-700 dark:text-red-200">{error}</div>}
     <div className="grid gap-4 md:grid-cols-3">
