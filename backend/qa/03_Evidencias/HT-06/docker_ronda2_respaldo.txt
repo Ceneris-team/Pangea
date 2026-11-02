@@ -1,0 +1,15 @@
+# HT-06 ronda 2 - respaldo (PP-129) probado en local con Docker. Rama origin/feature/HT06-job-respaldo @3950274
+## 1. Build del Dockerfile tal como esta (python:3.12-slim = Debian 13 trixie, pgdg bookworm)
+RESULTADO: FALLA (exit 100): libpq5 pgdg12 depende de libldap-2.5-0, que no existe en trixie. Con 'trixie-pgdg' compila: pg_dump 16.15.
+
+## 2. Respaldo real (imagen con trixie-pgdg, Postgres 16 local, S3 simulado moto)
+RESULTADO {"clave": "respaldos/pangea-2026-11-02.sql.gz.enc", "bytes": 2672, "borrados_por_retencion": 0}
+OBJETOS [('respaldos/pangea-2026-11-02.sql.gz.enc', 2672)]
+RETENCION_400D_BORRADOS ['respaldos/pangea-2026-11-02.sql.gz.enc']
+OBJETOS_TRAS []
+
+## 3. Cifrado y restauracion
+CIFRADO_SALT_HEADER b'Salted__' | contiene 'CREATE TABLE' en claro: False
+CLAVE_INCORRECTA_rc 0 salida: b''
+DESCIFRADO_OK lineas COPY/INSERT: 1
+Restauracion en BD nueva: 500 filas de telemetria (origen 500)

@@ -1,0 +1,8 @@
+# HT-06 ronda 2 - verificacion en solo lectura de Lightsail (CloudShell, us-east-1), 02/11/2026
+$ aws lightsail get-relational-database --relational-database-name pangea-db --region us-east-1 --query 'relationalDatabase.{publica:publiclyAccessible,estado:state,version:engine}'
+{ "publica": false, "estado": "available", "version": "postgres" }
+
+$ aws lightsail get-buckets --region us-east-1 --query 'buckets[].{nombre:name,acceso:accessRules.getObject,publico:accessRules.allowPublicOverrides,versionado:objectVersioning}'
+[ { "nombre": "pangea-storage-prod", "acceso": "private", "publico": false, "versionado": "NeverEnabled" } ]
+
+Resultado: la base pangea-db ya NO es publica (DEF-01 cerrado). El bucket es privado y sigue sin versionado (OBS-04).
