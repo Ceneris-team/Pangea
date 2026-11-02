@@ -1,0 +1,22 @@
+QA HT-30.2 (PP-403) - reprueba de DEF-01 (RG-01): verificacion de solo lectura de Lightsail (AWS CloudShell, us-east-1)
+Fecha: 2026-11-02 16:00 UTC. Script: backend/qa/03_Evidencias/HT-06/verificar_lightsail.sh, ejecutado por el usuario.
+Archivo original: lightsail_verificacion_20261102_1600.txt (CloudShell). Resumen fiel de la salida; host de la BD abreviado
+y sin el listado de instancias de la cuenta, que no son de Pangea.
+
+CA2 - Base de datos (DEF-01)
+  Nombre: pangea-db | postgres 16.15 | estado available | puerto 5432 | host ls-9826f642...us-east-1.rds.amazonaws.com
+  publiclyAccessible = False                      (28/10/2026: True)
+  Conexion TCP desde CloudShell (fuera de la red privada de Lightsail) -> sin conexion   (28/10/2026: ABIERTO)
+  RESULTADO: APROBADO. La BD de produccion ya no es publica ni acepta conexiones desde fuera de Lightsail.
+  En git no hay commit que registre el cambio: se hizo en la consola de Lightsail entre el 28/10 y el 02/11/2026.
+
+CA1 - Container Service
+  Servicio: pangea-api | estado RUNNING | potencia small | escala 1.
+  El detalle del despliegue no se leyo: el script usa por defecto "pangea-app" y el servicio real es "pangea-api" (ya anotado el 28/10).
+
+CA3 / CA4 - sin cambios respecto del 28/10/2026
+  Bucket pangea-storage-prod: estado OK, versionado NeverEnabled (OBS-04).
+  respaldoAuto = True; snapshot manual pangea-pre-b948aac-20261020 (available).
+
+Pendiente (OBS-25): confirmar que la API de produccion sigue leyendo la BD tras pasarla a privada
+(el riesgo anotado en DEF-01 era que el Container Service perdiera la conexion si no habia acceso interno).

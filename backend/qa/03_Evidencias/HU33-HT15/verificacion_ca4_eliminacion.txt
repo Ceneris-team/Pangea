@@ -1,0 +1,10 @@
+Verificación CA4 · 02/11/2026 10:53:51 · usuario cliente@pangea-dev.com
+1. POST /exportaciones -> 202 Exportación solicitada. Puedes seguir trabajando mientras se prepara.
+2. Exportación #6: estado=Lista, filas=38, disponible hasta 2026-11-03T15:53:51.434067Z
+3. Vigencia = 24.00 horas desde la solicitud. Objeto en bucket: exportaciones/4/38d6dff4d72f458089ae68f368dded02.csv -> existe=True
+4. Se fuerza el vencimiento (fch_exprcn = hace 1 segundo) y se ejecuta la tarea mantener_exportaciones del producto
+   resultado de la tarea: {'eliminadas': 1}
+5. Estado en BD: Expirada, objeto_clave=None
+6. Objeto en bucket tras la limpieza: existe=False
+7. POST /exportaciones/6/descarga -> 410 La exportación expiró. Solicita una nueva.
+RESULTADO: CUMPLE CA4

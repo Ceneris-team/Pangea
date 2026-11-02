@@ -1,0 +1,22 @@
+﻿[2026-11-02 10:47:49,775: INFO/MainProcess] Task app.tasks.notificaciones.enviar_correo_bienvenida[e3c8fcf9-05ff-4f99-b0f2-b284550e9a7d] received
+[2026-11-02 10:47:49,797: INFO/MainProcess] Task app.tasks.notificaciones.enviar_correo_bienvenida[e3c8fcf9-05ff-4f99-b0f2-b284550e9a7d] succeeded in 0.020869200001470745s: {'correo': 'nuevo@pangea-dev.com', 'estado': 'simulado'}
+[2026-11-02 10:47:49,800: INFO/MainProcess] Task app.tasks.exportaciones.notificar_exportacion[7e91eeb7-e336-4293-9b70-75964dc419f3] received
+[2026-11-02 10:47:59,621: INFO/MainProcess] Task app.tasks.exportaciones.notificar_exportacion[7e91eeb7-e336-4293-9b70-75964dc419f3] succeeded in 9.821344399999361s: {'estado': 'Enviada'}
+[2026-11-02 10:47:59,744: INFO/MainProcess] Task app.tasks.exportaciones.notificar_exportacion[fc8a79d6-7af1-4374-85f1-12ff4e8ff95a] received
+[2026-11-02 10:48:00,092: INFO/MainProcess] Task app.tasks.exportaciones.notificar_exportacion[fc8a79d6-7af1-4374-85f1-12ff4e8ff95a] succeeded in 0.3479905999847688s: {'estado': 'Enviada'}
+[2026-11-02 10:48:25,274: INFO/MainProcess] Task app.tasks.exportaciones.generar_exportacion[624cce75-024c-4171-94f3-bb9f0033dc5e] received
+[2026-11-02 10:48:25,368: INFO/MainProcess] Task app.tasks.exportaciones.generar_exportacion[624cce75-024c-4171-94f3-bb9f0033dc5e] succeeded in 0.09337680001044646s: {'estado': 'Lista', 'filas': 38}
+[2026-11-02 10:48:25,371: INFO/MainProcess] Task app.tasks.exportaciones.notificar_exportacion[774c1c92-3364-4695-8d1d-4acfc97c0837] received
+[2026-11-02 10:48:25,390: INFO/MainProcess] Task app.tasks.exportaciones.notificar_exportacion[774c1c92-3364-4695-8d1d-4acfc97c0837] succeeded in 0.017885599983856082s: {'estado': 'Enviada'}
+[2026-11-02 10:49:24,617: INFO/MainProcess] Task app.tasks.exportaciones.generar_exportacion[5e3f371a-fea3-405c-9a41-927255d57c08] received
+[2026-11-02 10:49:24,838: INFO/MainProcess] Task app.tasks.exportaciones.generar_exportacion[5e3f371a-fea3-405c-9a41-927255d57c08] succeeded in 0.21987089997855946s: {'estado': 'Lista', 'filas': 38}
+[2026-11-02 10:49:24,844: INFO/MainProcess] Task app.tasks.exportaciones.notificar_exportacion[618616b4-317f-4ea4-b0fa-92d4ccfb0ae6] received
+[2026-11-02 10:49:24,874: INFO/MainProcess] Task app.tasks.exportaciones.notificar_exportacion[618616b4-317f-4ea4-b0fa-92d4ccfb0ae6] succeeded in 0.02894910000031814s: {'estado': 'Enviada'}
+[2026-11-02 10:50:49,926: INFO/MainProcess] Task app.tasks.exportaciones.generar_exportacion[52db87c0-d08e-4d55-9144-c690521b1d95] received
+[2026-11-02 10:50:50,311: INFO/MainProcess] Task app.tasks.exportaciones.generar_exportacion[52db87c0-d08e-4d55-9144-c690521b1d95] succeeded in 0.3848209999850951s: {'estado': 'Lista', 'filas': 38}
+[2026-11-02 10:50:50,322: INFO/MainProcess] Task app.tasks.exportaciones.notificar_exportacion[a0c1f6d1-1827-4dbb-ac11-72f9481462ce] received
+[2026-11-02 10:50:50,361: INFO/MainProcess] Task app.tasks.exportaciones.notificar_exportacion[a0c1f6d1-1827-4dbb-ac11-72f9481462ce] succeeded in 0.03873500000918284s: {'estado': 'Enviada'}
+[2026-11-02 10:53:51,325: INFO/MainProcess] Task app.tasks.exportaciones.generar_exportacion[12ece513-6a64-400b-ae44-9f1005172fc2] received
+[2026-11-02 10:53:51,448: INFO/MainProcess] Task app.tasks.exportaciones.generar_exportacion[12ece513-6a64-400b-ae44-9f1005172fc2] succeeded in 0.1227292999974452s: {'estado': 'Lista', 'filas': 38}
+[2026-11-02 10:53:51,454: INFO/MainProcess] Task app.tasks.exportaciones.notificar_exportacion[6f54b162-a779-4ffa-a889-5aa9c1305c16] received
+[2026-11-02 10:53:51,479: INFO/MainProcess] Task app.tasks.exportaciones.notificar_exportacion[6f54b162-a779-4ffa-a889-5aa9c1305c16] succeeded in 0.0250141000142321s: {'estado': 'Enviada'}

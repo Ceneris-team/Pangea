@@ -48,3 +48,16 @@ await pytest('pytest_reverificacion.html', 'EV-HT302-INF-09_captura-reverificaci
     clip: { x: 0, y: 0, width: 1000, height: Math.ceil(bottom) + 10 } });
 }
 await browser.close();
+
+// Extracto para el informe PDF: cabecera con contadores y las primeras 10 de 40 pruebas (la lista completa no cabe en una página).
+{
+  const browser2 = await chromium.launch({ channel: 'msedge' });
+  const page = await browser2.newPage({ viewport: { width: 1000, height: 900 }, deviceScaleFactor: 2 });
+  await page.goto(pathToFileURL(path.join(dir, 'playwright', 'index.html')).href);
+  await page.waitForSelector('.test-file-test');
+  await page.waitForTimeout(500);
+  const bottom = await page.evaluate(() => document.querySelectorAll('.test-file-test')[9].getBoundingClientRect().bottom + window.scrollY);
+  await page.screenshot({ path: path.join(dir, 'EV-HT302-INF-12_captura-informe-playwright-extracto.png'), fullPage: true,
+    clip: { x: 0, y: 0, width: 1000, height: Math.ceil(bottom) + 6 } });
+  await browser2.close();
+}

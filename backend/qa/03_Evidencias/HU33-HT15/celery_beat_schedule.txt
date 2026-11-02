@@ -1,0 +1,3 @@
+PP-286 · Configuración de Celery Beat para la limpieza de exportaciones · 02/11/2026 10:56
+mantener-exportaciones-cada-minuto -> app.tasks.exportaciones.mantener_exportaciones cada 60.0 s opciones: None
+Cola de la tarea generar_exportacion: {'app.tasks.exportaciones.generar_exportacion': {'queue': 'exportaciones'}}
