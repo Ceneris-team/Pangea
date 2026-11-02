@@ -95,6 +95,48 @@ def autenticar(client, cuenta):
     )
 
 
+def test_estado_acceso_cambia_con_revocacion_y_no_expone_proyectos_ajenos(entorno):
+    client, db, empresas, recursos, cuentas, _ = entorno
+    autenticar(client, cuentas["Lector"])
+    antes = client.get("/auth/acceso")
+    assert antes.status_code == 200
+    assert antes.headers["cache-control"] == "no-store"
+    assert antes.json()["empresas"] == [{"id_clnt": empresas[0].id_clnt, "rol": "Lector", "proyecto_ids": [recursos[0][0].id_ubccn]}]
+    db.query(UsuarioProyecto).filter_by(id_mmb=cuentas["Lector"][1].id_mmb).delete()
+    db.flush()
+    despues = client.get("/auth/acceso").json()
+    assert despues["version"] != antes.json()["version"]
+    assert despues["empresas"][0]["proyecto_ids"] == []
+
+
+def test_membresia_revocada_no_afecta_otra_empresa_del_mismo_usuario(entorno):
+    client, db, empresas, recursos, cuentas, _ = entorno
+    usuario, miembro = cuentas["Lector"]
+    otra = UsuarioCliente(id_usr=usuario.id_usr, id_clnt=empresas[1].id_clnt, rol_emp="Lector")
+    db.add(otra)
+    db.flush()
+    db.add(UsuarioProyecto(id_mmb=otra.id_mmb, id_ubccn=recursos[2][0].id_ubccn))
+    miembro.estd = "Inactivo"
+    db.flush()
+    autenticar(client, cuentas["Lector"])
+    client.headers["X-Cliente-Id"] = str(empresas[0].id_clnt)
+    assert client.get("/mediciones").status_code == 403
+    client.headers["X-Cliente-Id"] = str(empresas[1].id_clnt)
+    assert client.get("/mediciones").status_code == 200
+    assert client.get("/auth/acceso").json()["empresas"][0]["id_clnt"] == empresas[1].id_clnt
+
+
+@pytest.mark.parametrize("rol", ["Lector", "Tecnico", "Técnico CENERIS"])
+def test_solo_administrador_puede_cambiar_membresias_por_api(entorno, rol):
+    client, db, empresas, _, cuentas, _ = entorno
+    objetivo = cuentas["Lector"][1]
+    autenticar(client, cuentas[rol])
+    ruta = f"/empresas/{empresas[0].id_clnt}/usuarios/{objetivo.id_mmb}"
+    assert client.patch(ruta, json={"rol": "Lector", "estado": "Inactivo", "proyecto_ids": []}).status_code == 403
+    db.refresh(objetivo)
+    assert objetivo.estd == "Activo"
+
+
 @pytest.mark.parametrize("rol", ["Administrador", "Tecnico"])
 def test_empresa_opera_recursos_propios_y_rechaza_ajenos(entorno, rol):
     client, db, empresas, recursos, cuentas, parametro = entorno

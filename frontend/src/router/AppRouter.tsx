@@ -3,6 +3,7 @@ import { AuthProvider } from "../context/AuthContext";
 import { useAuth } from "../hooks/useAuth";
 import { ThemeProvider } from "../context/ThemeContext";
 import ProtectedRoute from "../components/ProtectedRoute";
+import VigenciaAcceso from "../components/VigenciaAcceso";
 import Login from "../pages/Login";
 import OlvideContrasena from "../pages/OlvideContrasena";
 import RestablecerContrasena from "../pages/RestablecerContrasena";
@@ -52,6 +53,7 @@ export default function AppRouter() {
     <BrowserRouter>
       <ThemeProvider>
       <AuthProvider>
+        <VigenciaAcceso>
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/clientes" element={<ProtectedRoute rolesPermitidos={[ROLES.ADMINISTRADOR, ROLES.TECNICO_CENERIS]}><Clientes /></ProtectedRoute>} />
@@ -298,6 +300,7 @@ export default function AppRouter() {
 
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
+        </VigenciaAcceso>
       </AuthProvider>
       </ThemeProvider>
     </BrowserRouter>
