@@ -2,7 +2,7 @@
 
 from datetime import date, timedelta
 from decimal import Decimal
-from typing import Literal
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator
@@ -27,6 +27,7 @@ from app.models import (
 from app.security.dependencies import get_current_user
 from app.security.permisos import EDICION, LECTURA, require_permiso
 from app.services import clientes as servicio_clientes
+from app.services import cobros as servicio_cobros
 from app.services.contratos import (
     aplicar_programadas,
     auditar,
@@ -379,6 +380,57 @@ def asignar_plan(
         "fecha_vencimiento": contrato.fch_vncmnt,
         "cliente": resumen_cliente(db, db.get(Cliente, id_clnt)),
     }
+
+
+# PP-67 - Registrar cobro (PP-312, PP-313). Reglas en services/cobros.py.
+class CobroRegistrar(BaseModel):
+    # Sin tipos estrictos a propósito: services/cobros.py valida y responde
+    # con el mensaje en español que muestra el formulario.
+    # Any y no str | int | float: así Pydantic no convierte true en 1.
+    monto: Any = None
+    fecha_cobro: str | None = None
+    metodo_pago: str | None = None
+
+
+@router.post("/clientes/{id_clnt}/cobros", status_code=201)
+def registrar_cobro(
+    id_clnt: int,
+    body: CobroRegistrar,
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(require_permiso("Comercial", EDICION)),
+):
+    """CA2: registra el cobro en el período (contrato) actual del cliente.
+    "Solo el rol Administrador Comercial puede registrar cobros"."""
+    if usuario.get("rol") != "Administrador Comercial" or usuario.get("scope") != "global":
+        raise HTTPException(status_code=403, detail="Solo el Administrador Comercial puede registrar cobros")
+    if db.get(Cliente, id_clnt) is None:
+        raise HTTPException(status_code=404, detail="Cliente no encontrado")
+    cobro = servicio_cobros.registrar_cobro(
+        db, id_clnt, monto=body.monto, fecha_cobro=body.fecha_cobro,
+        metodo_pago=body.metodo_pago, hoy=fecha_comercial(),
+    )
+    auditar(
+        db, usuario, "registrar", "Cobro",
+        despues={"cliente_id": id_clnt, "cobro_id": cobro.id_cbr, "suscripcion_id": cobro.id_sscrpcn,
+                 "monto": str(cobro.mnt), "fecha_cobro": cobro.fch_cbr.isoformat(), "metodo_pago": cobro.mtd_pg},
+    )
+    db.commit()
+    db.refresh(cobro)
+    contrato = db.get(Suscripcion, cobro.id_sscrpcn)
+    return {"mensaje": servicio_cobros.MSG_COBRO_REGISTRADO, "cobro": servicio_cobros.cobro_dict(db, cobro, contrato)}
+
+
+@router.get("/clientes/{id_clnt}/cobros")
+def listar_cobros(
+    id_clnt: int,
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(require_permiso("Comercial", LECTURA)),
+):
+    """CA3: historial de cobros del cliente (monto, fecha y método)."""
+    _solo_comercial(usuario)
+    if db.get(Cliente, id_clnt) is None:
+        raise HTTPException(status_code=404, detail="Cliente no encontrado")
+    return servicio_cobros.historial_cobros(db, id_clnt)
 
 
 @router.post("/clientes/{id_clnt}/suscripcion/preview")
