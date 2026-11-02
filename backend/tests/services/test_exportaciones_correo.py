@@ -26,6 +26,7 @@ def test_correo_real_usa_smtp_y_enlace_a_app_sin_adjuntar_datos(monkeypatch):
         )
         servidor = smtp.return_value.__enter__.return_value
         servidor.starttls.assert_called_once()
+        assert servidor.starttls.call_args.kwargs["context"].check_hostname
         mensaje = servidor.send_message.call_args.args[0]
         assert mensaje["To"] == "usuario@example.com"
         assert "https://app.example/consulta-datos?exportacion=1" in mensaje.get_content()
