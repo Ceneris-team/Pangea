@@ -1,0 +1,22 @@
+Verificación con S3 y SMTP reales en local (moto como servidor S3, Mailpit como buzón con STARTTLS) · 02/11/2026 12:09:41
+
+CP-221 · Flujo completo contra el servidor S3
+1. POST /exportaciones -> 202; exportación #41
+2. Estado: Lista; filas 38; error: None
+3. Objeto en el bucket: exportaciones/4/1cc1719efc564bd9a535d7dfb96a160b.csv; versiones 1, marcadores 0; versión guardada en la BD: True
+4. POST /descarga -> 200; URL firmada con X-Amz-Expires: True
+5. GET de la URL firmada -> 200; 5780 bytes; cabecera: b'\xef\xbb\xbfEmpresa,Sede,Proyecto,ID dispositivo,Dispositivo,ID par\xc3\xa1'
+6. GET del mismo objeto sin firma -> 403 (S3 real debe responder 403; moto no siempre valida acceso anónimo)
+  -> CUMPLE: se subió, se firmó y se descargó el archivo real
+
+CP-220 · Correo recibido en el buzón (Mailpit, SMTP con STARTTLS)
+7. Mensaje recibido: para ['cliente@pangea-dev.com']; asunto «Tu exportación está lista - Pangea»; adjuntos: 0
+   cuerpo: Tu exportación está lista. Inicia sesión en Pangea y abre la empresa y el proyecto donde la solicitaste. |  | http://localhost:5173/consulta-datos?exportacion=41 |  | Disponible hasta 2026-11-03T17:09:42.670943+00:00. | El acceso a los datos se comprobará de nuevo antes de descargar. | 
+  -> CUMPLE: llegó al buzón con el enlace a la aplicación y la caducidad, sin adjuntos ni datos
+
+Limpieza con Beat y varias versiones
+8. Antes de vencer: 2 versiones y 1 marcadores de borrado en la clave
+9. Beat lo limpió en 6 s: estado Expirada; versiones 0; marcadores 0; descarga posterior -> 410
+  -> CUMPLE: se eliminaron todas las versiones y marcadores en menos de 5 minutos
+
+RESUMEN: flujo=ok; correo=ok; limpieza=ok

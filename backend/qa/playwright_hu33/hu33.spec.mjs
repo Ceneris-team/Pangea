@@ -79,3 +79,28 @@ test.describe.serial('HU33 Exportación desde Consulta de datos', () => {
     expect(cuerpo.url).toContain('X-Expires=');
   });
 });
+
+test('HU33 recarga: la interfaz conserva el identificador de la exportación', async ({ browser }) => {
+  execSync('docker exec pangea-redis-1 redis-cli -n 5 FLUSHDB');
+  const ctx = await browser.newContext();
+  const p = await ctx.newPage();
+  await p.goto('/login');
+  await p.getByPlaceholder('Ingresa tu correo').fill(CLIENTE);
+  await p.getByPlaceholder('Ingresa tu contraseña').fill(CLAVE);
+  await p.locator('button.submit').click();
+  await p.waitForURL((u) => !u.pathname.includes('login'), { timeout: 20000 });
+  await p.goto('/consulta-datos');
+  await p.getByRole('button', { name: 'Exportar datos CSV / Excel' }).click();
+  await p.getByRole('button', { name: 'Solicitar exportación' }).click();
+  const item = p.locator('li', { hasText: /#\d+ ·/ }).first();
+  await expect(item).toBeVisible({ timeout: 15000 });
+  const id = (await item.textContent()).match(/#(\d+)/)[1];
+  await p.reload();
+  await p.getByRole('button', { name: 'Exportar datos CSV / Excel' }).click();
+  await expect(p.getByText(new RegExp(`#${id} ·`))).toBeVisible({ timeout: 15000 });
+  await p.goto(`/consulta-datos?exportacion=${id}`);
+  await expect(p.getByRole('button', { name: 'Cerrar exportaciones' })).toBeVisible({ timeout: 15000 });
+  await expect(p.getByText(new RegExp(`#${id} ·`))).toBeVisible();
+  await p.screenshot({ path: EV + 'EV-HU33-E2E-05_recarga-conserva-id.png' });
+  await ctx.close();
+});

@@ -1,0 +1,24 @@
+PP-408 · CP-219 · Privacidad del bucket en AWS real (solo lectura) · 02/11/2026
+Ejecutado por el usuario en AWS CloudShell (us-east-1), cuenta Ceneris aws; QA registra la salida.
+Nota: los dos primeros comandos se pegaron con los marcadores <BUCKET> y <REGION> sin reemplazar y no consultaron AWS (error de bash y código 000); no cuentan como evidencia.
+
+~ $ aws lightsail get-buckets --region us-east-1 --query 'buckets[].{nombre:name,acceso:accessRules.getObject,sobrescritura_publica:accessRules.allowPublicOverrides,versionado:objectVersioning,url:url}' --output table
+---------------------------------------------------------------------------------------------------------------------------------------
+|                                                             GetBuckets                                                              |
++---------+----------------------+------------------------+----------------------------------------------------------+----------------+
+| acceso  |       nombre         | sobrescritura_publica  |                           url                            |  versionado    |
++---------+----------------------+------------------------+----------------------------------------------------------+----------------+
+|  private|  pangea-storage-prod |  False                 |  https://pangea-storage-prod.s3.us-east-1.amazonaws.com  |  NeverEnabled  |
++---------+----------------------+------------------------+----------------------------------------------------------+----------------+
+
+~ $ curl -s -o /dev/null -w "listar sin firma: %{http_code}\n" "https://pangea-storage-prod.s3.us-east-1.amazonaws.com/"
+listar sin firma: 403
+
+~ $ curl -s -o /dev/null -w "objeto sin firma: %{http_code}\n" "https://pangea-storage-prod.s3.us-east-1.amazonaws.com/exportaciones/prueba-qa.csv"
+objeto sin firma: 403
+
+Lectura de QA:
+- Es el único bucket de Lightsail de la cuenta en us-east-1 y es el de los .dat de ingesta (HT-06): no existe un bucket dedicado a exportaciones.
+- pangea-storage-prod es privado, sin sobrescritura pública, y rechaza el listado y la descarga sin firma (403).
+- El versionado nunca se activó: la limpieza del producto borra con delete_object y no necesita eliminar versiones.
+- El 403 sobre una clave que no existe no prueba por sí solo que un objeto real esté protegido; lo que lo respalda es el acceso privado y el 403 al listado.

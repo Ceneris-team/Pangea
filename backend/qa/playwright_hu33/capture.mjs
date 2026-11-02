@@ -30,6 +30,7 @@ async function pytest(html, png, soloFallidas, filas = FILAS) {
 }
 
 await pytest('pytest_exportaciones.html', 'EV-HU33-INF-01_captura-pytest-exportaciones-extracto.png', false, 10);
+await pytest('pytest_criterios_hu15.html', 'EV-HU33-INF-12_captura-pytest-criterios-ronda2.png', false, 8);
 await pytest('pytest_benchmark_mes.html', 'EV-HU33-INF-02_captura-benchmark-mes-completo.png', false, 2);
 await pytest('pytest_regresion.html', 'EV-HU33-INF-03_captura-regresion-extracto.png', false, 8);
 {

@@ -1,0 +1,4 @@
+﻿[2026-11-02 11:22:53,100: INFO/MainProcess] Scheduler: Sending due task mantener-exportaciones-cada-minuto (app.tasks.exportaciones.mantener_exportaciones)
+[2026-11-02 11:23:53,100: INFO/MainProcess] Scheduler: Sending due task mantener-exportaciones-cada-minuto (app.tasks.exportaciones.mantener_exportaciones)
+[2026-11-02 11:24:53,100: INFO/MainProcess] Scheduler: Sending due task mantener-exportaciones-cada-minuto (app.tasks.exportaciones.mantener_exportaciones)
+[2026-11-02 11:25:53,100: INFO/MainProcess] Scheduler: Sending due task mantener-exportaciones-cada-minuto (app.tasks.exportaciones.mantener_exportaciones)

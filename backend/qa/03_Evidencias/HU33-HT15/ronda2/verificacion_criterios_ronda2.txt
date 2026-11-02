@@ -1,0 +1,41 @@
+Verificación de criterios de HU-15 · ronda 2 · 02/11/2026 11:22:19 · API, worker, Beat y SMTP local con STARTTLS
+
+1. Solicitud asíncrona: 30 solicitudes seguidas (cada una espera a Lista antes de la siguiente)
+   202 en las 30; mediana 16 ms; p95 22 ms; máximo 255 ms
+  -> CUMPLE: p95 <= 2 s
+
+2. Contenido completo: columnas, filas, zona horaria y decimales
+   CSV: 38 filas; consulta directa a la BD: 38; cabecera: ['Empresa', 'Sede', 'Proyecto', 'ID dispositivo', 'Dispositivo', 'ID parámetro', 'Parámetro', 'Unidad', 'Fecha y hora', 'Valor', 'Tipo']
+   Fecha con zona horaria en todas las filas: True; ejemplo: 2026-10-29T21:34:02.991411-05:00; valor: 17.0000
+   XLSX: 38 filas; cabecera igual a la del CSV: True
+  -> CUMPLE: todas las filas coinciden con la BD, 11 columnas y fecha con zona horaria
+
+3. Filtros conservados con el trabajo
+   fltrs_aplcds de #36: rango 2026-10-29T00:00:00Z a 2026-10-31T00:00:00Z, proyectos [1, 2], dispositivos [], parámetros []
+  -> CUMPLE: los filtros quedan persistidos con el trabajo
+
+4. Aislamiento: otro administrador y un identificador inexistente
+   admin consulta #36 -> 404; admin descarga -> 404; cliente consulta id inexistente -> 404; el listado del admin incluye el trabajo del cliente: False
+  -> CUMPLE: 404 para otro administrador y para un id inexistente
+
+5. Vigencia y descarga
+   fecha límite antes 2026-11-03T16:22:53.022634Z; después de 3 descargas 2026-11-03T16:22:53.022634Z; segundos de cada firma: [60, 60, 60]
+   fecha límite - fin de la generación = 1 day, 0:00:00.000004 (24 h exactas desde que quedó lista)
+  -> CUMPLE: misma fecha, firmas de 60 s o menos y 24 h desde el fin
+
+6. Notificación por SMTP (servidor local con STARTTLS)
+   31 correos recibidos; último para cliente@pangea-dev.com, asunto «Tu =?utf-8?q?exportaci=C3=B3n_est=C3=A1?= lista - Pangea», adjuntos: False
+   cuerpo: Tu exportación está lista. Inicia sesión en Pangea y abre la empresa y el proyecto donde la solicitaste. |  | http://localhost:5173/consulta-datos?exportacion=37 |  | Disponible hasta 2026-11-03T16:23:03.399029+00:00. | El acceso a los datos se comprobará
+  -> CUMPLE: enlace a la aplicación y fecha de caducidad, sin adjuntos
+   Se detiene el SMTP, se solicita una exportación y se vuelve a levantar el SMTP
+   con SMTP caído: estado=Lista, notificación=Fallida, archivo disponible hasta 2026-11-03T16:23:04.552740Z
+   descarga mientras el correo falla -> 200
+   tras volver el SMTP: notificación=Enviada en 55 s; misma clave de archivo: True; intentos de generación: 1
+  -> CUMPLE: el archivo siguió disponible y el correo se reintentó sin regenerarlo
+
+7. Limpieza con Beat y worker reales
+   vencimiento forzado; Beat/worker lo limpiaron en 60 s; estado Expirada; objeto en el almacén: False
+   descarga posterior -> 410
+  -> CUMPLE: objeto vencido eliminado en menos de 5 minutos
+
+RESUMEN: p95=ok; contenido=ok; filtros=ok; aislamiento=ok; vigencia=ok; correo=ok; reintento_correo=ok; limpieza=ok

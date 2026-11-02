@@ -1,7 +1,7 @@
 ﻿"""Entorno local de QA para PP-408: API y worker Celery reales con el bucket simulado en una carpeta.
 
 Solo parchea el borde externo (S3 y SMTP). La tarea, los lotes, la expiración y la limpieza son el código del producto.
-Uso: python entorno_local.py api | worker
+Uso: [QA_REAL=1] python entorno_local.py api | worker | beat; con QA_REAL=1 no se parchea nada y se usan los servicios de .env.qa (SMTP real contra smtp_local.py; QA_CORREO_SIMULADO=1 vuelve al correo simulado)
 """
 import json
 import os
@@ -14,16 +14,23 @@ BUCKET = RAIZ / "bucket_local"
 CORREOS = RAIZ / "correos_enviados.jsonl"
 FIRMAS = RAIZ / "firmas_generadas.jsonl"
 
+REAL = os.environ.get("QA_REAL") == "1"  # servicios reales: bucket de Lightsail y SMTP reales, leídos de .env.qa (ignorado por git)
 os.environ.update(
     DATABASE_URL="postgresql+psycopg2://postgres:postgres@localhost:5433/pangea_e2e",
     RATELIMIT_STORAGE_URL="redis://localhost:6379/5",
-    EXPORT_S3_BUCKET="bucket-local-qa",
-    SMTP_HOST="",
 )
+if REAL:
+    from dotenv import load_dotenv
+
+    load_dotenv(Path(__file__).with_name(".env.qa"), override=True)
+else:
+    os.environ.update(EXPORT_S3_BUCKET="bucket-local-qa", SMTP_HOST="127.0.0.1", SMTP_PORT="1025")
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 
 def parchar():
+    if REAL:
+        return
     from app.security import mailer
     from app.services.exportaciones_storage import AlmacenExportaciones
 
@@ -53,7 +60,8 @@ def parchar():
     AlmacenExportaciones.subir = subir
     AlmacenExportaciones.eliminar = eliminar
     AlmacenExportaciones.firmar = firmar
-    mailer.enviar_correo_exportacion = correo
+    if os.environ.get('QA_CORREO_SIMULADO'):
+        mailer.enviar_correo_exportacion = correo
 
 
 if __name__ == "__main__":
@@ -64,6 +72,10 @@ if __name__ == "__main__":
         from app.main import app
 
         uvicorn.run(app, port=8000)
+    elif sys.argv[1] == "beat":
+        from app.core.celery_app import celery_app
+
+        celery_app.start(["beat", "-l", "INFO", "-s", str(RAIZ / "celerybeat-schedule-qa")])
     else:
         from app.core.celery_app import celery_app
 

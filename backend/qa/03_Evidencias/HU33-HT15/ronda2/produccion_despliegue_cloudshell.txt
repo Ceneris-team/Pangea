@@ -1,0 +1,31 @@
+PP-408 · CP-220 y CP-221 · Estado del despliegue de producción para exportaciones (solo lectura) · 02/11/2026
+Ejecutado por el usuario en AWS CloudShell (us-east-1). Se filtró la salida con jq para no mostrar valores de variables: solo nombres de variables SMTP, EXPORT, FRONTEND, CELERY y REDIS, y el valor de SMTP_HOST y SMTP_PORT.
+
+~ $ aws lightsail get-container-services --region us-east-1 --query 'containerServices[].{servicio:containerServiceName,estado:state}' --output table
+|  RUNNING |  pangea-api  |
+
+~ $ aws lightsail get-container-service-deployments --service-name pangea-api --region us-east-1 | jq '.deployments[0] | {estado: .state, contenedores: (...)}'
+{
+  "estado": "ACTIVE",
+  "contenedores": {
+    "api":    { "variables_definidas": ["CELERY_BROKER_URL", "CELERY_RESULT_BACKEND", "FRONTEND_URL"], "smtp_host": null, "smtp_port": null },
+    "beat":   { "variables_definidas": ["CELERY_BROKER_URL", "CELERY_RESULT_BACKEND"], "smtp_host": null, "smtp_port": null },
+    "redis":  { "variables_definidas": [], "smtp_host": null, "smtp_port": null },
+    "worker": { "variables_definidas": ["CELERY_BROKER_URL", "CELERY_RESULT_BACKEND", "FRONTEND_URL"], "smtp_host": null, "smtp_port": null }
+  }
+}
+
+~ $ aws lightsail get-container-service-deployments --service-name pangea-api --region us-east-1 | jq '.deployments[0].containers | map_values(.command)'
+{
+  "api": [],
+  "beat": ["celery", "-A", "app.core.celery_app", "beat", "--loglevel=info"],
+  "redis": [],
+  "worker": ["celery", "-A", "app.core.celery_app", "worker", "--loglevel=info", "--concurrency=2"]
+}
+
+Lectura de QA:
+- Ningún contenedor define SMTP_HOST, SMTP_USER, SMTP_PASSWORD ni SMTP_FROM: producción no puede enviar el correo de exportación (CP-220).
+- Ningún contenedor define EXPORT_S3_BUCKET: la API respondería 503 al solicitar una exportación, y no existe un bucket dedicado (CP-221, PEN-06).
+- El worker arranca sin --queues, así que solo atiende la cola por defecto. La tarea generar_exportacion se enruta a la cola "exportaciones" (app/core/celery_app.py) y no hay un contenedor worker-exportaciones como el de docker-compose.yml: una solicitud quedaría Pendiente sin que nadie la genere.
+- Beat sí está desplegado, con la tarea de mantenimiento de exportaciones ya programada en el código.
+- Nada de esto es un defecto del código: es configuración y despliegue de producción pendientes.
