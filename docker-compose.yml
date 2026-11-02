@@ -52,6 +52,23 @@ services:
       - db
       - redis
 
+  worker-exportaciones:
+    build: ./backend
+    profiles: ["full"]
+    env_file:
+      - ./.env
+    environment:
+      DATABASE_URL: postgresql+psycopg2://pangea:pangea_dev@db:5432/pangea_dev
+      CELERY_BROKER_URL: redis://redis:6379/2
+      CELERY_RESULT_BACKEND: redis://redis:6379/3
+    command: celery -A app.core.celery_app worker --loglevel=info --queues=exportaciones --concurrency=1 --prefetch-multiplier=1
+    mem_limit: 512m
+    cpus: 2.0
+    restart: unless-stopped
+    depends_on:
+      - db
+      - redis
+
   beat:
     build: ./backend
     profiles: ["full"]

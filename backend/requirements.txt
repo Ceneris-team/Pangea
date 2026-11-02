@@ -19,3 +19,6 @@ pydantic[email]
 python-multipart  # HU06: FastAPI lo exige para leer multipart/form-data (vista previa del .dat de muestra)
 pytest
 httpx
+boto3>=1.35,<2
+openpyxl>=3.1.5,<4
+lxml>=5.3,<7

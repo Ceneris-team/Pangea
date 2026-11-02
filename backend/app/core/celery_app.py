@@ -19,6 +19,7 @@ celery_app = Celery(
         "app.tasks.notificaciones",
         "app.tasks.particiones",
         "app.tasks.suscripciones",
+        "app.tasks.exportaciones",
     ],
 )
 
@@ -29,6 +30,9 @@ celery_app.conf.update(
     timezone="America/Bogota",
     enable_utc=True,
     task_track_started=True,
+    task_routes={
+        "app.tasks.exportaciones.generar_exportacion": {"queue": "exportaciones"},
+    },
 )
 
 # HT-05 CA4 - Límite de concurrencia del worker
@@ -69,6 +73,10 @@ celery_app.conf.update(
 # posible, así que ninguna frcnc_mnts configurada por debajo de eso puede
 # cumplirse igual.
 celery_app.conf.beat_schedule = {
+    "mantener-exportaciones-cada-minuto": {
+        "task": "app.tasks.exportaciones.mantener_exportaciones",
+        "schedule": 60.0,
+    },
     "activar-suscripciones-programadas": {
         "task": "app.tasks.suscripciones.activar_suscripciones_programadas",
         "schedule": 60.0,

@@ -13,6 +13,7 @@ from app.routers import (
     conexiones_ftp,
     dispositivos,
     empresas,
+    exportaciones,
     ingesta,
     mapa_cliente,
     mapeos,
@@ -55,6 +56,7 @@ app.include_router(ubicaciones.router)
 app.include_router(ingesta.router)
 app.include_router(conexiones_ftp.router)
 app.include_router(mediciones.router)
+app.include_router(exportaciones.router)
 app.include_router(mapeos.router)
 app.include_router(mapeos.router_parametros)
 app.include_router(mapeos.router_sedes)
