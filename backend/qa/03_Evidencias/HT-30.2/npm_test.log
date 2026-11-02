@@ -1,0 +1,29 @@
+$ npm run test:series  (02/11/2026 08:49, commit ada083f)
+
+> frontend@0.0.0 test:series
+> node --experimental-strip-types --test tests/*.test.ts
+
+✔ una respuesta lenta se publica y los ticks pendientes se reducen al más reciente (8.3869ms)
+✔ cambiar de filtros cancela la conexión, la cola y los resultados antiguos (0.9318ms)
+✔ un error permite procesar el refresco siguiente y terminar el indicador de carga (0.7882ms)
+✔ actualizar manualmente el mismo rango vuelve a consultar (0.7844ms)
+✔ el zoom se conserva dentro de la ventana móvil (0.6205ms)
+✔ un zoom que sale de la ventana se acota o se restaura al rango completo (0.2143ms)
+✔ mover un widget conserva los demás y envía el orden completo (3.4775ms)
+✔ soltar fuera del panel no modifica el orden (0.223ms)
+✔ separa lecturas antiguas de estaciones que nunca enviaron datos (1.3939ms)
+✔ resumen operativo respeta el umbral elegido (1.1325ms)
+✔ seis dataloggers con dos parámetros generan dos grupos con seis fuentes (3.7261ms)
+✔ no compara unidades diferentes ni confunde mV con MV (0.2022ms)
+✔ no mezcla contador de eventos, secuencia y estado aunque compartan parámetro (0.1494ms)
+✔ mantiene separados encabezados con significado desconocido (0.1483ms)
+✔ conserva formatos y reglas de reinicio propios de cada fuente al comparar (0.1723ms)
+✔ no mezcla proyectos distintos (0.1485ms)
+ℹ tests 16
+ℹ suites 0
+ℹ pass 16
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 264.1478

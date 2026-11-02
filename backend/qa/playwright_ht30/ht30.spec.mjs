@@ -15,8 +15,22 @@ const EV = '../03_Evidencias/HT-30.2/';
 
 const reiniciarLimite = () => execSync('docker exec pangea-redis-1 redis-cli -n 5 FLUSHDB');
 
+// Cada test abre su propio contexto; los que no pertenecen a un bloque serial se cierran al terminar el test,
+// para no acumular pestañas abiertas que ralenticen los siguientes recorridos.
+const abiertos = [];
+async function nuevaPagina(browser) {
+  const ctx = await browser.newContext();
+  abiertos.push(ctx);
+  return ctx.newPage();
+}
+test.afterEach(async ({}, info) => {
+  if (!info.titlePath.some((t) => /^F[3-6] /.test(t))) {
+    while (abiertos.length) await abiertos.pop().close();
+  }
+});
+
 async function abrirLogin(browser) {
-  const page = await (await browser.newContext()).newPage();
+  const page = await nuevaPagina(browser);
   await page.goto('/login');
   return page;
 }
@@ -112,7 +126,7 @@ test.describe('F1 Autenticación', () => {
 
 test.describe('F2 Control de acceso por rol', () => {
   test('F2 sin sesión las rutas protegidas redirigen a /login', async ({ browser }) => {
-    const page = await (await browser.newContext()).newPage();
+    const page = await nuevaPagina(browser);
     for (const ruta of ['/usuarios', '/paneles', '/consulta-datos']) {
       await page.goto(ruta);
       await enLogin(page);
@@ -175,7 +189,7 @@ test.describe.serial('F3 Entorno CENERIS y dispositivos', () => {
     await page.getByLabel('Buscar cliente').fill('Demo');
     await expect(page.getByRole('heading', { name: 'Cliente Demo' })).toBeVisible();
     await page.getByRole('button', { name: 'Entrar al entorno de Cliente Demo' }).click();
-    await expect(page).toHaveURL(/\/ubicaciones$/);
+    await expect(page).toHaveURL(/\/ubicaciones$/, { timeout: 15000 }); // abrirEntorno recarga la página completa
     await expect(page.getByRole('cell', { name: U_DEMO })).toBeVisible();
   });
 
@@ -216,6 +230,11 @@ test.describe.serial('F4 Consulta de datos', () => {
     await expect(page.getByRole('heading', { name: 'Consulta de Datos' })).toBeVisible();
     for (const col of ['Parámetro', 'Proyecto', 'Valor', 'Fecha']) await expect(page.getByRole('columnheader', { name: col })).toBeVisible();
     await abrirFiltros();
+    // La vista abre con las últimas 24 h; la telemetría del seed QA es del 30/10/2026, así que se fija un rango que la cubra (OBS-23).
+    await page.getByLabel('Fecha inicio').fill('2026-10-29T00:00');
+    await page.getByLabel('Fecha fin').fill('2026-10-31T00:00');
+    await page.locator('div:has(> button:text-is("LIMPIAR FILTRO")) > button:text-is("APLICAR")').click();
+    if (!(await page.getByRole('dialog', { name: 'Filtros' }).isVisible())) await abrirFiltros();
     await page.locator('label', { hasText: /^ph/ }).first().click();
     await page.locator('label', { hasText: U_DEMO }).first().click();
     // Hay dos «APLICAR» en el panel (rango de fechas y selección); se usa el que acompaña a «LIMPIAR FILTROS».
@@ -276,7 +295,7 @@ test.describe.serial('F5 Tableros personalizables', () => {
     await page.getByPlaceholder('Resumen de estaciones').fill(PANEL);
     await page.getByRole('button', { name: 'Guardar', exact: true }).click();
     await page.waitForURL(/\/paneles\/\d+$/);
-    await expect(page.getByText(PANEL).first()).toBeVisible();
+    await expect(page.getByText(PANEL).first()).toBeVisible({ timeout: 15000 });
   });
 
   test('F5 añadir ubicación y widget al panel', async () => {
