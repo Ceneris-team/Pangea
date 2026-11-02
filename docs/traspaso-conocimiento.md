@@ -70,7 +70,7 @@ Las dudas D-01 a D-12 salieron al revisar el repositorio para HT-25 (rama
 |---|---|---|---|---|---|---|
 | D-01 | CI | El CI solo corre en push y PR hacia `jareth` y `main`. Los PR hacia `dev`, que hoy es la rama de integración, no pasan por lint ni tests. ¿Se agrega `dev` a `.github/workflows/ci.yml`? | Abierta | | | |
 | D-02 | CI | El lint no pasa en `dev`: en local (02/11) ruff da 5 errores y black reformatearía 55 archivos. ¿Se corrige en una tarea aparte con `ruff check --fix` y `black .`? | Abierta | | | |
-| D-03 | Ramas | ¿El flujo oficial es `feature/PP-xxx` → `dev` → `main`? ¿Quién aprueba y fusiona los PR? ¿Siguen usándose las ramas personales (`jareth`, `fabio`)? | Abierta | | | |
+| D-03 | Ramas | ¿El flujo oficial es `feature/PP-xxx` → `dev` → `main`? En el historial, cada desarrollador sube a `dev` (directo o con PR) y solo Jareth pasa `dev` a `main`. ¿Se deja así como regla? ¿Siguen usándose las ramas personales (`jareth`, `fabio`)? | Abierta | | | |
 | D-04 | Commits | ¿Se adopta el formato `PP-xxx tipo(ámbito): descripción` propuesto en `CONTRIBUTING.md`? | Abierta | | | |
 | D-05 | Deploy | No están documentados los pasos del deploy: construir y subir las imágenes a Lightsail, aplicar migraciones en la RDS, publicar el frontend en S3 e invalidar CloudFront. ¿Quién los documenta? | Abierta | | | |
 | D-06 | Deploy | `containers.example.json` no tiene un worker para la cola `exportaciones`. Como `generar_exportacion` va a esa cola, en producción las exportaciones (HT-17) no se procesarían. ¿Ya se agregó en el `containers.json` real? | Abierta | | | |

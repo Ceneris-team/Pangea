@@ -30,9 +30,12 @@ Flujo:
 3. Al subirla por primera vez, dale su propio nombre en el remoto (si no,
    Git la asociaría a `dev`):
    `git push -u origin feature/PP-xxx-descripcion`.
-4. Abre el Pull Request hacia `dev`. Lo revisa y lo fusiona el Scrum Master.
+4. Abre el Pull Request hacia `dev`, aunque lo fusiones tú mismo: así
+   queda registro de qué entró, cuándo y de qué subtarea. Si quieres una
+   revisión, asigna a otra persona del equipo.
 5. `dev` pasa a `main` en un merge aparte («Merge dev into main: ...»),
-   cuando se va a desplegar.
+   cuando se va a desplegar. Lo hace el Scrum Master (Jareth), porque lleva
+   todo lo que haya en `dev`, también el trabajo de otras personas.
 
 **Propuesta:** el CI hoy solo corre para `jareth` y `main`. Los Pull
 Requests hacia `dev` no pasan por lint ni por tests; conviene agregar `dev`
