@@ -1,0 +1,1094 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8"/>
+    <title id="head-title">pytest_regresion_hu28.html</title>
+      <style type="text/css">body {
+  font-family: Helvetica, Arial, sans-serif;
+  font-size: 12px;
+  /* do not increase min-width as some may use split screens */
+  min-width: 800px;
+  color: #999;
+}
+
+h1 {
+  font-size: 24px;
+  color: black;
+}
+
+h2 {
+  font-size: 16px;
+  color: black;
+}
+
+p {
+  color: black;
+}
+
+a {
+  color: #999;
+}
+
+table {
+  border-collapse: collapse;
+}
+
+/******************************
+ * SUMMARY INFORMATION
+ ******************************/
+#environment td {
+  padding: 5px;
+  border: 1px solid #e6e6e6;
+  vertical-align: top;
+}
+#environment tr:nth-child(odd) {
+  background-color: #f6f6f6;
+}
+#environment ul {
+  margin: 0;
+  padding: 0 20px;
+}
+
+/******************************
+ * TEST RESULT COLORS
+ ******************************/
+span.passed,
+.passed .col-result {
+  color: green;
+}
+
+span.skipped,
+span.xfailed,
+span.rerun,
+.skipped .col-result,
+.xfailed .col-result,
+.rerun .col-result {
+  color: orange;
+}
+
+span.error,
+span.failed,
+span.xpassed,
+.error .col-result,
+.failed .col-result,
+.xpassed .col-result {
+  color: red;
+}
+
+.col-links__extra {
+  margin-right: 3px;
+}
+
+/******************************
+ * RESULTS TABLE
+ *
+ * 1. Table Layout
+ * 2. Extra
+ * 3. Sorting items
+ *
+ ******************************/
+/*------------------
+ * 1. Table Layout
+ *------------------*/
+#results-table {
+  border: 1px solid #e6e6e6;
+  color: #999;
+  font-size: 12px;
+  width: 100%;
+}
+#results-table th,
+#results-table td {
+  padding: 5px;
+  border: 1px solid #e6e6e6;
+  text-align: left;
+}
+#results-table th {
+  font-weight: bold;
+}
+
+/*------------------
+ * 2. Extra
+ *------------------*/
+.logwrapper {
+  max-height: 230px;
+  overflow-y: scroll;
+  background-color: #e6e6e6;
+}
+.logwrapper.expanded {
+  max-height: none;
+}
+.logwrapper.expanded .logexpander:after {
+  content: "collapse [-]";
+}
+.logwrapper .logexpander {
+  z-index: 1;
+  position: sticky;
+  top: 10px;
+  width: max-content;
+  border: 1px solid;
+  border-radius: 3px;
+  padding: 5px 7px;
+  margin: 10px 0 10px calc(100% - 80px);
+  cursor: pointer;
+  background-color: #e6e6e6;
+}
+.logwrapper .logexpander:after {
+  content: "expand [+]";
+}
+.logwrapper .logexpander:hover {
+  color: #000;
+  border-color: #000;
+}
+.logwrapper .log {
+  min-height: 40px;
+  position: relative;
+  top: -50px;
+  height: calc(100% + 50px);
+  border: 1px solid #e6e6e6;
+  color: black;
+  display: block;
+  font-family: "Courier New", Courier, monospace;
+  padding: 5px;
+  padding-right: 80px;
+  white-space: pre-wrap;
+}
+
+div.media {
+  border: 1px solid #e6e6e6;
+  float: right;
+  height: 240px;
+  margin: 0 5px;
+  overflow: hidden;
+  width: 320px;
+}
+
+.media-container {
+  display: grid;
+  grid-template-columns: 25px auto 25px;
+  align-items: center;
+  flex: 1 1;
+  overflow: hidden;
+  height: 200px;
+}
+
+.media-container--fullscreen {
+  grid-template-columns: 0px auto 0px;
+}
+
+.media-container__nav--right,
+.media-container__nav--left {
+  text-align: center;
+  cursor: pointer;
+}
+
+.media-container__viewport {
+  cursor: pointer;
+  text-align: center;
+  height: inherit;
+}
+.media-container__viewport img,
+.media-container__viewport video {
+  object-fit: cover;
+  width: 100%;
+  max-height: 100%;
+}
+
+.media__name,
+.media__counter {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-around;
+  flex: 0 0 25px;
+  align-items: center;
+}
+
+.collapsible td:not(.col-links) {
+  cursor: pointer;
+}
+.collapsible td:not(.col-links):hover::after {
+  color: #bbb;
+  font-style: italic;
+  cursor: pointer;
+}
+
+.col-result {
+  width: 130px;
+}
+.col-result:hover::after {
+  content: " (hide details)";
+}
+
+.col-result.collapsed:hover::after {
+  content: " (show details)";
+}
+
+#environment-header h2:hover::after {
+  content: " (hide details)";
+  color: #bbb;
+  font-style: italic;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+#environment-header.collapsed h2:hover::after {
+  content: " (show details)";
+  color: #bbb;
+  font-style: italic;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+/*------------------
+ * 3. Sorting items
+ *------------------*/
+.sortable {
+  cursor: pointer;
+}
+.sortable.desc:after {
+  content: " ";
+  position: relative;
+  left: 5px;
+  bottom: -12.5px;
+  border: 10px solid #4caf50;
+  border-bottom: 0;
+  border-left-color: transparent;
+  border-right-color: transparent;
+}
+.sortable.asc:after {
+  content: " ";
+  position: relative;
+  left: 5px;
+  bottom: 12.5px;
+  border: 10px solid #4caf50;
+  border-top: 0;
+  border-left-color: transparent;
+  border-right-color: transparent;
+}
+
+.hidden, .summary__reload__button.hidden {
+  display: none;
+}
+
+.summary__data {
+  flex: 0 0 550px;
+}
+.summary__reload {
+  flex: 1 1;
+  display: flex;
+  justify-content: center;
+}
+.summary__reload__button {
+  flex: 0 0 300px;
+  display: flex;
+  color: white;
+  font-weight: bold;
+  background-color: #4caf50;
+  text-align: center;
+  justify-content: center;
+  align-items: center;
+  border-radius: 3px;
+  cursor: pointer;
+}
+.summary__reload__button:hover {
+  background-color: #46a049;
+}
+.summary__spacer {
+  flex: 0 0 550px;
+}
+
+.controls {
+  display: flex;
+  justify-content: space-between;
+}
+
+.filters,
+.collapse {
+  display: flex;
+  align-items: center;
+}
+.filters button,
+.collapse button {
+  color: #999;
+  border: none;
+  background: none;
+  cursor: pointer;
+  text-decoration: underline;
+}
+.filters button:hover,
+.collapse button:hover {
+  color: #ccc;
+}
+
+.filter__label {
+  margin-right: 10px;
+}
+
+      </style>
+    
+  </head>
+  <body>
+    <h1 id="title">pytest_regresion_hu28.html</h1>
+    <p>Report generated on 02-Nov-2026 at 16:49:22 by <a href="https://pypi.python.org/pypi/pytest-html">pytest-html</a>
+        v4.2.0</p>
+    <div id="environment-header">
+      <h2>Environment</h2>
+    </div>
+    <table id="environment"></table>
+    <!-- TEMPLATES -->
+      <template id="template_environment_row">
+      <tr>
+        <td></td>
+        <td></td>
+      </tr>
+    </template>
+    <template id="template_results-table__body--empty">
+      <tbody class="results-table-row">
+        <tr id="not-found-message">
+          <td colspan="4">No results found. Check the filters.</td>
+        </tr>
+      </tbody>
+    </template>
+    <template id="template_results-table__tbody">
+      <tbody class="results-table-row">
+        <tr class="collapsible">
+        </tr>
+        <tr class="extras-row">
+          <td class="extra" colspan="4">
+            <div class="extraHTML"></div>
+            <div class="media">
+              <div class="media-container">
+                  <div class="media-container__nav--left">&lt;</div>
+                  <div class="media-container__viewport">
+                    <img src="" />
+                    <video controls>
+                      <source src="" type="video/mp4">
+                    </video>
+                  </div>
+                  <div class="media-container__nav--right">&gt;</div>
+                </div>
+                <div class="media__name"></div>
+                <div class="media__counter"></div>
+            </div>
+            <div class="logwrapper">
+              <div class="logexpander"></div>
+              <div class="log"></div>
+            </div>
+          </td>
+        </tr>
+      </tbody>
+    </template>
+    <!-- END TEMPLATES -->
+    <div class="summary">
+      <div class="summary__data">
+        <h2>Summary</h2>
+        <div class="additional-summary prefix">
+        </div>
+        <p class="run-count">167 tests took 00:01:25.</p>
+        <p class="filter">(Un)check the boxes to filter the results.</p>
+        <div class="summary__reload">
+          <div class="summary__reload__button hidden" onclick="location.reload()">
+            <div>There are still tests running. <br />Reload this page to get the latest results!</div>
+          </div>
+        </div>
+        <div class="summary__spacer"></div>
+        <div class="controls">
+          <div class="filters">
+            <input checked="true" class="filter" name="filter_checkbox" type="checkbox" data-test-result="failed" disabled>
+            <span class="failed">0 Failed,</span>
+            <input checked="true" class="filter" name="filter_checkbox" type="checkbox" data-test-result="passed" >
+            <span class="passed">167 Passed,</span>
+            <input checked="true" class="filter" name="filter_checkbox" type="checkbox" data-test-result="skipped" disabled>
+            <span class="skipped">0 Skipped,</span>
+            <input checked="true" class="filter" name="filter_checkbox" type="checkbox" data-test-result="xfailed" disabled>
+            <span class="xfailed">0 Expected failures,</span>
+            <input checked="true" class="filter" name="filter_checkbox" type="checkbox" data-test-result="xpassed" disabled>
+            <span class="xpassed">0 Unexpected passes,</span>
+            <input checked="true" class="filter" name="filter_checkbox" type="checkbox" data-test-result="error" disabled>
+            <span class="error">0 Errors,</span>
+            <input checked="true" class="filter" name="filter_checkbox" type="checkbox" data-test-result="rerun" disabled>
+            <span class="rerun">0 Reruns</span>
+            <input checked="true" class="filter" name="filter_checkbox" type="checkbox" data-test-result="retried" disabled>
+            <span class="retried">0 Retried,</span>
+          </div>
+          <div class="collapse">
+            <button id="show_all_details">Show all details</button>&nbsp;/&nbsp;<button id="hide_all_details">Hide all details</button>
+          </div>
+        </div>
+      </div>
+      <div class="additional-summary summary">
+      </div>
+      <div class="additional-summary postfix">
+      </div>
+    </div>
+    <table id="results-table">
+      <thead id="results-table-head">
+        <tr>
+          <th class="sortable" data-column-type="result">Result</th>
+          <th class="sortable" data-column-type="testId">Test</th>
+          <th class="sortable" data-column-type="duration">Duration</th>
+          <th>Links</th>
+        </tr>
+      </thead>
+    </table>
+  <footer>
+    <div id="data-container" data-jsonblob="{&#34;environment&#34;: {&#34;Python&#34;: &#34;3.13.15&#34;, &#34;Platform&#34;: &#34;Windows-10-10.0.19045-SP0&#34;, &#34;Packages&#34;: {&#34;pytest&#34;: &#34;9.1.1&#34;, &#34;pluggy&#34;: &#34;1.6.0&#34;}, &#34;Plugins&#34;: {&#34;anyio&#34;: &#34;4.15.1&#34;, &#34;platformdirs&#34;: &#34;4.13.0&#34;, &#34;html&#34;: &#34;4.2.0&#34;, &#34;metadata&#34;: &#34;3.1.1&#34;}, &#34;JAVA_HOME&#34;: &#34;C:\\Program Files\\Microsoft\\jdk-21.0.12.8-hotspot\\&#34;}, &#34;tests&#34;: {&#34;tests/routers/test_paneles.py::test_listar_paneles_devuelve_nombre_y_fecha&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_paneles.py::test_listar_paneles_devuelve_nombre_y_fecha&#34;, &#34;duration&#34;: &#34;00:00:01&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_paneles.py::test_listar_paneles_devuelve_nombre_y_fecha&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;00:00:01&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_paneles.py::test_listar_paneles_ordena_por_fecha_creacion_descendente&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_paneles.py::test_listar_paneles_ordena_por_fecha_creacion_descendente&#34;, &#34;duration&#34;: &#34;285 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_paneles.py::test_listar_paneles_ordena_por_fecha_creacion_descendente&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;285 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_paneles.py::test_listar_paneles_usuario_sin_paneles_devuelve_lista_vacia&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_paneles.py::test_listar_paneles_usuario_sin_paneles_devuelve_lista_vacia&#34;, &#34;duration&#34;: &#34;243 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_paneles.py::test_listar_paneles_usuario_sin_paneles_devuelve_lista_vacia&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;243 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_paneles.py::test_listar_paneles_no_incluye_paneles_de_otro_usuario&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_paneles.py::test_listar_paneles_no_incluye_paneles_de_otro_usuario&#34;, &#34;duration&#34;: &#34;461 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_paneles.py::test_listar_paneles_no_incluye_paneles_de_otro_usuario&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;461 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_paneles.py::test_buscar_paneles_por_fragmento_de_nombre&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_paneles.py::test_buscar_paneles_por_fragmento_de_nombre&#34;, &#34;duration&#34;: &#34;498 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_paneles.py::test_buscar_paneles_por_fragmento_de_nombre&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;498 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_paneles.py::test_buscar_paneles_es_insensible_a_mayusculas&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_paneles.py::test_buscar_paneles_es_insensible_a_mayusculas&#34;, &#34;duration&#34;: &#34;238 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_paneles.py::test_buscar_paneles_es_insensible_a_mayusculas&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;238 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_paneles.py::test_buscar_paneles_sin_coincidencias_devuelve_lista_vacia&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_paneles.py::test_buscar_paneles_sin_coincidencias_devuelve_lista_vacia&#34;, &#34;duration&#34;: &#34;276 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_paneles.py::test_buscar_paneles_sin_coincidencias_devuelve_lista_vacia&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;276 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_paneles.py::test_listar_paneles_sin_permiso_sobre_tableros_devuelve_403&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_paneles.py::test_listar_paneles_sin_permiso_sobre_tableros_devuelve_403&#34;, &#34;duration&#34;: &#34;235 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_paneles.py::test_listar_paneles_sin_permiso_sobre_tableros_devuelve_403&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;235 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;------------------------------ Captured log call -------------------------------\nWARNING  auditoria.autorizacion:permisos.py:127 Acceso denegado: usuario=4945 sede=4720 rol=Cliente Final modulo=Tableros accion=lectura\n\n&#34;}], &#34;tests/routers/test_paneles.py::test_obtener_panel_devuelve_nombre_y_fecha&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_paneles.py::test_obtener_panel_devuelve_nombre_y_fecha&#34;, &#34;duration&#34;: &#34;245 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_paneles.py::test_obtener_panel_devuelve_nombre_y_fecha&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;245 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_paneles.py::test_obtener_panel_inexistente_devuelve_404&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_paneles.py::test_obtener_panel_inexistente_devuelve_404&#34;, &#34;duration&#34;: &#34;235 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_paneles.py::test_obtener_panel_inexistente_devuelve_404&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;235 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_paneles.py::test_obtener_panel_de_otro_usuario_devuelve_404&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_paneles.py::test_obtener_panel_de_otro_usuario_devuelve_404&#34;, &#34;duration&#34;: &#34;464 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_paneles.py::test_obtener_panel_de_otro_usuario_devuelve_404&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;464 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_paneles.py::test_crear_panel_devuelve_201_y_mensaje&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_paneles.py::test_crear_panel_devuelve_201_y_mensaje&#34;, &#34;duration&#34;: &#34;248 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_paneles.py::test_crear_panel_devuelve_201_y_mensaje&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;248 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_paneles.py::test_crear_panel_lo_agrega_al_listado_del_usuario&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_paneles.py::test_crear_panel_lo_agrega_al_listado_del_usuario&#34;, &#34;duration&#34;: &#34;249 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_paneles.py::test_crear_panel_lo_agrega_al_listado_del_usuario&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;249 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_paneles.py::test_crear_panel_queda_sin_ubicaciones_ni_widgets&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_paneles.py::test_crear_panel_queda_sin_ubicaciones_ni_widgets&#34;, &#34;duration&#34;: &#34;253 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_paneles.py::test_crear_panel_queda_sin_ubicaciones_ni_widgets&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;253 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_paneles.py::test_crear_panel_nombre_duplicado_devuelve_409&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_paneles.py::test_crear_panel_nombre_duplicado_devuelve_409&#34;, &#34;duration&#34;: &#34;306 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_paneles.py::test_crear_panel_nombre_duplicado_devuelve_409&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;306 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_paneles.py::test_crear_panel_nombre_duplicado_es_insensible_a_mayusculas&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_paneles.py::test_crear_panel_nombre_duplicado_es_insensible_a_mayusculas&#34;, &#34;duration&#34;: &#34;255 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_paneles.py::test_crear_panel_nombre_duplicado_es_insensible_a_mayusculas&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;255 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_paneles.py::test_crear_panel_incluye_solo_al_propio_usuario_en_el_chequeo_de_duplicado&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_paneles.py::test_crear_panel_incluye_solo_al_propio_usuario_en_el_chequeo_de_duplicado&#34;, &#34;duration&#34;: &#34;463 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_paneles.py::test_crear_panel_incluye_solo_al_propio_usuario_en_el_chequeo_de_duplicado&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;463 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_paneles.py::test_crear_panel_nombre_vacio_es_rechazado&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_paneles.py::test_crear_panel_nombre_vacio_es_rechazado&#34;, &#34;duration&#34;: &#34;234 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_paneles.py::test_crear_panel_nombre_vacio_es_rechazado&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;234 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_paneles.py::test_crear_panel_nombre_faltante_es_rechazado&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_paneles.py::test_crear_panel_nombre_faltante_es_rechazado&#34;, &#34;duration&#34;: &#34;238 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_paneles.py::test_crear_panel_nombre_faltante_es_rechazado&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;238 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_paneles.py::test_crear_panel_nombre_muy_largo_es_rechazado&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_paneles.py::test_crear_panel_nombre_muy_largo_es_rechazado&#34;, &#34;duration&#34;: &#34;234 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_paneles.py::test_crear_panel_nombre_muy_largo_es_rechazado&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;234 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_paneles.py::test_crear_panel_nombre_de_100_caracteres_es_aceptado&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_paneles.py::test_crear_panel_nombre_de_100_caracteres_es_aceptado&#34;, &#34;duration&#34;: &#34;239 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_paneles.py::test_crear_panel_nombre_de_100_caracteres_es_aceptado&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;239 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_paneles.py::test_crear_panel_recorta_espacios_del_nombre&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_paneles.py::test_crear_panel_recorta_espacios_del_nombre&#34;, &#34;duration&#34;: &#34;236 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_paneles.py::test_crear_panel_recorta_espacios_del_nombre&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;236 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_paneles.py::test_crear_panel_sin_permiso_sobre_tableros_devuelve_403&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_paneles.py::test_crear_panel_sin_permiso_sobre_tableros_devuelve_403&#34;, &#34;duration&#34;: &#34;560 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_paneles.py::test_crear_panel_sin_permiso_sobre_tableros_devuelve_403&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;560 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;------------------------------ Captured log call -------------------------------\nWARNING  auditoria.autorizacion:permisos.py:127 Acceso denegado: usuario=4962 sede=4735 rol=Cliente Final modulo=Tableros accion=edicion\n\n&#34;}], &#34;tests/routers/test_paneles.py::test_crear_panel_administrador_con_edicion_en_tableros_devuelve_403_por_rol&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_paneles.py::test_crear_panel_administrador_con_edicion_en_tableros_devuelve_403_por_rol&#34;, &#34;duration&#34;: &#34;234 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_paneles.py::test_crear_panel_administrador_con_edicion_en_tableros_devuelve_403_por_rol&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;234 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_paneles.py::test_crear_panel_tecnico_ceneris_con_edicion_en_tableros_devuelve_403_por_rol&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_paneles.py::test_crear_panel_tecnico_ceneris_con_edicion_en_tableros_devuelve_403_por_rol&#34;, &#34;duration&#34;: &#34;236 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_paneles.py::test_crear_panel_tecnico_ceneris_con_edicion_en_tableros_devuelve_403_por_rol&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;236 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_paneles.py::test_crear_panel_cliente_final_scope_global_sin_sede_devuelve_422&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_paneles.py::test_crear_panel_cliente_final_scope_global_sin_sede_devuelve_422&#34;, &#34;duration&#34;: &#34;233 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_paneles.py::test_crear_panel_cliente_final_scope_global_sin_sede_devuelve_422&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;233 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_paneles.py::test_crear_panel_con_login_real_guarda_la_sede_del_jwt&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_paneles.py::test_crear_panel_con_login_real_guarda_la_sede_del_jwt&#34;, &#34;duration&#34;: &#34;00:00:04&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_paneles.py::test_crear_panel_con_login_real_guarda_la_sede_del_jwt&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;00:00:04&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_paneles.py::test_editar_panel_devuelve_200_y_mensaje&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_paneles.py::test_editar_panel_devuelve_200_y_mensaje&#34;, &#34;duration&#34;: &#34;240 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_paneles.py::test_editar_panel_devuelve_200_y_mensaje&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;240 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_paneles.py::test_editar_panel_recorta_espacios_del_nombre&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_paneles.py::test_editar_panel_recorta_espacios_del_nombre&#34;, &#34;duration&#34;: &#34;235 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_paneles.py::test_editar_panel_recorta_espacios_del_nombre&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;235 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_paneles.py::test_editar_panel_nombre_vacio_es_rechazado&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_paneles.py::test_editar_panel_nombre_vacio_es_rechazado&#34;, &#34;duration&#34;: &#34;00:00:02&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_paneles.py::test_editar_panel_nombre_vacio_es_rechazado&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;00:00:02&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_paneles.py::test_editar_panel_nombre_duplicado_devuelve_409&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_paneles.py::test_editar_panel_nombre_duplicado_devuelve_409&#34;, &#34;duration&#34;: &#34;00:00:05&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_paneles.py::test_editar_panel_nombre_duplicado_devuelve_409&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;00:00:05&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_paneles.py::test_editar_panel_guardar_sin_cambiar_el_nombre_no_choca_consigo_mismo&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_paneles.py::test_editar_panel_guardar_sin_cambiar_el_nombre_no_choca_consigo_mismo&#34;, &#34;duration&#34;: &#34;240 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_paneles.py::test_editar_panel_guardar_sin_cambiar_el_nombre_no_choca_consigo_mismo&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;240 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_paneles.py::test_editar_panel_duplicado_es_insensible_a_mayusculas&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_paneles.py::test_editar_panel_duplicado_es_insensible_a_mayusculas&#34;, &#34;duration&#34;: &#34;00:00:04&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_paneles.py::test_editar_panel_duplicado_es_insensible_a_mayusculas&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;00:00:04&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_paneles.py::test_editar_panel_inexistente_devuelve_404&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_paneles.py::test_editar_panel_inexistente_devuelve_404&#34;, &#34;duration&#34;: &#34;891 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_paneles.py::test_editar_panel_inexistente_devuelve_404&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;891 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_paneles.py::test_editar_panel_de_otro_usuario_devuelve_404&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_paneles.py::test_editar_panel_de_otro_usuario_devuelve_404&#34;, &#34;duration&#34;: &#34;00:00:01&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_paneles.py::test_editar_panel_de_otro_usuario_devuelve_404&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;00:00:01&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_paneles.py::test_editar_panel_sin_permiso_sobre_tableros_devuelve_403&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_paneles.py::test_editar_panel_sin_permiso_sobre_tableros_devuelve_403&#34;, &#34;duration&#34;: &#34;237 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_paneles.py::test_editar_panel_sin_permiso_sobre_tableros_devuelve_403&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;237 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;------------------------------ Captured log call -------------------------------\nWARNING  auditoria.autorizacion:permisos.py:127 Acceso denegado: usuario=4976 sede=4748 rol=Cliente Final modulo=Tableros accion=edicion\n\n&#34;}], &#34;tests/routers/test_paneles.py::test_editar_panel_administrador_con_edicion_en_tableros_devuelve_403_por_rol&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_paneles.py::test_editar_panel_administrador_con_edicion_en_tableros_devuelve_403_por_rol&#34;, &#34;duration&#34;: &#34;457 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_paneles.py::test_editar_panel_administrador_con_edicion_en_tableros_devuelve_403_por_rol&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;457 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_paneles.py::test_eliminar_panel_devuelve_200_y_mensaje&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_paneles.py::test_eliminar_panel_devuelve_200_y_mensaje&#34;, &#34;duration&#34;: &#34;00:00:02&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_paneles.py::test_eliminar_panel_devuelve_200_y_mensaje&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;00:00:02&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_paneles.py::test_eliminar_panel_lo_retira_del_listado&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_paneles.py::test_eliminar_panel_lo_retira_del_listado&#34;, &#34;duration&#34;: &#34;275 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_paneles.py::test_eliminar_panel_lo_retira_del_listado&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;275 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_paneles.py::test_eliminar_panel_borra_el_registro_de_la_bd&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_paneles.py::test_eliminar_panel_borra_el_registro_de_la_bd&#34;, &#34;duration&#34;: &#34;244 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_paneles.py::test_eliminar_panel_borra_el_registro_de_la_bd&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;244 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_paneles.py::test_eliminar_panel_borra_en_cascada_ubicaciones_y_widgets_asociados&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_paneles.py::test_eliminar_panel_borra_en_cascada_ubicaciones_y_widgets_asociados&#34;, &#34;duration&#34;: &#34;284 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_paneles.py::test_eliminar_panel_borra_en_cascada_ubicaciones_y_widgets_asociados&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;284 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_paneles.py::test_eliminar_panel_inexistente_devuelve_404&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_paneles.py::test_eliminar_panel_inexistente_devuelve_404&#34;, &#34;duration&#34;: &#34;308 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_paneles.py::test_eliminar_panel_inexistente_devuelve_404&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;308 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_paneles.py::test_eliminar_panel_de_otro_usuario_devuelve_404&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_paneles.py::test_eliminar_panel_de_otro_usuario_devuelve_404&#34;, &#34;duration&#34;: &#34;462 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_paneles.py::test_eliminar_panel_de_otro_usuario_devuelve_404&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;462 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_paneles.py::test_eliminar_panel_sin_permiso_sobre_tableros_devuelve_403&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_paneles.py::test_eliminar_panel_sin_permiso_sobre_tableros_devuelve_403&#34;, &#34;duration&#34;: &#34;438 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_paneles.py::test_eliminar_panel_sin_permiso_sobre_tableros_devuelve_403&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;438 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;------------------------------ Captured log call -------------------------------\nWARNING  auditoria.autorizacion:permisos.py:127 Acceso denegado: usuario=4986 sede=4756 rol=Cliente Final modulo=Tableros accion=edicion\n\n&#34;}], &#34;tests/routers/test_paneles.py::test_eliminar_panel_administrador_con_edicion_en_tableros_devuelve_403_por_rol&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_paneles.py::test_eliminar_panel_administrador_con_edicion_en_tableros_devuelve_403_por_rol&#34;, &#34;duration&#34;: &#34;523 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_paneles.py::test_eliminar_panel_administrador_con_edicion_en_tableros_devuelve_403_por_rol&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;523 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_paneles_hu26.py::TestCA1ListadoDisponibles::test_solo_muestra_las_asignadas_y_no_las_ya_agregadas&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_paneles_hu26.py::TestCA1ListadoDisponibles::test_solo_muestra_las_asignadas_y_no_las_ya_agregadas&#34;, &#34;duration&#34;: &#34;00:00:02&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_paneles_hu26.py::TestCA1ListadoDisponibles::test_solo_muestra_las_asignadas_y_no_las_ya_agregadas&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;00:00:02&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_paneles_hu26.py::TestCA1ListadoDisponibles::test_ubicacion_no_asignada_no_aparece&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_paneles_hu26.py::TestCA1ListadoDisponibles::test_ubicacion_no_asignada_no_aparece&#34;, &#34;duration&#34;: &#34;252 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_paneles_hu26.py::TestCA1ListadoDisponibles::test_ubicacion_no_asignada_no_aparece&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;252 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_paneles_hu26.py::TestCA1ListadoDisponibles::test_panel_ajeno_da_404&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_paneles_hu26.py::TestCA1ListadoDisponibles::test_panel_ajeno_da_404&#34;, &#34;duration&#34;: &#34;466 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_paneles_hu26.py::TestCA1ListadoDisponibles::test_panel_ajeno_da_404&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;466 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_paneles_hu26.py::TestCA2AgregarAlPanel::test_agrega_las_seleccionadas_y_muestra_el_mensaje&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_paneles_hu26.py::TestCA2AgregarAlPanel::test_agrega_las_seleccionadas_y_muestra_el_mensaje&#34;, &#34;duration&#34;: &#34;444 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_paneles_hu26.py::TestCA2AgregarAlPanel::test_agrega_las_seleccionadas_y_muestra_el_mensaje&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;444 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_paneles_hu26.py::TestCA2AgregarAlPanel::test_una_misma_ubicacion_no_se_puede_agregar_dos_veces&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_paneles_hu26.py::TestCA2AgregarAlPanel::test_una_misma_ubicacion_no_se_puede_agregar_dos_veces&#34;, &#34;duration&#34;: &#34;358 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_paneles_hu26.py::TestCA2AgregarAlPanel::test_una_misma_ubicacion_no_se_puede_agregar_dos_veces&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;358 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_paneles_hu26.py::TestCA2AgregarAlPanel::test_ubicacion_no_asignada_da_403&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_paneles_hu26.py::TestCA2AgregarAlPanel::test_ubicacion_no_asignada_da_403&#34;, &#34;duration&#34;: &#34;248 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_paneles_hu26.py::TestCA2AgregarAlPanel::test_ubicacion_no_asignada_da_403&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;248 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_paneles_hu26.py::TestCA2AgregarAlPanel::test_lista_vacia_es_rechazada&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_paneles_hu26.py::TestCA2AgregarAlPanel::test_lista_vacia_es_rechazada&#34;, &#34;duration&#34;: &#34;244 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_paneles_hu26.py::TestCA2AgregarAlPanel::test_lista_vacia_es_rechazada&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;244 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_paneles_hu26.py::TestCA2AgregarAlPanel::test_panel_ajeno_da_404&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_paneles_hu26.py::TestCA2AgregarAlPanel::test_panel_ajeno_da_404&#34;, &#34;duration&#34;: &#34;466 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_paneles_hu26.py::TestCA2AgregarAlPanel::test_panel_ajeno_da_404&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;466 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_paneles_hu26.py::TestCA2AgregarAlPanel::test_otro_rol_con_edicion_no_puede_agregar&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_paneles_hu26.py::TestCA2AgregarAlPanel::test_otro_rol_con_edicion_no_puede_agregar&#34;, &#34;duration&#34;: &#34;468 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_paneles_hu26.py::TestCA2AgregarAlPanel::test_otro_rol_con_edicion_no_puede_agregar&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;468 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_paneles_hu26.py::TestCA3VistaConTelemetria::test_ubicacion_agregada_aparece_con_su_ultimo_valor&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_paneles_hu26.py::TestCA3VistaConTelemetria::test_ubicacion_agregada_aparece_con_su_ultimo_valor&#34;, &#34;duration&#34;: &#34;425 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_paneles_hu26.py::TestCA3VistaConTelemetria::test_ubicacion_agregada_aparece_con_su_ultimo_valor&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;425 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_paneles_hu26.py::TestCA3VistaConTelemetria::test_ubicacion_sin_telemetria_aparece_sin_parametros&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_paneles_hu26.py::TestCA3VistaConTelemetria::test_ubicacion_sin_telemetria_aparece_sin_parametros&#34;, &#34;duration&#34;: &#34;285 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_paneles_hu26.py::TestCA3VistaConTelemetria::test_ubicacion_sin_telemetria_aparece_sin_parametros&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;285 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_paneles_hu26.py::TestCA4QuitarUbicacion::test_quitar_retira_del_panel_y_muestra_el_mensaje&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_paneles_hu26.py::TestCA4QuitarUbicacion::test_quitar_retira_del_panel_y_muestra_el_mensaje&#34;, &#34;duration&#34;: &#34;301 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_paneles_hu26.py::TestCA4QuitarUbicacion::test_quitar_retira_del_panel_y_muestra_el_mensaje&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;301 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_paneles_hu26.py::TestCA4QuitarUbicacion::test_quitar_no_borra_la_ubicacion_del_sistema&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_paneles_hu26.py::TestCA4QuitarUbicacion::test_quitar_no_borra_la_ubicacion_del_sistema&#34;, &#34;duration&#34;: &#34;293 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_paneles_hu26.py::TestCA4QuitarUbicacion::test_quitar_no_borra_la_ubicacion_del_sistema&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;293 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_paneles_hu26.py::TestCA4QuitarUbicacion::test_quitar_ubicacion_que_no_esta_en_el_panel_da_404&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_paneles_hu26.py::TestCA4QuitarUbicacion::test_quitar_ubicacion_que_no_esta_en_el_panel_da_404&#34;, &#34;duration&#34;: &#34;302 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_paneles_hu26.py::TestCA4QuitarUbicacion::test_quitar_ubicacion_que_no_esta_en_el_panel_da_404&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;302 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_ubicaciones.py::test_crear_ubicacion_devuelve_201_y_mensaje&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_ubicaciones.py::test_crear_ubicacion_devuelve_201_y_mensaje&#34;, &#34;duration&#34;: &#34;320 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_ubicaciones.py::test_crear_ubicacion_devuelve_201_y_mensaje&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;320 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_ubicaciones.py::test_crear_ubicacion_guarda_el_poligono_completo&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_ubicaciones.py::test_crear_ubicacion_guarda_el_poligono_completo&#34;, &#34;duration&#34;: &#34;315 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_ubicaciones.py::test_crear_ubicacion_guarda_el_poligono_completo&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;315 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_ubicaciones.py::test_crear_ubicacion_queda_activa_por_defecto&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_ubicaciones.py::test_crear_ubicacion_queda_activa_por_defecto&#34;, &#34;duration&#34;: &#34;315 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_ubicaciones.py::test_crear_ubicacion_queda_activa_por_defecto&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;315 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_ubicaciones.py::test_descripcion_es_opcional&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_ubicaciones.py::test_descripcion_es_opcional&#34;, &#34;duration&#34;: &#34;350 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_ubicaciones.py::test_descripcion_es_opcional&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;350 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_ubicaciones.py::test_campos_obligatorios_faltantes_devuelven_422[nmbr]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_ubicaciones.py::test_campos_obligatorios_faltantes_devuelven_422[nmbr]&#34;, &#34;duration&#34;: &#34;248 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_ubicaciones.py::test_campos_obligatorios_faltantes_devuelven_422[nmbr]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;248 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_ubicaciones.py::test_campos_obligatorios_faltantes_devuelven_422[lttd]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_ubicaciones.py::test_campos_obligatorios_faltantes_devuelven_422[lttd]&#34;, &#34;duration&#34;: &#34;235 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_ubicaciones.py::test_campos_obligatorios_faltantes_devuelven_422[lttd]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;235 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_ubicaciones.py::test_campos_obligatorios_faltantes_devuelven_422[lngtd]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_ubicaciones.py::test_campos_obligatorios_faltantes_devuelven_422[lngtd]&#34;, &#34;duration&#34;: &#34;235 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_ubicaciones.py::test_campos_obligatorios_faltantes_devuelven_422[lngtd]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;235 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_ubicaciones.py::test_campos_obligatorios_faltantes_devuelven_422[plgn_gjsn]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_ubicaciones.py::test_campos_obligatorios_faltantes_devuelven_422[plgn_gjsn]&#34;, &#34;duration&#34;: &#34;234 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_ubicaciones.py::test_campos_obligatorios_faltantes_devuelven_422[plgn_gjsn]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;234 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_ubicaciones.py::test_nombre_en_blanco_devuelve_422&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_ubicaciones.py::test_nombre_en_blanco_devuelve_422&#34;, &#34;duration&#34;: &#34;234 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_ubicaciones.py::test_nombre_en_blanco_devuelve_422&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;234 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_ubicaciones.py::test_latitud_fuera_de_rango_devuelve_422[-90.1]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_ubicaciones.py::test_latitud_fuera_de_rango_devuelve_422[-90.1]&#34;, &#34;duration&#34;: &#34;237 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_ubicaciones.py::test_latitud_fuera_de_rango_devuelve_422[-90.1]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;237 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_ubicaciones.py::test_latitud_fuera_de_rango_devuelve_422[90.1]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_ubicaciones.py::test_latitud_fuera_de_rango_devuelve_422[90.1]&#34;, &#34;duration&#34;: &#34;236 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_ubicaciones.py::test_latitud_fuera_de_rango_devuelve_422[90.1]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;236 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_ubicaciones.py::test_latitud_fuera_de_rango_devuelve_422[100]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_ubicaciones.py::test_latitud_fuera_de_rango_devuelve_422[100]&#34;, &#34;duration&#34;: &#34;233 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_ubicaciones.py::test_latitud_fuera_de_rango_devuelve_422[100]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;233 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_ubicaciones.py::test_longitud_fuera_de_rango_devuelve_422[-180.1]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_ubicaciones.py::test_longitud_fuera_de_rango_devuelve_422[-180.1]&#34;, &#34;duration&#34;: &#34;234 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_ubicaciones.py::test_longitud_fuera_de_rango_devuelve_422[-180.1]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;234 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_ubicaciones.py::test_longitud_fuera_de_rango_devuelve_422[180.1]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_ubicaciones.py::test_longitud_fuera_de_rango_devuelve_422[180.1]&#34;, &#34;duration&#34;: &#34;237 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_ubicaciones.py::test_longitud_fuera_de_rango_devuelve_422[180.1]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;237 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_ubicaciones.py::test_longitud_fuera_de_rango_devuelve_422[200]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_ubicaciones.py::test_longitud_fuera_de_rango_devuelve_422[200]&#34;, &#34;duration&#34;: &#34;236 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_ubicaciones.py::test_longitud_fuera_de_rango_devuelve_422[200]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;236 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_ubicaciones.py::test_poligono_invalido_devuelve_422[poligono0]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_ubicaciones.py::test_poligono_invalido_devuelve_422[poligono0]&#34;, &#34;duration&#34;: &#34;242 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_ubicaciones.py::test_poligono_invalido_devuelve_422[poligono0]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;242 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_ubicaciones.py::test_poligono_invalido_devuelve_422[poligono1]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_ubicaciones.py::test_poligono_invalido_devuelve_422[poligono1]&#34;, &#34;duration&#34;: &#34;237 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_ubicaciones.py::test_poligono_invalido_devuelve_422[poligono1]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;237 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_ubicaciones.py::test_poligono_invalido_devuelve_422[poligono2]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_ubicaciones.py::test_poligono_invalido_devuelve_422[poligono2]&#34;, &#34;duration&#34;: &#34;234 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_ubicaciones.py::test_poligono_invalido_devuelve_422[poligono2]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;234 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_ubicaciones.py::test_poligono_invalido_devuelve_422[poligono3]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_ubicaciones.py::test_poligono_invalido_devuelve_422[poligono3]&#34;, &#34;duration&#34;: &#34;235 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_ubicaciones.py::test_poligono_invalido_devuelve_422[poligono3]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;235 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_ubicaciones.py::test_poligono_invalido_devuelve_422[poligono4]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_ubicaciones.py::test_poligono_invalido_devuelve_422[poligono4]&#34;, &#34;duration&#34;: &#34;233 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_ubicaciones.py::test_poligono_invalido_devuelve_422[poligono4]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;233 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_ubicaciones.py::test_poligono_invalido_devuelve_422[poligono5]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_ubicaciones.py::test_poligono_invalido_devuelve_422[poligono5]&#34;, &#34;duration&#34;: &#34;238 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_ubicaciones.py::test_poligono_invalido_devuelve_422[poligono5]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;238 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_ubicaciones.py::test_nombre_duplicado_en_la_misma_sede_devuelve_409&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_ubicaciones.py::test_nombre_duplicado_en_la_misma_sede_devuelve_409&#34;, &#34;duration&#34;: &#34;249 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_ubicaciones.py::test_nombre_duplicado_en_la_misma_sede_devuelve_409&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;249 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_ubicaciones.py::test_nombre_duplicado_ignora_mayusculas&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_ubicaciones.py::test_nombre_duplicado_ignora_mayusculas&#34;, &#34;duration&#34;: &#34;259 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_ubicaciones.py::test_nombre_duplicado_ignora_mayusculas&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;259 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_ubicaciones.py::test_mismo_nombre_en_otra_sede_si_se_permite&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_ubicaciones.py::test_mismo_nombre_en_otra_sede_si_se_permite&#34;, &#34;duration&#34;: &#34;252 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_ubicaciones.py::test_mismo_nombre_en_otra_sede_si_se_permite&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;252 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_ubicaciones.py::test_usuario_global_sin_id_sd_devuelve_422&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_ubicaciones.py::test_usuario_global_sin_id_sd_devuelve_422&#34;, &#34;duration&#34;: &#34;236 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_ubicaciones.py::test_usuario_global_sin_id_sd_devuelve_422&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;236 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_ubicaciones.py::test_sede_inexistente_devuelve_422&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_ubicaciones.py::test_sede_inexistente_devuelve_422&#34;, &#34;duration&#34;: &#34;233 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_ubicaciones.py::test_sede_inexistente_devuelve_422&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;233 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_ubicaciones.py::test_sin_permiso_de_edicion_devuelve_403&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_ubicaciones.py::test_sin_permiso_de_edicion_devuelve_403&#34;, &#34;duration&#34;: &#34;236 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_ubicaciones.py::test_sin_permiso_de_edicion_devuelve_403&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;236 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;------------------------------ Captured log call -------------------------------\nWARNING  auditoria.autorizacion:permisos.py:127 Acceso denegado: usuario=5032 sede=4799 rol=Cliente Final modulo=Ubicaciones accion=edicion\n\n&#34;}], &#34;tests/routers/test_ubicaciones.py::test_sin_ninguna_fila_de_permiso_devuelve_403&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_ubicaciones.py::test_sin_ninguna_fila_de_permiso_devuelve_403&#34;, &#34;duration&#34;: &#34;237 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_ubicaciones.py::test_sin_ninguna_fila_de_permiso_devuelve_403&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;237 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;------------------------------ Captured log call -------------------------------\nWARNING  auditoria.autorizacion:permisos.py:127 Acceso denegado: usuario=5033 sede=4800 rol=Cliente Final modulo=Ubicaciones accion=edicion\n\n&#34;}], &#34;tests/routers/test_ubicaciones.py::test_permiso_de_edicion_en_otro_modulo_no_habilita&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_ubicaciones.py::test_permiso_de_edicion_en_otro_modulo_no_habilita&#34;, &#34;duration&#34;: &#34;236 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_ubicaciones.py::test_permiso_de_edicion_en_otro_modulo_no_habilita&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;236 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;------------------------------ Captured log call -------------------------------\nWARNING  auditoria.autorizacion:permisos.py:127 Acceso denegado: usuario=5034 sede=4801 rol=T\u00e9cnico CENERIS modulo=Ubicaciones accion=edicion\n\n&#34;}], &#34;tests/routers/test_ubicaciones.py::test_la_ubicacion_creada_aparece_en_el_listado&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_ubicaciones.py::test_la_ubicacion_creada_aparece_en_el_listado&#34;, &#34;duration&#34;: &#34;252 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_ubicaciones.py::test_la_ubicacion_creada_aparece_en_el_listado&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;252 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_ubicaciones.py::test_mapa_devuelve_el_poligono_y_el_punto&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_ubicaciones.py::test_mapa_devuelve_el_poligono_y_el_punto&#34;, &#34;duration&#34;: &#34;461 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_ubicaciones.py::test_mapa_devuelve_el_poligono_y_el_punto&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;461 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_ubicaciones.py::test_mapa_cuenta_los_dispositivos_de_cada_ubicacion&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_ubicaciones.py::test_mapa_cuenta_los_dispositivos_de_cada_ubicacion&#34;, &#34;duration&#34;: &#34;281 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_ubicaciones.py::test_mapa_cuenta_los_dispositivos_de_cada_ubicacion&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;281 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_ubicaciones.py::test_ubicacion_sin_dispositivos_aparece_con_cero&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_ubicaciones.py::test_ubicacion_sin_dispositivos_aparece_con_cero&#34;, &#34;duration&#34;: &#34;258 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_ubicaciones.py::test_ubicacion_sin_dispositivos_aparece_con_cero&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;258 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_ubicaciones.py::test_mapa_incluye_las_inactivas&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_ubicaciones.py::test_mapa_incluye_las_inactivas&#34;, &#34;duration&#34;: &#34;248 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_ubicaciones.py::test_mapa_incluye_las_inactivas&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;248 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_ubicaciones.py::test_mapa_trae_nombre_descripcion_y_estado&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_ubicaciones.py::test_mapa_trae_nombre_descripcion_y_estado&#34;, &#34;duration&#34;: &#34;270 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_ubicaciones.py::test_mapa_trae_nombre_descripcion_y_estado&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;270 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_ubicaciones.py::test_cliente_final_solo_ve_sus_ubicaciones_asignadas&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_ubicaciones.py::test_cliente_final_solo_ve_sus_ubicaciones_asignadas&#34;, &#34;duration&#34;: &#34;244 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_ubicaciones.py::test_cliente_final_solo_ve_sus_ubicaciones_asignadas&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;244 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_ubicaciones.py::test_mapa_denegado_sin_permiso_de_lectura&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_ubicaciones.py::test_mapa_denegado_sin_permiso_de_lectura&#34;, &#34;duration&#34;: &#34;235 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_ubicaciones.py::test_mapa_denegado_sin_permiso_de_lectura&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;235 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;------------------------------ Captured log call -------------------------------\nWARNING  auditoria.autorizacion:permisos.py:127 Acceso denegado: usuario=5042 sede=4809 rol=Cliente Final modulo=Ubicaciones accion=lectura\n\n&#34;}], &#34;tests/routers/test_ubicaciones.py::test_ruta_mapa_no_la_captura_el_endpoint_de_detalle&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_ubicaciones.py::test_ruta_mapa_no_la_captura_el_endpoint_de_detalle&#34;, &#34;duration&#34;: &#34;240 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_ubicaciones.py::test_ruta_mapa_no_la_captura_el_endpoint_de_detalle&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;240 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_ubicaciones.py::test_editar_actualiza_los_campos&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_ubicaciones.py::test_editar_actualiza_los_campos&#34;, &#34;duration&#34;: &#34;275 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_ubicaciones.py::test_editar_actualiza_los_campos&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;275 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_ubicaciones.py::test_editar_cambia_el_estado&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_ubicaciones.py::test_editar_cambia_el_estado&#34;, &#34;duration&#34;: &#34;253 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_ubicaciones.py::test_editar_cambia_el_estado&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;253 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_ubicaciones.py::test_estado_invalido_devuelve_422&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_ubicaciones.py::test_estado_invalido_devuelve_422&#34;, &#34;duration&#34;: &#34;260 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_ubicaciones.py::test_estado_invalido_devuelve_422&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;260 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_ubicaciones.py::test_guardar_el_mismo_nombre_sin_cambios_no_choca_consigo_misma&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_ubicaciones.py::test_guardar_el_mismo_nombre_sin_cambios_no_choca_consigo_misma&#34;, &#34;duration&#34;: &#34;261 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_ubicaciones.py::test_guardar_el_mismo_nombre_sin_cambios_no_choca_consigo_misma&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;261 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_ubicaciones.py::test_nombre_de_otra_ubicacion_de_la_misma_sede_devuelve_409&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_ubicaciones.py::test_nombre_de_otra_ubicacion_de_la_misma_sede_devuelve_409&#34;, &#34;duration&#34;: &#34;277 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_ubicaciones.py::test_nombre_de_otra_ubicacion_de_la_misma_sede_devuelve_409&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;277 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_ubicaciones.py::test_editar_con_rango_invalido_devuelve_422[lttd-95]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_ubicaciones.py::test_editar_con_rango_invalido_devuelve_422[lttd-95]&#34;, &#34;duration&#34;: &#34;248 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_ubicaciones.py::test_editar_con_rango_invalido_devuelve_422[lttd-95]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;248 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_ubicaciones.py::test_editar_con_rango_invalido_devuelve_422[lttd--91]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_ubicaciones.py::test_editar_con_rango_invalido_devuelve_422[lttd--91]&#34;, &#34;duration&#34;: &#34;260 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_ubicaciones.py::test_editar_con_rango_invalido_devuelve_422[lttd--91]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;260 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_ubicaciones.py::test_editar_con_rango_invalido_devuelve_422[lngtd-181]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_ubicaciones.py::test_editar_con_rango_invalido_devuelve_422[lngtd-181]&#34;, &#34;duration&#34;: &#34;271 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_ubicaciones.py::test_editar_con_rango_invalido_devuelve_422[lngtd-181]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;271 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_ubicaciones.py::test_editar_con_rango_invalido_devuelve_422[lngtd--180.5]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_ubicaciones.py::test_editar_con_rango_invalido_devuelve_422[lngtd--180.5]&#34;, &#34;duration&#34;: &#34;258 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_ubicaciones.py::test_editar_con_rango_invalido_devuelve_422[lngtd--180.5]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;258 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_ubicaciones.py::test_editar_con_poligono_invalido_devuelve_422[poligono0]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_ubicaciones.py::test_editar_con_poligono_invalido_devuelve_422[poligono0]&#34;, &#34;duration&#34;: &#34;248 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_ubicaciones.py::test_editar_con_poligono_invalido_devuelve_422[poligono0]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;248 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_ubicaciones.py::test_editar_con_poligono_invalido_devuelve_422[poligono1]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_ubicaciones.py::test_editar_con_poligono_invalido_devuelve_422[poligono1]&#34;, &#34;duration&#34;: &#34;246 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_ubicaciones.py::test_editar_con_poligono_invalido_devuelve_422[poligono1]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;246 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_ubicaciones.py::test_editar_con_poligono_invalido_devuelve_422[poligono2]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_ubicaciones.py::test_editar_con_poligono_invalido_devuelve_422[poligono2]&#34;, &#34;duration&#34;: &#34;251 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_ubicaciones.py::test_editar_con_poligono_invalido_devuelve_422[poligono2]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;251 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_ubicaciones.py::test_id_sd_en_el_body_se_ignora&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_ubicaciones.py::test_id_sd_en_el_body_se_ignora&#34;, &#34;duration&#34;: &#34;257 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_ubicaciones.py::test_id_sd_en_el_body_se_ignora&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;257 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_ubicaciones.py::test_editar_solo_un_campo_no_toca_los_demas&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_ubicaciones.py::test_editar_solo_un_campo_no_toca_los_demas&#34;, &#34;duration&#34;: &#34;249 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_ubicaciones.py::test_editar_solo_un_campo_no_toca_los_demas&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;249 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_ubicaciones.py::test_editar_ubicacion_inexistente_devuelve_404&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_ubicaciones.py::test_editar_ubicacion_inexistente_devuelve_404&#34;, &#34;duration&#34;: &#34;241 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_ubicaciones.py::test_editar_ubicacion_inexistente_devuelve_404&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;241 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_ubicaciones.py::test_editar_denegado_sin_permiso_de_edicion&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_ubicaciones.py::test_editar_denegado_sin_permiso_de_edicion&#34;, &#34;duration&#34;: &#34;497 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_ubicaciones.py::test_editar_denegado_sin_permiso_de_edicion&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;497 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;------------------------------ Captured log call -------------------------------\nWARNING  auditoria.autorizacion:permisos.py:127 Acceso denegado: usuario=5060 sede=4827 rol=Cliente Final modulo=Ubicaciones accion=edicion\n\n&#34;}], &#34;tests/routers/test_autorizacion_endpoints.py::TestUbicacionesListar::test_autorizado_con_permiso_de_lectura&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_autorizacion_endpoints.py::TestUbicacionesListar::test_autorizado_con_permiso_de_lectura&#34;, &#34;duration&#34;: &#34;250 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_autorizacion_endpoints.py::TestUbicacionesListar::test_autorizado_con_permiso_de_lectura&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;250 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_autorizacion_endpoints.py::TestUbicacionesListar::test_denegado_sin_permiso&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_autorizacion_endpoints.py::TestUbicacionesListar::test_denegado_sin_permiso&#34;, &#34;duration&#34;: &#34;249 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_autorizacion_endpoints.py::TestUbicacionesListar::test_denegado_sin_permiso&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;249 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;------------------------------ Captured log call -------------------------------\nWARNING  auditoria.autorizacion:permisos.py:127 Acceso denegado: usuario=5062 sede=4829 rol=Cliente Final modulo=Ubicaciones accion=lectura\n\n&#34;}], &#34;tests/routers/test_autorizacion_endpoints.py::TestIngestaMetricas::test_autorizado_con_permiso_de_lectura&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_autorizacion_endpoints.py::TestIngestaMetricas::test_autorizado_con_permiso_de_lectura&#34;, &#34;duration&#34;: &#34;291 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_autorizacion_endpoints.py::TestIngestaMetricas::test_autorizado_con_permiso_de_lectura&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;291 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_autorizacion_endpoints.py::TestIngestaMetricas::test_denegado_sin_permiso&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_autorizacion_endpoints.py::TestIngestaMetricas::test_denegado_sin_permiso&#34;, &#34;duration&#34;: &#34;255 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_autorizacion_endpoints.py::TestIngestaMetricas::test_denegado_sin_permiso&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;255 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;------------------------------ Captured log call -------------------------------\nWARNING  auditoria.autorizacion:permisos.py:127 Acceso denegado: usuario=5064 sede=4831 rol=Cliente Final modulo=Ingesta accion=lectura\n\n&#34;}], &#34;tests/routers/test_autorizacion_endpoints.py::TestUsuarios::test_listar_autorizado_con_permiso_de_lectura&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_autorizacion_endpoints.py::TestUsuarios::test_listar_autorizado_con_permiso_de_lectura&#34;, &#34;duration&#34;: &#34;255 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_autorizacion_endpoints.py::TestUsuarios::test_listar_autorizado_con_permiso_de_lectura&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;255 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_autorizacion_endpoints.py::TestUsuarios::test_listar_denegado_sin_permiso&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_autorizacion_endpoints.py::TestUsuarios::test_listar_denegado_sin_permiso&#34;, &#34;duration&#34;: &#34;242 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_autorizacion_endpoints.py::TestUsuarios::test_listar_denegado_sin_permiso&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;242 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;------------------------------ Captured log call -------------------------------\nWARNING  auditoria.autorizacion:permisos.py:127 Acceso denegado: usuario=5066 sede=4833 rol=Cliente Final modulo=Usuarios accion=lectura\n\n&#34;}], &#34;tests/routers/test_autorizacion_endpoints.py::TestUsuarios::test_crear_autorizado_con_permiso_de_edicion&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_autorizacion_endpoints.py::TestUsuarios::test_crear_autorizado_con_permiso_de_edicion&#34;, &#34;duration&#34;: &#34;835 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_autorizacion_endpoints.py::TestUsuarios::test_crear_autorizado_con_permiso_de_edicion&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;835 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_autorizacion_endpoints.py::TestUsuarios::test_crear_denegado_con_permiso_de_solo_lectura&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_autorizacion_endpoints.py::TestUsuarios::test_crear_denegado_con_permiso_de_solo_lectura&#34;, &#34;duration&#34;: &#34;241 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_autorizacion_endpoints.py::TestUsuarios::test_crear_denegado_con_permiso_de_solo_lectura&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;241 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;------------------------------ Captured log call -------------------------------\nWARNING  auditoria.autorizacion:permisos.py:127 Acceso denegado: usuario=5069 sede=4835 rol=Administrador modulo=Usuarios accion=edicion\n\n&#34;}], &#34;tests/routers/test_usuarios_permisos.py::TestPanelDePermisos::test_lista_todas_las_ubicaciones_registradas&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_usuarios_permisos.py::TestPanelDePermisos::test_lista_todas_las_ubicaciones_registradas&#34;, &#34;duration&#34;: &#34;467 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_usuarios_permisos.py::TestPanelDePermisos::test_lista_todas_las_ubicaciones_registradas&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;467 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_usuarios_permisos.py::TestPanelDePermisos::test_marca_el_estado_de_acceso_actual&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_usuarios_permisos.py::TestPanelDePermisos::test_marca_el_estado_de_acceso_actual&#34;, &#34;duration&#34;: &#34;483 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_usuarios_permisos.py::TestPanelDePermisos::test_marca_el_estado_de_acceso_actual&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;483 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_usuarios_permisos.py::TestPanelDePermisos::test_sin_permisos_todas_salen_en_falso&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_usuarios_permisos.py::TestPanelDePermisos::test_sin_permisos_todas_salen_en_falso&#34;, &#34;duration&#34;: &#34;498 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_usuarios_permisos.py::TestPanelDePermisos::test_sin_permisos_todas_salen_en_falso&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;498 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_usuarios_permisos.py::TestPanelDePermisos::test_incluye_los_datos_del_usuario_gestionado&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_usuarios_permisos.py::TestPanelDePermisos::test_incluye_los_datos_del_usuario_gestionado&#34;, &#34;duration&#34;: &#34;491 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_usuarios_permisos.py::TestPanelDePermisos::test_incluye_los_datos_del_usuario_gestionado&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;491 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_usuarios_permisos.py::TestPanelDePermisos::test_usuario_inexistente_devuelve_404&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_usuarios_permisos.py::TestPanelDePermisos::test_usuario_inexistente_devuelve_404&#34;, &#34;duration&#34;: &#34;249 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_usuarios_permisos.py::TestPanelDePermisos::test_usuario_inexistente_devuelve_404&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;249 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_usuarios_permisos.py::TestPanelDePermisos::test_sin_permiso_de_lectura_devuelve_403&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_usuarios_permisos.py::TestPanelDePermisos::test_sin_permiso_de_lectura_devuelve_403&#34;, &#34;duration&#34;: &#34;249 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_usuarios_permisos.py::TestPanelDePermisos::test_sin_permiso_de_lectura_devuelve_403&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;249 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;------------------------------ Captured log call -------------------------------\nWARNING  auditoria.autorizacion:permisos.py:127 Acceso denegado: usuario=5079 sede=4841 rol=Cliente Final modulo=Usuarios accion=lectura\n\n&#34;}], &#34;tests/routers/test_usuarios_permisos.py::TestSoloClienteFinal::test_el_panel_no_se_ofrece_para_roles_con_acceso_total[Administrador]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_usuarios_permisos.py::TestSoloClienteFinal::test_el_panel_no_se_ofrece_para_roles_con_acceso_total[Administrador]&#34;, &#34;duration&#34;: &#34;459 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_usuarios_permisos.py::TestSoloClienteFinal::test_el_panel_no_se_ofrece_para_roles_con_acceso_total[Administrador]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;459 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_usuarios_permisos.py::TestSoloClienteFinal::test_el_panel_no_se_ofrece_para_roles_con_acceso_total[T\\xe9cnico CENERIS]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_usuarios_permisos.py::TestSoloClienteFinal::test_el_panel_no_se_ofrece_para_roles_con_acceso_total[T\\xe9cnico CENERIS]&#34;, &#34;duration&#34;: &#34;458 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_usuarios_permisos.py::TestSoloClienteFinal::test_el_panel_no_se_ofrece_para_roles_con_acceso_total[T\\xe9cnico CENERIS]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;458 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_usuarios_permisos.py::TestSoloClienteFinal::test_tampoco_se_les_pueden_guardar_permisos[Administrador]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_usuarios_permisos.py::TestSoloClienteFinal::test_tampoco_se_les_pueden_guardar_permisos[Administrador]&#34;, &#34;duration&#34;: &#34;462 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_usuarios_permisos.py::TestSoloClienteFinal::test_tampoco_se_les_pueden_guardar_permisos[Administrador]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;462 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_usuarios_permisos.py::TestSoloClienteFinal::test_tampoco_se_les_pueden_guardar_permisos[T\\xe9cnico CENERIS]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_usuarios_permisos.py::TestSoloClienteFinal::test_tampoco_se_les_pueden_guardar_permisos[T\\xe9cnico CENERIS]&#34;, &#34;duration&#34;: &#34;468 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_usuarios_permisos.py::TestSoloClienteFinal::test_tampoco_se_les_pueden_guardar_permisos[T\\xe9cnico CENERIS]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;468 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_usuarios_permisos.py::TestSoloClienteFinal::test_no_se_escriben_filas_para_esos_roles&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_usuarios_permisos.py::TestSoloClienteFinal::test_no_se_escriben_filas_para_esos_roles&#34;, &#34;duration&#34;: &#34;470 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_usuarios_permisos.py::TestSoloClienteFinal::test_no_se_escriben_filas_para_esos_roles&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;470 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_usuarios_permisos.py::TestGuardarPermisos::test_devuelve_el_mensaje_exacto_del_ca&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_usuarios_permisos.py::TestGuardarPermisos::test_devuelve_el_mensaje_exacto_del_ca&#34;, &#34;duration&#34;: &#34;468 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_usuarios_permisos.py::TestGuardarPermisos::test_devuelve_el_mensaje_exacto_del_ca&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;468 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_usuarios_permisos.py::TestGuardarPermisos::test_marcar_una_ubicacion_crea_la_fila&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_usuarios_permisos.py::TestGuardarPermisos::test_marcar_una_ubicacion_crea_la_fila&#34;, &#34;duration&#34;: &#34;468 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_usuarios_permisos.py::TestGuardarPermisos::test_marcar_una_ubicacion_crea_la_fila&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;468 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_usuarios_permisos.py::TestGuardarPermisos::test_desmarcar_elimina_la_fila&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_usuarios_permisos.py::TestGuardarPermisos::test_desmarcar_elimina_la_fila&#34;, &#34;duration&#34;: &#34;480 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_usuarios_permisos.py::TestGuardarPermisos::test_desmarcar_elimina_la_fila&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;480 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_usuarios_permisos.py::TestGuardarPermisos::test_reemplaza_el_conjunto_completo&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_usuarios_permisos.py::TestGuardarPermisos::test_reemplaza_el_conjunto_completo&#34;, &#34;duration&#34;: &#34;551 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_usuarios_permisos.py::TestGuardarPermisos::test_reemplaza_el_conjunto_completo&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;551 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_usuarios_permisos.py::TestGuardarPermisos::test_lista_vacia_quita_todos_los_accesos&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_usuarios_permisos.py::TestGuardarPermisos::test_lista_vacia_quita_todos_los_accesos&#34;, &#34;duration&#34;: &#34;474 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_usuarios_permisos.py::TestGuardarPermisos::test_lista_vacia_quita_todos_los_accesos&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;474 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_usuarios_permisos.py::TestGuardarPermisos::test_guardar_dos_veces_lo_mismo_no_duplica&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_usuarios_permisos.py::TestGuardarPermisos::test_guardar_dos_veces_lo_mismo_no_duplica&#34;, &#34;duration&#34;: &#34;649 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_usuarios_permisos.py::TestGuardarPermisos::test_guardar_dos_veces_lo_mismo_no_duplica&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;649 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_usuarios_permisos.py::TestGuardarPermisos::test_ids_repetidos_en_el_body_no_duplican&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_usuarios_permisos.py::TestGuardarPermisos::test_ids_repetidos_en_el_body_no_duplican&#34;, &#34;duration&#34;: &#34;475 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_usuarios_permisos.py::TestGuardarPermisos::test_ids_repetidos_en_el_body_no_duplican&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;475 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_usuarios_permisos.py::TestGuardarPermisos::test_ubicacion_inexistente_devuelve_400&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_usuarios_permisos.py::TestGuardarPermisos::test_ubicacion_inexistente_devuelve_400&#34;, &#34;duration&#34;: &#34;460 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_usuarios_permisos.py::TestGuardarPermisos::test_ubicacion_inexistente_devuelve_400&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;460 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_usuarios_permisos.py::TestGuardarPermisos::test_body_sin_el_campo_devuelve_422&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_usuarios_permisos.py::TestGuardarPermisos::test_body_sin_el_campo_devuelve_422&#34;, &#34;duration&#34;: &#34;466 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_usuarios_permisos.py::TestGuardarPermisos::test_body_sin_el_campo_devuelve_422&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;466 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_usuarios_permisos.py::TestGuardarPermisos::test_usuario_inexistente_devuelve_404&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_usuarios_permisos.py::TestGuardarPermisos::test_usuario_inexistente_devuelve_404&#34;, &#34;duration&#34;: &#34;249 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_usuarios_permisos.py::TestGuardarPermisos::test_usuario_inexistente_devuelve_404&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;249 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_usuarios_permisos.py::TestPermisosDeEdicion::test_sin_permiso_devuelve_403&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_usuarios_permisos.py::TestPermisosDeEdicion::test_sin_permiso_devuelve_403&#34;, &#34;duration&#34;: &#34;689 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_usuarios_permisos.py::TestPermisosDeEdicion::test_sin_permiso_devuelve_403&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;689 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;------------------------------ Captured log call -------------------------------\nWARNING  auditoria.autorizacion:permisos.py:127 Acceso denegado: usuario=5111 sede=4857 rol=Cliente Final modulo=Usuarios accion=edicion\n\n&#34;}], &#34;tests/routers/test_usuarios_permisos.py::TestPermisosDeEdicion::test_con_solo_lectura_devuelve_403&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_usuarios_permisos.py::TestPermisosDeEdicion::test_con_solo_lectura_devuelve_403&#34;, &#34;duration&#34;: &#34;709 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_usuarios_permisos.py::TestPermisosDeEdicion::test_con_solo_lectura_devuelve_403&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;709 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;------------------------------ Captured log call -------------------------------\nWARNING  auditoria.autorizacion:permisos.py:127 Acceso denegado: usuario=5114 sede=4858 rol=Administrador modulo=Usuarios accion=edicion\n\n&#34;}], &#34;tests/routers/test_usuarios_permisos.py::TestPermisosDeEdicion::test_el_permiso_no_cruza_de_sede&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_usuarios_permisos.py::TestPermisosDeEdicion::test_el_permiso_no_cruza_de_sede&#34;, &#34;duration&#34;: &#34;694 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_usuarios_permisos.py::TestPermisosDeEdicion::test_el_permiso_no_cruza_de_sede&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;694 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;------------------------------ Captured log call -------------------------------\nWARNING  auditoria.autorizacion:permisos.py:127 Acceso denegado: usuario=5117 sede=4861 rol=Administrador modulo=Usuarios accion=edicion\n\n&#34;}], &#34;tests/routers/test_usuarios_permisos.py::TestCancelar::test_sin_guardar_no_se_modifica_nada&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_usuarios_permisos.py::TestCancelar::test_sin_guardar_no_se_modifica_nada&#34;, &#34;duration&#34;: &#34;463 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_usuarios_permisos.py::TestCancelar::test_sin_guardar_no_se_modifica_nada&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;463 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_usuarios_permisos.py::TestCancelar::test_el_panel_sigue_mostrando_el_estado_original&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_usuarios_permisos.py::TestCancelar::test_el_panel_sigue_mostrando_el_estado_original&#34;, &#34;duration&#34;: &#34;471 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_usuarios_permisos.py::TestCancelar::test_el_panel_sigue_mostrando_el_estado_original&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;471 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_usuarios_permisos.py::TestLoQueVeElUsuarioAfectado::test_solo_ve_las_ubicaciones_habilitadas&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_usuarios_permisos.py::TestLoQueVeElUsuarioAfectado::test_solo_ve_las_ubicaciones_habilitadas&#34;, &#34;duration&#34;: &#34;475 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_usuarios_permisos.py::TestLoQueVeElUsuarioAfectado::test_solo_ve_las_ubicaciones_habilitadas&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;475 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_usuarios_permisos.py::TestLoQueVeElUsuarioAfectado::test_al_habilitar_otra_ubicacion_aparece_de_inmediato&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_usuarios_permisos.py::TestLoQueVeElUsuarioAfectado::test_al_habilitar_otra_ubicacion_aparece_de_inmediato&#34;, &#34;duration&#34;: &#34;795 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_usuarios_permisos.py::TestLoQueVeElUsuarioAfectado::test_al_habilitar_otra_ubicacion_aparece_de_inmediato&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;795 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_usuarios_permisos.py::TestLoQueVeElUsuarioAfectado::test_al_revocar_deja_de_verla_de_inmediato&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_usuarios_permisos.py::TestLoQueVeElUsuarioAfectado::test_al_revocar_deja_de_verla_de_inmediato&#34;, &#34;duration&#34;: &#34;496 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_usuarios_permisos.py::TestLoQueVeElUsuarioAfectado::test_al_revocar_deja_de_verla_de_inmediato&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;496 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_usuarios_permisos.py::TestLoQueVeElUsuarioAfectado::test_sin_ubicaciones_asignadas_el_modulo_sale_vacio&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_usuarios_permisos.py::TestLoQueVeElUsuarioAfectado::test_sin_ubicaciones_asignadas_el_modulo_sale_vacio&#34;, &#34;duration&#34;: &#34;819 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_usuarios_permisos.py::TestLoQueVeElUsuarioAfectado::test_sin_ubicaciones_asignadas_el_modulo_sale_vacio&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;819 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/routers/test_usuarios_permisos.py::TestLoQueVeElUsuarioAfectado::test_no_ve_mediciones_de_ubicaciones_no_habilitadas&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/routers/test_usuarios_permisos.py::TestLoQueVeElUsuarioAfectado::test_no_ve_mediciones_de_ubicaciones_no_habilitadas&#34;, &#34;duration&#34;: &#34;00:00:02&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/routers/test_usuarios_permisos.py::TestLoQueVeElUsuarioAfectado::test_no_ve_mediciones_de_ubicaciones_no_habilitadas&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;00:00:02&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/test_permisos.py::TestTienePermiso::test_lectura_permite_leer_pero_no_editar&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/test_permisos.py::TestTienePermiso::test_lectura_permite_leer_pero_no_editar&#34;, &#34;duration&#34;: &#34;00:00:01&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/test_permisos.py::TestTienePermiso::test_lectura_permite_leer_pero_no_editar&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;00:00:01&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/test_permisos.py::TestTienePermiso::test_edicion_permite_leer_y_editar&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/test_permisos.py::TestTienePermiso::test_edicion_permite_leer_y_editar&#34;, &#34;duration&#34;: &#34;233 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/test_permisos.py::TestTienePermiso::test_edicion_permite_leer_y_editar&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;233 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/test_permisos.py::TestTienePermiso::test_nivel_ninguno_no_permite_nada&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/test_permisos.py::TestTienePermiso::test_nivel_ninguno_no_permite_nada&#34;, &#34;duration&#34;: &#34;229 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/test_permisos.py::TestTienePermiso::test_nivel_ninguno_no_permite_nada&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;229 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/test_permisos.py::TestTienePermiso::test_sin_registro_en_prms_usr_sd_no_permite_nada&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/test_permisos.py::TestTienePermiso::test_sin_registro_en_prms_usr_sd_no_permite_nada&#34;, &#34;duration&#34;: &#34;227 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/test_permisos.py::TestTienePermiso::test_sin_registro_en_prms_usr_sd_no_permite_nada&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;227 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/test_permisos.py::TestTienePermiso::test_permiso_de_otro_modulo_no_aplica&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/test_permisos.py::TestTienePermiso::test_permiso_de_otro_modulo_no_aplica&#34;, &#34;duration&#34;: &#34;279 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/test_permisos.py::TestTienePermiso::test_permiso_de_otro_modulo_no_aplica&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;279 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/test_permisos.py::TestTienePermiso::test_scope_por_sede_no_usa_permiso_de_otra_sede&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/test_permisos.py::TestTienePermiso::test_scope_por_sede_no_usa_permiso_de_otra_sede&#34;, &#34;duration&#34;: &#34;587 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/test_permisos.py::TestTienePermiso::test_scope_por_sede_no_usa_permiso_de_otra_sede&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;587 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/test_permisos.py::TestTienePermiso::test_scope_global_con_registro_en_cualquier_sede_alcanza&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/test_permisos.py::TestTienePermiso::test_scope_global_con_registro_en_cualquier_sede_alcanza&#34;, &#34;duration&#34;: &#34;229 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/test_permisos.py::TestTienePermiso::test_scope_global_con_registro_en_cualquier_sede_alcanza&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;229 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/test_permisos.py::TestTienePermiso::test_scope_global_sin_ningun_registro_igual_deniega&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/test_permisos.py::TestTienePermiso::test_scope_global_sin_ningun_registro_igual_deniega&#34;, &#34;duration&#34;: &#34;443 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/test_permisos.py::TestTienePermiso::test_scope_global_sin_ningun_registro_igual_deniega&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;443 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/test_permisos.py::TestRequirePermiso::test_caso_autorizado_devuelve_el_usuario&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/test_permisos.py::TestRequirePermiso::test_caso_autorizado_devuelve_el_usuario&#34;, &#34;duration&#34;: &#34;231 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/test_permisos.py::TestRequirePermiso::test_caso_autorizado_devuelve_el_usuario&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;231 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/test_permisos.py::TestRequirePermiso::test_caso_denegado_lanza_403_no_401&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/test_permisos.py::TestRequirePermiso::test_caso_denegado_lanza_403_no_401&#34;, &#34;duration&#34;: &#34;321 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/test_permisos.py::TestRequirePermiso::test_caso_denegado_lanza_403_no_401&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;321 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;------------------------------ Captured log call -------------------------------\nWARNING  auditoria.autorizacion:permisos.py:127 Acceso denegado: usuario=5141 sede=4878 rol=Cliente Final modulo=Dispositivos accion=edicion\n\n&#34;}], &#34;tests/test_permisos.py::TestRequirePermiso::test_caso_denegado_queda_registrado_en_el_log&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/test_permisos.py::TestRequirePermiso::test_caso_denegado_queda_registrado_en_el_log&#34;, &#34;duration&#34;: &#34;233 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/test_permisos.py::TestRequirePermiso::test_caso_denegado_queda_registrado_en_el_log&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;233 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;------------------------------ Captured log call -------------------------------\nWARNING  auditoria.autorizacion:permisos.py:127 Acceso denegado: usuario=5142 sede=4879 rol=Cliente Final modulo=Dispositivos accion=edicion\n\n&#34;}], &#34;tests/test_permisos.py::TestVerificarSede::test_misma_sede_no_lanza&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/test_permisos.py::TestVerificarSede::test_misma_sede_no_lanza&#34;, &#34;duration&#34;: &#34;1 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/test_permisos.py::TestVerificarSede::test_misma_sede_no_lanza&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;1 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/test_permisos.py::TestVerificarSede::test_sede_distinta_lanza_403&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/test_permisos.py::TestVerificarSede::test_sede_distinta_lanza_403&#34;, &#34;duration&#34;: &#34;00:00:06&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/test_permisos.py::TestVerificarSede::test_sede_distinta_lanza_403&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;00:00:06&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;------------------------------ Captured log call -------------------------------\nWARNING  auditoria.autorizacion:permisos.py:127 Acceso denegado: usuario=1 sede=1 rol=Cliente Final modulo=(sede) accion=acceso_sede\nERROR    auditoria.autorizacion:permisos.py:150 No se pudo persistir el acceso denegado en lg_adtr (HT-11 CA5)\nTraceback (most recent call last):\n  File &amp;quot;C:\\Users\\COMERCIAL\\Desktop\\Proyectos\\pangea\\Pangea\\backend\\venv\\Lib\\site-packages\\sqlalchemy\\engine\\base.py&amp;quot;, line 1946, in _exec_single_context\n    self.dialect.do_execute(\n    ~~~~~~~~~~~~~~~~~~~~~~~^\n        cursor, str_statement, effective_parameters, context\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File &amp;quot;C:\\Users\\COMERCIAL\\Desktop\\Proyectos\\pangea\\Pangea\\backend\\venv\\Lib\\site-packages\\sqlalchemy\\engine\\default.py&amp;quot;, line 1192, in do_execute\n    cursor.execute(statement, parameters)\n    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^\npsycopg2.errors.ForeignKeyViolation: insert or update on table &amp;quot;lg_adtr&amp;quot; violates foreign key constraint &amp;quot;lg_adtr_id_sd_fkey&amp;quot;\nDETAIL:  Key (id_sd)=(1) is not present in table &amp;quot;sd&amp;quot;.\n\n\nThe above exception was the direct cause of the following exception:\n\nTraceback (most recent call last):\n  File &amp;quot;C:\\Users\\COMERCIAL\\Desktop\\Proyectos\\pangea\\Pangea-fabio\\backend\\app\\security\\permisos.py&amp;quot;, line 147, in _registrar_acceso_denegado\n    db.commit()\n    ~~~~~~~~~^^\n  File &amp;quot;C:\\Users\\COMERCIAL\\Desktop\\Proyectos\\pangea\\Pangea\\backend\\venv\\Lib\\site-packages\\sqlalchemy\\orm\\session.py&amp;quot;, line 2095, in commit\n    trans.commit(_to_root=True)\n    ~~~~~~~~~~~~^^^^^^^^^^^^^^^\n  File &amp;quot;&amp;lt;sqlalchemy generated _go() wrapper for sqlalchemy.orm.session.SessionTransaction.commit&amp;gt;&amp;quot;, line 2, in commit\n    return target(fn, self, _to_root=_to_root)\n  File &amp;quot;C:\\Users\\COMERCIAL\\Desktop\\Proyectos\\pangea\\Pangea\\backend\\venv\\Lib\\site-packages\\sqlalchemy\\orm\\state_changes.py&amp;quot;, line 137, in _go\n    ret_value = fn(self, *arg, **kw)\n  File &amp;quot;C:\\Users\\COMERCIAL\\Desktop\\Proyectos\\pangea\\Pangea\\backend\\venv\\Lib\\site-packages\\sqlalchemy\\orm\\session.py&amp;quot;, line 1330, in commit\n    self._prepare_impl()\n    ~~~~~~~~~~~~~~~~~~^^\n  File &amp;quot;&amp;lt;sqlalchemy generated _go() wrapper for sqlalchemy.orm.session.SessionTransaction._prepare_impl&amp;gt;&amp;quot;, line 2, in _prepare_impl\n    return target(fn, self)\n  File &amp;quot;C:\\Users\\COMERCIAL\\Desktop\\Proyectos\\pangea\\Pangea\\backend\\venv\\Lib\\site-packages\\sqlalchemy\\orm\\state_changes.py&amp;quot;, line 137, in _go\n    ret_value = fn(self, *arg, **kw)\n  File &amp;quot;C:\\Users\\COMERCIAL\\Desktop\\Proyectos\\pangea\\Pangea\\backend\\venv\\Lib\\site-packages\\sqlalchemy\\orm\\session.py&amp;quot;, line 1304, in _prepare_impl\n    self.session.flush()\n    ~~~~~~~~~~~~~~~~~~^^\n  File &amp;quot;C:\\Users\\COMERCIAL\\Desktop\\Proyectos\\pangea\\Pangea\\backend\\venv\\Lib\\site-packages\\sqlalchemy\\orm\\session.py&amp;quot;, line 4536, in flush\n    self._flush(objects)\n    ~~~~~~~~~~~^^^^^^^^^\n  File &amp;quot;&amp;lt;sqlalchemy generated warned() wrapper for sqlalchemy.orm.session.Session._flush&amp;gt;&amp;quot;, line 2, in _flush\n    return target(fn, self, objects=objects)\n  File &amp;quot;C:\\Users\\COMERCIAL\\Desktop\\Proyectos\\pangea\\Pangea\\backend\\venv\\Lib\\site-packages\\sqlalchemy\\util\\deprecations.py&amp;quot;, line 281, in warned\n    return fn(*args, **kwargs)  # type: ignore[no-any-return]\n  File &amp;quot;C:\\Users\\COMERCIAL\\Desktop\\Proyectos\\pangea\\Pangea\\backend\\venv\\Lib\\site-packages\\sqlalchemy\\orm\\session.py&amp;quot;, line 4679, in _flush\n    with util.safe_reraise():\n         ~~~~~~~~~~~~~~~~~^^\n  File &amp;quot;C:\\Users\\COMERCIAL\\Desktop\\Proyectos\\pangea\\Pangea\\backend\\venv\\Lib\\site-packages\\sqlalchemy\\util\\langhelpers.py&amp;quot;, line 166, in __exit__\n    raise exc_value.with_traceback(exc_tb)\n  File &amp;quot;C:\\Users\\COMERCIAL\\Desktop\\Proyectos\\pangea\\Pangea\\backend\\venv\\Lib\\site-packages\\sqlalchemy\\orm\\session.py&amp;quot;, line 4640, in _flush\n    flush_context.execute()\n    ~~~~~~~~~~~~~~~~~~~~~^^\n  File &amp;quot;C:\\Users\\COMERCIAL\\Desktop\\Proyectos\\pangea\\Pangea\\backend\\venv\\Lib\\site-packages\\sqlalchemy\\orm\\unitofwork.py&amp;quot;, line 467, in execute\n    rec.execute(self)\n    ~~~~~~~~~~~^^^^^^\n  File &amp;quot;C:\\Users\\COMERCIAL\\Desktop\\Proyectos\\pangea\\Pangea\\backend\\venv\\Lib\\site-packages\\sqlalchemy\\orm\\unitofwork.py&amp;quot;, line 643, in execute\n    util.preloaded.orm_persistence._save_obj(\n    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^\n        self.mapper,\n        ^^^^^^^^^^^^\n        uow.states_for_mapper_hierarchy(self.mapper, False, False),\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n        uow,\n        ^^^^\n    )\n    ^\n  File &amp;quot;C:\\Users\\COMERCIAL\\Desktop\\Proyectos\\pangea\\Pangea\\backend\\venv\\Lib\\site-packages\\sqlalchemy\\orm\\persistence.py&amp;quot;, line 92, in _save_obj\n    _emit_insert_statements(\n    ~~~~~~~~~~~~~~~~~~~~~~~^\n        base_mapper,\n        ^^^^^^^^^^^^\n    ...&amp;lt;3 lines&amp;gt;...\n        insert,\n        ^^^^^^^\n    )\n    ^\n  File &amp;quot;C:\\Users\\COMERCIAL\\Desktop\\Proyectos\\pangea\\Pangea\\backend\\venv\\Lib\\site-packages\\sqlalchemy\\orm\\persistence.py&amp;quot;, line 1237, in _emit_insert_statements\n    result = connection.execute(\n        statement,\n        params,\n        execution_options=execution_options,\n    )\n  File &amp;quot;C:\\Users\\COMERCIAL\\Desktop\\Proyectos\\pangea\\Pangea\\backend\\venv\\Lib\\site-packages\\sqlalchemy\\engine\\base.py&amp;quot;, line 1451, in execute\n    return meth(\n        self,\n        distilled_parameters,\n        execution_options or NO_OPTIONS,\n    )\n  File &amp;quot;C:\\Users\\COMERCIAL\\Desktop\\Proyectos\\pangea\\Pangea\\backend\\venv\\Lib\\site-packages\\sqlalchemy\\sql\\elements.py&amp;quot;, line 533, in _execute_on_connection\n    return connection._execute_clauseelement(\n           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^\n        self, distilled_params, execution_options\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File &amp;quot;C:\\Users\\COMERCIAL\\Desktop\\Proyectos\\pangea\\Pangea\\backend\\venv\\Lib\\site-packages\\sqlalchemy\\engine\\base.py&amp;quot;, line 1671, in _execute_clauseelement\n    ret = self._execute_context(\n        dialect,\n    ...&amp;lt;9 lines&amp;gt;...\n        param_dict=param_dict,\n    )\n  File &amp;quot;C:\\Users\\COMERCIAL\\Desktop\\Proyectos\\pangea\\Pangea\\backend\\venv\\Lib\\site-packages\\sqlalchemy\\engine\\base.py&amp;quot;, line 1825, in _execute_context\n    return self._exec_single_context(\n           ~~~~~~~~~~~~~~~~~~~~~~~~~^\n        dialect, context, statement, parameters\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File &amp;quot;C:\\Users\\COMERCIAL\\Desktop\\Proyectos\\pangea\\Pangea\\backend\\venv\\Lib\\site-packages\\sqlalchemy\\engine\\base.py&amp;quot;, line 1965, in _exec_single_context\n    self._handle_dbapi_exception(\n    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^\n        e, str_statement, effective_parameters, cursor, context\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File &amp;quot;C:\\Users\\COMERCIAL\\Desktop\\Proyectos\\pangea\\Pangea\\backend\\venv\\Lib\\site-packages\\sqlalchemy\\engine\\base.py&amp;quot;, line 2335, in _handle_dbapi_exception\n    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e\n  File &amp;quot;C:\\Users\\COMERCIAL\\Desktop\\Proyectos\\pangea\\Pangea\\backend\\venv\\Lib\\site-packages\\sqlalchemy\\engine\\base.py&amp;quot;, line 1946, in _exec_single_context\n    self.dialect.do_execute(\n    ~~~~~~~~~~~~~~~~~~~~~~~^\n        cursor, str_statement, effective_parameters, context\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File &amp;quot;C:\\Users\\COMERCIAL\\Desktop\\Proyectos\\pangea\\Pangea\\backend\\venv\\Lib\\site-packages\\sqlalchemy\\engine\\default.py&amp;quot;, line 1192, in do_execute\n    cursor.execute(statement, parameters)\n    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^\nsqlalchemy.exc.IntegrityError: (psycopg2.errors.ForeignKeyViolation) insert or update on table &amp;quot;lg_adtr&amp;quot; violates foreign key constraint &amp;quot;lg_adtr_id_sd_fkey&amp;quot;\nDETAIL:  Key (id_sd)=(1) is not present in table &amp;quot;sd&amp;quot;.\n\n[SQL: INSERT INTO lg_adtr (id_usr, id_sd, accn, entdd, vlrs_antrrs, vlrs_nvs) VALUES (%(id_usr)s, %(id_sd)s, %(accn)s, %(entdd)s, %(vlrs_antrrs)s::JSONB, %(vlrs_nvs)s::JSONB) RETURNING lg_adtr.id_evnt, lg_adtr.fch_evnt]\n[parameters: {&amp;#x27;id_usr&amp;#x27;: 1, &amp;#x27;id_sd&amp;#x27;: 1, &amp;#x27;accn&amp;#x27;: &amp;#x27;acceso_denegado:acceso_sede&amp;#x27;, &amp;#x27;entdd&amp;#x27;: &amp;#x27;(sede)&amp;#x27;, &amp;#x27;vlrs_antrrs&amp;#x27;: &amp;#x27;null&amp;#x27;, &amp;#x27;vlrs_nvs&amp;#x27;: &amp;#x27;null&amp;#x27;}]\n(Background on this error at: https://sqlalche.me/e/21/gkpj)\n\n&#34;}], &#34;tests/test_permisos.py::TestVerificarSede::test_permiso_de_edicion_no_evita_el_aislamiento_de_sede&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/test_permisos.py::TestVerificarSede::test_permiso_de_edicion_no_evita_el_aislamiento_de_sede&#34;, &#34;duration&#34;: &#34;892 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/test_permisos.py::TestVerificarSede::test_permiso_de_edicion_no_evita_el_aislamiento_de_sede&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;892 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;------------------------------ Captured log call -------------------------------\nWARNING  auditoria.autorizacion:permisos.py:127 Acceso denegado: usuario=5143 sede=4880 rol=T\u00e9cnico CENERIS modulo=(sede) accion=acceso_sede\n\n&#34;}], &#34;tests/test_permisos.py::TestVerificarSede::test_scope_global_ignora_la_sede&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/test_permisos.py::TestVerificarSede::test_scope_global_ignora_la_sede&#34;, &#34;duration&#34;: &#34;5 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/test_permisos.py::TestVerificarSede::test_scope_global_ignora_la_sede&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;5 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}]}, &#34;renderCollapsed&#34;: [&#34;passed&#34;], &#34;initialSort&#34;: &#34;result&#34;, &#34;title&#34;: &#34;pytest_regresion_hu28.html&#34;}"></div>
+    <script>
+      (function(){function r(e,n,t){function o(i,f){if(!n[i]){if(!e[i]){var c="function"==typeof require&&require;if(!f&&c)return c(i,!0);if(u)return u(i,!0);var a=new Error("Cannot find module '"+i+"'");throw a.code="MODULE_NOT_FOUND",a}var p=n[i]={exports:{}};e[i][0].call(p.exports,function(r){var n=e[i][1][r];return o(n||r)},p,p.exports,r,e,n,t)}return n[i].exports}for(var u="function"==typeof require&&require,i=0;i<t.length;i++)o(t[i]);return o}return r})()({1:[function(require,module,exports){
+const { getCollapsedCategory, setCollapsedIds } = require('./storage.js')
+
+class DataManager {
+    setManager(data) {
+        const collapsedCategories = [...getCollapsedCategory(data.renderCollapsed)]
+        const collapsedIds = []
+        const tests = Object.values(data.tests).flat().map((test, index) => {
+            const collapsed = collapsedCategories.includes(test.result.toLowerCase())
+            const id = `test_${index}`
+            if (collapsed) {
+                collapsedIds.push(id)
+            }
+            return {
+                ...test,
+                id,
+                collapsed,
+            }
+        })
+        const dataBlob = { ...data, tests }
+        this.data = { ...dataBlob }
+        this.renderData = { ...dataBlob }
+        setCollapsedIds(collapsedIds)
+    }
+
+    get allData() {
+        return { ...this.data }
+    }
+
+    resetRender() {
+        this.renderData = { ...this.data }
+    }
+
+    setRender(data) {
+        this.renderData.tests = [...data]
+    }
+
+    toggleCollapsedItem(id) {
+        this.renderData.tests = this.renderData.tests.map((test) =>
+            test.id === id ? { ...test, collapsed: !test.collapsed } : test,
+        )
+    }
+
+    set allCollapsed(collapsed) {
+        this.renderData = { ...this.renderData, tests: [...this.renderData.tests.map((test) => (
+            { ...test, collapsed }
+        ))] }
+    }
+
+    get testSubset() {
+        return [...this.renderData.tests]
+    }
+
+    get environment() {
+        return this.renderData.environment
+    }
+
+    get initialSort() {
+        return this.data.initialSort
+    }
+}
+
+module.exports = {
+    manager: new DataManager(),
+}
+
+},{"./storage.js":8}],2:[function(require,module,exports){
+const mediaViewer = require('./mediaviewer.js')
+const templateEnvRow = document.getElementById('template_environment_row')
+const templateResult = document.getElementById('template_results-table__tbody')
+
+function htmlToElements(html) {
+    const temp = document.createElement('template')
+    temp.innerHTML = html
+    return temp.content.childNodes
+}
+
+const find = (selector, elem) => {
+    if (!elem) {
+        elem = document
+    }
+    return elem.querySelector(selector)
+}
+
+const findAll = (selector, elem) => {
+    if (!elem) {
+        elem = document
+    }
+    return [...elem.querySelectorAll(selector)]
+}
+
+const dom = {
+    getStaticRow: (key, value) => {
+        const envRow = templateEnvRow.content.cloneNode(true)
+        const isObj = typeof value === 'object' && value !== null
+        const values = isObj ? Object.keys(value).map((k) => `${k}: ${value[k]}`) : null
+
+        const valuesElement = htmlToElements(
+            values ? `<ul>${values.map((val) => `<li>${val}</li>`).join('')}<ul>` : `<div>${value}</div>`)[0]
+        const td = findAll('td', envRow)
+        td[0].textContent = key
+        td[1].appendChild(valuesElement)
+
+        return envRow
+    },
+    getResultTBody: ({ testId, id, log, extras, resultsTableRow, tableHtml, result, collapsed }) => {
+        const resultBody = templateResult.content.cloneNode(true)
+        resultBody.querySelector('tbody').classList.add(result.toLowerCase())
+        resultBody.querySelector('tbody').id = testId
+        resultBody.querySelector('.collapsible').dataset.id = id
+
+        resultsTableRow.forEach((html) => {
+            const t = document.createElement('template')
+            t.innerHTML = html
+            resultBody.querySelector('.collapsible').appendChild(t.content)
+        })
+
+        if (log) {
+            // Wrap lines starting with "E" with span.error to color those lines red
+            const wrappedLog = log.replace(/^E.*$/gm, (match) => `<span class="error">${match}</span>`)
+            resultBody.querySelector('.log').innerHTML = wrappedLog
+        } else {
+            resultBody.querySelector('.log').remove()
+        }
+
+        if (collapsed) {
+            resultBody.querySelector('.collapsible > .col-result')?.classList.add('collapsed')
+            resultBody.querySelector('.extras-row').classList.add('hidden')
+        } else {
+            resultBody.querySelector('.collapsible > .col-result')?.classList.remove('collapsed')
+        }
+
+        const media = []
+        extras?.forEach(({ name, format_type, content }) => {
+            if (['image', 'video'].includes(format_type)) {
+                media.push({ path: content, name, format_type })
+            }
+
+            if (format_type === 'html') {
+                resultBody.querySelector('.extraHTML').insertAdjacentHTML('beforeend', `<div>${content}</div>`)
+            }
+        })
+        mediaViewer.setup(resultBody, media)
+
+        // Add custom html from the pytest_html_results_table_html hook
+        tableHtml?.forEach((item) => {
+            resultBody.querySelector('td[class="extra"]').insertAdjacentHTML('beforeend', item)
+        })
+
+        return resultBody
+    },
+}
+
+module.exports = {
+    dom,
+    htmlToElements,
+    find,
+    findAll,
+}
+
+},{"./mediaviewer.js":6}],3:[function(require,module,exports){
+const { manager } = require('./datamanager.js')
+const { doSort } = require('./sort.js')
+const storageModule = require('./storage.js')
+
+const getFilteredSubSet = (filter) =>
+    manager.allData.tests.filter(({ result }) => filter.includes(result.toLowerCase()))
+
+const doInitFilter = () => {
+    const currentFilter = storageModule.getVisible()
+    const filteredSubset = getFilteredSubSet(currentFilter)
+    manager.setRender(filteredSubset)
+}
+
+const doFilter = (type, show) => {
+    if (show) {
+        storageModule.showCategory(type)
+    } else {
+        storageModule.hideCategory(type)
+    }
+
+    const currentFilter = storageModule.getVisible()
+    const filteredSubset = getFilteredSubSet(currentFilter)
+    manager.setRender(filteredSubset)
+
+    const sortColumn = storageModule.getSort()
+    doSort(sortColumn, true)
+}
+
+module.exports = {
+    doFilter,
+    doInitFilter,
+}
+
+},{"./datamanager.js":1,"./sort.js":7,"./storage.js":8}],4:[function(require,module,exports){
+const { redraw, bindEvents, renderStatic } = require('./main.js')
+const { doInitFilter } = require('./filter.js')
+const { doInitSort } = require('./sort.js')
+const { manager } = require('./datamanager.js')
+const data = JSON.parse(document.getElementById('data-container').dataset.jsonblob)
+
+function init() {
+    manager.setManager(data)
+    doInitFilter()
+    doInitSort()
+    renderStatic()
+    redraw()
+    bindEvents()
+}
+
+init()
+
+},{"./datamanager.js":1,"./filter.js":3,"./main.js":5,"./sort.js":7}],5:[function(require,module,exports){
+const { dom, find, findAll } = require('./dom.js')
+const { manager } = require('./datamanager.js')
+const { doSort } = require('./sort.js')
+const { doFilter } = require('./filter.js')
+const {
+    getVisible,
+    getCollapsedIds,
+    setCollapsedIds,
+    getSort,
+    getSortDirection,
+    possibleFilters,
+} = require('./storage.js')
+
+const removeChildren = (node) => {
+    while (node.firstChild) {
+        node.removeChild(node.firstChild)
+    }
+}
+
+const renderStatic = () => {
+    const renderEnvironmentTable = () => {
+        const environment = manager.environment
+        const rows = Object.keys(environment).map((key) => dom.getStaticRow(key, environment[key]))
+        const table = document.getElementById('environment')
+        removeChildren(table)
+        rows.forEach((row) => table.appendChild(row))
+    }
+    renderEnvironmentTable()
+}
+
+const addItemToggleListener = (elem) => {
+    elem.addEventListener('click', ({ target }) => {
+        const id = target.parentElement.dataset.id
+        manager.toggleCollapsedItem(id)
+
+        const collapsedIds = getCollapsedIds()
+        if (collapsedIds.includes(id)) {
+            const updated = collapsedIds.filter((item) => item !== id)
+            setCollapsedIds(updated)
+        } else {
+            collapsedIds.push(id)
+            setCollapsedIds(collapsedIds)
+        }
+        redraw()
+    })
+}
+
+const renderContent = (tests) => {
+    const sortAttr = getSort(manager.initialSort)
+    const sortAsc = JSON.parse(getSortDirection())
+    const rows = tests.map(dom.getResultTBody)
+    const table = document.getElementById('results-table')
+    const tableHeader = document.getElementById('results-table-head')
+
+    const newTable = document.createElement('table')
+    newTable.id = 'results-table'
+
+    // remove all sorting classes and set the relevant
+    findAll('.sortable', tableHeader).forEach((elem) => elem.classList.remove('asc', 'desc'))
+    tableHeader.querySelector(`.sortable[data-column-type="${sortAttr}"]`)?.classList.add(sortAsc ? 'desc' : 'asc')
+    newTable.appendChild(tableHeader)
+
+    if (!rows.length) {
+        const emptyTable = document.getElementById('template_results-table__body--empty').content.cloneNode(true)
+        newTable.appendChild(emptyTable)
+    } else {
+        rows.forEach((row) => {
+            if (!!row) {
+                findAll('.collapsible td:not(.col-links', row).forEach(addItemToggleListener)
+                find('.logexpander', row).addEventListener('click',
+                    (evt) => evt.target.parentNode.classList.toggle('expanded'),
+                )
+                newTable.appendChild(row)
+            }
+        })
+    }
+
+    table.replaceWith(newTable)
+}
+
+const renderDerived = () => {
+    const currentFilter = getVisible()
+    possibleFilters.forEach((result) => {
+        const input = document.querySelector(`input[data-test-result="${result}"]`)
+        input.checked = currentFilter.includes(result)
+    })
+}
+
+const bindEvents = () => {
+    const filterColumn = (evt) => {
+        const { target: element } = evt
+        const { testResult } = element.dataset
+
+        doFilter(testResult, element.checked)
+        const collapsedIds = getCollapsedIds()
+        const updated = manager.renderData.tests.map((test) => {
+            return {
+                ...test,
+                collapsed: collapsedIds.includes(test.id),
+            }
+        })
+        manager.setRender(updated)
+        redraw()
+    }
+
+    const header = document.getElementById('environment-header')
+    header.addEventListener('click', () => {
+        const table = document.getElementById('environment')
+        table.classList.toggle('hidden')
+        header.classList.toggle('collapsed')
+    })
+
+    findAll('input[name="filter_checkbox"]').forEach((elem) => {
+        elem.addEventListener('click', filterColumn)
+    })
+
+    findAll('.sortable').forEach((elem) => {
+        elem.addEventListener('click', (evt) => {
+            const { target: element } = evt
+            const { columnType } = element.dataset
+            doSort(columnType)
+            redraw()
+        })
+    })
+
+    document.getElementById('show_all_details').addEventListener('click', () => {
+        manager.allCollapsed = false
+        setCollapsedIds([])
+        redraw()
+    })
+    document.getElementById('hide_all_details').addEventListener('click', () => {
+        manager.allCollapsed = true
+        const allIds = manager.renderData.tests.map((test) => test.id)
+        setCollapsedIds(allIds)
+        redraw()
+    })
+}
+
+const redraw = () => {
+    const { testSubset } = manager
+
+    renderContent(testSubset)
+    renderDerived()
+}
+
+module.exports = {
+    redraw,
+    bindEvents,
+    renderStatic,
+}
+
+},{"./datamanager.js":1,"./dom.js":2,"./filter.js":3,"./sort.js":7,"./storage.js":8}],6:[function(require,module,exports){
+class MediaViewer {
+    constructor(assets) {
+        this.assets = assets
+        this.index = 0
+    }
+
+    nextActive() {
+        this.index = this.index === this.assets.length - 1 ? 0 : this.index + 1
+        return [this.activeFile, this.index]
+    }
+
+    prevActive() {
+        this.index = this.index === 0 ? this.assets.length - 1 : this.index -1
+        return [this.activeFile, this.index]
+    }
+
+    get currentIndex() {
+        return this.index
+    }
+
+    get activeFile() {
+        return this.assets[this.index]
+    }
+}
+
+
+const setup = (resultBody, assets) => {
+    if (!assets.length) {
+        resultBody.querySelector('.media').classList.add('hidden')
+        return
+    }
+
+    const mediaViewer = new MediaViewer(assets)
+    const container = resultBody.querySelector('.media-container')
+    const leftArrow = resultBody.querySelector('.media-container__nav--left')
+    const rightArrow = resultBody.querySelector('.media-container__nav--right')
+    const mediaName = resultBody.querySelector('.media__name')
+    const counter = resultBody.querySelector('.media__counter')
+    const imageEl = resultBody.querySelector('img')
+    const sourceEl = resultBody.querySelector('source')
+    const videoEl = resultBody.querySelector('video')
+
+    const setImg = (media, index) => {
+        if (media?.format_type === 'image') {
+            imageEl.src = media.path
+
+            imageEl.classList.remove('hidden')
+            videoEl.classList.add('hidden')
+        } else if (media?.format_type === 'video') {
+            sourceEl.src = media.path
+
+            videoEl.classList.remove('hidden')
+            imageEl.classList.add('hidden')
+        }
+
+        mediaName.innerText = media?.name
+        counter.innerText = `${index + 1} / ${assets.length}`
+    }
+    setImg(mediaViewer.activeFile, mediaViewer.currentIndex)
+
+    const moveLeft = () => {
+        const [media, index] = mediaViewer.prevActive()
+        setImg(media, index)
+    }
+    const doRight = () => {
+        const [media, index] = mediaViewer.nextActive()
+        setImg(media, index)
+    }
+    const openImg = () => {
+        window.open(mediaViewer.activeFile.path, '_blank')
+    }
+    if (assets.length === 1) {
+        container.classList.add('media-container--fullscreen')
+    } else {
+        leftArrow.addEventListener('click', moveLeft)
+        rightArrow.addEventListener('click', doRight)
+    }
+    imageEl.addEventListener('click', openImg)
+}
+
+module.exports = {
+    setup,
+}
+
+},{}],7:[function(require,module,exports){
+const { manager } = require('./datamanager.js')
+const storageModule = require('./storage.js')
+
+const genericSort = (list, key, ascending, customOrder) => {
+    let sorted
+    if (customOrder) {
+        sorted = list.sort((a, b) => {
+            const aValue = a.result.toLowerCase()
+            const bValue = b.result.toLowerCase()
+
+            const aIndex = customOrder.findIndex((item) => item.toLowerCase() === aValue)
+            const bIndex = customOrder.findIndex((item) => item.toLowerCase() === bValue)
+
+            // Compare the indices to determine the sort order
+            return aIndex - bIndex
+        })
+    } else {
+        sorted = list.sort((a, b) => a[key] === b[key] ? 0 : a[key] > b[key] ? 1 : -1)
+    }
+
+    if (ascending) {
+        sorted.reverse()
+    }
+    return sorted
+}
+
+const durationSort = (list, ascending) => {
+    const parseDuration = (duration) => {
+        if (duration.includes(':')) {
+            // If it's in the format "HH:mm:ss"
+            const [hours, minutes, seconds] = duration.split(':').map(Number)
+            return (hours * 3600 + minutes * 60 + seconds) * 1000
+        } else {
+            // If it's in the format "nnn ms"
+            return parseInt(duration)
+        }
+    }
+    const sorted = list.sort((a, b) => parseDuration(a['duration']) - parseDuration(b['duration']))
+    if (ascending) {
+        sorted.reverse()
+    }
+    return sorted
+}
+
+const doInitSort = () => {
+    const type = storageModule.getSort(manager.initialSort)
+    const ascending = storageModule.getSortDirection()
+    const list = manager.testSubset
+    const initialOrder = ['Error', 'Failed', 'Rerun', 'XFailed', 'XPassed', 'Skipped', 'Passed']
+
+    storageModule.setSort(type)
+    storageModule.setSortDirection(ascending)
+
+    if (type?.toLowerCase() === 'original') {
+        manager.setRender(list)
+    } else {
+        let sortedList
+        switch (type) {
+        case 'duration':
+            sortedList = durationSort(list, ascending)
+            break
+        case 'result':
+            sortedList = genericSort(list, type, ascending, initialOrder)
+            break
+        default:
+            sortedList = genericSort(list, type, ascending)
+            break
+        }
+        manager.setRender(sortedList)
+    }
+}
+
+const doSort = (type, skipDirection) => {
+    const newSortType = storageModule.getSort(manager.initialSort) !== type
+    const currentAsc = storageModule.getSortDirection()
+    let ascending
+    if (skipDirection) {
+        ascending = currentAsc
+    } else {
+        ascending = newSortType ? false : !currentAsc
+    }
+    storageModule.setSort(type)
+    storageModule.setSortDirection(ascending)
+
+    const list = manager.testSubset
+    const sortedList = type === 'duration' ? durationSort(list, ascending) : genericSort(list, type, ascending)
+    manager.setRender(sortedList)
+}
+
+module.exports = {
+    doInitSort,
+    doSort,
+}
+
+},{"./datamanager.js":1,"./storage.js":8}],8:[function(require,module,exports){
+const possibleFilters = [
+    'passed',
+    'skipped',
+    'failed',
+    'error',
+    'xfailed',
+    'xpassed',
+    'rerun',
+]
+
+const getVisible = () => {
+    const url = new URL(window.location.href)
+    const settings = new URLSearchParams(url.search).get('visible')
+    const lower = (item) => {
+        const lowerItem = item.toLowerCase()
+        if (possibleFilters.includes(lowerItem)) {
+            return lowerItem
+        }
+        return null
+    }
+    return settings === null ?
+        possibleFilters :
+        [...new Set(settings?.split(',').map(lower).filter((item) => item))]
+}
+
+const hideCategory = (categoryToHide) => {
+    const url = new URL(window.location.href)
+    const visibleParams = new URLSearchParams(url.search).get('visible')
+    const currentVisible = visibleParams ? visibleParams.split(',') : [...possibleFilters]
+    const settings = [...new Set(currentVisible)].filter((f) => f !== categoryToHide).join(',')
+
+    url.searchParams.set('visible', settings)
+    window.history.pushState({}, null, unescape(url.href))
+}
+
+const showCategory = (categoryToShow) => {
+    if (typeof window === 'undefined') {
+        return
+    }
+    const url = new URL(window.location.href)
+    const currentVisible = new URLSearchParams(url.search).get('visible')?.split(',').filter(Boolean) ||
+        [...possibleFilters]
+    const settings = [...new Set([categoryToShow, ...currentVisible])]
+    const noFilter = possibleFilters.length === settings.length || !settings.length
+
+    noFilter ? url.searchParams.delete('visible') : url.searchParams.set('visible', settings.join(','))
+    window.history.pushState({}, null, unescape(url.href))
+}
+
+const getSort = (initialSort) => {
+    const url = new URL(window.location.href)
+    let sort = new URLSearchParams(url.search).get('sort')
+    if (!sort) {
+        sort = initialSort || 'result'
+    }
+    return sort
+}
+
+const setSort = (type) => {
+    const url = new URL(window.location.href)
+    url.searchParams.set('sort', type)
+    window.history.pushState({}, null, unescape(url.href))
+}
+
+const getCollapsedCategory = (renderCollapsed) => {
+    let categories
+    if (typeof window !== 'undefined') {
+        const url = new URL(window.location.href)
+        const collapsedItems = new URLSearchParams(url.search).get('collapsed')
+        switch (true) {
+        case !renderCollapsed && collapsedItems === null:
+            categories = ['passed']
+            break
+        case collapsedItems?.length === 0 || /^["']{2}$/.test(collapsedItems):
+            categories = []
+            break
+        case /^all$/.test(collapsedItems) || collapsedItems === null && /^all$/.test(renderCollapsed):
+            categories = [...possibleFilters]
+            break
+        default:
+            categories = collapsedItems?.split(',').map((item) => item.toLowerCase()) || renderCollapsed
+            break
+        }
+    } else {
+        categories = []
+    }
+    return categories
+}
+
+const getSortDirection = () => JSON.parse(sessionStorage.getItem('sortAsc')) || false
+const setSortDirection = (ascending) => sessionStorage.setItem('sortAsc', ascending)
+
+const getCollapsedIds = () => JSON.parse(sessionStorage.getItem('collapsedIds')) || []
+const setCollapsedIds = (list) => sessionStorage.setItem('collapsedIds', JSON.stringify(list))
+
+module.exports = {
+    getVisible,
+    hideCategory,
+    showCategory,
+    getCollapsedIds,
+    setCollapsedIds,
+    getSort,
+    setSort,
+    getSortDirection,
+    setSortDirection,
+    getCollapsedCategory,
+    possibleFilters,
+}
+
+},{}]},{},[4]);
+    </script>
+  </footer>
+  </body>
+</html>
