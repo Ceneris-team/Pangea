@@ -31,6 +31,8 @@ async function pytest(html, png, soloFallidas) {
 
 await pytest('pytest_regresion.html', 'EV-HT302-INF-04_captura-regresion-fallidas-extracto.png', true);
 await pytest('pytest_regresion_sin_suscripcion.html', 'EV-HT302-INF-05_captura-regresion-sin-suscripcion-extracto.png', false);
+// PP-403: reprueba de DEF-02 (historial de git) y DEF-04 (sondeo FTP de HU-18); primero las 2 fallidas de DEF-02.
+await pytest('pytest_reverificacion.html', 'EV-HT302-INF-09_captura-reverificacion-extracto.png', false);
 
 // Playwright: cabecera con contadores y lista completa de pruebas.
 {

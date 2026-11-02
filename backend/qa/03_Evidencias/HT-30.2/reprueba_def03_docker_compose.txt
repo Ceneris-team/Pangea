@@ -1,0 +1,28 @@
+Reprueba DEF-03 (RG-03) · HT-30.2 PP-403 · 02/11/2026 09:24 · commit 58cead6 (qa-elliot con dev f9c0967)
+Comando: docker compose --profile full up -d --build
+
+== Configuración (docker-compose.yml)
+8:      POSTGRES_USER: postgres
+9:      POSTGRES_PASSWORD: postgres
+29:      DATABASE_URL: postgresql+psycopg2://pangea:***@db:5432/pangea_dev
+46:      DATABASE_URL: postgresql+psycopg2://pangea:***@db:5432/pangea_dev
+61:      DATABASE_URL: postgresql+psycopg2://pangea:***@db:5432/pangea_dev
+78:      DATABASE_URL: postgresql+psycopg2://pangea:***@db:5432/pangea_dev
+
+== Estado de los servicios
+api: Up About a minute
+beat: Up About a minute
+db: Up 35 minutes
+redis: Up 35 minutes
+worker: Up About a minute
+worker-exportaciones: Up About a minute
+
+== Errores del worker (resumen)
+worker-1  | [2026-11-02 14:23:31,072: ERROR/ForkPoolWorker-2] Task app.tasks.suscripciones.activar_suscripciones_programadas raised unexpected: OperationalError('(psycopg2.OperationalError) connection to server at "db" (172.18.0.3), port 5432 failed: FATAL:  p
+worker-1  | [2026-11-02 14:23:31,076: ERROR/ForkPoolWorker-1] Task app.tasks.exportaciones.mantener_exportaciones raised unexpected: OperationalError('(psycopg2.OperationalError) connection to server at "db" (172.18.0.3), port 5432 failed: FATAL:  password aut
+worker-1  | [2026-11-02 14:23:31,173: ERROR/ForkPoolWorker-4] Task app.tasks.ingesta.sondear_conexiones_ftp raised unexpected: OperationalError('(psycopg2.OperationalError) connection to server at "db" (172.18.0.3), port 5432 failed: FATAL:  password authentic
+
+== API
+GET /docs -> 200 (la API arranca; usa la misma DATABASE_URL que el worker)
+
+Resultado: FALLIDO. El servicio db crea el usuario postgres y api, worker, worker-exportaciones y beat usan pangea; DEF-03 sigue abierto.
