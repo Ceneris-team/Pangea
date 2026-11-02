@@ -32,6 +32,7 @@ import logging
 import os
 import subprocess
 import tempfile
+from urllib.parse import quote, urlsplit, urlunsplit
 
 from app.database import DATABASE_URL
 from app.services import object_storage
@@ -53,6 +54,25 @@ def _url_libpq(database_url: str) -> str:
     válida ('postgresql://...'). El resto (usuario, clave, host, puerto,
     base) se pasa tal cual."""
     return database_url.replace("+psycopg2", "", 1)
+
+
+def _separar_credenciales(url_libpq: str) -> tuple[str, str | None]:
+    """Separa la contraseña de la URL libpq y la devuelve aparte.
+
+    DEF-05 (observación de QA): pasarle a pg_dump la URL con la contraseña
+    incrustada la deja visible en la lista de procesos del contenedor (`ps`).
+    En su lugar la contraseña viaja por la variable de entorno PGPASSWORD y a
+    pg_dump se le da la URL SIN contraseña. Devuelve (url_sin_password,
+    password|None)."""
+    partes = urlsplit(url_libpq)
+    if not partes.password:
+        return url_libpq, None
+    host = partes.hostname or ""
+    if partes.port:
+        host = f"{host}:{partes.port}"
+    netloc = f"{quote(partes.username or '', safe='')}@{host}" if partes.username else host
+    url_sin = urlunsplit((partes.scheme, netloc, partes.path, partes.query, partes.fragment))
+    return url_sin, partes.password
 
 
 def prefijo() -> str:
@@ -78,9 +98,10 @@ def generar_respaldo_cifrado(ruta_destino: str) -> None:
     `ruta_destino`. Encadena procesos por pipes (streaming): el dump nunca
     se materializa sin cifrar en disco ni se carga entero en memoria.
 
-    La passphrase viaja a openssl por `-pass env:` -NUNCA como argumento de
-    línea de comandos-, para que no quede visible en la lista de procesos
-    (`ps`) de la máquina."""
+    Ni la passphrase de cifrado ni la contraseña de la base viajan como
+    argumentos de línea de comandos (serían visibles en `ps`): la passphrase va
+    a openssl por `-pass env:BACKUP_ENCRYPTION_KEY`, y la contraseña de la base
+    a pg_dump por `PGPASSWORD` (ver _separar_credenciales, DEF-05)."""
     clave = os.environ.get("BACKUP_ENCRYPTION_KEY")
     if not clave:
         raise RespaldoError(
@@ -88,8 +109,10 @@ def generar_respaldo_cifrado(ruta_destino: str) -> None:
             "(CA de HT-06 exige que el respaldo quede cifrado)."
         )
 
+    url, password = _separar_credenciales(_url_libpq(DATABASE_URL))
     entorno = {**os.environ, "BACKUP_ENCRYPTION_KEY": clave}
-    url = _url_libpq(DATABASE_URL)
+    if password is not None:
+        entorno["PGPASSWORD"] = password
 
     # --no-owner/--no-privileges: el restore se hace sobre una base nueva cuyo
     # rol dueño puede diferir del de origen (otra instancia Lightsail/RDS); sin

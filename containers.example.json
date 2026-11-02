@@ -25,7 +25,7 @@
       "JWT_SECRET": "<mismo valor que api>",
       "FTP_CREDENTIAL_KEY": "<mismo valor que api>",
       "FRONTEND_URL": "https://<dominio-frontend-lightsail>",
-      "OBJECT_STORAGE_BUCKET": "pangea-data-prod",
+      "OBJECT_STORAGE_BUCKET": "pangea-storage-prod",
       "OBJECT_STORAGE_REGION": "us-east-1",
       "OBJECT_STORAGE_ENDPOINT": "https://s3.us-east-1.amazonaws.com",
       "OBJECT_STORAGE_ACCESS_KEY": "<access key del bucket Lightsail>",

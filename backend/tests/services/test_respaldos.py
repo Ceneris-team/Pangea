@@ -23,6 +23,20 @@ def test_url_libpq_deja_igual_una_url_ya_libpq():
     assert respaldos._url_libpq("postgresql://u:p@host/db") == "postgresql://u:p@host/db"
 
 
+def test_separar_credenciales_saca_la_password_de_la_url():
+    # DEF-05: la contraseña no debe quedar en la URL (visible en `ps`).
+    url, password = respaldos._separar_credenciales("postgresql://usuario:secreta@host:5432/db")
+    assert password == "secreta"
+    assert "secreta" not in url
+    assert url == "postgresql://usuario@host:5432/db"
+
+
+def test_separar_credenciales_sin_password_no_cambia_nada():
+    url, password = respaldos._separar_credenciales("postgresql://host:5432/db")
+    assert password is None
+    assert url == "postgresql://host:5432/db"
+
+
 def test_clave_respaldo_incluye_prefijo_y_fecha(monkeypatch):
     monkeypatch.delenv("BACKUP_PREFIX", raising=False)
     assert respaldos.clave_respaldo(dt.date(2026, 3, 9)) == "respaldos/pangea-2026-03-09.sql.gz.enc"
