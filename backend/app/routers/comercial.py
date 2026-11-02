@@ -2,7 +2,7 @@
 
 from datetime import date, timedelta
 from decimal import Decimal
-from typing import Literal
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator
@@ -26,6 +26,9 @@ from app.models import (
 )
 from app.security.dependencies import get_current_user
 from app.security.permisos import EDICION, LECTURA, require_permiso
+from app.services import clientes as servicio_clientes
+from app.services import cobros as servicio_cobros
+from app.services import vencimientos as servicio_vencimientos
 from app.services.contratos import (
     aplicar_programadas,
     auditar,
@@ -33,6 +36,7 @@ from app.services.contratos import (
     contrato_dict,
     preparar_condiciones,
     registrar_contrato,
+    ultimo_contrato,
     validar_funcionalidades,
     validar_operacion,
 )
@@ -230,6 +234,44 @@ def listar_clientes(
     return [resumen_cliente(db, cliente) for cliente in db.query(Cliente).order_by(Cliente.rzn_scl).all()]
 
 
+class ClienteRegistrar(BaseModel):
+    # Sin restricciones de Pydantic a propósito: services/clientes.py valida
+    # y responde con el mensaje en español que muestra el formulario.
+    razon_social: str = ""
+    ruc: str = ""
+    correo_contacto: str = ""
+    telefono_contacto: str | None = None
+
+
+@router.post("/clientes", status_code=201)
+def registrar_cliente(
+    body: ClienteRegistrar,
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(require_permiso("Comercial", EDICION)),
+):
+    """HU65 CA2: registra al cliente y lo deja listo para asignarle un plan
+    (CA3, HU45). «Solo el rol Administrador Comercial puede registrar
+    clientes en este módulo»: el Administrador CENERIS también tiene
+    Comercial/Edición, pero registra empresas desde POST /empresas."""
+    if usuario.get("rol") != "Administrador Comercial" or usuario.get("scope") != "global":
+        raise HTTPException(
+            status_code=403, detail="Solo el Administrador Comercial puede registrar clientes"
+        )
+    cliente = servicio_clientes.registrar_cliente(
+        db,
+        razon_social=body.razon_social,
+        ruc=body.ruc,
+        correo=body.correo_contacto,
+        telefono=body.telefono_contacto,
+    )
+    auditar(
+        db, usuario, "crear", "Cliente",
+        despues={"cliente_id": cliente.id_clnt, "razon_social": cliente.rzn_scl, "ruc": cliente.rc},
+    )
+    db.commit()
+    return {"mensaje": "Cliente registrado correctamente", "cliente": resumen_cliente(db, cliente)}
+
+
 @router.get("/mi-plan")
 def mi_plan(
     db: Session = Depends(get_db),
@@ -271,6 +313,140 @@ def asignar_suscripcion(
     db.commit()
     return {"mensaje": "Suscripción programada correctamente" if contrato.estd == "Programada" else "Suscripción asignada correctamente" if creado else "Suscripción ya registrada",
             "suscripcion_id": contrato.id_sscrpcn, "cliente": resumen_cliente(db, db.get(Cliente, id_clnt))}
+
+
+# HU45 - Asignar plan a cliente (PP-309, PP-310)
+#
+# Entrada simple del Administrador Comercial: solo plan y fecha de inicio.
+# Reutiliza el motor de contratos (services/contratos.registrar_contrato),
+# que ya garantiza "un cliente solo puede tener un plan activo a la vez":
+# al asignar uno nuevo con inicio hoy, el anterior queda "Reemplazada"; con
+# inicio futuro, el nuevo queda "Programada" y reemplaza al actual en esa
+# fecha. PUT /clientes/{id}/suscripcion sigue siendo la entrada completa
+# (periodicidad, precio, gracia, cupos acordados) de «Gestionar suscripción».
+DIAS_VIGENCIA_PLAN = 30  # "La fecha de vencimiento se calcula sumando 30 días calendario"
+MSG_PLAN_ASIGNADO = "Plan asignado correctamente"
+MSG_PLAN_ACTUALIZADO = "Plan actualizado correctamente"
+
+
+class PlanAsignar(BaseModel):
+    plan_id: int
+    fecha_inicio: date
+
+
+def fecha_vencimiento_plan(fecha_inicio: date) -> date:
+    return fecha_inicio + timedelta(days=DIAS_VIGENCIA_PLAN)
+
+
+@router.post("/clientes/{id_clnt}/plan")
+def asignar_plan(
+    id_clnt: int,
+    body: PlanAsignar,
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(require_permiso("Comercial", EDICION)),
+):
+    """HU45 CA2/CA4: asocia el plan, calcula el vencimiento (+30 días) y
+    reemplaza el plan anterior si lo había. Solo el Administrador Comercial."""
+    if usuario.get("rol") != "Administrador Comercial" or usuario.get("scope") != "global":
+        raise HTTPException(status_code=403, detail="Solo el Administrador Comercial puede asignar planes")
+    hoy = fecha_comercial()
+    if body.fecha_inicio < hoy:
+        raise HTTPException(status_code=422, detail="La fecha de inicio no puede ser anterior a hoy")
+    if db.get(Cliente, id_clnt) is None:
+        raise HTTPException(status_code=404, detail="Cliente no encontrado")
+
+    # Se decide antes de escribir: después, el contrato nuevo ya es el último.
+    tenia_plan = ultimo_contrato(db, id_clnt, hoy) is not None
+    contrato, creado = registrar_contrato(
+        db,
+        id_clnt,
+        SuscripcionAsignar(
+            plan_id=body.plan_id,
+            fecha_inicio=body.fecha_inicio,
+            fecha_vencimiento=fecha_vencimiento_plan(body.fecha_inicio),
+            motivo="Asignación de plan (HU45)",
+        ),
+        usuario,
+    )
+    db.commit()
+    if not creado:
+        mensaje = "El cliente ya tiene ese plan con esa fecha de inicio"
+    else:
+        mensaje = MSG_PLAN_ACTUALIZADO if tenia_plan else MSG_PLAN_ASIGNADO
+    return {
+        "mensaje": mensaje,
+        "suscripcion_id": contrato.id_sscrpcn,
+        "estado": contrato.estd,
+        "fecha_inicio": contrato.fch_inc,
+        "fecha_vencimiento": contrato.fch_vncmnt,
+        "cliente": resumen_cliente(db, db.get(Cliente, id_clnt)),
+    }
+
+
+# PP-67 - Registrar cobro (PP-312, PP-313). Reglas en services/cobros.py.
+class CobroRegistrar(BaseModel):
+    # Sin tipos estrictos a propósito: services/cobros.py valida y responde
+    # con el mensaje en español que muestra el formulario.
+    # Any y no str | int | float: así Pydantic no convierte true en 1.
+    monto: Any = None
+    fecha_cobro: str | None = None
+    metodo_pago: str | None = None
+
+
+@router.post("/clientes/{id_clnt}/cobros", status_code=201)
+def registrar_cobro(
+    id_clnt: int,
+    body: CobroRegistrar,
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(require_permiso("Comercial", EDICION)),
+):
+    """CA2: registra el cobro en el período (contrato) actual del cliente.
+    "Solo el rol Administrador Comercial puede registrar cobros"."""
+    if usuario.get("rol") != "Administrador Comercial" or usuario.get("scope") != "global":
+        raise HTTPException(status_code=403, detail="Solo el Administrador Comercial puede registrar cobros")
+    if db.get(Cliente, id_clnt) is None:
+        raise HTTPException(status_code=404, detail="Cliente no encontrado")
+    cobro = servicio_cobros.registrar_cobro(
+        db, id_clnt, monto=body.monto, fecha_cobro=body.fecha_cobro,
+        metodo_pago=body.metodo_pago, hoy=fecha_comercial(),
+    )
+    auditar(
+        db, usuario, "registrar", "Cobro",
+        despues={"cliente_id": id_clnt, "cobro_id": cobro.id_cbr, "suscripcion_id": cobro.id_sscrpcn,
+                 "monto": str(cobro.mnt), "fecha_cobro": cobro.fch_cbr.isoformat(), "metodo_pago": cobro.mtd_pg},
+    )
+    db.commit()
+    db.refresh(cobro)
+    contrato = db.get(Suscripcion, cobro.id_sscrpcn)
+    return {"mensaje": servicio_cobros.MSG_COBRO_REGISTRADO, "cobro": servicio_cobros.cobro_dict(db, cobro, contrato)}
+
+
+@router.get("/clientes/{id_clnt}/cobros")
+def listar_cobros(
+    id_clnt: int,
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(require_permiso("Comercial", LECTURA)),
+):
+    """CA3: historial de cobros del cliente (monto, fecha y método)."""
+    _solo_comercial(usuario)
+    if db.get(Cliente, id_clnt) is None:
+        raise HTTPException(status_code=404, detail="Cliente no encontrado")
+    return servicio_cobros.historial_cobros(db, id_clnt)
+
+
+# PP-68 - Consultar vencimientos (PP-314, PP-315, PP-316). Reglas en services/vencimientos.py.
+@router.get("/vencimientos")
+def consultar_vencimientos(
+    rango: str = "todos",
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(require_permiso("Comercial", LECTURA)),
+):
+    """CA1/CA2: clientes con suscripción activa, del vencimiento más próximo
+    al más lejano, filtrados por rango de días restantes. "Solo el rol
+    Administrador Comercial tiene acceso a esta sección"."""
+    if usuario.get("rol") != "Administrador Comercial" or usuario.get("scope") != "global":
+        raise HTTPException(status_code=403, detail="Solo el Administrador Comercial puede consultar los vencimientos")
+    return servicio_vencimientos.vencimientos(db, fecha_comercial(), rango)
 
 
 @router.post("/clientes/{id_clnt}/suscripcion/preview")

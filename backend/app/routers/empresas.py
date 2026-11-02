@@ -23,6 +23,7 @@ from app.models import (
 from app.security.dependencies import get_current_user
 from app.security.entorno import es_ceneris
 from app.security.hashing import generar_password_temporal, hash_password
+from app.services.clientes import registrar_cliente
 from app.services.limites_plan import comprobar_cupo, resumen_cliente, suscripcion_vigente
 
 router = APIRouter(prefix="/empresas", tags=["Empresas y proyectos"])
@@ -174,18 +175,13 @@ def crear_empresa(
 ):
     if actor["rol"] != "Administrador" or actor["scope"] != "global":
         raise HTTPException(status_code=403, detail="Solo CENERIS puede registrar empresas")
-    nombre = body.nombre.strip()
-    if not nombre:
-        raise HTTPException(status_code=422, detail="Indica la razón social")
-    cliente = Cliente(rzn_scl=nombre, rc=body.ruc, crr_cntct=body.correo_contacto.lower())
-    db.add(cliente)
-    try:
-        db.flush()
-        _auditar(db, actor, "crear", "Empresa", {"cliente_id": cliente.id_clnt})
-        db.commit()
-    except IntegrityError:
-        db.rollback()
-        raise HTTPException(status_code=409, detail="Ya existe una empresa con ese RUC") from None
+    # Misma regla de alta que «Registrar cliente» de Planes y Suscripciones
+    # (HU65): el RUC repetido se detecta antes de insertar.
+    cliente = registrar_cliente(
+        db, razon_social=body.nombre, ruc=body.ruc, correo=body.correo_contacto
+    )
+    _auditar(db, actor, "crear", "Empresa", {"cliente_id": cliente.id_clnt})
+    db.commit()
     return {"id_clnt": cliente.id_clnt, "nombre": cliente.rzn_scl}
 
 
