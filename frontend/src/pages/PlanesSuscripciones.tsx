@@ -14,7 +14,9 @@ import { fechaVisible } from "../components/comercial/asignacionPlan";
 import RegistrarCobroFormulario from "../components/comercial/RegistrarCobroFormulario";
 import HistorialCobros from "../components/comercial/HistorialCobros";
 import SolicitudesSuscripcion from "../components/comercial/SolicitudesSuscripcion";
-import { type Limites, type Plan, type Cliente, type Catalogo } from "../types/comercial";
+import TablaVencimientos, { type FilaVencimiento } from "../components/comercial/TablaVencimientos";
+import { esRango, inicioRenovacion, type RangoVencimiento } from "../components/comercial/vencimientos";
+import { fechaLima, type Limites, type Plan, type Cliente, type Catalogo } from "../types/comercial";
 
 const tarjeta = "rounded-2xl border border-gray-200 bg-white/80 p-5 shadow-sm dark:border-white/10 dark:bg-[#171d2a]/90";
 const campo = "w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-gray-900 outline-none focus:border-lime-500 dark:border-white/20 dark:bg-[#242b39] dark:text-white";
@@ -51,7 +53,11 @@ export default function PlanesSuscripciones() {
   // PP-67: "Solo el rol Administrador Comercial puede registrar cobros".
   const puedeRegistrarCobro = rol === ROLES.ADMINISTRADOR_COMERCIAL;
   const [parametros, setParametros] = useSearchParams();
-  const vista = ["suscripciones", "solicitudes"].includes(parametros.get("vista") ?? "") ? parametros.get("vista")! : "planes";
+  // PP-68: "Solo el rol Administrador Comercial tiene acceso a esta sección".
+  const puedeVerVencimientos = rol === ROLES.ADMINISTRADOR_COMERCIAL;
+  const vistas = puedeVerVencimientos ? ["suscripciones", "solicitudes", "vencimientos"] : ["suscripciones", "solicitudes"];
+  const vista = vistas.includes(parametros.get("vista") ?? "") ? parametros.get("vista")! : "planes";
+  const rangoVencimientos: RangoVencimiento = esRango(parametros.get("rango")) ? parametros.get("rango") as RangoVencimiento : "todos";
   const [planes, setPlanes] = useState<Plan[]>([]);
   const [catalogo, setCatalogo] = useState<Catalogo>({ funcionalidades: [], complementos: [] });
   const [historialCliente, setHistorialCliente] = useState<number | null>(null);
@@ -67,6 +73,7 @@ export default function PlanesSuscripciones() {
   const [registrandoCliente, setRegistrandoCliente] = useState(false);
   const [clienteNuevo, setClienteNuevo] = useState<number | null>(null);
   const [asignandoPlan, setAsignandoPlan] = useState<number | null>(null);
+  const [inicioPlanSugerido, setInicioPlanSugerido] = useState<string | undefined>(undefined);
   const [cobrando, setCobrando] = useState<number | null>(null);
   const [cobrosDe, setCobrosDe] = useState<number | null>(null);
   const [recargaCobros, setRecargaCobros] = useState(0);
@@ -153,12 +160,20 @@ export default function PlanesSuscripciones() {
   }
 
   // HU45 CA1: "Asignar plan" sobre un cliente abre el formulario simple (plan + fecha de inicio).
-  function abrirAsignacionPlan(idCliente: number) {
+  function abrirAsignacionPlan(idCliente: number, inicioSugerido?: string) {
     setAsignandoPlan(idCliente);
+    setInicioPlanSugerido(inicioSugerido);
     setAsignando(null);
     setRegistrandoCliente(false);
     setCobrando(null);
     setError("");
+  }
+
+  // PP-68 CA3: "Renovar" lleva a Asignar plan (HU45) con el cliente preseleccionado.
+  function renovar(fila: FilaVencimiento) {
+    setParametros({ vista: "suscripciones" });
+    setMensaje("");
+    abrirAsignacionPlan(fila.id_clnt, inicioRenovacion(fila.fecha_vencimiento, fechaLima()));
   }
 
   async function planAsignado(mensajeAsignacion: string) {
@@ -215,6 +230,7 @@ export default function PlanesSuscripciones() {
               <button type="button" onClick={() => setParametros({ vista: "solicitudes" })} className={`rounded-xl px-4 py-2 font-semibold ${vista === "solicitudes" ? "bg-[#ccff00] text-gray-950" : "bg-gray-200/70 dark:bg-white/10"}`}>Solicitudes</button>
               <button type="button" onClick={() => setParametros({ vista: "planes" })} className={`rounded-xl px-4 py-2 font-semibold ${vista === "planes" ? "bg-[#ccff00] text-gray-950" : "bg-gray-200/70 dark:bg-white/10"}`}>Planes</button>
               <button type="button" onClick={() => setParametros({ vista: "suscripciones" })} className={`rounded-xl px-4 py-2 font-semibold ${vista === "suscripciones" ? "bg-[#ccff00] text-gray-950" : "bg-gray-200/70 dark:bg-white/10"}`}>Suscripciones</button>
+              {puedeVerVencimientos && <button type="button" onClick={() => setParametros({ vista: "vencimientos" })} className={`rounded-xl px-4 py-2 font-semibold ${vista === "vencimientos" ? "bg-[#ccff00] text-gray-950" : "bg-gray-200/70 dark:bg-white/10"}`}>Vencimientos</button>}
             </nav>
             {error && <div role="alert" className="rounded-xl border border-red-400/50 bg-red-500/10 p-3 text-red-700 dark:text-red-200">{error}</div>}
             {mensaje && <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-lime-500/50 bg-lime-500/10 p-3 text-lime-800 dark:text-lime-200">
@@ -269,6 +285,7 @@ export default function PlanesSuscripciones() {
                     </div>
                   </form>}
                 </section>}
+                {vista === "vencimientos" && <TablaVencimientos rango={rangoVencimientos} onRango={(rango) => setParametros({ vista: "vencimientos", rango })} onRenovar={renovar} />}
                 {vista === "suscripciones" && <section className="space-y-4">
                   <div className="flex flex-wrap items-end justify-between gap-4">
                     <div><h2 className="text-xl font-semibold">Clientes y suscripciones</h2><p className="text-sm text-gray-600 dark:text-gray-300">El plan corresponde a la empresa minera; sus usuarios comparten estos cupos.</p></div>
@@ -278,7 +295,7 @@ export default function PlanesSuscripciones() {
                     </div>
                   </div>
                   {registrandoCliente && <RegistrarClienteFormulario onCancelar={() => setRegistrandoCliente(false)} onRegistrado={clienteRegistrado} />}
-                  {asignandoPlan !== null && clientes.find((c) => c.id_clnt === asignandoPlan) && <AsignarPlanFormulario key={asignandoPlan} cliente={clientes.find((c) => c.id_clnt === asignandoPlan)!} planes={planes} onCancelar={() => setAsignandoPlan(null)} onAsignado={planAsignado} />}
+                  {asignandoPlan !== null && clientes.find((c) => c.id_clnt === asignandoPlan) && <AsignarPlanFormulario key={`${asignandoPlan}-${inicioPlanSugerido ?? ""}`} cliente={clientes.find((c) => c.id_clnt === asignandoPlan)!} planes={planes} inicioSugerido={inicioPlanSugerido} onCancelar={() => setAsignandoPlan(null)} onAsignado={planAsignado} />}
                   {cobrando !== null && clientes.find((c) => c.id_clnt === cobrando) && <RegistrarCobroFormulario key={cobrando} cliente={clientes.find((c) => c.id_clnt === cobrando)!} onCancelar={() => setCobrando(null)} onRegistrado={(m) => cobroRegistrado(cobrando, m)} />}
                   {cobrosDe !== null && clientes.find((c) => c.id_clnt === cobrosDe) && <HistorialCobros key={cobrosDe} clienteId={cobrosDe} nombre={clientes.find((c) => c.id_clnt === cobrosDe)!.nombre} recarga={recargaCobros} onCerrar={() => setCobrosDe(null)} />}
                   {asignando !== null && <div className="space-y-3">
