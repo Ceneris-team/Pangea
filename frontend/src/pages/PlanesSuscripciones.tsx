@@ -8,6 +8,7 @@ import { ROLES } from "../config/roles";
 
 import ContratoFormulario from "../components/comercial/ContratoFormulario";
 import DetalleSuscripcion from "../components/comercial/DetalleSuscripcion";
+import RegistrarClienteFormulario from "../components/comercial/RegistrarClienteFormulario";
 import SolicitudesSuscripcion from "../components/comercial/SolicitudesSuscripcion";
 import { type Limites, type Plan, type Cliente, type Catalogo } from "../types/comercial";
 
@@ -39,6 +40,8 @@ function Cupo({ titulo, uso, limite }: { titulo: string; uso: number; limite: nu
 export default function PlanesSuscripciones() {
   const { nombreCompleto, rol, logout } = useAuth();
   const puedeGestionar = rol === ROLES.ADMINISTRADOR_COMERCIAL || rol === ROLES.ADMINISTRADOR;
+  // HU65: "Solo el rol Administrador Comercial puede registrar clientes en este módulo".
+  const puedeRegistrarCliente = rol === ROLES.ADMINISTRADOR_COMERCIAL;
   const [parametros, setParametros] = useSearchParams();
   const vista = ["suscripciones", "solicitudes"].includes(parametros.get("vista") ?? "") ? parametros.get("vista")! : "planes";
   const [planes, setPlanes] = useState<Plan[]>([]);
@@ -53,6 +56,8 @@ export default function PlanesSuscripciones() {
   const [editandoLimites, setEditandoLimites] = useState<number | null>(null);
   const [limites, setLimites] = useState<Limites>({ ubicaciones: 0, dispositivos: 0, usuarios: 0 });
   const [asignando, setAsignando] = useState<number | null>(null);
+  const [registrandoCliente, setRegistrandoCliente] = useState(false);
+  const [clienteNuevo, setClienteNuevo] = useState<number | null>(null);
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState("");
@@ -119,6 +124,29 @@ export default function PlanesSuscripciones() {
     setError("");
   }
 
+  function abrirRegistroCliente() {
+    setRegistrandoCliente(true);
+    setAsignando(null);
+    setClienteNuevo(null);
+    setError("");
+    setMensaje("");
+  }
+
+  async function clienteRegistrado(cliente: Cliente, mensajeRegistro: string) {
+    await recargar();
+    setRegistrandoCliente(false);
+    setClienteNuevo(cliente.id_clnt);
+    setMensaje(mensajeRegistro);
+  }
+
+  // HU65 CA3: ASIGNAR PLAN abre el contrato de HU45 con el cliente ya elegido.
+  function asignarPlanAlNuevo() {
+    if (clienteNuevo === null) return;
+    abrirSuscripcion(clienteNuevo);
+    setClienteNuevo(null);
+    setMensaje("");
+  }
+
   const clientesFiltrados = clientes.filter((cliente) =>
     `${cliente.nombre} ${cliente.ruc} ${cliente.plan_nombre ?? ""} ${cliente.estado_suscripcion}`.toLocaleLowerCase("es-PE")
       .includes(filtroCliente.trim().toLocaleLowerCase("es-PE"))
@@ -141,7 +169,10 @@ export default function PlanesSuscripciones() {
               <button type="button" onClick={() => setParametros({ vista: "suscripciones" })} className={`rounded-xl px-4 py-2 font-semibold ${vista === "suscripciones" ? "bg-[#ccff00] text-gray-950" : "bg-gray-200/70 dark:bg-white/10"}`}>Suscripciones</button>
             </nav>
             {error && <div role="alert" className="rounded-xl border border-red-400/50 bg-red-500/10 p-3 text-red-700 dark:text-red-200">{error}</div>}
-            {mensaje && <div role="status" className="rounded-xl border border-lime-500/50 bg-lime-500/10 p-3 text-lime-800 dark:text-lime-200">{mensaje}</div>}
+            {mensaje && <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-lime-500/50 bg-lime-500/10 p-3 text-lime-800 dark:text-lime-200">
+              <span>{mensaje}</span>
+              {vista === "suscripciones" && clienteNuevo !== null && <button type="button" className={primario} onClick={asignarPlanAlNuevo}>ASIGNAR PLAN</button>}
+            </div>}
             {cargando ? <p>Cargando planes y clientes...</p> : (
               <>
                 {vista === "solicitudes" && <SolicitudesSuscripcion comercial clientes={clientes} planes={planes} catalogo={catalogo} onCambio={recargar} />}
@@ -193,8 +224,12 @@ export default function PlanesSuscripciones() {
                 {vista === "suscripciones" && <section className="space-y-4">
                   <div className="flex flex-wrap items-end justify-between gap-4">
                     <div><h2 className="text-xl font-semibold">Clientes y suscripciones</h2><p className="text-sm text-gray-600 dark:text-gray-300">El plan corresponde a la empresa minera; sus usuarios comparten estos cupos.</p></div>
-                    {puedeGestionar && <button type="button" className={primario} onClick={() => abrirSuscripcion()} disabled={clientes.length === 0}>+ Crear suscripción</button>}
+                    <div className="flex flex-wrap gap-2">
+                      {puedeRegistrarCliente && <button type="button" className="rounded-xl border border-gray-300 px-4 py-2 font-semibold hover:border-lime-500 dark:border-white/20" onClick={abrirRegistroCliente} disabled={registrandoCliente}>Registrar cliente</button>}
+                      {puedeGestionar && <button type="button" className={primario} onClick={() => abrirSuscripcion()} disabled={clientes.length === 0}>+ Crear suscripción</button>}
+                    </div>
                   </div>
+                  {registrandoCliente && <RegistrarClienteFormulario onCancelar={() => setRegistrandoCliente(false)} onRegistrado={clienteRegistrado} />}
                   {asignando !== null && <div className="space-y-3">
                     <label className="block max-w-md">Empresa<select aria-label="Empresa del contrato" className={campo} value={asignando} onChange={e => setAsignando(Number(e.target.value))}>{clientes.map(c => <option key={c.id_clnt} value={c.id_clnt}>{c.nombre}</option>)}</select></label>
                     {clientes.find(c => c.id_clnt === asignando) && <ContratoFormulario key={asignando} cliente={clientes.find(c => c.id_clnt === asignando)!} planes={planes} catalogo={catalogo} onCancelar={() => setAsignando(null)} onGuardado={async () => { await recargar(); setAsignando(null); setHistorialCliente(null); setMensaje("Suscripción guardada correctamente"); }} />}
