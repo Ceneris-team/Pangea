@@ -30,6 +30,8 @@ import Parametros from "../pages/Parametros";
 import ColaIngesta from "../pages/ColaIngesta";
 import Paneles from "../pages/Paneles";
 import DetallePanel from "../pages/DetallePanel";
+import Alarmas from "../pages/Alarmas";
+import CrearAlarma from "../pages/CrearAlarma";
 
 // HU06: "Solo los roles Técnico CENERIS y Administrador tienen acceso a
 // este módulo." El backend lo exige igual vía require_permiso('Ingesta').
@@ -292,6 +294,28 @@ export default function AppRouter() {
             element={
               <ProtectedRoute>
                 <DetallePanel />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* HU27 (PP-72): listado de alarmas. Sin restricción de rol extra:
+              el backend exige permiso sobre 'Alarmas' y cada usuario solo
+              ve las suyas (Alarma.id_usr). */}
+          <Route
+            path="/alarmas"
+            element={
+              <ProtectedRoute>
+                <Alarmas />
+              </ProtectedRoute>
+            }
+          />
+          {/* HU28 (PP-73): alta de alarma en dos pasos (datos generales y
+              condiciones de HU29). */}
+          <Route
+            path="/alarmas/nueva"
+            element={
+              <ProtectedRoute>
+                <CrearAlarma />
               </ProtectedRoute>
             }
           />
