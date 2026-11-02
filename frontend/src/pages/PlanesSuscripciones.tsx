@@ -11,6 +11,8 @@ import DetalleSuscripcion from "../components/comercial/DetalleSuscripcion";
 import RegistrarClienteFormulario from "../components/comercial/RegistrarClienteFormulario";
 import AsignarPlanFormulario from "../components/comercial/AsignarPlanFormulario";
 import { fechaVisible } from "../components/comercial/asignacionPlan";
+import RegistrarCobroFormulario from "../components/comercial/RegistrarCobroFormulario";
+import HistorialCobros from "../components/comercial/HistorialCobros";
 import SolicitudesSuscripcion from "../components/comercial/SolicitudesSuscripcion";
 import { type Limites, type Plan, type Cliente, type Catalogo } from "../types/comercial";
 
@@ -46,6 +48,8 @@ export default function PlanesSuscripciones() {
   const puedeRegistrarCliente = rol === ROLES.ADMINISTRADOR_COMERCIAL;
   // HU45: "Solo el rol Administrador Comercial puede asignar planes a clientes".
   const puedeAsignarPlan = rol === ROLES.ADMINISTRADOR_COMERCIAL;
+  // PP-67: "Solo el rol Administrador Comercial puede registrar cobros".
+  const puedeRegistrarCobro = rol === ROLES.ADMINISTRADOR_COMERCIAL;
   const [parametros, setParametros] = useSearchParams();
   const vista = ["suscripciones", "solicitudes"].includes(parametros.get("vista") ?? "") ? parametros.get("vista")! : "planes";
   const [planes, setPlanes] = useState<Plan[]>([]);
@@ -63,6 +67,9 @@ export default function PlanesSuscripciones() {
   const [registrandoCliente, setRegistrandoCliente] = useState(false);
   const [clienteNuevo, setClienteNuevo] = useState<number | null>(null);
   const [asignandoPlan, setAsignandoPlan] = useState<number | null>(null);
+  const [cobrando, setCobrando] = useState<number | null>(null);
+  const [cobrosDe, setCobrosDe] = useState<number | null>(null);
+  const [recargaCobros, setRecargaCobros] = useState(0);
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState("");
@@ -150,6 +157,7 @@ export default function PlanesSuscripciones() {
     setAsignandoPlan(idCliente);
     setAsignando(null);
     setRegistrandoCliente(false);
+    setCobrando(null);
     setError("");
   }
 
@@ -158,6 +166,25 @@ export default function PlanesSuscripciones() {
     setAsignandoPlan(null);
     setHistorialCliente(null);
     setMensaje(mensajeAsignacion);
+  }
+
+  // PP-67 CA1: "Registrar cobro" en la tarjeta de un cliente con plan asignado.
+  function abrirCobro(idCliente: number) {
+    setCobrando(idCliente);
+    setCobrosDe(null);
+    setAsignandoPlan(null);
+    setAsignando(null);
+    setRegistrandoCliente(false);
+    setError("");
+    setMensaje("");
+  }
+
+  // PP-67 CA2/CA3: tras guardar se abre el historial con el cobro nuevo.
+  async function cobroRegistrado(idCliente: number, mensajeCobro: string) {
+    setCobrando(null);
+    setCobrosDe(idCliente);
+    setRecargaCobros((n) => n + 1);
+    setMensaje(mensajeCobro);
   }
 
   // HU65 CA3: ASIGNAR PLAN lleva al flujo de HU45 con el cliente recién registrado.
@@ -252,6 +279,8 @@ export default function PlanesSuscripciones() {
                   </div>
                   {registrandoCliente && <RegistrarClienteFormulario onCancelar={() => setRegistrandoCliente(false)} onRegistrado={clienteRegistrado} />}
                   {asignandoPlan !== null && clientes.find((c) => c.id_clnt === asignandoPlan) && <AsignarPlanFormulario key={asignandoPlan} cliente={clientes.find((c) => c.id_clnt === asignandoPlan)!} planes={planes} onCancelar={() => setAsignandoPlan(null)} onAsignado={planAsignado} />}
+                  {cobrando !== null && clientes.find((c) => c.id_clnt === cobrando) && <RegistrarCobroFormulario key={cobrando} cliente={clientes.find((c) => c.id_clnt === cobrando)!} onCancelar={() => setCobrando(null)} onRegistrado={(m) => cobroRegistrado(cobrando, m)} />}
+                  {cobrosDe !== null && clientes.find((c) => c.id_clnt === cobrosDe) && <HistorialCobros key={cobrosDe} clienteId={cobrosDe} nombre={clientes.find((c) => c.id_clnt === cobrosDe)!.nombre} recarga={recargaCobros} onCerrar={() => setCobrosDe(null)} />}
                   {asignando !== null && <div className="space-y-3">
                     <label className="block max-w-md">Empresa<select aria-label="Empresa del contrato" className={campo} value={asignando} onChange={e => setAsignando(Number(e.target.value))}>{clientes.map(c => <option key={c.id_clnt} value={c.id_clnt}>{c.nombre}</option>)}</select></label>
                     {clientes.find(c => c.id_clnt === asignando) && <ContratoFormulario key={asignando} cliente={clientes.find(c => c.id_clnt === asignando)!} planes={planes} catalogo={catalogo} onCancelar={() => setAsignando(null)} onGuardado={async () => { await recargar(); setAsignando(null); setHistorialCliente(null); setMensaje("Suscripción guardada correctamente"); }} />}
@@ -272,6 +301,10 @@ export default function PlanesSuscripciones() {
                     {puedeAsignarPlan && <button type="button" className="mr-3 mt-5 rounded-xl bg-[#ccff00] px-3 py-2 text-sm font-semibold text-gray-950 hover:bg-[#b9eb00]" onClick={() => abrirAsignacionPlan(cliente.id_clnt)}>Asignar plan</button>}
                     {puedeGestionar && <button type="button" className="mt-5 rounded-xl border border-gray-300 px-3 py-2 text-sm font-semibold hover:border-lime-500 dark:border-white/20" onClick={() => { abrirSuscripcion(cliente.id_clnt); }}>Gestionar suscripción</button>}
                     <button type="button" className="ml-3 mt-3 text-sm font-semibold underline" onClick={() => setHistorialCliente(historialCliente === cliente.id_clnt ? null : cliente.id_clnt)}>Condiciones e historial</button>
+                    {(puedeGestionar || (puedeRegistrarCobro && cliente.suscripcion_id !== null)) && <div className="mt-3 flex flex-wrap gap-3 border-t border-gray-200 pt-3 dark:border-white/10">
+                      {puedeRegistrarCobro && cliente.suscripcion_id !== null && <button type="button" className="rounded-xl border border-lime-500 px-3 py-2 text-sm font-semibold hover:bg-lime-500/10" onClick={() => abrirCobro(cliente.id_clnt)}>Registrar cobro</button>}
+                      {puedeGestionar && <button type="button" className="text-sm font-semibold underline" onClick={() => { setCobrosDe(cobrosDe === cliente.id_clnt ? null : cliente.id_clnt); setCobrando(null); }}>Historial de cobros</button>}
+                    </div>}
                   </article>)}</div>
                   {historialCliente !== null && <DetalleSuscripcion key={historialCliente} clienteId={historialCliente} gestionar onCambio={recargar} />}
                 </section>}
