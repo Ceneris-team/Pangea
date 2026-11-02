@@ -26,6 +26,7 @@ from app.models import (
 )
 from app.security.dependencies import get_current_user
 from app.security.permisos import EDICION, LECTURA, require_permiso
+from app.services import clientes as servicio_clientes
 from app.services.contratos import (
     aplicar_programadas,
     auditar,
@@ -228,6 +229,44 @@ def listar_clientes(
     _usuario: dict = Depends(require_permiso("Comercial", LECTURA)),
 ):
     return [resumen_cliente(db, cliente) for cliente in db.query(Cliente).order_by(Cliente.rzn_scl).all()]
+
+
+class ClienteRegistrar(BaseModel):
+    # Sin restricciones de Pydantic a propósito: services/clientes.py valida
+    # y responde con el mensaje en español que muestra el formulario.
+    razon_social: str = ""
+    ruc: str = ""
+    correo_contacto: str = ""
+    telefono_contacto: str | None = None
+
+
+@router.post("/clientes", status_code=201)
+def registrar_cliente(
+    body: ClienteRegistrar,
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(require_permiso("Comercial", EDICION)),
+):
+    """HU65 CA2: registra al cliente y lo deja listo para asignarle un plan
+    (CA3, HU45). «Solo el rol Administrador Comercial puede registrar
+    clientes en este módulo»: el Administrador CENERIS también tiene
+    Comercial/Edición, pero registra empresas desde POST /empresas."""
+    if usuario.get("rol") != "Administrador Comercial" or usuario.get("scope") != "global":
+        raise HTTPException(
+            status_code=403, detail="Solo el Administrador Comercial puede registrar clientes"
+        )
+    cliente = servicio_clientes.registrar_cliente(
+        db,
+        razon_social=body.razon_social,
+        ruc=body.ruc,
+        correo=body.correo_contacto,
+        telefono=body.telefono_contacto,
+    )
+    auditar(
+        db, usuario, "crear", "Cliente",
+        despues={"cliente_id": cliente.id_clnt, "razon_social": cliente.rzn_scl, "ruc": cliente.rc},
+    )
+    db.commit()
+    return {"mensaje": "Cliente registrado correctamente", "cliente": resumen_cliente(db, cliente)}
 
 
 @router.get("/mi-plan")
