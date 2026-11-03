@@ -17,6 +17,7 @@
  */
 import { esAdministracion, esCeneris } from "../config/espacios";
 import { textoDeProyectos } from "../config/terminologia";
+import { mensajeDeDetalle } from "./mensajeError";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
 
@@ -167,7 +168,9 @@ async function manejarRespuesta<T>(
       window.dispatchEvent(new Event("pangea:acceso-rechazado"));
     }
     const data = await res.json().catch(() => null);
-    throw new ApiError(data?.detail ?? "Ocurrió un error inesperado", res.status);
+    // DEF-02 (PP-225): un 422 de validación trae `detail` como lista de
+    // objetos; mensajeDeDetalle lo convierte en texto legible.
+    throw new ApiError(mensajeDeDetalle(data?.detail), res.status);
   }
 
   return res.json() as Promise<T>;
