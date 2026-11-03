@@ -18,9 +18,12 @@ Variables de entorno (ver .env.example):
     OBJECT_STORAGE_SECRET_KEY  secret del bucket
 """
 
+import datetime as dt
 import os
 
 import boto3
+
+PREFIJO_DAT = "datos-crudos/"
 
 
 class ObjectStorageNoConfigurado(Exception):
@@ -43,6 +46,22 @@ def _requerido(nombre: str) -> str:
 
 def bucket() -> str:
     return _requerido("OBJECT_STORAGE_BUCKET")
+
+
+def esta_configurado() -> bool:
+    """True si hay un bucket de Object Storage configurado. Permite que los
+    usos OPCIONALES -como archivar el .dat crudo en la ingesta- se salteen
+    limpio en entornos sin bucket (desarrollo local, CI) en vez de reventar,
+    a diferencia del respaldo, donde el bucket es obligatorio."""
+    return bool(os.environ.get("OBJECT_STORAGE_BUCKET"))
+
+
+def clave_dat(id_cnxn: int, nombre_archivo: str, fecha: dt.date | None = None) -> str:
+    """Nombre del objeto para archivar un .dat crudo (HT-06 CA3). Particiona
+    por conexión y por año/mes para que el bucket quede navegable y listar por
+    periodo sea simple. `fecha` es la de archivado (hoy por defecto)."""
+    fecha = fecha or dt.date.today()
+    return f"{PREFIJO_DAT}cnxn-{id_cnxn}/{fecha:%Y}/{fecha:%m}/{nombre_archivo}"
 
 
 def cliente_s3():
@@ -69,6 +88,16 @@ def subir_archivo(ruta_local: str, clave: str) -> None:
     objeto). Usa upload_file, que hace multipart por debajo para archivos
     grandes -un dump de la base puede pesar-, sin cargarlo entero en memoria."""
     cliente_s3().upload_file(ruta_local, bucket(), clave)
+
+
+def subir_contenido(
+    datos: bytes, clave: str, content_type: str = "application/octet-stream"
+) -> None:
+    """Sube datos que ya están en memoria al bucket bajo `clave`, sin pasar
+    por disco. Para archivos chicos (p. ej. el .dat crudo que la ingesta
+    acaba de bajar por FTP); el dump grande del respaldo usa subir_archivo
+    (multipart desde disco)."""
+    cliente_s3().put_object(Bucket=bucket(), Key=clave, Body=datos, ContentType=content_type)
 
 
 def listar(prefijo: str) -> list[dict]:
