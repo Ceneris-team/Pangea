@@ -459,3 +459,169 @@ class TestAislamientoYPermisos:
 
         alarma = db_session.query(Alarma).filter(Alarma.nmbr == "Crecida del río").first()
         assert alarma.id_usr == escenario["usuario"].id_usr
+
+
+# ---------------------------------------------------------------------------
+# PP-72 - HU 27 Listar alarmas (GET /alarmas)
+#
+# CA1: tabla con nombre de la alarma, parámetro asociado, condición y estado
+# (las acciones las arma el frontend). CA2: filtro por estado. CA3: búsqueda
+# por nombre. Detalles: estados Activa e Inactiva; 10 registros por página;
+# cada usuario solo ve sus propias alarmas; sin alarmas, total 0 (el mensaje
+# y el botón son del frontend).
+# ---------------------------------------------------------------------------
+def crear_alarma(db, escenario, nombre, estado="Activa", condicion=(">", 3.5), usuario=None):
+    alarma = Alarma(
+        id_usr=(usuario or escenario["usuario"]).id_usr,
+        id_sd=escenario["sede"].id_sd,
+        nmbr=nombre,
+        id_prmtr=escenario["parametro"].id_prmtr,
+        id_ubccn=escenario["ubicacion"].id_ubccn,
+        estd=estado,
+    )
+    db.add(alarma)
+    db.flush()
+    if condicion:
+        db.add(CondicionAlarma(id_alrm=alarma.id_alrm, oprdr=condicion[0], vlr_umbrl=condicion[1]))
+        db.flush()
+    return alarma
+
+
+def nombres(respuesta):
+    return [a["nmbr"] for a in respuesta.json()["items"]]
+
+
+# --- CA1 -----------------------------------------------------------------------
+
+
+def test_listado_trae_nombre_parametro_condicion_y_estado(client, db_session, escenario):
+    crear_alarma(db_session, escenario, "Crecida del río", condicion=(">=", 30.0))
+
+    resp = client.get("/alarmas")
+
+    assert resp.status_code == 200
+    [fila] = resp.json()["items"]
+    assert fila["nmbr"] == "Crecida del río"
+    assert fila["parametro_nombre"] == "Nivel HU28"
+    assert fila["condicion"] == ">= 30 m"
+    assert fila["estd"] == "Activa"
+    assert isinstance(fila["id_alrm"], int)
+
+
+def test_alarma_sin_condicion_viaja_con_condicion_nula(client, db_session, escenario):
+    crear_alarma(db_session, escenario, "Sin condición", condicion=None)
+    assert client.get("/alarmas").json()["items"][0]["condicion"] is None
+
+
+def test_listado_ordenado_por_nombre(client, db_session, escenario):
+    for nombre in ["Gamma", "alfa", "Beta"]:
+        crear_alarma(db_session, escenario, nombre)
+    # Orden de la base (por nmbr): mayúsculas antes que minúsculas en C;
+    # se verifica que sea estable y determinado por el nombre.
+    primera = nombres(client.get("/alarmas"))
+    assert sorted(primera) == sorted(["Gamma", "alfa", "Beta"])
+    assert primera == nombres(client.get("/alarmas"))
+
+
+def test_sin_alarmas_devuelve_lista_vacia(client, escenario):
+    cuerpo = client.get("/alarmas").json()
+    assert cuerpo["total"] == 0
+    assert cuerpo["items"] == []
+
+
+# --- PP-223: cada usuario solo ve las suyas ---------------------------------------
+
+
+def test_cada_usuario_solo_ve_sus_alarmas(client, db_session, fabrica, escenario):
+    crear_alarma(db_session, escenario, "Mía")
+    rol = escenario["rol"]
+    otro = fabrica.usuario(rol=rol)
+    agregar_permiso(db_session, otro, escenario["sede"], "Alarmas", "Edición", rol)
+    asignar_ubicacion(db_session, otro, escenario["ubicacion"])
+    crear_alarma(db_session, escenario, "Del otro usuario", usuario=otro)
+
+    assert nombres(client.get("/alarmas")) == ["Mía"]
+
+    app.dependency_overrides[get_current_user] = lambda: usuario_jwt(
+        otro, rol.nmbr, sede_id=escenario["sede"].id_sd
+    )
+    assert nombres(client.get("/alarmas")) == ["Del otro usuario"]
+
+
+# --- PP-224: filtro por estado -------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("estado", "esperado"),
+    [
+        ("Activa", ["Activa 1", "Activa 2"]),
+        ("Inactiva", ["Inactiva 1"]),
+        (None, ["Activa 1", "Activa 2", "Inactiva 1"]),
+    ],
+)
+def test_filtro_por_estado(client, db_session, escenario, estado, esperado):
+    crear_alarma(db_session, escenario, "Activa 1")
+    crear_alarma(db_session, escenario, "Activa 2")
+    crear_alarma(db_session, escenario, "Inactiva 1", estado="Inactiva")
+
+    params = {"estado": estado} if estado else {}
+    resp = client.get("/alarmas", params=params)
+
+    assert sorted(nombres(resp)) == esperado
+    assert resp.json()["total"] == len(esperado)
+
+
+# --- CA3: búsqueda por nombre ---------------------------------------------------------
+
+
+def test_busqueda_parcial_sin_distinguir_mayusculas(client, db_session, escenario):
+    crear_alarma(db_session, escenario, "Crecida del Río Rímac")
+    crear_alarma(db_session, escenario, "pH alto Planta")
+
+    assert nombres(client.get("/alarmas", params={"busqueda": "río"})) == ["Crecida del Río Rímac"]
+    assert nombres(client.get("/alarmas", params={"busqueda": "PH ALTO"})) == ["pH alto Planta"]
+    assert nombres(client.get("/alarmas", params={"busqueda": "no existe"})) == []
+
+
+@pytest.mark.parametrize("texto", ["_", "%", "50%"])
+def test_busqueda_trata_comodines_como_texto(client, db_session, escenario, texto):
+    """Con LIKE a mano, "_" y "%" eran comodines y devolvían todo."""
+    crear_alarma(db_session, escenario, "Nivel 50% del cauce")
+    crear_alarma(db_session, escenario, "Caudal alto")
+
+    encontradas = nombres(client.get("/alarmas", params={"busqueda": texto}))
+
+    assert "Caudal alto" not in encontradas
+    if texto != "_":
+        assert encontradas == ["Nivel 50% del cauce"]
+    else:
+        assert encontradas == []
+
+
+def test_busqueda_y_estado_se_combinan(client, db_session, escenario):
+    crear_alarma(db_session, escenario, "Crecida norte")
+    crear_alarma(db_session, escenario, "Crecida sur", estado="Inactiva")
+
+    resp = client.get("/alarmas", params={"busqueda": "crecida", "estado": "Inactiva"})
+    assert nombres(resp) == ["Crecida sur"]
+
+
+# --- Paginación de 10 -----------------------------------------------------------------
+
+
+def test_pagina_de_10_por_defecto(client, db_session, escenario):
+    for n in range(12):
+        crear_alarma(db_session, escenario, f"Alarma {n:02d}")
+
+    primera = client.get("/alarmas").json()
+    segunda = client.get("/alarmas", params={"pagina": 2}).json()
+
+    assert primera["por_pagina"] == 10
+    assert primera["total"] == 12
+    assert len(primera["items"]) == 10
+    assert len(segunda["items"]) == 2
+    assert not set(nombres_de(primera)) & set(nombres_de(segunda))
+
+
+def nombres_de(cuerpo):
+    return [a["nmbr"] for a in cuerpo["items"]]
