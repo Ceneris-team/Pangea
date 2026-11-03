@@ -176,7 +176,12 @@ def listar_alarmas(
     )
 
     if busqueda:
-        query = query.filter(func.lower(Alarma.nmbr).like(f"%{busqueda.lower()}%"))
+        # PP-72 CA3: coincidencia parcial sin distinguir mayúsculas. autoescape
+        # hace que "%" y "_" se busquen como texto y no como comodines de LIKE
+        # (con like() a mano, buscar "_" devolvía todas las alarmas).
+        query = query.filter(
+            func.lower(Alarma.nmbr).contains(busqueda.strip().lower(), autoescape=True)
+        )
     if estado:
         query = query.filter(Alarma.estd == estado)
 
