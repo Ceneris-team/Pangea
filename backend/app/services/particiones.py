@@ -125,6 +125,12 @@ def asegurar_particiones(conexion, desde: dt.date, cantidad: int) -> list:
     nombres efectivamente creados (vacía si ya estaban todas)."""
     from sqlalchemy import text
 
+    if conexion.execute(text("SELECT current_user")).scalar_one() == "pangea_app":
+        return conexion.execute(
+            text("SELECT public.telemetria_particiones(:desde, :cantidad)"),
+            {"desde": desde, "cantidad": cantidad},
+        ).scalar_one()
+
     existentes = particiones_existentes(conexion)
     creadas = []
     for mes in meses_a_cubrir(desde, cantidad):

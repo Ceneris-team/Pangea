@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import Usuario
+from app.security.auditoria_contexto import marcar_actor
 
 from .entorno import resolver_entorno
 from .jwt_auth import TokenExpirado, TokenInvalido, decode_access_token
@@ -84,4 +85,7 @@ def get_current_user(
                 detail="Tu sesión ya no es válida porque la contraseña fue actualizada. Vuelve a iniciar sesión.",
             )
 
-    return resolver_entorno(db, payload, x_cliente_id, x_proyecto_id)
+    marcar_actor(db, payload, origen="API")
+    resuelto = resolver_entorno(db, payload, x_cliente_id, x_proyecto_id)
+    marcar_actor(db, resuelto, origen="API")
+    return resuelto

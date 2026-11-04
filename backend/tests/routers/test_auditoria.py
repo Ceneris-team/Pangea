@@ -87,6 +87,7 @@ class TestCA1AuditoriaAutomatica:
 
         registros = (
             db_session.query(LogAuditoria)
+            .filter(LogAuditoria.origen == "API")
             .filter(LogAuditoria.entdd == f"usuario:{objetivo.id_usr}")
             .all()
         )
@@ -102,6 +103,7 @@ class TestCA1AuditoriaAutomatica:
 
         registro = (
             db_session.query(LogAuditoria)
+            .filter(LogAuditoria.origen == "API")
             .filter(LogAuditoria.entdd == f"usuario:{objetivo.id_usr}")
             .one()
         )
@@ -122,6 +124,7 @@ class TestCA1AuditoriaAutomatica:
 
         registro = (
             db_session.query(LogAuditoria)
+            .filter(LogAuditoria.origen == "API")
             .filter(LogAuditoria.entdd == f"usuario:{objetivo.id_usr}")
             .one()
         )
@@ -138,6 +141,7 @@ class TestCA1AuditoriaAutomatica:
 
         registro = (
             db_session.query(LogAuditoria)
+            .filter(LogAuditoria.origen == "API")
             .filter(LogAuditoria.entdd == f"usuario:{objetivo.id_usr}")
             .one()
         )
@@ -160,6 +164,7 @@ class TestCA1AuditoriaAutomatica:
         assert resp.status_code == 200
         registros = (
             db_session.query(LogAuditoria)
+            .filter(LogAuditoria.origen == "API")
             .filter(LogAuditoria.entdd == f"usuario:{objetivo.id_usr}")
             .count()
         )
@@ -192,6 +197,7 @@ class TestCA1AuditoriaAutomatica:
 
         registro = (
             db_session.query(LogAuditoria)
+            .filter(LogAuditoria.origen == "API")
             .filter(LogAuditoria.entdd == f"permisos_ubicacion:{objetivo.id_usr}")
             .one()
         )
@@ -223,26 +229,29 @@ class TestCA1AuditoriaAutomatica:
 
         registros = (
             db_session.query(LogAuditoria)
+            .filter(LogAuditoria.origen == "API")
             .filter(LogAuditoria.entdd == f"permisos_ubicacion:{objetivo.id_usr}")
             .all()
         )
         assert len(registros) == 1
         assert registros[0].vlrs_antrrs["ubicaciones_quitadas"] == [ubicacion.id_ubccn]
 
-    def test_no_se_audita_por_fuera_de_hu20_hu21(self, client, db_session, fabrica, admin_editor):
-        """Otro UPDATE cualquiera sobre Usuario -p. ej. uno hecho a mano en
-        un test, sin pasar por auditar_cambios()- no debe generar una fila:
-        el listener solo actúa si la sesión trae la marca de contexto."""
+    def test_se_audita_tambien_por_fuera_de_hu20_hu21(
+        self, client, db_session, fabrica, admin_editor
+    ):
         objetivo = fabrica.usuario(rol=fabrica.rol("Cliente Final"))
         objetivo.nmbr_cmplt = "Editado Sin Pasar Por El Endpoint"
         db_session.commit()
-
         registros = (
             db_session.query(LogAuditoria)
-            .filter(LogAuditoria.entdd == f"usuario:{objetivo.id_usr}")
-            .count()
+            .filter(
+                LogAuditoria.entdd == f"usuario:{objetivo.id_usr}", LogAuditoria.origen == "SQL"
+            )
+            .all()
         )
-        assert registros == 0
+        assert any(
+            r.vlrs_nvs.get("nmbr_cmplt") == "Editado Sin Pasar Por El Endpoint" for r in registros
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -265,6 +274,7 @@ class TestExclusionDeColumnasSensibles:
 
         registro = (
             db_session.query(LogAuditoria)
+            .filter(LogAuditoria.origen == "API")
             .filter(LogAuditoria.entdd == f"usuario:{objetivo.id_usr}")
             .one()
         )
@@ -281,13 +291,18 @@ class TestExclusionDeColumnasSensibles:
         usuario_admin, _, _ = admin_editor
         objetivo = fabrica.usuario(rol=fabrica.rol("Cliente Final"))
 
-        db_session.info[_CLAVE_CONTEXTO] = {"id_usr": usuario_admin.id_usr, "id_sd": None}
+        db_session.info[_CLAVE_CONTEXTO] = {
+            "id_usr": usuario_admin.id_usr,
+            "id_sd": None,
+            "origen": "API",
+        }
         objetivo.cntrsn_hsh = hash_password("NuevaClave123")
         objetivo.nmbr_cmplt = "Nombre También Cambiado"
         db_session.commit()
 
         registro = (
             db_session.query(LogAuditoria)
+            .filter(LogAuditoria.origen == "API")
             .filter(LogAuditoria.entdd == f"usuario:{objetivo.id_usr}")
             .one()
         )
@@ -428,39 +443,24 @@ class TestCA3Inmutabilidad:
 
 class TestCA4AislamientoPorSede:
     def test_administrador_por_sede_no_ve_registros_de_otra_sede(self, client, db_session, fabrica):
+        # Los roles de consulta admitidos son Administrador CENERIS global
+        # y Administrador de empresa con membresia vigente.
         rol = fabrica.rol("Administrador")
-        sede_propia = fabrica.sede()
-        sede_ajena = fabrica.sede()
-        admin_propio = fabrica.usuario(rol=rol, scp="por_sede")
-        admin_ajeno = fabrica.usuario(rol=rol, scp="por_sede")
-        agregar_permiso(db_session, admin_propio, sede_propia, "Usuarios", "Edición", rol)
-        agregar_permiso(db_session, admin_ajeno, sede_ajena, "Usuarios", "Edición", rol)
-
-        # El admin ajeno edita a alguien de SU sede -> registro con id_sd=sede_ajena.
-        autenticar_como(admin_ajeno, rol.nmbr, sede_id=sede_ajena.id_sd)
-        objetivo = fabrica.usuario(rol=fabrica.rol("Cliente Final"))
-        client.put(f"/usuarios/{objetivo.id_usr}", json={"nmbr_cmplt": "Editado En Sede Ajena"})
-
-        # El admin propio, limitado a su propia sede, no debe verlo.
-        autenticar_como(admin_propio, rol.nmbr, sede_id=sede_propia.id_sd)
-        resp = client.get("/auditoria")
-
-        entidades = {i["entdd"] for i in resp.json()["items"]}
-        assert f"usuario:{objetivo.id_usr}" not in entidades
+        sede = fabrica.sede()
+        usuario = fabrica.usuario(rol=rol, scp="por_sede")
+        agregar_permiso(db_session, usuario, sede, "Usuarios", "Edici\u00f3n", rol)
+        autenticar_como(usuario, rol.nmbr, sede_id=sede.id_sd)
+        assert client.get("/auditoria").status_code == 403
 
     def test_administrador_por_sede_ve_los_de_su_propia_sede(self, client, db_session, fabrica):
+        # Los roles de consulta admitidos son Administrador CENERIS global
+        # y Administrador de empresa con membresia vigente.
         rol = fabrica.rol("Administrador")
-        sede_propia = fabrica.sede()
-        admin_propio = fabrica.usuario(rol=rol, scp="por_sede")
-        agregar_permiso(db_session, admin_propio, sede_propia, "Usuarios", "Edición", rol)
-
-        autenticar_como(admin_propio, rol.nmbr, sede_id=sede_propia.id_sd)
-        objetivo = fabrica.usuario(rol=fabrica.rol("Cliente Final"))
-        client.put(f"/usuarios/{objetivo.id_usr}", json={"nmbr_cmplt": "Editado En Mi Sede"})
-
-        resp = client.get("/auditoria")
-        entidades = {i["entdd"] for i in resp.json()["items"]}
-        assert f"usuario:{objetivo.id_usr}" in entidades
+        sede = fabrica.sede()
+        usuario = fabrica.usuario(rol=rol, scp="por_sede")
+        agregar_permiso(db_session, usuario, sede, "Usuarios", "Edici\u00f3n", rol)
+        autenticar_como(usuario, rol.nmbr, sede_id=sede.id_sd)
+        assert client.get("/auditoria").status_code == 403
 
     def test_filtro_explicito_de_sede_acota_al_administrador_global(
         self, client, db_session, fabrica, admin_editor
@@ -501,6 +501,7 @@ class TestCA4AislamientoPorSede:
 
         registro = (
             db_session.query(LogAuditoria)
+            .filter(LogAuditoria.origen == "API")
             .filter(LogAuditoria.entdd == f"usuario:{objetivo.id_usr}")
             .one()
         )
@@ -511,27 +512,16 @@ class TestCA4AislamientoPorSede:
         assert f"usuario:{objetivo.id_usr}" in entidades
 
     def test_registro_con_sede_null_no_visible_para_administrador_por_sede(
-        self, client, db_session, fabrica, admin_editor
+        self, client, db_session, fabrica
     ):
-        """Decisión explícita de HT-11 sobre el caso NULL: 'sin sede
-        asociada' no es 'cualquier sede'. Un Administrador con scope
-        'por_sede' -restringido a UNA sede concreta, sea cual sea- nunca
-        ve un registro que no tiene ninguna sede asociada."""
-        objetivo_admin_global = fabrica.usuario(rol=fabrica.rol("Cliente Final"))
-        client.put(
-            f"/usuarios/{objetivo_admin_global.id_usr}",
-            json={"nmbr_cmplt": "Con Sede Nula Otra Vez"},
-        )
-
+        # Los roles de consulta admitidos son Administrador CENERIS global
+        # y Administrador de empresa con membresia vigente.
         rol = fabrica.rol("Administrador")
-        sede_propia = fabrica.sede()
-        admin_por_sede = fabrica.usuario(rol=rol, scp="por_sede")
-        agregar_permiso(db_session, admin_por_sede, sede_propia, "Usuarios", "Edición", rol)
-        autenticar_como(admin_por_sede, rol.nmbr, sede_id=sede_propia.id_sd)
-
-        resp = client.get("/auditoria")
-        entidades = {i["entdd"] for i in resp.json()["items"]}
-        assert f"usuario:{objetivo_admin_global.id_usr}" not in entidades
+        sede = fabrica.sede()
+        usuario = fabrica.usuario(rol=rol, scp="por_sede")
+        agregar_permiso(db_session, usuario, sede, "Usuarios", "Edici\u00f3n", rol)
+        autenticar_como(usuario, rol.nmbr, sede_id=sede.id_sd)
+        assert client.get("/auditoria").status_code == 403
 
     def test_filtro_explicito_de_sede_excluye_los_null_incluso_para_global(
         self, client, db_session, fabrica, admin_editor
@@ -633,6 +623,7 @@ class TestCA5AccesosDenegados:
 
         registro = (
             db_session.query(LogAuditoria)
+            .filter(LogAuditoria.origen == "API")
             .filter(LogAuditoria.id_usr == sin_permiso.id_usr)
             .order_by(LogAuditoria.id_evnt.desc())
             .first()

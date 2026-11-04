@@ -50,9 +50,15 @@ def usuario_jwt(usuario_db, rol_nombre, sede_id=None, scope="por_sede"):
 
 
 def agregar_permiso(db, usuario_db, sede_db, modulo, nivel, rol_db):
-    existente = db.query(PermisoUsuarioSede).filter_by(
-        id_usr=usuario_db.id_usr, id_sd=sede_db.id_sd, mdl=modulo,
-    ).first()
+    existente = (
+        db.query(PermisoUsuarioSede)
+        .filter_by(
+            id_usr=usuario_db.id_usr,
+            id_sd=sede_db.id_sd,
+            mdl=modulo,
+        )
+        .first()
+    )
     if existente:
         existente.nvl = nivel
         db.flush()
@@ -239,45 +245,69 @@ class TestSoloClienteFinal:
 
 
 class TestGuardarPermisos:
-    def test_tecnico_con_permiso_de_modulo_no_puede_gestionar_accesos(self, client, db_session, fabrica, cliente_final, admin_editor):
+    def test_tecnico_con_permiso_de_modulo_no_puede_gestionar_accesos(
+        self, client, db_session, fabrica, cliente_final, admin_editor
+    ):
         objetivo, _, _ = cliente_final
         _, sede, _ = admin_editor
         rol = fabrica.rol("Técnico CENERIS")
         tecnico = fabrica.usuario(rol=rol)
         agregar_permiso(db_session, tecnico, sede, "Usuarios", "Edición", rol)
-        app.dependency_overrides[get_current_user] = lambda: usuario_jwt(tecnico, rol.nmbr, sede.id_sd)
+        app.dependency_overrides[get_current_user] = lambda: usuario_jwt(
+            tecnico, rol.nmbr, sede.id_sd
+        )
         ruta = f"/usuarios/{objetivo.id_usr}/permisos-ubicaciones"
         assert client.get(ruta).status_code == 403
         assert client.put(ruta, json={"ubicacion_ids": []}).status_code == 403
 
-    def test_contexto_distingue_proyectos_y_explica_restriccion(self, client, db_session, fabrica, cliente_final, dos_ubicaciones):
+    def test_contexto_distingue_proyectos_y_explica_restriccion(
+        self, client, db_session, fabrica, cliente_final, dos_ubicaciones
+    ):
         usuario, sede, _ = cliente_final
         otra_sede = fabrica.sede()
         ajena = crear_ubicacion(db_session, otra_sede, "Ubicación Norte")
         items = client.get(f"/usuarios/{usuario.id_usr}/permisos-ubicaciones").json()["items"]
         propias = [i for i in items if i["id_sd"] == sede.id_sd]
-        assert all(i["empresa"] and i["sede"] and i["estado"] == "Activa" and i["puede_asignar"] for i in propias)
+        assert all(
+            i["empresa"] and i["sede"] and i["estado"] == "Activa" and i["puede_asignar"]
+            for i in propias
+        )
         restringida = next(i for i in items if i["id_ubccn"] == ajena.id_ubccn)
         assert not restringida["puede_asignar"]
         assert "sede" in restringida["motivo_restriccion"]
 
-    @pytest.mark.parametrize("rol,scope", [("Administrador Comercial", "global"), ("Usuario Empresa", "por_cliente"), ("Lector desconocido", "por_sede")])
-    def test_rechaza_destinatarios_que_no_son_cliente_final(self, client, fabrica, admin_editor, rol, scope):
+    @pytest.mark.parametrize(
+        "rol,scope",
+        [
+            ("Administrador Comercial", "global"),
+            ("Usuario Empresa", "por_cliente"),
+            ("Lector desconocido", "por_sede"),
+        ],
+    )
+    def test_rechaza_destinatarios_que_no_son_cliente_final(
+        self, client, fabrica, admin_editor, rol, scope
+    ):
         objetivo = fabrica.usuario(rol=fabrica.rol(rol), scp=scope)
         ruta = f"/usuarios/{objetivo.id_usr}/permisos-ubicaciones"
         assert client.get(ruta).status_code == 409
         assert client.put(ruta, json={"ubicacion_ids": []}).status_code == 409
 
-    def test_asignacion_fuera_de_sede_no_altera_conjunto_anterior(self, client, db_session, fabrica, cliente_final, dos_ubicaciones):
+    def test_asignacion_fuera_de_sede_no_altera_conjunto_anterior(
+        self, client, db_session, fabrica, cliente_final, dos_ubicaciones
+    ):
         usuario, _, _ = cliente_final
         norte, _ = dos_ubicaciones
         db_session.add(PermisoUbicacion(id_usr=usuario.id_usr, id_ubccn=norte.id_ubccn))
         ajena = crear_ubicacion(db_session, fabrica.sede(), "Ajena")
         ruta = f"/usuarios/{usuario.id_usr}/permisos-ubicaciones"
         assert client.put(ruta, json={"ubicacion_ids": [ajena.id_ubccn]}).status_code == 422
-        assert [i["id_ubccn"] for i in client.get(ruta).json()["items"] if i["tiene_acceso"]] == [norte.id_ubccn]
+        assert [i["id_ubccn"] for i in client.get(ruta).json()["items"] if i["tiene_acceso"]] == [
+            norte.id_ubccn
+        ]
 
-    def test_sin_permiso_de_telemetria_o_proyecto_inactivo_no_se_concede(self, client, db_session, cliente_final, dos_ubicaciones):
+    def test_sin_permiso_de_telemetria_o_proyecto_inactivo_no_se_concede(
+        self, client, db_session, cliente_final, dos_ubicaciones
+    ):
         usuario, _, _ = cliente_final
         norte, _ = dos_ubicaciones
         ruta = f"/usuarios/{usuario.id_usr}/permisos-ubicaciones"
@@ -285,24 +315,43 @@ class TestGuardarPermisos:
         db_session.flush()
         assert client.put(ruta, json={"ubicacion_ids": [norte.id_ubccn]}).status_code == 422
         norte.estd = "Activa"
-        db_session.query(PermisoUsuarioSede).filter_by(id_usr=usuario.id_usr, mdl="Tableros").update({"nvl": "Ninguno"})
+        db_session.query(PermisoUsuarioSede).filter_by(
+            id_usr=usuario.id_usr, mdl="Tableros"
+        ).update({"nvl": "Ninguno"})
         db_session.flush()
         assert client.put(ruta, json={"ubicacion_ids": [norte.id_ubccn]}).status_code == 422
         assert client.put(ruta, json={"ubicacion_ids": []}).status_code == 200
 
-    def test_auditoria_conserva_proyecto_que_no_cambia(self, client, db_session, cliente_final, dos_ubicaciones):
+    def test_auditoria_conserva_proyecto_que_no_cambia(
+        self, client, db_session, cliente_final, dos_ubicaciones
+    ):
         from app.models import LogAuditoria
 
         usuario, sede, _ = cliente_final
         norte, sur = dos_ubicaciones
         tercero = crear_ubicacion(db_session, sede, "Tercero")
-        db_session.add_all([PermisoUbicacion(id_usr=usuario.id_usr, id_ubccn=p.id_ubccn) for p in (norte, sur)])
+        db_session.add_all(
+            [PermisoUbicacion(id_usr=usuario.id_usr, id_ubccn=p.id_ubccn) for p in (norte, sur)]
+        )
         db_session.flush()
-        assert client.put(f"/usuarios/{usuario.id_usr}/permisos-ubicaciones", json={"ubicacion_ids": [sur.id_ubccn, tercero.id_ubccn]}).status_code == 200
-        registro = db_session.query(LogAuditoria).filter_by(entdd=f"permisos_ubicacion:{usuario.id_usr}").one()
-        assert registro.vlrs_antrrs["ubicacion_ids"] == sorted([norte.id_ubccn, sur.id_ubccn])
-        assert registro.vlrs_nvs["ubicacion_ids"] == sorted([sur.id_ubccn, tercero.id_ubccn])
-        assert registro.vlrs_nvs["empresa_ids"] == [sede.id_clnt]
+        assert (
+            client.put(
+                f"/usuarios/{usuario.id_usr}/permisos-ubicaciones",
+                json={"ubicacion_ids": [sur.id_ubccn, tercero.id_ubccn]},
+            ).status_code
+            == 200
+        )
+        registros = (
+            db_session.query(LogAuditoria)
+            .filter_by(entdd=f"permisos_ubicacion:{usuario.id_usr}", origen="API")
+            .order_by(LogAuditoria.id_evnt)
+            .all()
+        )
+        assert len(registros) == 2  # Retiro y concesion dentro de la misma transaccion.
+        assert registros[0].vlrs_antrrs["ubicacion_ids"] == sorted([norte.id_ubccn, sur.id_ubccn])
+        assert registros[-1].vlrs_nvs["ubicacion_ids"] == sorted([sur.id_ubccn, tercero.id_ubccn])
+        assert all(r.id_clnt == sede.id_clnt for r in registros)
+        assert all(sur.id_ubccn in r.vlrs_nvs["ubicacion_ids"] for r in registros)
 
     def test_devuelve_el_mensaje_exacto_del_ca(self, client, cliente_final, dos_ubicaciones):
         """CA2: 'Permisos actualizados correctamente', literal."""
