@@ -26,14 +26,14 @@ REVISA = "Product Owner"
 VEREDICTO = "APTO CON OBSERVACIONES"
 RESUMEN = ("<b>CA1 a CA5 se cumplen</b> sobre dev unido a la rama PP-47: <b>0 defectos del producto</b>. "
            "<b>PP-319</b> (límite de sedes) <b>no estaba entregada</b> (PEN-07, no es un defecto): a pedido del usuario, QA la implementó en <b>qa/correcciones</b> y pasó. "
-           "Queda <b>integrar a dev</b> PP-319 a PP-322 (OBS-42) y <b>2 decisiones del PO</b> (OBS-43 y OBS-44).")
+           "Queda <b>integrar a dev</b> PP-319 a PP-322 (OBS-42) y <b>3 decisiones del PO</b> (OBS-43, OBS-44 y OBS-45). Ojo: <b>88 pruebas antiguas fallan</b> sin una variable de entorno (OBS-45); ya fallaban antes y no son de PP-47.")
 
 KPIS = [
     ("37 / 37", "casos funcionales<br/>aprobados", "ok"),
     ("0", "defectos del producto<br/>(1 entrega pendiente)", "ok"),
     ("45 / 45", "pruebas automatizadas<br/>aprobadas (pytest)", "ok"),
     ("8 / 8", "requisitos cubiertos<br/>(RTM)", "ok"),
-    ("5", "observaciones abiertas<br/>(2 para el PO)", "warn"),
+    ("5", "observaciones abiertas<br/>(3 para el PO)", "warn"),
 ]
 
 SUBTAREAS = [
@@ -49,7 +49,7 @@ SUBTAREAS = [
 DEFECTOS_PRODUCTO = 0
 FALLOS = [
     ("PEN-07", "PP-319 no estaba entregada: el plan no guardaba el máximo de sedes y ninguna sede nueva se rechazaba (2 xfail al inicio).", "comprobar_cupo no conocía el recurso «sedes» y no había endpoint de alta de sede. No es un defecto del producto.", "QA lo implementó en qa/correcciones (db86ba8) y los 2 casos pasan (RG-29)."),
-    ("Entorno", "Una prueba existente falló (test_suscripcion_vencida_bloquea_altas) y Docker estaba apagado al retomar.", "Esa prueba depende de PLAN_LIMITS_REQUIRE_SUBSCRIPTION=false (OBS-45); Docker Desktop no estaba iniciado.", "Se fijó la variable y se reinició el contenedor de pruebas; sin cambios en el producto."),
+    ("Entorno", "Una prueba existente falló (test_suscripcion_vencida_bloquea_altas) y Docker estaba apagado al retomar; sin la variable, 88 pruebas antiguas fallan.", "Dependen de PLAN_LIMITS_REQUIRE_SUBSCRIPTION=false (OBS-45); Docker Desktop no estaba iniciado.", "Se fijó la variable y se reinició el contenedor de pruebas; sin cambios en el producto."),
 ]
 
 COBERTURA = [
@@ -70,20 +70,20 @@ ESPERADO_PIE = ""
 
 HERRAMIENTAS = [
     ("pytest + pytest-html", "API, reglas de negocio y modelo con BD real de test", "Los criterios son reglas de datos y de API; es la herramienta del backend y ya cubre estos módulos.", 45, 0),
-    ("pytest (regresión)", "Suites existentes y backend completo", "PP-319 tocó contratos, límites, comercial y ubicaciones: 182 pruebas dirigidas y 1 020 del backend completo.", 1020, 0),
+    ("pytest (regresión)", "Suites existentes y backend completo", "PP-319 tocó contratos, límites, comercial y ubicaciones: 182 pruebas dirigidas y 1 020 del backend completo con PLAN_LIMITS_REQUIRE_SUBSCRIPTION=false. Sin esa variable fallan 88 (OBS-45).", 1020, 0),
 ]
 HERRAMIENTAS_NOTA = ("Descartadas: Locust, k6, OWASP ZAP, Lighthouse y axe (la HT no los pide) y Playwright (la HT es de modelo y automatización; la pantalla de HU47 y el correo real quedan en OBS-46). "
                      "No hay pytest-cov instalado, así que no se midió cobertura. La pasarela de pago está fuera del alcance de la HT.")
 
 EVIDENCIAS = [
     ("pytest-html", 45, 0, "extracto: primeras 10 de 45 filas",
-     "qa/03_Evidencias/PP-410/EV-PP410-INF-01_captura-informe-pytest.png", 0.66,
+     "qa/03_Evidencias/PP-410/EV-PP410-INF-01_captura-informe-pytest.png", 0.5,
      "EV-PP410-INF-01. HTML completo: backend/qa/03_Evidencias/PP-410/pytest_pp410.html"),
     ("pytest-html (regresión)", 159, 0, "extracto: primeras 10 de 159 filas",
-     "qa/03_Evidencias/PP-410/EV-PP410-INF-02_captura-informe-regresion-extracto.png", 0.66,
+     "qa/03_Evidencias/PP-410/EV-PP410-INF-02_captura-informe-regresion-extracto.png", 0.5,
      "EV-PP410-INF-02. HTML completo: backend/qa/03_Evidencias/PP-410/pytest_regresion.html"),
     ("pytest-html (HU47)", 23, 0, "extracto: primeras 10 de 23 filas",
-     "qa/03_Evidencias/PP-410/EV-PP410-INF-03_captura-informe-regresion-hu47-extracto.png", 0.66,
+     "qa/03_Evidencias/PP-410/EV-PP410-INF-03_captura-informe-regresion-hu47-extracto.png", 0.5,
      "EV-PP410-INF-03. HTML completo: backend/qa/03_Evidencias/PP-410/pytest_regresion_hu47.html"),
 ]
 
@@ -92,16 +92,17 @@ OBSERVACIONES = [
     ("OBS-42", "PP-320 a 322 (ccfc588) y PP-319 no están en dev; la rama feature va 27 commits atrás. La HT no se cierra hasta integrarlas.", "Dev"),
     ("OBS-43", "El cobro cuelga del contrato y no tiene un campo de período propio. ¿El contrato basta como período de facturación?", "PO"),
     ("OBS-44", "El ER y el flujo multiempresa decían «la sede es un detalle interno»; el criterio exige límite de sedes. ¿Es requisito vigente?", "PO"),
-    ("OBS-45", "La prueba test_suscripcion_vencida_bloquea_altas depende de PLAN_LIMITS_REQUIRE_SUBSCRIPTION=false; fijarla con monkeypatch.", "Dev"),
+    ("OBS-45", "Sin PLAN_LIMITS_REQUIRE_SUBSCRIPTION=false fallan 88 de 1 020 pruebas (mapeos 33, ubicaciones 23, dispositivos 17, ficha de dispositivo 9, otras 6). Ya fallaban antes de PP-319 y son la OBS-11 de HU-18 (fixtures sin suscripción vigente); ninguna es del modelo comercial de PP-47. ¿Se corrigen ahora (fixture común) o después?", "PO"),
     ("OBS-46", "No se probó la pantalla de HU47 ni el correo real (HT-14 con envío simulado) ni la cobertura de código.", "QA"),
 ]
 
-CONCLUSION = ("<b>APTO CON OBSERVACIONES.</b> CA1 a CA5 se cumplen, los errores (401, 403, 404, 409 y 422) responden como se espera y la regresión de 1 020 pruebas no falla. "
+CONCLUSION = ("<b>APTO CON OBSERVACIONES.</b> CA1 a CA5 se cumplen, los errores (401, 403, 404, 409 y 422) responden como se espera y la regresión de 1 020 pruebas pasa con PLAN_LIMITS_REQUIRE_SUBSCRIPTION=false; <b>sin esa variable fallan 88 pruebas antiguas</b> (mapeos, ubicaciones, dispositivos, ficha de dispositivo, cola de ingesta y caché) que ya fallaban antes de PP-47 y no son de esta HT (OBS-45). "
               "Estado propuesto: PP-317 a PP-322 y PP-410 en Listo; PP-319 depende de integrar qa/correcciones a dev. "
               "<b>Alcance real</b>: solo local; no se probó producción, la pantalla de HU47 ni el envío real del correo.")
 PENDIENTES = [
     ("Subir qa/correcciones, abrir el PR hacia dev e integrar la rama feature/PP-47 (OBS-42, PEN-07).", "Dev"),
-    ("Decidir OBS-43 (período del cobro) y OBS-44 (límite de sedes como requisito vigente).", "PO"),
+    ("Decidir OBS-43 (período del cobro), OBS-44 (límite de sedes como requisito vigente) y OBS-45 (corregir ahora las 88 pruebas antiguas).", "PO"),
+    ("Agregar a tests/conftest.py un fixture con suscripción vigente para las 88 pruebas de OBS-45 / OBS-11.", "Dev"),
     ("Cambiar los estados de las subtareas en Jira según la sección 1.", "QA"),
 ]
 
