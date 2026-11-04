@@ -17,3 +17,9 @@ export function leerVersionAcceso(storage: Pick<Storage, "getItem" | "removeItem
 export function guardarVersionAcceso(storage: Pick<Storage, "setItem">, usuario: string, version: string): void {
   storage.setItem("pangea_acceso", JSON.stringify({ usuario, version }));
 }
+
+/** Un enlace fuera del alcance no demuestra por sí solo que los permisos hayan cambiado. */
+export function avisoTrasValidar(permisosCambiaron: boolean, enlaceNoPermitido: boolean): string | null {
+  if (permisosCambiaron) return "Tus permisos cambiaron. Se actualizaron los proyectos disponibles y se limpiaron los filtros anteriores.";
+  return enlaceNoPermitido ? "No tienes acceso al proyecto del enlace. Se muestran tus proyectos disponibles." : null;
+}

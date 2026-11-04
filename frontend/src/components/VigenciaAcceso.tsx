@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useAuth } from "../hooks/useAuth";
 import { apiFetch, ApiError } from "../services/api";
-import { guardarVersionAcceso, leerVersionAcceso } from "../services/vigenciaAcceso";
+import { avisoTrasValidar, guardarVersionAcceso, leerVersionAcceso } from "../services/vigenciaAcceso";
 
 type Acceso = {
   version: string;
@@ -49,19 +49,23 @@ function VigenciaSesion({ children, usuario, logout }: { children: ReactNode; us
         const filtroInicial = window.location.pathname === "/consulta-datos"
           ? new URLSearchParams(window.location.search).get("ubicacion_id") : null;
         const seleccionRevocada = (proyecto !== null && !proyectos.includes(Number(proyecto)))
-          || (filtroInicial !== null && !proyectos.includes(Number(filtroInicial)))
           || (clienteId > 0 && acceso.empresas.length > 0 && !empresaActual);
-        if ((version !== null && acceso.version !== version) || seleccionRevocada) {
+        const enlaceNoPermitido = filtroInicial !== null && !proyectos.includes(Number(filtroInicial));
+        const permisosCambiaron = (version !== null && acceso.version !== version) || seleccionRevocada;
+        const avisoRedireccion = avisoTrasValidar(permisosCambiaron, enlaceNoPermitido);
+        if (avisoRedireccion) {
           // Actualizar antes de recargar evita comparar otra vez con la versión revocada.
           guardarVersionAcceso(sessionStorage, usuario, acceso.version);
           // Una carga completa elimina el estado de todos los módulos y las peticiones pendientes.
-          const empresa = empresaActual ?? acceso.empresas[0];
-          if (empresa) sessionStorage.setItem("pangea_cliente", String(empresa.id_clnt));
-          else sessionStorage.removeItem("pangea_cliente");
-          sessionStorage.removeItem("pangea_proyecto_v2");
-          sessionStorage.removeItem("pangea_proyecto");
-          sessionStorage.setItem("pangea_aviso_acceso", "Tus permisos cambiaron. Se actualizaron los proyectos disponibles y se limpiaron los filtros anteriores.");
-          setEstado({ denegado: true, aviso: null });
+          if (permisosCambiaron) {
+            const empresa = empresaActual ?? acceso.empresas[0];
+            if (empresa) sessionStorage.setItem("pangea_cliente", String(empresa.id_clnt));
+            else sessionStorage.removeItem("pangea_cliente");
+            sessionStorage.removeItem("pangea_proyecto_v2");
+            sessionStorage.removeItem("pangea_proyecto");
+            setEstado({ denegado: true, aviso: null });
+          }
+          sessionStorage.setItem("pangea_aviso_acceso", avisoRedireccion);
           window.location.replace("/consulta-datos");
           return;
         }
