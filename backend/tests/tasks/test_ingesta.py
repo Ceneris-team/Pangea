@@ -23,9 +23,11 @@ con dispositivo/mapeo mal configurado en producción-.
 
 import dataclasses
 import ftplib
+import types
 from unittest.mock import patch
 
 import pytest
+from botocore.exceptions import ClientError
 
 from app.models import ConexionFTP, Dispositivo, IntentoProcesamiento, Ubicacion
 from app.models.archivo_ingesta import ArchivoIngesta
@@ -295,7 +297,9 @@ class TestNoRegistraIntentosTransitoriosSinTerminar:
         # objeto mínimo para que el flujo llegue hasta
         # descargar_archivo_dat, que es la pieza bajo prueba acá.
         formato_falso = type(
-            "FormatoFalso", (), {"id_mp": 1, "tipo_trama": "H", "config": None, "delimitador_decimal": "."}
+            "FormatoFalso",
+            (),
+            {"id_mp": 1, "tipo_trama": "H", "config": None, "delimitador_decimal": "."},
         )()
         monkeypatch.setattr(tareas_ingesta, "resolver_formato", lambda *a, **k: formato_falso)
         monkeypatch.setattr(
@@ -310,4 +314,149 @@ class TestNoRegistraIntentosTransitoriosSinTerminar:
         with pytest.raises(ftplib.error_temp):
             procesar(db_session, id_archv=archivo.id_archv)
 
+        assert intentos_de(db_session, archivo.id_archv) == []
+
+
+CONTENIDO_DAT = "TOA5,CR1000,datos\n2026-01-01 00:00:00,1,2.5\n"
+
+
+@pytest.fixture()
+def entorno_exitoso(db_session, fabrica, monkeypatch):
+    """Conexión con dispositivo y pipeline (formato/descarga/persistencia)
+    mockeado para que procesar_archivo_dat llegue a 'Exitoso' sin FTP ni un
+    .dat real. Aísla el archivado del .dat crudo (HT-06 CA3)."""
+    sede = fabrica.sede()
+    conexion = ConexionFTP(
+        id_sd=sede.id_sd,
+        nmbr="Datalogger con dispositivo",
+        prtcl="FTP",
+        hst="127.0.0.1",
+        prt=21,
+        usr_ftp="usr",
+        crdncl_cfrd="cifrado-de-prueba",
+        rt_rmt="/data",
+        frcnc_mnts=1,
+        estd="Activa",
+    )
+    db_session.add(conexion)
+    db_session.flush()
+    ubicacion = Ubicacion(
+        id_sd=sede.id_sd, nmbr="Ubicacion de prueba", lttd=0, lngtd=0, plgn_gjsn=POLIGONO_DUMMY
+    )
+    db_session.add(ubicacion)
+    db_session.flush()
+    dispositivo = Dispositivo(
+        id_ubccn=ubicacion.id_ubccn,
+        id_cnxn=conexion.id_cnxn,
+        nmbr="CR1000-01",
+        mrc="Campbell",
+        lttd=0,
+        lngtd=0,
+        estd="Activo",
+    )
+    db_session.add(dispositivo)
+    db_session.flush()
+
+    formato_falso = type(
+        "FormatoFalso",
+        (),
+        {"id_mp": 1, "tipo_trama": "H", "config": None, "delimitador_decimal": "."},
+    )()
+    monkeypatch.setattr(tareas_ingesta, "resolver_formato", lambda *a, **k: formato_falso)
+    monkeypatch.setattr(tareas_ingesta, "descargar_archivo_dat", lambda *a, **k: CONTENIDO_DAT)
+
+    ResultadoValidacionFalso = dataclasses.make_dataclass(
+        "ResultadoValidacionFalso", [("validas", list), ("errores", list)]
+    )
+    ResultadoPersistenciaFalso = dataclasses.make_dataclass(
+        "ResultadoPersistenciaFalso",
+        [
+            ("guardadas", int),
+            ("omitidas_sin_valor", int),
+            ("omitidas_parametro_desconocido", list),
+            ("ultimos_por_parametro", dict),
+            ("id_ubccn", int),
+            ("id_sd", int),
+        ],
+    )
+    monkeypatch.setattr(
+        tareas_ingesta,
+        "interpretar_y_guardar",
+        lambda *a, **k: (
+            ResultadoValidacionFalso(validas=[], errores=[]),
+            ResultadoPersistenciaFalso(
+                guardadas=3,
+                omitidas_sin_valor=0,
+                omitidas_parametro_desconocido=[],
+                ultimos_por_parametro={},
+                id_ubccn=ubicacion.id_ubccn,
+                id_sd=sede.id_sd,
+            ),
+        ),
+    )
+    return types.SimpleNamespace(conexion=conexion, ubicacion=ubicacion, sede=sede)
+
+
+class TestArchivadoDatCrudo:
+    """HT-06 CA3 (PP-127): el .dat crudo se persiste en Object Storage."""
+
+    def test_sube_el_dat_crudo_cuando_hay_bucket(self, db_session, entorno_exitoso, monkeypatch):
+        subidos = []
+        monkeypatch.setattr(tareas_ingesta.object_storage, "esta_configurado", lambda: True)
+        monkeypatch.setattr(
+            tareas_ingesta.object_storage,
+            "subir_contenido",
+            lambda datos, clave, content_type="application/octet-stream": subidos.append(
+                (datos, clave, content_type)
+            ),
+        )
+        archivo = crear_archivo(db_session, entorno_exitoso.conexion)
+
+        procesar(db_session, id_archv=archivo.id_archv)
+
+        db_session.refresh(archivo)
+        assert archivo.estd == "Exitoso"
+        assert len(subidos) == 1
+        datos, clave, content_type = subidos[0]
+        assert datos == CONTENIDO_DAT.encode("utf-8")
+        assert clave.startswith(f"datos-crudos/cnxn-{entorno_exitoso.conexion.id_cnxn}/")
+        assert clave.endswith("/H_ejemplo.dat")
+        assert content_type == "text/plain; charset=utf-8"
+
+    def test_no_sube_nada_si_no_hay_bucket(self, db_session, entorno_exitoso, monkeypatch):
+        llamadas = []
+        monkeypatch.setattr(tareas_ingesta.object_storage, "esta_configurado", lambda: False)
+        monkeypatch.setattr(
+            tareas_ingesta.object_storage, "subir_contenido", lambda *a, **k: llamadas.append(a)
+        )
+        archivo = crear_archivo(db_session, entorno_exitoso.conexion)
+
+        procesar(db_session, id_archv=archivo.id_archv)
+
+        db_session.refresh(archivo)
+        assert archivo.estd == "Exitoso"
+        assert llamadas == []
+
+    def test_fallo_de_subida_es_transitorio_y_no_marca_fallido(
+        self, db_session, entorno_exitoso, monkeypatch
+    ):
+        """Una caída de S3 al archivar el .dat se trata como transitoria: se
+        propaga para que Celery reintente (retries<max), sin marcar Fallido ni
+        registrar intento, y sin haber tocado telemetría (la subida va ANTES
+        del parseo)."""
+        monkeypatch.setattr(tareas_ingesta.object_storage, "esta_configurado", lambda: True)
+
+        def falla(*a, **k):
+            raise ClientError(
+                {"Error": {"Code": "ServiceUnavailable", "Message": "down"}}, "PutObject"
+            )
+
+        monkeypatch.setattr(tareas_ingesta.object_storage, "subir_contenido", falla)
+        archivo = crear_archivo(db_session, entorno_exitoso.conexion)
+
+        with pytest.raises(ClientError):
+            procesar(db_session, id_archv=archivo.id_archv)
+
+        db_session.refresh(archivo)
+        assert archivo.estd != "Fallido"
         assert intentos_de(db_session, archivo.id_archv) == []

@@ -1,12 +1,14 @@
 import os
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.routers import (
+    alarmas,
     auditoria,
     auth,
     comercial,
@@ -23,6 +25,8 @@ from app.routers import (
     ubicaciones,
     usuarios,
 )
+from app.security.auditoria_contexto import preparar_peticion
+from app.security.auditoria_denegaciones import manejar_denegacion
 
 RATELIMIT_STORAGE_URL = os.environ.get("RATELIMIT_STORAGE_URL", "redis://localhost:6379/1")
 limiter = Limiter(key_func=get_remote_address, storage_uri=RATELIMIT_STORAGE_URL)
@@ -34,7 +38,8 @@ CORS_ALLOWED_ORIGINS = os.environ.get(
     "CORS_ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173"
 ).split(",")
 
-app = FastAPI()
+app = FastAPI(dependencies=[Depends(preparar_peticion)])
+app.add_exception_handler(StarletteHTTPException, manejar_denegacion)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -67,6 +72,8 @@ app.include_router(dispositivos.router)
 app.include_router(mapa_cliente.router)
 # HU23: listar paneles (Tableros Personalizables, E05).
 app.include_router(panel.router)
+# HU27/HU28 (PP-73): listar y crear alarmas (Gestión de Alarmas y Notificaciones).
+app.include_router(alarmas.router)
 
 
 @app.get("/")

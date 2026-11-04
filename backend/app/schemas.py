@@ -118,6 +118,13 @@ class UbicacionPermisoItem(BaseModel):
     id_ubccn: int
     nmbr: str
     tiene_acceso: bool
+    id_clnt: int
+    empresa: str
+    id_sd: int
+    sede: str
+    estado: str
+    puede_asignar: bool
+    motivo_restriccion: str | None = None
 
 
 class PermisosUbicacionPanel(BaseModel):
@@ -1082,23 +1089,31 @@ class VistaPreviaResponse(BaseModel):
 
 
 class AuditoriaListItem(BaseModel):
-    """HT-11 CA1/CA5: una fila de lg_adtr, ya con el nombre del usuario
-    ejecutor resuelto -la tabla solo guarda id_usr- para que el panel no
-    tenga que hacer un segundo viaje por cada fila."""
+    """Evento inmutable con ambito y atribucion explicitos."""
 
     model_config = ConfigDict(from_attributes=True)
 
     id_evnt: int
-    id_usr: int
+    id_usr: int | None
     usuario_nombre: str | None
+    id_afectado: int | None
     id_sd: int | None
+    id_clnt: int | None
+    id_ubccn: int | None
     accn: str
     entdd: str
     vlrs_antrrs: dict | list | None
     vlrs_nvs: dict | list | None
     fch_evnt: datetime
+    resultado: str
+    origen: str
+    ejecutor: str
+    motivo: str | None
+    operacion: str | None
+    solicitud_id: str | None
 
 
+# ---------------------------------------------------------------------------
 # HU23 - Listar paneles
 
 

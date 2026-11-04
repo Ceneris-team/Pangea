@@ -19,7 +19,7 @@ type Empresa = {
 };
 type Proyecto = {
   id_ubccn: number; nombre: string; descripcion: string | null;
-  estado: string; dispositivos_total: number;
+  estado: string; dispositivos_total: number; sede: string;
 };
 type Miembro = {
   id_mmb: number | null; id_usr: number; nombre: string; correo: string;
@@ -34,6 +34,13 @@ function mensajeError(error: unknown): string {
 }
 
 export default function Empresas() {
+  const [params] = useSearchParams();
+  const { clienteId } = useAuth();
+  // Una navegación, incluido Atrás/Adelante, descarta la edición del contexto anterior.
+  return <EmpresasContenido key={params.get("cliente") ?? clienteId ?? "global"} />;
+}
+
+function EmpresasContenido() {
   const { rol, clienteId, puedeOperar } = useAuth();
   const adminCeneris = rol === ROLES.ADMINISTRADOR;
   const ceneris = adminCeneris || rol === ROLES.TECNICO_CENERIS;
@@ -42,6 +49,7 @@ export default function Empresas() {
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
   const [proyectos, setProyectos] = useState<Proyecto[]>([]);
   const [miembros, setMiembros] = useState<Miembro[]>([]);
+  const [datosEmpresaId, setDatosEmpresaId] = useState<number | null>(null);
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState("");
@@ -79,6 +87,7 @@ export default function Empresas() {
     ]);
     setProyectos(listaProyectos);
     setMiembros(listaMiembros);
+    setDatosEmpresaId(id);
   }
 
   useEffect(() => {
@@ -110,6 +119,7 @@ export default function Empresas() {
       if (cancelado) return;
       setProyectos(listaProyectos);
       setMiembros(listaMiembros);
+      setDatosEmpresaId(empresaId);
     }).catch((err) => { if (!cancelado) setError(mensajeError(err)); });
     return () => { cancelado = true; };
   }, [empresaId, empresa, ceneris, puedeOperar]);
@@ -158,15 +168,20 @@ export default function Empresas() {
   }
 
   async function guardarMiembro(miembro: Miembro, estado: string) {
-    if (!empresaId || miembro.id_mmb === null) return;
+    if (!empresaId || datosEmpresaId !== empresaId || miembro.id_mmb === null || guardando) return;
+    const editar = estado === miembro.estado && editando === miembro.id_mmb;
+    if (editar && estado === "Activo" && edicionRol === "Lector" && edicionProyectos.length === 0) {
+      setError("Asigna al menos un proyecto activo al Lector o desactiva su membresía para retirar todo el acceso.");
+      return;
+    }
     setGuardando(true); setError(""); setAviso("");
     try {
       await apiFetch(`/empresas/${empresaId}/usuarios/${miembro.id_mmb}`, {
         method: "PATCH",
         body: {
-          rol: editando === miembro.id_mmb ? edicionRol : miembro.rol,
+          rol: editar ? edicionRol : miembro.rol,
           estado,
-          proyecto_ids: editando === miembro.id_mmb ? edicionProyectos : miembro.proyecto_ids,
+          proyecto_ids: editar ? edicionProyectos : miembro.proyecto_ids,
         },
       });
       setEditando(null); setAviso("Acceso actualizado correctamente");
@@ -186,6 +201,7 @@ export default function Empresas() {
             </p>
           </div>
           {ceneris && <select aria-label="Empresa a gestionar" className={campo + " min-w-64"} value={empresaId ?? ""}
+            disabled={guardando}
             onChange={(e) => elegirEmpresa(e.target.value ? Number(e.target.value) : null)}>
             <option value="">Todos los clientes</option>
             {empresas.map((item) => <option key={item.id_clnt} value={item.id_clnt}>{item.nombre}</option>)}
@@ -216,7 +232,8 @@ export default function Empresas() {
           </div>
         )}
 
-        {empresa && <>
+        {empresa && datosEmpresaId !== empresaId && <p role="status">Cargando proyectos y usuarios de {empresa.nombre}…</p>}
+        {empresa && datosEmpresaId === empresaId && <>
           <section className={tarjeta}>
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div><p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Empresa seleccionada</p><h2 className="text-xl font-bold text-gray-900 dark:text-white">{empresa.nombre}</h2><p className="text-sm text-gray-600 dark:text-gray-300">Acceso: {ceneris ? "CENERIS" : empresa.rol_empresa}</p></div>
@@ -238,10 +255,10 @@ export default function Empresas() {
 
           {puedeVerUsuarios && <section className={tarjeta}><h2 className="text-lg font-semibold text-gray-900 dark:text-white">Usuarios de {empresa.nombre}</h2><p className="mt-1 text-sm text-gray-600 dark:text-gray-300">Administradores y técnicos acceden a todos los proyectos de la empresa. Los lectores consultan los proyectos asignados. Todos los miembros activos consumen cupo.</p>
             {puedeGestionarUsuarios && <form onSubmit={crearMiembro} className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4"><input className={campo} placeholder="Nombre completo" aria-label="Nombre completo" value={nombreUsuario} onChange={(e) => setNombreUsuario(e.target.value)} required /><input className={campo} type="email" placeholder="Correo" aria-label="Correo" value={correoUsuario} onChange={(e) => setCorreoUsuario(e.target.value)} required /><select className={campo} aria-label="Rol en la empresa" value={rolUsuario} onChange={(e) => setRolUsuario(e.target.value)}><option value="Administrador">Administrador</option><option value="Tecnico">Técnico</option><option value="Lector">Lector</option></select><button className={boton} disabled={guardando || !["Vigente", "En gracia"].includes(empresa.estado_suscripcion)}>Agregar usuario</button>
-              {rolUsuario === "Lector" && <div className="md:col-span-2 xl:col-span-4 flex flex-wrap gap-3 text-sm text-gray-700 dark:text-gray-200">{proyectos.map((p) => <label key={p.id_ubccn} className="flex items-center gap-1"><input type="checkbox" checked={proyectosUsuario.includes(p.id_ubccn)} onChange={() => alternarProyecto(proyectosUsuario, p.id_ubccn, setProyectosUsuario)} />{p.nombre}</label>)}</div>}
+              {rolUsuario === "Lector" && <div className="md:col-span-2 xl:col-span-4 flex flex-wrap gap-3 text-sm text-gray-700 dark:text-gray-200">{proyectos.map((p) => <label key={p.id_ubccn} className="flex items-center gap-1"><input type="checkbox" disabled={guardando || p.estado !== "Activa"} checked={proyectosUsuario.includes(p.id_ubccn)} onChange={() => alternarProyecto(proyectosUsuario, p.id_ubccn, setProyectosUsuario)} /><span>{p.nombre} · {p.sede} · {p.estado}</span></label>)}</div>}
             </form>}
-            <div className="mt-5 space-y-3">{miembros.map((m) => <div key={`${m.legado ? "legacy" : "member"}-${m.id_usr}`} className="rounded-xl border border-gray-200 p-3 dark:border-white/10"><div className="flex flex-wrap items-center justify-between gap-2"><div><strong className="text-gray-900 dark:text-white">{m.nombre}</strong><p className="text-sm text-gray-600 dark:text-gray-300">{m.correo} · {m.rol} · {m.estado}{m.legado ? " · Cuenta anterior" : ""}</p></div><div className="flex gap-2">{puedeGestionarUsuarios && (m.legado ? (adminCeneris && <Link to="/usuarios" className="rounded-lg border border-gray-300 px-3 py-1 text-sm text-gray-800 dark:border-white/20 dark:text-white">Ver en usuarios</Link>) : <><button type="button" className="rounded-lg border border-gray-300 px-3 py-1 text-sm text-gray-800 dark:border-white/20 dark:text-white" onClick={() => { setEditando(m.id_mmb); setEdicionRol(m.rol); setEdicionProyectos(m.proyecto_ids); }}>Editar</button><button type="button" className="rounded-lg border border-gray-300 px-3 py-1 text-sm text-gray-800 dark:border-white/20 dark:text-white" disabled={guardando} onClick={() => guardarMiembro(m, m.estado === "Activo" ? "Inactivo" : "Activo")}>{m.estado === "Activo" ? "Desactivar" : "Activar"}</button></>)} </div></div>
-              {!m.legado && editando === m.id_mmb && <div className="mt-3 space-y-3"><select className={campo + " max-w-xs"} aria-label={`Rol de ${m.nombre}`} value={edicionRol} onChange={(e) => setEdicionRol(e.target.value)}><option value="Administrador">Administrador</option><option value="Tecnico">Técnico</option><option value="Lector">Lector</option></select>{edicionRol === "Lector" && <div className="flex flex-wrap gap-3 text-sm text-gray-700 dark:text-gray-200">{proyectos.map((p) => <label key={p.id_ubccn} className="flex items-center gap-1"><input type="checkbox" checked={edicionProyectos.includes(p.id_ubccn)} onChange={() => alternarProyecto(edicionProyectos, p.id_ubccn, setEdicionProyectos)} />{p.nombre}</label>)}</div>}<button type="button" className={boton} disabled={guardando} onClick={() => guardarMiembro(m, m.estado)}>Guardar cambios</button></div>}
+            <div className="mt-5 space-y-3">{miembros.map((m) => <div key={`${m.legado ? "legacy" : "member"}-${m.id_usr}`} className="rounded-xl border border-gray-200 p-3 dark:border-white/10"><div className="flex flex-wrap items-center justify-between gap-2"><div><strong className="text-gray-900 dark:text-white">{m.nombre}</strong><p className="text-sm text-gray-600 dark:text-gray-300">{m.correo} · {m.rol} · {m.estado}{m.legado ? " · Cuenta anterior" : " · Usuario Empresa"}</p></div><div className="flex gap-2">{puedeGestionarUsuarios && (m.legado ? (adminCeneris && <Link to="/usuarios" className="rounded-lg border border-gray-300 px-3 py-1 text-sm text-gray-800 dark:border-white/20 dark:text-white">Ver en usuarios</Link>) : <><button type="button" className="rounded-lg border border-gray-300 px-3 py-1 text-sm text-gray-800 dark:border-white/20 dark:text-white" disabled={guardando} onClick={() => { setError(""); setAviso(""); setEditando(m.id_mmb); setEdicionRol(m.rol); setEdicionProyectos(m.proyecto_ids); }}>Editar</button><button type="button" className="rounded-lg border border-gray-300 px-3 py-1 text-sm text-gray-800 dark:border-white/20 dark:text-white" disabled={guardando} onClick={() => guardarMiembro(m, m.estado === "Activo" ? "Inactivo" : "Activo")}>{m.estado === "Activo" ? "Desactivar" : "Activar"}</button></>)} </div></div>
+              {!m.legado && editando === m.id_mmb && <div className="mt-3 space-y-3"><select className={campo + " max-w-xs"} disabled={guardando} aria-label={`Rol de ${m.nombre}`} value={edicionRol} onChange={(e) => setEdicionRol(e.target.value)}><option value="Administrador">Administrador</option><option value="Tecnico">Técnico</option><option value="Lector">Lector</option></select>{edicionRol === "Lector" && <div className="flex flex-wrap gap-3 text-sm text-gray-700 dark:text-gray-200">{proyectos.map((p) => <label key={p.id_ubccn} className="flex items-center gap-1"><input type="checkbox" disabled={guardando || (p.estado !== "Activa" && !edicionProyectos.includes(p.id_ubccn))} checked={edicionProyectos.includes(p.id_ubccn)} onChange={() => alternarProyecto(edicionProyectos, p.id_ubccn, setEdicionProyectos)} /><span>{p.nombre} · {p.sede} · {p.estado}</span></label>)}</div>}<button type="button" className={boton} disabled={guardando} onClick={() => guardarMiembro(m, m.estado)}>Guardar cambios</button><button type="button" className="ml-3 rounded-lg border border-gray-300 px-3 py-2 text-sm dark:border-white/20 dark:text-white" disabled={guardando} onClick={() => { setEditando(null); setEdicionProyectos([]); setError(""); }}>Cancelar</button>{edicionRol === "Lector" ? <p className="text-sm text-gray-600 dark:text-gray-300">Selecciona al menos un proyecto activo. Para retirar todo el acceso a esta empresa, utiliza Desactivar; los cambios pendientes no se guardarán.</p> : <p className="text-sm text-gray-600 dark:text-gray-300">Este rol accede a todos los proyectos de {empresa.nombre}, incluidos los nuevos.</p>}</div>}
             </div>)}{miembros.length === 0 && <p className="text-sm text-gray-600 dark:text-gray-300">Aún no hay usuarios empresariales.</p>}</div>
           </section>}
         </>}

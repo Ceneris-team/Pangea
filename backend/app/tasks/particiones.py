@@ -12,6 +12,8 @@ operación normal.
 import datetime as dt
 import logging
 
+from sqlalchemy import text
+
 from app.core.celery_app import celery_app
 from app.database import SessionLocal
 from app.services.particiones import (
@@ -54,6 +56,10 @@ def asegurar_particiones_futuras() -> dict:
         # Desde el mes en curso hacia adelante: cubre el hueco del mes
         # actual si por alguna razón faltara, no solo los futuros.
         creadas = asegurar_particiones(db.connection(), hoy, MESES_DE_COLCHON + 1)
+        auditoria_creadas = db.execute(
+            text("SELECT auditoria_particiones(CURRENT_DATE, :meses)"),
+            {"meses": MESES_DE_COLCHON + 1},
+        ).scalar_one()
         db.commit()
 
         # Tras el commit hay que pedir la conexión de nuevo: la anterior
@@ -71,6 +77,7 @@ def asegurar_particiones_futuras() -> dict:
             "particion_mes_siguiente": mes_siguiente_nombre,
             "mes_siguiente_listo": mes_siguiente_nombre in existentes,
             "total_particiones": len(existentes),
+            "auditoria_creadas": auditoria_creadas,
         }
     except Exception:
         db.rollback()

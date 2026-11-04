@@ -15,8 +15,18 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import Cliente, PermisoUbicacion, PermisoUsuarioSede, PlanSuscripcion, Rol, Sede, Suscripcion, Ubicacion, Usuario, UsuarioCliente
-from app.services.limites_plan import comprobar_cupo, fecha_comercial
+from app.models import (
+    Cliente,
+    PermisoUbicacion,
+    PermisoUsuarioSede,
+    PlanSuscripcion,
+    Rol,
+    Sede,
+    Suscripcion,
+    Ubicacion,
+    Usuario,
+    UsuarioCliente,
+)
 from app.schemas import (
     PermisosUbicacionActualizados,
     PermisosUbicacionActualizar,
@@ -24,16 +34,17 @@ from app.schemas import (
     UbicacionPermisoItem,
     UsuarioActualizado,
     UsuarioActualizar,
+    UsuarioClientePlan,
     UsuarioCreado,
     UsuarioCrear,
     UsuarioDetalle,
     UsuarioListItem,
-    UsuarioClientePlan,
 )
 from app.security.auditoria import auditar_cambios
 from app.security.hashing import generar_password_temporal, hash_password
 from app.security.permisos import EDICION, LECTURA, require_permiso
 from app.security.ubicaciones_permitidas import ROLES_CON_ACCESO_TOTAL
+from app.services.limites_plan import comprobar_cupo, fecha_comercial
 from app.tasks.notificaciones import enviar_correo_bienvenida
 
 router = APIRouter(prefix="/usuarios", tags=["Usuarios"])
@@ -340,7 +351,7 @@ def actualizar_usuario(
 # ---------------------------------------------------------------------------
 
 
-def _usuario_gestionable_o_error(db: Session, id_usr: int) -> Usuario:
+def _usuario_gestionable_o_error(db: Session, id_usr: int, bloquear: bool = False) -> Usuario:
     """Regla de negocio de HU21: la gestión de permisos aplica ÚNICAMENTE a
     usuarios con rol Cliente Final.
 
@@ -356,7 +367,10 @@ def _usuario_gestionable_o_error(db: Session, id_usr: int) -> Usuario:
     La interfaz además no ofrece la acción para esos roles (CA1), así que
     llegar acá con uno de ellos es un intento de saltarse la interfaz.
     """
-    usuario = db.query(Usuario).filter(Usuario.id_usr == id_usr).first()
+    query = db.query(Usuario).filter(Usuario.id_usr == id_usr)
+    if bloquear:
+        query = query.populate_existing().with_for_update()
+    usuario = query.first()
     if usuario is None:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
@@ -371,7 +385,47 @@ def _usuario_gestionable_o_error(db: Session, id_usr: int) -> Usuario:
                 "ubicaciones y no requiere asignación de permisos"
             ),
         )
+    if usuario.rol.nmbr != "Cliente Final":
+        raise HTTPException(409, "Solo las cuentas Cliente Final admiten permisos por ubicación")
     return usuario
+
+
+def _administrador_permisos(usuario: dict) -> None:
+    if usuario.get("rol") != "Administrador":
+        raise HTTPException(403, "Solo un administrador puede gestionar permisos")
+
+
+def _opciones_permisos_ubicaciones(db: Session, usuario: Usuario, ids: set[int] | None = None) -> list[UbicacionPermisoItem]:
+    """Explica y valida el acceso con el mismo alcance que tendrá al iniciar sesión."""
+    permisos = db.query(PermisoUsuarioSede).filter(
+        PermisoUsuarioSede.id_usr == usuario.id_usr,
+    ).all()
+    sedes = {p.id_sd for p in permisos}
+    query = db.query(Ubicacion, Sede, Cliente).join(Sede, Sede.id_sd == Ubicacion.id_sd).join(
+        Cliente, Cliente.id_clnt == Sede.id_clnt,
+    )
+    if ids is not None:
+        query = query.filter(Ubicacion.id_ubccn.in_(ids))
+    concedidas = {id_ubccn for (id_ubccn,) in db.query(PermisoUbicacion.id_ubccn).filter(
+        PermisoUbicacion.id_usr == usuario.id_usr,
+    ).all()}
+    items = []
+    for ubicacion, sede, empresa in query.order_by(Ubicacion.nmbr).all():
+        motivo = None
+        if ubicacion.estd != "Activa" or sede.estd != "Activa" or empresa.estd != "Activo":
+            motivo = "El proyecto, su sede o su empresa están inactivos"
+        elif usuario.scp != "por_sede" or len(sedes) != 1 or ubicacion.id_sd not in sedes:
+            motivo = "El proyecto no corresponde a la única sede configurada para esta cuenta"
+        elif not any(p.mdl == "Tableros" and p.nvl in {"Lectura", "Edición"} for p in permisos):
+            motivo = "La cuenta requiere permiso de lectura en Tableros para consultar telemetría"
+        items.append(UbicacionPermisoItem(
+            id_ubccn=ubicacion.id_ubccn, nmbr=ubicacion.nmbr,
+            tiene_acceso=ubicacion.id_ubccn in concedidas,
+            id_clnt=empresa.id_clnt, empresa=empresa.rzn_scl, id_sd=sede.id_sd,
+            sede=sede.nmbr, estado=ubicacion.estd,
+            puede_asignar=motivo is None, motivo_restriccion=motivo,
+        ))
+    return items
 
 
 @router.get("/{id_usr}/permisos-ubicaciones", response_model=PermisosUbicacionPanel)
@@ -386,27 +440,14 @@ def listar_permisos_ubicaciones(
     Se listan todas -no solo las concedidas- porque el panel es de
     marcar/desmarcar: sin las no concedidas no habría nada que marcar.
     """
+    _administrador_permisos(_usuario)
     usuario = _usuario_gestionable_o_error(db, id_usr)
-
-    concedidas = {
-        fila.id_ubccn
-        for fila in db.query(PermisoUbicacion).filter(PermisoUbicacion.id_usr == id_usr).all()
-    }
-
-    ubicaciones = db.query(Ubicacion).order_by(Ubicacion.nmbr).all()
 
     return PermisosUbicacionPanel(
         id_usr=usuario.id_usr,
         nmbr_cmplt=usuario.nmbr_cmplt,
         rol_nombre=usuario.rol.nmbr,
-        items=[
-            UbicacionPermisoItem(
-                id_ubccn=u.id_ubccn,
-                nmbr=u.nmbr,
-                tiene_acceso=u.id_ubccn in concedidas,
-            )
-            for u in ubicaciones
-        ],
+        items=_opciones_permisos_ubicaciones(db, usuario),
     )
 
 
@@ -434,7 +475,8 @@ def actualizar_permisos_ubicaciones(
     el conjunto permitido NO viaja en el JWT -si viajara, un permiso
     recién quitado seguiría vigente hasta que expirara el token-.
     """
-    usuario_objetivo = _usuario_gestionable_o_error(db, id_usr)
+    _administrador_permisos(_usuario)
+    usuario_objetivo = _usuario_gestionable_o_error(db, id_usr, bloquear=True)
 
     solicitadas = set(body.ubicacion_ids)
 
@@ -451,6 +493,9 @@ def actualizar_permisos_ubicaciones(
         if faltantes:
             ids = ", ".join(str(i) for i in sorted(faltantes))
             raise HTTPException(status_code=400, detail=f"No existe la ubicación: {ids}")
+        for opcion in _opciones_permisos_ubicaciones(db, usuario_objetivo, solicitadas):
+            if not opcion.puede_asignar:
+                raise HTTPException(422, f"{opcion.nmbr}: {opcion.motivo_restriccion}")
 
     actuales = {
         fila.id_ubccn: fila

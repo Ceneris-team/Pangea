@@ -298,6 +298,7 @@ def test_revalida_revocacion_de_proyecto_del_lector(entorno_exportacion, fabrica
         **exportacion.fltrs_aplcds,
         "scope": "por_cliente",
         "rol": "Usuario Empresa",
+        "rol_empresa": "Lector",
     }
     db.flush()
     revalidar_acceso(db, exportacion)
@@ -480,3 +481,86 @@ def test_mes_completo_por_minuto_con_memoria_acotada(entorno_exportacion, monkey
     print(
         f"BENCHMARK {formato}: {esperadas} filas; {segundos:.2f}s; RSS pico {pico / 1024 / 1024:.2f} MiB"
     )
+
+
+@pytest.mark.parametrize("cambio", ["rol", "inactivo", "eliminado", "sin_snapshot"])
+def test_revocacion_empresarial_bloquea_una_exportacion_lista(entorno_exportacion, fabrica, cambio):
+    from fastapi import HTTPException
+
+    from app.models import Sede
+
+    _, db, _, _, proyectos, _, _ = entorno_exportacion
+    exportacion = solicitar(entorno_exportacion)
+    usuario = fabrica.usuario(fabrica.rol("Usuario Empresa"), scp="por_cliente")
+    sede = db.get(Sede, proyectos[0].id_sd)
+    miembro = UsuarioCliente(id_usr=usuario.id_usr, id_clnt=sede.id_clnt, rol_emp="Administrador")
+    db.add(miembro)
+    exportacion.id_usr = usuario.id_usr
+    exportacion.fltrs_aplcds = {
+        **exportacion.fltrs_aplcds,
+        "scope": "por_cliente",
+        "rol": "Usuario Empresa",
+        "rol_empresa": "Administrador",
+    }
+    db.commit()
+    assert tareas.generar_exportacion(exportacion.id_exprtcn)["estado"] == "Lista"
+    if cambio == "rol":
+        # Ambos roles conservan acceso al proyecto: debe detectarse el cambio de rol.
+        miembro.rol_emp = "Tecnico"
+    elif cambio == "inactivo":
+        miembro.estd = "Inactivo"
+    elif cambio == "eliminado":
+        db.delete(miembro)
+    else:
+        filtros = dict(exportacion.fltrs_aplcds)
+        filtros.pop("rol_empresa")
+        exportacion.fltrs_aplcds = filtros
+    db.commit()
+    with pytest.raises(HTTPException) as error:
+        revalidar_acceso(db, exportacion)
+    assert error.value.status_code == 403
+
+
+def test_limpieza_recorrer_mas_de_un_lote_aunque_los_primeros_fallen(
+    entorno_exportacion, monkeypatch
+):
+    _, db, cuenta, _, _, _, _ = entorno_exportacion
+    filas = [
+        Exportacion(
+            id_usr=cuenta.id_usr,
+            frmt="csv",
+            fltrs_aplcds={},
+            estd="Lista",
+            objeto_clave=f"exportaciones/prueba/{i}.csv",
+            fch_exprcn=ahora() - dt.timedelta(seconds=1),
+        )
+        for i in range(205)
+    ]
+    db.add_all(filas)
+    db.commit()
+    eliminar = AlmacenFalso.eliminar
+
+    def con_fallos(self, clave, version=None):
+        if int(clave.rsplit("/", 1)[1].split(".")[0]) < 100:
+            raise OSError("Proveedor temporalmente no disponible")
+        eliminar(self, clave, version)
+
+    monkeypatch.setattr(AlmacenFalso, "eliminar", con_fallos)
+    assert tareas.mantener_exportaciones()["eliminadas"] == 105
+    assert all(f.estd == "Lista" and f.objeto_clave for f in filas[:100])
+    assert all(f.estd == "Expirada" and f.objeto_clave is None for f in filas[100:])
+    monkeypatch.setattr(AlmacenFalso, "eliminar", eliminar)
+    assert tareas.mantener_exportaciones()["eliminadas"] == 100
+
+
+@pytest.mark.parametrize("prefijo", ["\t", "\r", "\n", "\v", "\f", "\u00a0"])
+def test_csv_neutraliza_formulas_precedidas_por_espacios(prefijo):
+    from app.services.exportaciones import celda_csv
+
+    assert celda_csv(prefijo + "=1+1").startswith("'")
+
+
+def test_solicitud_conserva_el_rol_empresarial_original(entorno_exportacion):
+    entorno_exportacion[3]["rol_empresa"] = "Administrador"
+    exportacion = solicitar(entorno_exportacion)
+    assert exportacion.fltrs_aplcds["rol_empresa"] == "Administrador"

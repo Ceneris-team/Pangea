@@ -189,6 +189,7 @@ export function useMapaEnVivo(onLectura: (evento: EventoLectura) => void) {
       // Reintentar con el MISMO token daría exactamente el mismo
       // resultado, así que se deja de insistir.
       if (evento.code === 1008) {
+        window.dispatchEvent(new Event("pangea:acceso-rechazado"));
         setEstado("sin-conexion");
         return;
       }

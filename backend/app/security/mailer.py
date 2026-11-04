@@ -11,6 +11,7 @@ jwt_auth.py.
 import logging
 import os
 import smtplib
+import ssl
 from email.message import EmailMessage
 
 logger = logging.getLogger("pangea.mailer")
@@ -36,7 +37,7 @@ def enviar_correo_exportacion(correo: str, enlace: str, expira_en) -> None:
         "El acceso a los datos se comprobará de nuevo antes de descargar."
     )
     with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=20) as servidor:
-        servidor.starttls()
+        servidor.starttls(context=ssl.create_default_context())
         if SMTP_USER and SMTP_PASSWORD:
             servidor.login(SMTP_USER, SMTP_PASSWORD)
         servidor.send_message(mensaje)
@@ -62,7 +63,7 @@ def enviar_correo_recuperacion(correo: str, token: str) -> None:
     mensaje.set_content(cuerpo)
 
     with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as servidor:
-        servidor.starttls()
+        servidor.starttls(context=ssl.create_default_context())
         if SMTP_USER and SMTP_PASSWORD:
             servidor.login(SMTP_USER, SMTP_PASSWORD)
         servidor.send_message(mensaje)

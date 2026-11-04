@@ -2,6 +2,8 @@ import datetime as dt
 import ftplib
 import logging
 
+from botocore.exceptions import BotoCoreError, ClientError
+
 from app.core.celery_app import celery_app
 from app.database import SessionLocal
 from app.ingesta.ftp_receptor import descargar_archivo_dat, listar_archivos_dat
@@ -10,6 +12,7 @@ from app.models.intento_procesamiento import IntentoProcesamiento
 from app.models.mapeo_dispositivo import Dispositivo, Parametro
 from app.models.ubicacion_conexion import ConexionFTP
 from app.security.auditoria import limpiar_contexto_auditoria, marcar_contexto_auditoria
+from app.services import object_storage
 from app.services.cache.invalidacion import invalidar_por_lectura
 from app.services.ingesta.estandarizador import estandarizar_filas
 from app.services.ingesta.mapeo import (
@@ -44,7 +47,11 @@ logger = logging.getLogger(__name__)
 # 'Procesando' para siempre en vez de reintentarse. TimeoutError y
 # OSError ya están cubiertos por all_errors (TimeoutError hereda de
 # OSError).
-ERRORES_TRANSITORIOS = tuple(ftplib.all_errors)
+# Se suman los errores de boto3/Object Storage (BotoCoreError, ClientError):
+# archivar el .dat crudo en el bucket (HT-06 CA3) ocurre ANTES de parsear, así
+# que un fallo transitorio de S3 debe reintentar el archivo entero -todavía no
+# se insertó telemetría, no hay riesgo de duplicar- en vez de marcarlo Fallido.
+ERRORES_TRANSITORIOS = tuple(ftplib.all_errors) + (BotoCoreError, ClientError)
 
 
 class ErrorDatosNoRecuperable(Exception):
@@ -308,6 +315,19 @@ def procesar_archivo_dat(self, id_archv: int, id_usr_reintento: int | None = Non
             limpiar_contexto_auditoria(db)
 
         contenido = descargar_archivo_dat(cnxn, archivo.nmbr_archv)
+
+        # HT-06 CA3: archivar el .dat CRUDO en Object Storage. Se hace ANTES de
+        # parsear a propósito: así queda guardado el original aunque el parseo
+        # después falle, y si la subida falla se reintenta (BotoCoreError/
+        # ClientError son transitorios) sin duplicar telemetría -todavía no se
+        # insertó nada-. En entornos sin bucket (dev/CI) se saltea limpio.
+        if object_storage.esta_configurado():
+            object_storage.subir_contenido(
+                contenido.encode("utf-8"),
+                object_storage.clave_dat(archivo.id_cnxn, archivo.nmbr_archv),
+                content_type="text/plain; charset=utf-8",
+            )
+            logger.info("archv_ingst id=%s: .dat crudo archivado en Object Storage", id_archv)
 
         try:
             resultado_validacion, resultado_persistencia = interpretar_y_guardar(

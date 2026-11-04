@@ -91,6 +91,13 @@ def _registrar_acceso_denegado(db: Session, usuario: dict, modulo: str, accion: 
     que este es el último paso antes del 403, pero es gratis y evita un
     "InvalidRequestError: session is in 'inactive' state" en cascada).
     """
+    from app.security.auditoria_contexto import marcar_actor
+
+    marcar_actor(db, usuario)
+    if db.info.get("auditoria_ht11", {}).get("origen") == "API":
+        db.info["auditoria_denegacion"] = {"accion": f"acceso_denegado:{accion}", "entidad": modulo}
+        db.info["auditoria_ht11"]["denegacion"] = db.info["auditoria_denegacion"]
+        return
     logger.warning(
         "Acceso denegado: usuario=%s sede=%s rol=%s modulo=%s accion=%s",
         usuario.get("sub"),
@@ -109,12 +116,15 @@ def _registrar_acceso_denegado(db: Session, usuario: dict, modulo: str, accion: 
                 entdd=modulo,
                 vlrs_antrrs=None,
                 vlrs_nvs=None,
+                resultado="Denegado",
+                ejecutor=f"usuario:{sub}",
+                motivo="permisos_insuficientes",
             )
         )
         db.commit()
     except Exception:
         db.rollback()
-        logger.exception("No se pudo persistir el acceso denegado en lg_adtr (HT-11 CA5)")
+        logger.error("HT11_ALERTA_DENEGACION_NO_REGISTRADA")
 
 
 def require_permiso(modulo: str, accion: str):
@@ -128,6 +138,9 @@ def require_permiso(modulo: str, accion: str):
     ) -> dict:
         id_usr = int(usuario["sub"])
         id_sd = usuario.get("sede_id")
+        from app.security.auditoria_contexto import marcar_actor
+
+        marcar_actor(db, usuario)
         permiso = permiso_del_entorno(db, usuario, modulo, accion)
         if permiso is None:
             permiso = tiene_permiso(db, id_usr, id_sd, modulo, accion)
@@ -162,7 +175,9 @@ def require_alguno_permiso(*modulos_acciones: tuple[str, str]):
         id_sd = usuario.get("sede_id")
         for modulo, accion in modulos_acciones:
             permiso = permiso_del_entorno(db, usuario, modulo, accion)
-            if permiso is True or (permiso is None and tiene_permiso(db, id_usr, id_sd, modulo, accion)):
+            if permiso is True or (
+                permiso is None and tiene_permiso(db, id_usr, id_sd, modulo, accion)
+            ):
                 return usuario
         modulos = "/".join(modulo for modulo, _ in modulos_acciones)
         _registrar_acceso_denegado(db, usuario, modulos, "|".join(a for _, a in modulos_acciones))
@@ -197,7 +212,10 @@ def verificar_sede(
 
 def require_funcionalidad(codigo: str, modulo: str, accion: str = LECTURA):
     """Todo módulo comercial nuevo exige rol, ámbito y derecho contratado."""
-    def dependencia(usuario: dict = Depends(require_permiso(modulo, accion)), db: Session = Depends(get_db)):
+
+    def dependencia(
+        usuario: dict = Depends(require_permiso(modulo, accion)), db: Session = Depends(get_db)
+    ):
         cliente_id = usuario.get("cliente_id")
         if cliente_id is None and usuario.get("sede_id"):
             sede = db.get(Sede, usuario["sede_id"])
@@ -206,4 +224,5 @@ def require_funcionalidad(codigo: str, modulo: str, accion: str = LECTURA):
             raise HTTPException(403, "Selecciona una empresa para usar esta funcionalidad")
         exigir_funcionalidad(db, cliente_id, codigo)
         return usuario
+
     return dependencia

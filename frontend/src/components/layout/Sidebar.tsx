@@ -7,7 +7,7 @@ import pangeaIconLight from "../../assets/pangea-icon-light.png";
 import pangeaIconDark from "../../assets/pangea-icon-dark.png";
 import { ROLES, rutaPorRol } from "../../config/roles";
 
-export type SeccionActiva = "panel" | "usuarios" | "ubicaciones" | "dispositivos" | "conexiones-ftp" | "dashboard" | "configuracion" | "consulta-datos"| "mapeos" | "parametros" | "cola-ingesta" | "graficos" | "mapa-estaciones" | "mapa-ubicaciones" | "paneles" | "mi-perfil" | "planes" | "suscripciones" | "empresas" | "clientes";
+export type SeccionActiva = "panel" | "usuarios" | "ubicaciones" | "dispositivos" | "conexiones-ftp" | "dashboard" | "configuracion" | "consulta-datos"| "mapeos" | "parametros" | "cola-ingesta" | "graficos" | "mapa-estaciones" | "mapa-ubicaciones" | "paneles" | "mi-perfil" | "planes" | "suscripciones" | "empresas" | "clientes" | "alarmas";
 
 interface SidebarProps {
   onLogout: () => void;
@@ -138,6 +138,7 @@ function ItemMenu({ to, activo, icono, children }: { to: string; activo: boolean
 
 const iconos = {
   panel: "M4 6h16M4 12h16M4 18h7",
+  alarma: "M15 17h5l-1.4-1.4A2 2 0 0118 14.2V11a6 6 0 10-12 0v3.2a2 2 0 01-.6 1.4L4 17h5m6 0a3 3 0 11-6 0",
   usuarios: "M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2m18 0v-2a4 4 0 00-3-3.87M9 11a4 4 0 100-8 4 4 0 000 8m8-7.87a4 4 0 010 7.75",
   empresa: "M3 21h18M5 21V5h14v16M9 9h2m-2 4h2m4-4h2m-2 4h2M9 21v-4h6v4",
   planes: "M4 5h16v14H4zM8 9h8m-8 4h5",
@@ -170,6 +171,8 @@ export default function Sidebar({ onLogout, activo, rol }: SidebarProps) {
   const grupos: { titulo: string; entradas: Entrada[] }[] = [
     { titulo: "Operación", entradas: [
       { ruta: "/paneles", seccion: "paneles", titulo: "Tableros personalizables", icono: "panel" },
+      // HU27/HU28 (PP-72, PP-73): Gestión de Alarmas y Notificaciones.
+      { ruta: "/alarmas", seccion: "alarmas", titulo: "Alarmas", icono: "alarma" },
     ] },
     { titulo: "Datos", entradas: [
       { ruta: "/consulta-datos", seccion: "consulta-datos", titulo: "Consulta de datos", icono: "datos" },

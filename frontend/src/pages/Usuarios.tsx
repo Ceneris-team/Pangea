@@ -59,6 +59,13 @@ interface UbicacionPermisoItem {
   id_ubccn: number;
   nmbr: string;
   tiene_acceso: boolean;
+  id_clnt: number;
+  empresa: string;
+  id_sd: number;
+  sede: string;
+  estado: string;
+  puede_asignar: boolean;
+  motivo_restriccion: string | null;
 }
 
 /** HU21 CA1: respuesta de GET /usuarios/{id}/permisos-ubicaciones. */
@@ -164,6 +171,8 @@ export default function Usuarios() {
   const [guardandoPermisos, setGuardandoPermisos] = useState(false);
   const [errorPermisos, setErrorPermisos] = useState<string | null>(null);
   const [permisosGuardados, setPermisosGuardados] = useState<string | null>(null);
+  const cargaPermisos = useRef<AbortController | null>(null);
+  useEffect(() => () => cargaPermisos.current?.abort(), []);
 
   function abrirForm() {
     setForm(FORM_VACIO);
@@ -283,6 +292,10 @@ export default function Usuarios() {
    *  listado de TODAS las ubicaciones registradas y el estado de acceso
    *  actual de ese usuario." */
   async function abrirPermisos(usuario: UsuarioListItem) {
+    if (guardandoPermisos) return;
+    cargaPermisos.current?.abort();
+    const controller = new AbortController();
+    cargaPermisos.current = controller;
     cancelarEdicion();
     setMostrarForm(false);
     setCreado(null);
@@ -290,21 +303,25 @@ export default function Usuarios() {
     setPermisosGuardados(null);
     setPermisosDe(usuario);
     setPanelPermisos(null);
+    setSeleccionUbicaciones([]);
     setCargandoPermisos(true);
 
     try {
       const panel = await apiFetch<PermisosPanelResponse>(
         `/usuarios/${usuario.id_usr}/permisos-ubicaciones`,
+        { signal: controller.signal },
       );
+      if (controller.signal.aborted) return;
       setPanelPermisos(panel);
       // El estado de acceso actual es el punto de partida de la selección.
       setSeleccionUbicaciones(panel.items.filter((i) => i.tiene_acceso).map((i) => i.id_ubccn));
     } catch (err) {
+      if (controller.signal.aborted) return;
       setErrorPermisos(
         err instanceof ApiError ? err.message : "No se pudo cargar el panel de permisos",
       );
     } finally {
-      setCargandoPermisos(false);
+      if (!controller.signal.aborted) setCargandoPermisos(false);
     }
   }
 
@@ -313,6 +330,9 @@ export default function Usuarios() {
    *  en memoria hasta que se pulsa "GUARDAR PERMISOS", así que descartarla es
    *  literalmente no mandar nada al backend. */
   function cerrarPermisos() {
+    if (guardandoPermisos) return;
+    cargaPermisos.current?.abort();
+    setCargandoPermisos(false);
     setPermisosDe(null);
     setPanelPermisos(null);
     setSeleccionUbicaciones([]);
@@ -332,8 +352,9 @@ export default function Usuarios() {
    *  ENTONCES el sistema actualiza los permisos y muestra el mensaje
    *  'Permisos actualizados correctamente'." */
   async function guardarPermisos() {
-    if (permisosDe === null) return;
+    if (permisosDe === null || !panelPermisos || panelPermisos.id_usr !== permisosDe.id_usr || cargandoPermisos || guardandoPermisos) return;
     setErrorPermisos(null);
+    setPermisosGuardados(null);
     setGuardandoPermisos(true);
 
     try {
@@ -636,11 +657,12 @@ export default function Usuarios() {
                           >
                             <input
                               type="checkbox"
+                              disabled={guardandoPermisos || (!u.puede_asignar && !seleccionUbicaciones.includes(u.id_ubccn))}
                               checked={seleccionUbicaciones.includes(u.id_ubccn)}
                               onChange={() => alternarUbicacion(u.id_ubccn)}
                               className="accent-[#ccff00]"
                             />
-                            {u.nmbr}
+                            <span><strong>{u.nmbr}</strong><span className="block text-xs">{u.empresa} · {u.sede} · {u.estado}</span>{u.motivo_restriccion && <span className="block text-xs text-amber-700 dark:text-amber-300">{u.motivo_restriccion}. Puedes retirar una asignación anterior.</span>}</span>
                           </label>
                         ))}
                       </div>
@@ -660,7 +682,7 @@ export default function Usuarios() {
                     <button
                       type="button"
                       onClick={guardarPermisos}
-                      disabled={guardandoPermisos || !panelPermisos}
+                      disabled={guardandoPermisos || cargandoPermisos || !panelPermisos || panelPermisos.id_usr !== permisosDe.id_usr}
                       className="px-4 py-2 text-sm font-semibold text-[#0c1712] bg-[#ccff00] hover:bg-[#b8e600] rounded-lg disabled:opacity-50 transition-colors"
                     >
                       {guardandoPermisos ? "Guardando…" : "GUARDAR PERMISOS"}

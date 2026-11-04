@@ -29,6 +29,7 @@ interface PerfilResponse {
 }
 
 interface AuthState {
+  correo: string | null;
   operacionHabilitada: boolean;
   rolEmpresa: string | null;
   clienteId: number | null;
@@ -87,6 +88,7 @@ function readInitialState(): AuthState {
   const zonaHoraria =
     localStorage.getItem("pangea_zona_horaria") ?? sessionStorage.getItem("pangea_zona_horaria");
   return {
+    correo: null,
     operacionHabilitada: false,
     rolEmpresa: null, clienteId: null, proyectoId: null,
     sesionIniciada: rol !== null,
@@ -137,6 +139,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         localStorage.setItem("pangea_zona_horaria", perfil.zona_horaria);
 
         setState({
+          correo: perfil.correo,
           operacionHabilitada: perfil.operacion_habilitada ?? true,
           rolEmpresa: perfil.rol_empresa, clienteId: perfil.cliente_id, proyectoId: perfil.proyecto_id,
           sesionIniciada: true,
@@ -160,6 +163,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         limpiarDatosDeSesion();
         setState({
+          correo: null,
           operacionHabilitada: false,
           rolEmpresa: null, clienteId: null, proyectoId: null,
           sesionIniciada: false,
@@ -187,6 +191,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     sessionStorage.removeItem("pangea_cliente");
     sessionStorage.removeItem("pangea_proyecto");
     sessionStorage.removeItem("pangea_proyecto_v2");
+    sessionStorage.removeItem("pangea_acceso");
+    sessionStorage.removeItem("pangea_aviso_acceso");
     const data = await apiFetch<LoginResponse>("/auth/login", {
       method: "POST",
       body: { correo, contrasena },
@@ -200,6 +206,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     storage.setItem("pangea_zona_horaria", data.zona_horaria);
 
     setState({
+      correo: perfil.correo,
       operacionHabilitada: perfil.operacion_habilitada ?? true,
       rolEmpresa: perfil.rol_empresa, clienteId: perfil.cliente_id, proyectoId: perfil.proyecto_id,
       sesionIniciada: true,
@@ -219,6 +226,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     apiFetch("/auth/logout", { method: "POST" }).catch(() => {});
     limpiarDatosDeSesion();
     setState({
+      correo: null,
       operacionHabilitada: false,
       rolEmpresa: null, clienteId: null, proyectoId: null,
       sesionIniciada: false,

@@ -17,6 +17,7 @@
  */
 import { esAdministracion, esCeneris } from "../config/espacios";
 import { textoDeProyectos } from "../config/terminologia";
+import { mensajeDeDetalle } from "./mensajeError";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
 
@@ -32,6 +33,8 @@ export const CLAVES_SESION_UI = [
   "pangea_cliente",
   "pangea_proyecto",
   "pangea_proyecto_v2",
+  "pangea_acceso",
+  "pangea_aviso_acceso",
 ] as const;
 
 export function limpiarDatosDeSesion(): void {
@@ -50,6 +53,8 @@ export class ApiError extends Error {
 }
 
 interface ApiOptions {
+  /** Consulta de vigencia independiente del proyecto que pueda haber sido revocado. */
+  sinEntorno?: boolean;
   signal?: AbortSignal;
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   body?: unknown;
@@ -108,7 +113,7 @@ export async function apiFetch<T>(path: string, options: ApiOptions = {}): Promi
     credentials: "include",
     headers: {
       "Content-Type": "application/json",
-      ...headersEntorno(),
+      ...(options.sinEntorno ? {} : headersEntorno()),
     },
     body: options.body ? JSON.stringify(options.body) : undefined,
   });
@@ -161,8 +166,13 @@ async function manejarRespuesta<T>(
   }
 
   if (!res.ok) {
+    if (res.status === 403 && path !== "/auth/acceso") {
+      window.dispatchEvent(new Event("pangea:acceso-rechazado"));
+    }
     const data = await res.json().catch(() => null);
-    throw new ApiError(data?.detail ?? "Ocurrió un error inesperado", res.status);
+    // DEF-02 (PP-225): un 422 de validación trae `detail` como lista de
+    // objetos; mensajeDeDetalle lo convierte en texto legible.
+    throw new ApiError(mensajeDeDetalle(data?.detail), res.status);
   }
 
   return res.json() as Promise<T>;
