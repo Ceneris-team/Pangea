@@ -117,20 +117,25 @@ def _validar_asignaciones(db: Session, cliente_id: int, rol: str, ids: list[int]
     solicitados = set(ids)
     if not solicitados:
         raise HTTPException(status_code=422, detail="Asigna al menos un proyecto al usuario")
-    existentes = {
-        id_pryct
-        for (id_pryct,) in db.query(Ubicacion.id_ubccn)
+    proyectos = (
+        db.query(Ubicacion.id_ubccn, Ubicacion.nmbr, Ubicacion.estd)
         .join(Sede, Sede.id_sd == Ubicacion.id_sd)
         .filter(
             Sede.id_clnt == cliente_id,
-            Ubicacion.estd == "Activa",
             Ubicacion.id_ubccn.in_(solicitados),
         )
         .all()
-    }
+    )
+    existentes = {proyecto.id_ubccn for proyecto in proyectos}
     if existentes != solicitados:
         raise HTTPException(
             status_code=422, detail="Hay proyectos que no pertenecen a esta empresa"
+        )
+    inactivos = sorted(proyecto.nmbr for proyecto in proyectos if proyecto.estd != "Activa")
+    if inactivos:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Hay proyectos inactivos: {', '.join(inactivos)}",
         )
     return solicitados
 

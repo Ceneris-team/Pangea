@@ -289,6 +289,82 @@ def test_guardado_invalido_es_atomico_y_guardado_repetido_no_duplica(escenario):
     assert db.query(UsuarioProyecto).filter_by(id_mmb=miembro["id_mmb"]).count() == 1
 
 
+@pytest.mark.parametrize("caso", ["asignar", "conservar", "reactivar"])
+def test_proyecto_inactivo_explica_motivo_sin_cambios_parciales(escenario, caso):
+    from app.models import UsuarioCliente, UsuarioProyecto
+
+    cliente, actor, andina, _, proyectos, _, db = escenario
+    admin = _crear_miembro(
+        cliente, andina.id_clnt, "Admin", "admin.inactivos@test.example", "Administrador"
+    )
+    _usar_miembro(actor, admin.json())
+    miembro = _crear_miembro(
+        cliente,
+        andina.id_clnt,
+        "Lector",
+        "lector.inactivos@test.example",
+        "Lector",
+        [proyectos[0].id_ubccn],
+    ).json()["miembro"]
+    ruta = f"/empresas/{andina.id_clnt}/usuarios/{miembro['id_mmb']}"
+    cuerpo = {"rol": "Lector", "estado": "Activo", "proyecto_ids": miembro["proyecto_ids"]}
+    if caso == "reactivar":
+        assert cliente.patch(ruta, json={**cuerpo, "estado": "Inactivo"}).status_code == 200
+    inactivo = proyectos[1] if caso == "asignar" else proyectos[0]
+    inactivo.estd = "Inactiva"
+    db.flush()
+    respuesta = cliente.patch(
+        ruta, json={**cuerpo, "proyecto_ids": [p.id_ubccn for p in proyectos]}
+    )
+    assert respuesta.status_code == 422, respuesta.text
+    assert "inactiv" in respuesta.json()["detail"].lower()
+    assert inactivo.nmbr in respuesta.json()["detail"]
+    db.expire_all()
+    guardado = db.get(UsuarioCliente, miembro["id_mmb"])
+    assert guardado.estd == ("Inactivo" if caso == "reactivar" else "Activo")
+    assert guardado.rol_emp == "Lector"
+    assert [
+        id_
+        for (id_,) in db.query(UsuarioProyecto.id_ubccn).filter_by(id_mmb=miembro["id_mmb"]).all()
+    ] == miembro["proyecto_ids"]
+
+
+def test_pertenencia_se_valida_antes_del_estado_y_no_revela_nombres_ajenos(escenario):
+    cliente, _, andina, _, proyectos, ajeno, db = escenario
+    proyectos[0].estd = "Inactiva"
+    ajeno.estd = "Inactiva"
+    db.flush()
+    respuesta = _crear_miembro(
+        cliente,
+        andina.id_clnt,
+        "Lector",
+        "lector.mixto@test.example",
+        "Lector",
+        [proyectos[0].id_ubccn, ajeno.id_ubccn],
+    )
+    assert respuesta.status_code == 422
+    assert respuesta.json()["detail"] == "Hay proyectos que no pertenecen a esta empresa"
+    assert db.query(Usuario).filter_by(crr="lector.mixto@test.example").count() == 0
+
+
+def test_crear_lector_con_proyecto_inactivo_explica_motivo_y_no_crea_usuario(escenario):
+    cliente, _, andina, _, proyectos, _, db = escenario
+    proyectos[0].estd = "Inactiva"
+    db.flush()
+    respuesta = _crear_miembro(
+        cliente,
+        andina.id_clnt,
+        "Lector",
+        "lector.nuevo.inactivo@test.example",
+        "Lector",
+        [proyectos[0].id_ubccn],
+    )
+    assert respuesta.status_code == 422
+    assert "inactiv" in respuesta.json()["detail"].lower()
+    assert proyectos[0].nmbr in respuesta.json()["detail"]
+    assert db.query(Usuario).filter_by(crr="lector.nuevo.inactivo@test.example").count() == 0
+
+
 def test_usuarios_anteriores_aparecen_en_empresa_sin_duplicar_membresias(escenario, fabrica):
     cliente, _, andina, _, proyectos, _, db = escenario
     sede_id = proyectos[0].id_sd
