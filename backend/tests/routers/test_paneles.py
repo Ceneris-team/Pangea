@@ -247,6 +247,21 @@ def test_buscar_paneles_sin_coincidencias_devuelve_lista_vacia(
     assert respuesta.json()["items"] == []
 
 
+@pytest.mark.parametrize("busqueda", ["%", "_", "\\", "*", "Panel%", "Panel_", "Panel\\"])
+def test_buscar_paneles_caracteres_especiales_son_literales(
+    client, db_session, cliente_con_edicion_tableros, busqueda
+):
+    """PP-211 / DEF-05: los caracteres de LIKE no amplían la búsqueda."""
+    usuario, sede = cliente_con_edicion_tableros
+    crear_panel(db_session, usuario, sede, "Panel Norte")
+    crear_panel(db_session, usuario, sede, "Panel Sur")
+
+    respuesta = client.get("/paneles", params={"busqueda": busqueda})
+
+    assert respuesta.status_code == 200
+    assert respuesta.json()["items"] == []
+
+
 # ---------------------------------------------------------------------------
 # Permisos (HT-09)
 # ---------------------------------------------------------------------------

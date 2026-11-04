@@ -158,8 +158,9 @@ def listar_paneles(
         query = filtrar_sedes(query, Panel.id_sd, db, usuario)
 
     if busqueda:
-        patron = f"%{busqueda.lower()}%"
-        query = query.filter(func.lower(Panel.nmbr).like(patron))
+        texto = busqueda.lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        patron = f"%{texto}%"
+        query = query.filter(func.lower(Panel.nmbr).like(patron, escape="\\"))
 
     paneles = query.order_by(Panel.fch_crcn.desc()).all()
     visibles = set(ubicaciones_permitidas(db, usuario))
