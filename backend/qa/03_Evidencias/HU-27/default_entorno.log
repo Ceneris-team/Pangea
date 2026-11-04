@@ -1,0 +1,121 @@
+E                                                                        [100%]
+=================================== ERRORS ====================================
+___________ ERROR at setup of test_sin_alarmas_devuelve_lista_vacia ___________
+
+_engine = Engine(postgresql+psycopg2://postgres:***@localhost:5432/pangea_test)
+
+    @pytest.fixture()
+    def db_session(_engine):
+>       conexion = _engine.connect()
+                   ^^^^^^^^^^^^^^^^^
+
+tests\conftest.py:46: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+..\..\Pangea\backend\venv\Lib\site-packages\sqlalchemy\engine\base.py:3263: in connect
+    return self._connection_cls(self)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+..\..\Pangea\backend\venv\Lib\site-packages\sqlalchemy\engine\base.py:149: in __init__
+    self._dbapi_connection = engine.raw_connection()
+                             ^^^^^^^^^^^^^^^^^^^^^^^
+..\..\Pangea\backend\venv\Lib\site-packages\sqlalchemy\engine\base.py:3287: in raw_connection
+    return self.pool.connect()
+           ^^^^^^^^^^^^^^^^^^^
+..\..\Pangea\backend\venv\Lib\site-packages\sqlalchemy\pool\base.py:445: in connect
+    return _ConnectionFairy._checkout(self)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+..\..\Pangea\backend\venv\Lib\site-packages\sqlalchemy\pool\base.py:1303: in _checkout
+    fairy = _ConnectionRecord.checkout(pool)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+..\..\Pangea\backend\venv\Lib\site-packages\sqlalchemy\pool\base.py:709: in checkout
+    rec = pool._do_get()
+          ^^^^^^^^^^^^^^
+..\..\Pangea\backend\venv\Lib\site-packages\sqlalchemy\pool\impl.py:176: in _do_get
+    with util.safe_reraise():
+         ^^^^^^^^^^^^^^^^^^^
+..\..\Pangea\backend\venv\Lib\site-packages\sqlalchemy\util\langhelpers.py:166: in __exit__
+    raise exc_value.with_traceback(exc_tb)
+..\..\Pangea\backend\venv\Lib\site-packages\sqlalchemy\pool\impl.py:174: in _do_get
+    return self._create_connection()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+..\..\Pangea\backend\venv\Lib\site-packages\sqlalchemy\pool\base.py:386: in _create_connection
+    return _ConnectionRecord(self)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+..\..\Pangea\backend\venv\Lib\site-packages\sqlalchemy\pool\base.py:671: in __init__
+    self.__connect()
+..\..\Pangea\backend\venv\Lib\site-packages\sqlalchemy\pool\base.py:906: in __connect
+    with util.safe_reraise():
+         ^^^^^^^^^^^^^^^^^^^
+..\..\Pangea\backend\venv\Lib\site-packages\sqlalchemy\util\langhelpers.py:166: in __exit__
+    raise exc_value.with_traceback(exc_tb)
+..\..\Pangea\backend\venv\Lib\site-packages\sqlalchemy\pool\base.py:902: in __connect
+    self.dbapi_connection = connection = pool._invoke_creator(self)
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+..\..\Pangea\backend\venv\Lib\site-packages\sqlalchemy\engine\create.py:645: in connect
+    return dialect.connect(*cargs_tup, **cparams)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+..\..\Pangea\backend\venv\Lib\site-packages\sqlalchemy\engine\default.py:869: in connect
+    return self.loaded_dbapi.connect(*cargs, **cparams)  # type: ignore[no-any-return]  # NOQA: E501
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+dsn = 'host=localhost dbname=pangea_test user=postgres password=postgres port=5432'
+connection_factory = None, cursor_factory = None
+kwargs = {'host': 'localhost', 'dbname': 'pangea_test', 'user': 'postgres', 'password': 'postgres', ...}
+
+    def connect(dsn=None, connection_factory=None, cursor_factory=None, **kwargs):
+        """
+        Create a new database connection.
+    
+        The connection parameters can be specified as a string:
+    
+            conn = psycopg2.connect("dbname=test user=postgres password=secret")
+    
+        or using a set of keyword arguments:
+    
+            conn = psycopg2.connect(database="test", user="postgres", password="secret")
+    
+        Or as a mix of both. The basic connection parameters are:
+    
+        - *dbname*: the database name
+        - *database*: the database name (only as keyword argument)
+        - *user*: user name used to authenticate
+        - *password*: password used to authenticate
+        - *host*: database host address (defaults to UNIX socket if not provided)
+        - *port*: connection port number (defaults to 5432 if not provided)
+    
+        Using the *connection_factory* parameter a different class or connections
+        factory can be specified. It should be a callable object taking a dsn
+        argument.
+    
+        Using the *cursor_factory* parameter, a new default cursor factory will be
+        used by cursor().
+    
+        Using *async*=True an asynchronous connection will be created. *async_* is
+        a valid alias (for Python versions where ``async`` is a keyword).
+    
+        Any other keyword parameter will be passed to the underlying client
+        library: the list of supported parameters depends on the library version.
+    
+        """
+        kwasync = {}
+        if 'async' in kwargs:
+            kwasync['async'] = kwargs.pop('async')
+        if 'async_' in kwargs:
+            kwasync['async_'] = kwargs.pop('async_')
+    
+        dsn = _ext.make_dsn(dsn, **kwargs)
+>       conn = _connect(dsn, connection_factory=connection_factory, **kwasync)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       UnicodeDecodeError: 'utf-8' codec can't decode byte 0xf3 in position 85: invalid continuation byte
+
+..\..\Pangea\backend\venv\Lib\site-packages\psycopg2\__init__.py:135: UnicodeDecodeError
+============================== warnings summary ===============================
+..\..\Pangea\backend\venv\Lib\site-packages\fastapi\testclient.py:1
+  C:\Users\COMERCIAL\Desktop\Proyectos\pangea\Pangea\backend\venv\Lib\site-packages\fastapi\testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+- Generated html report: file:///C:/Users/COMERCIAL/Desktop/Proyectos/pangea/Pangea/backend/qa/03_Evidencias/HU-27/pytest_bd_default.html -
+=========================== short test summary info ===========================
+ERROR tests/routers/test_alarmas.py::test_sin_alarmas_devuelve_lista_vacia - ...
+1 warning, 1 error in 3.25s
