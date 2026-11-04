@@ -13,6 +13,10 @@ function CargandoAcceso() {
   return <main className="p-8 text-gray-900 dark:text-white" aria-busy="true" role="status">Comprobando tus permisos…</main>;
 }
 
+function AccesoSinVerificar({ logout }: { logout: () => void }) {
+  return <main className="mx-auto max-w-xl p-8 text-gray-900 dark:text-white" role="alert"><h1 className="text-xl font-bold">No pudimos comprobar tus permisos</h1><p className="my-4">Reintenta en unos momentos. Tus datos se mostrarán cuando se confirme tu acceso.</p><div className="flex gap-3"><button type="button" className="rounded-lg bg-[#ccff00] px-4 py-2 text-gray-950" onClick={() => window.location.reload()}>Reintentar</button><button type="button" className="rounded-lg border border-gray-300 px-4 py-2 dark:border-white/20" onClick={logout}>Cerrar sesión</button></div></main>;
+}
+
 /** Cada cuenta valida su acceso antes de montar los módulos y cargar sus datos. */
 export default function VigenciaAcceso({ children }: { children: ReactNode }) {
   const { sesionIniciada, verificandoSesion, rol, correo, logout } = useAuth();
@@ -24,6 +28,7 @@ export default function VigenciaAcceso({ children }: { children: ReactNode }) {
 
 function VigenciaSesion({ children, usuario, logout }: { children: ReactNode; usuario: string; logout: () => void }) {
   const [estado, setEstado] = useState<{ denegado: boolean; aviso: string | null } | null>(null);
+  const [sinVerificar, setSinVerificar] = useState(false);
 
   useEffect(() => {
     let version = leerVersionAcceso(sessionStorage, usuario);
@@ -66,7 +71,10 @@ function VigenciaSesion({ children, usuario, logout }: { children: ReactNode; us
         sessionStorage.removeItem("pangea_aviso_acceso");
         setEstado(anterior => ({ denegado: false, aviso: aviso ?? anterior?.aviso ?? null }));
       } catch (error) {
-        if (!cancelado && error instanceof ApiError && error.status === 403) setEstado({ denegado: true, aviso: null });
+        if (cancelado) return;
+        if (error instanceof ApiError && error.status === 403) setEstado({ denegado: true, aviso: null });
+        // Sin acceso confirmado los módulos siguen ocultos; el intervalo reintenta y el aviso desaparece al verificar.
+        else setSinVerificar(true);
       } finally { consultando = false; }
     }
     void comprobar();
@@ -85,7 +93,7 @@ function VigenciaSesion({ children, usuario, logout }: { children: ReactNode; us
     };
   }, [usuario]);
 
-  if (!estado) return <CargandoAcceso />;
+  if (!estado) return sinVerificar ? <AccesoSinVerificar logout={logout} /> : <CargandoAcceso />;
   if (estado.denegado) return <main className="mx-auto max-w-xl p-8 text-gray-900 dark:text-white" role="alert"><h1 className="text-xl font-bold">Tu acceso cambió</h1><p className="my-4">Se retiró el acceso a esta empresa o se están actualizando los proyectos disponibles. Contacta al administrador si necesitas recuperar el acceso.</p><button type="button" className="rounded-lg bg-[#ccff00] px-4 py-2 text-gray-950" onClick={logout}>Cerrar sesión</button></main>;
   return <>{estado.aviso && <div role="status" className="bg-lime-100 p-3 text-sm text-gray-900">{estado.aviso}</div>}{children}</>;
 }
