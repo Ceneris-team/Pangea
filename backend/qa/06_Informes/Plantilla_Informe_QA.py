@@ -1,4 +1,4 @@
-"""Plantilla del informe PDF de QA por HU (A4, máximo 3 páginas). Formato fijo para cualquier proyecto.
+"""Plantilla del informe PDF de QA por HU (A4, máximo 4 páginas). Formato fijo para cualquier proyecto.
 
 Cómo se usa:
   1. Copia este archivo a QA/06_Informes/generar_informe_<HU>.py
@@ -38,7 +38,8 @@ ENTORNO = "[Entorno local, identidad simulada, sin Supabase ni datos reales]"
 RAMAS = "[rama-de-la-HU, dev, Matias y testing (HU integrada en las tres)]"
 REVISA = "Product Owner"
 
-# "APTO" | "APTO CON OBSERVACIONES" | "NO APTO"
+# "APTO" | "APTO CON OBSERVACIONES" | "NO APTO" | "NO APTO PARA CIERRE"
+# Con subtareas fuera de Listo, marca VERSION como borrador, por ejemplo "v1.0 (borrador)".
 VEREDICTO = "APTO CON OBSERVACIONES"
 RESUMEN = ("[2-3 líneas: qué CA se cumplen, si hay defectos del producto y <b>cuántas observaciones "
            "necesitan decisión del PO</b>.]")
@@ -46,9 +47,9 @@ RESUMEN = ("[2-3 líneas: qué CA se cumplen, si hay defectos del producto y <b>
 # 5 indicadores: (valor, etiqueta con <br/> para partir línea, "ok" | "warn" | "fail")
 KPIS = [
     ("[N / N]", "casos funcionales<br/>aprobados", "ok"),
-    ("[0]", "defectos<br/>del producto", "ok"),
+    ("[0]", "defectos abiertos<br/>([n] cerrados)", "ok"),
     ("[N]", "pruebas automatizadas<br/>aprobadas ([a] + [b] + [c])", "ok"),
-    ("[N / N]", "requisitos cubiertos<br/>(RTM)", "ok"),
+    ("[N / N]", "requisitos aprobados<br/>([N] con casos en RTM)", "ok"),
     ("[N]", "observaciones<br/>([n] para el PO)", "warn"),
 ]
 
@@ -88,13 +89,23 @@ ESPERADO = [
 ]
 ESPERADO_PIE = "[Nota corta: equivalencias de nombres, casos sin sesión, etc. Déjala vacía si no aplica.]"
 
-# 5. Herramientas: (herramienta, tipo de prueba, por qué, aprobadas, fallidas)
+# 5. Herramientas: (herramienta, "Sí" | "No", tipo de prueba, por qué se usó o no, aprobadas, fallidas).
+#    Las descartadas van aquí con "No" y aprobadas y fallidas en None. Las manuales citan su archivo de evidencia en «por qué».
 HERRAMIENTAS = [
-    ("pytest + pytest-html", "Funcional de API, seguridad básica y regresión", "[por qué]", 0, 0),
-    ("Playwright (Edge)", "Funcional de UI y flujos de punta a punta", "[por qué]", 0, 0),
+    ("pytest + pytest-html", "Sí", "Funcional de API, seguridad básica y regresión", "[por qué se usó]", 0, 0),
+    ("Playwright (Edge)", "Sí", "Funcional de UI y flujos de punta a punta", "[por qué se usó]", 0, 0),
+    ("[Locust o k6]", "No", "[Carga y estrés]", "[por qué no se usó]", None, None),
 ]
-HERRAMIENTAS_NOTA = ("[Datos extra (pruebas nuevas, variables usadas), pruebas pendientes de otras HU y herramientas "
-                     "descartadas con su motivo. Si hubo carga, el benchmarking va aquí.]")
+# Solo para lo que no cabe en la tabla (regresión por módulo, benchmarking). Déjala vacía si no hace falta.
+HERRAMIENTAS_NOTA = ""
+
+# Casos bloqueados: (caso, qué pide, por qué no se aprobó, qué falta, quién lo resuelve, tono o None).
+# Déjala vacía si no hay casos bloqueados: la tabla no sale.
+MOTIVOS_FALLOS = [
+    ("[CP-xxx]", "[Qué pide el caso]", "[Motivo exacto por el que no se aprobó]", "[Qué falta para aprobarlo (PEN-xx)]", "Dev", None),
+]
+# Relaciona las pruebas fallidas con los casos, si alguna no sale en la tabla. Déjala vacía si no hace falta.
+NOTA_FALLOS = "[Una o dos líneas que relacionen las pruebas fallidas con los casos.]"
 
 # 6. Evidencias: (herramienta, aprobadas, fallidas, qué muestra, png relativo a la raíz, ancho 0.7-1.0, pie)
 EVIDENCIAS = [
@@ -112,12 +123,24 @@ OBSERVACIONES = [
 ]
 
 # 8. Conclusión y pendientes
-CONCLUSION = ("[Veredicto: qué CA se cumplen y qué errores esperados responden bien. Estado propuesto de las "
-              "subtareas. <b>Alcance real</b>: qué no se probó.]")
-# (pendiente, responsable "PO" | "Dev" | "QA")
+CONCLUSION = "<b>[VEREDICTO].</b> [Una línea con lo que falta para cerrar la HU.]"
+# Barra de casos: (estado, cantidad, "ok" | "fail" | "warn")
+AVANCE = [("Aprobados", 1, "ok"), ("Fallidos", 0, "fail"), ("Bloqueados", 0, "warn")]
+# (tema, estado, "ok" | "warn" | "fail", qué significa)
+ESTADO_FINAL = [
+    ("Subtareas", "[N de N en Listo]", "ok", "[Cuáles faltan y por qué]"),
+    ("Criterios", "[Cumplen]", "ok", "[Qué CA se cumplen y cuáles no]"),
+    ("Defectos", "[N cerrados · N abiertos]", "ok", "[Cuáles quedan abiertos]"),
+]
+# (qué no se probó, "Parcial" | "Bloqueado" | "No aplica", por qué, qué falta). Déjala vacía si se probó todo.
+NO_PROBADO = [
+    ("[Prueba no realizada]", "Parcial", "[Por qué]", "[Qué falta (ID)]"),
+]
+LEYENDA_NO_PROBADO = "<b>Parcial:</b> se probó solo una parte. <b>Bloqueado:</b> no se puede probar hasta resolver lo indicado. <b>No aplica:</b> no se pide en esta HU."
+# (pendiente, responsable "PO" | "Dev" | "QA", ¿bloquea el cierre? "Sí" | "No"). Primero los que bloquean.
 PENDIENTES = [
-    ("[Confirmar OBS-01 ...]", "PO"),
-    ("[Cambiar las subtareas a Listo en Jira tras la revisión del PO.]", "QA"),
+    ("[Confirmar OBS-01 ...]", "PO", "Sí"),
+    ("[Cambiar las subtareas en Jira tras la revisión del PO.]", "QA", "No"),
 ]
 
 # =====================================================================
@@ -267,6 +290,16 @@ def callout(title, lines, clave):
     return t
 
 
+def barra_avance(items):
+    """Barra de casos por estado, proporcional al total, con su leyenda debajo."""
+    items = [i for i in items if i[1] > 0]
+    total = sum(n for _, n, _ in items)
+    barra = Table([[""] * len(items)], colWidths=[CONTENT_W * n / total for _, n, _ in items], rowHeights=[0.34 * cm])
+    barra.setStyle(TableStyle([("BACKGROUND", (i, 0), (i, 0), TONOS[c][0]) for i, (_, _, c) in enumerate(items)]))
+    leyenda = " · ".join(f'<font color="{TONOS[c][0].hexval()}"><b>{n} {t.lower()}</b></font>' for t, n, c in items)
+    return KeepTogether([barra, Spacer(1, 2), P(f"Casos funcionales ({total}): {leyenda}", S_SMALL)])
+
+
 def kpis(items):
     gap = 0.25 * cm
     w = (CONTENT_W - gap * (len(items) - 1)) / len(items)
@@ -396,39 +429,52 @@ def build():
     s.append(table(
         ["Criterio", "Requisito verificado", "Casos", "Resultado", "Obs."],
         [[P(c, S_CELL_B), r, cs, badge(res), o] for c, r, cs, res, o in COBERTURA],
-        [2.1 * cm, 8.3 * cm, 3.0 * cm, 1.75 * cm, CONTENT_W - 15.15 * cm],
+        [1.4 * cm, 7.3 * cm, 3.4 * cm, 2.7 * cm, CONTENT_W - 14.8 * cm],
     ))
 
-    # 4. Esperado vs. obtenido
-    s.append(P(f"4. {ESPERADO_TITULO}", S_H))
-    s.append(P(ESPERADO_NOTA, S_SMALL))
-    s.append(Spacer(1, 3))
-    n_col = len(COLUMNAS)
-    w_val = 1.75 * cm if n_col > 1 else 3.2 * cm
-    w_fixed = 4.5 * cm + w_val * n_col + 2.3 * cm + 1.8 * cm
-    s.append(table(
-        ["Acción"] + COLUMNAS + ["Por qué es lo esperado", "Casos", "Resultado"],
-        [[a] + [badge(v) for v in vals] + [pq, cs, badge(res)] for a, vals, pq, cs, res in ESPERADO],
-        [4.5 * cm] + [w_val] * n_col + [CONTENT_W - w_fixed, 2.3 * cm, 1.8 * cm],
-    ))
-    if ESPERADO_PIE:
-        s.append(Spacer(1, 2))
-        s.append(P(ESPERADO_PIE, S_SMALL))
+    # 4. Esperado vs. obtenido (condicional). Sin ESPERADO, las secciones siguientes se renumeran solas.
+    resta = 0 if ESPERADO else 1
+    if ESPERADO:
+        s.append(P(f"4. {ESPERADO_TITULO}", S_H))
+        s.append(P(ESPERADO_NOTA, S_SMALL))
+        s.append(Spacer(1, 3))
+        n_col = len(COLUMNAS)
+        w_val = 1.75 * cm if n_col > 1 else 3.2 * cm
+        w_fixed = 4.5 * cm + w_val * n_col + 2.3 * cm + 1.8 * cm
+        s.append(table(
+            ["Acción"] + COLUMNAS + ["Por qué es lo esperado", "Casos", "Resultado"],
+            [[a] + [badge(v) for v in vals] + [pq, cs, badge(res)] for a, vals, pq, cs, res in ESPERADO],
+            [4.5 * cm] + [w_val] * n_col + [CONTENT_W - w_fixed, 2.3 * cm, 1.8 * cm],
+        ))
+        if ESPERADO_PIE:
+            s.append(Spacer(1, 2))
+            s.append(P(ESPERADO_PIE, S_SMALL))
 
     # 5. Herramientas
-    s.append(P("5. Herramientas y tipo de prueba", S_H))
+    s.append(P(f"{5 - resta}. Herramientas y tipo de prueba", S_H))
     s.append(table(
-        ["Herramienta", "Tipo de prueba", "Por qué", "Resultado"],
-        [[P(h, S_CELL_B), t, pq, badge(f"{a} aprobadas · {f} fallidas", "fail" if isinstance(f, int) and f > 0 else "ok")]
-         for h, t, pq, a, f in HERRAMIENTAS],
-        [3.2 * cm, 4.0 * cm, CONTENT_W - 11.4 * cm, 4.2 * cm],
+        ["Herramienta", "¿Se usó?", "Tipo de prueba", "Por qué se usó o no", "Resultado"],
+        [[P(h, S_CELL_B), badge(u, "ok" if u == "Sí" else "gray"), t, pq,
+          badge("No aplica", "gray") if a is None else badge(f"{a} aprobadas · {f} fallidas", "fail" if f > 0 else "ok")]
+         for h, u, t, pq, a, f in HERRAMIENTAS],
+        [2.9 * cm, 1.5 * cm, 2.9 * cm, CONTENT_W - 11.1 * cm, 3.8 * cm],
     ))
     if HERRAMIENTAS_NOTA:
-        s.append(Spacer(1, 2))
-        s.append(P(HERRAMIENTAS_NOTA, S_SMALL))
+        s.append(Spacer(1, 3))
+        s.append(P(HERRAMIENTAS_NOTA, S_CELL))
+    if MOTIVOS_FALLOS:
+        s.append(P("Casos bloqueados: por qué y qué falta", S_H))
+        s.append(table(
+            ["Caso", "Qué pide", "Por qué no se aprobó", "Qué falta", "Resuelve"],
+            [[P(c, S_CELL_B), q, p, f, badge(r, t)] for c, q, p, f, r, t in MOTIVOS_FALLOS],
+            [1.5 * cm, 3.6 * cm, CONTENT_W - 12.0 * cm, 5.0 * cm, 1.9 * cm],
+        ))
+    if NOTA_FALLOS:
+        s.append(Spacer(1, 3))
+        s.append(P(NOTA_FALLOS, S_BODY))
 
     # 6. Evidencias
-    titulo_ev = P("6. Evidencias: captura del HTML que generó cada herramienta", S_H)
+    titulo_ev = P(f"{6 - resta}. Evidencias: captura del HTML que generó cada herramienta", S_H)
     for i, (h, a, f, que, png, ancho, pie) in enumerate(EVIDENCIAS):
         color = DENY.hexval() if isinstance(f, int) and f > 0 else OK.hexval()
         s.append(KeepTogether(([titulo_ev] if i == 0 else []) + [  # el título viaja con la primera captura
@@ -442,7 +488,7 @@ def build():
             s.append(Spacer(1, 8))
 
     # 7. Observaciones
-    s.append(P("7. Observaciones (no cambian el estado)", S_H))
+    s.append(P(f"{7 - resta}. Observaciones (no cambian el estado)", S_H))
     if OBSERVACIONES:
         s.append(table(
             ["ID", "Observación", "Decide"],
@@ -453,13 +499,21 @@ def build():
         s.append(P("Sin observaciones.", S_BODY))
 
     # 8. Conclusión
-    bloque = [P("8. Conclusión y pendientes", S_H), P(CONCLUSION, S_BODY)]
+    bloque = [P(f"{8 - resta}. Conclusión y pendientes", S_H), P(CONCLUSION, S_BODY), Spacer(1, 4), barra_avance(AVANCE), Spacer(1, 3),
+              table(["Tema", "Estado", "Qué significa"],
+                    [[P(t, S_CELL_B), badge(e, c), d] for t, e, c, d in ESTADO_FINAL],
+                    [3.3 * cm, 3.1 * cm, CONTENT_W - 6.4 * cm])]
+    if NO_PROBADO:
+        bloque += [Spacer(1, 3),
+                   table(["No se probó", "Estado", "Por qué", "Qué falta"],
+                         [[t, badge(e), d, f] for t, e, d, f in NO_PROBADO],
+                         [3.9 * cm, 1.9 * cm, CONTENT_W - 10.4 * cm, 4.6 * cm]),
+                   Spacer(1, 2), P(LEYENDA_NO_PROBADO, S_CELL)]
     if PENDIENTES:
-        bloque += [Spacer(1, 4), table(
-            ["#", "Pendiente", "Responsable"],
-            [[str(i), t, badge(r)] for i, (t, r) in enumerate(PENDIENTES, start=1)],
-            [0.7 * cm, CONTENT_W - 2.9 * cm, 2.2 * cm],
-        )]
+        bloque += [Spacer(1, 3),
+                   table(["#", "Pendiente", "Responsable", "¿Bloquea?"],
+                         [[str(i), t, badge(r), badge(b, "fail" if b == "Sí" else "gray")] for i, (t, r, b) in enumerate(PENDIENTES, start=1)],
+                         [0.7 * cm, CONTENT_W - 5.5 * cm, 2.4 * cm, 2.4 * cm])]
     s.append(KeepTogether(bloque))
     return s
 
@@ -485,8 +539,8 @@ def main():
     doc.build(build(), canvasmaker=NumberedCanvas)
     paginas = doc.page
     print("ok", out, f"({paginas} páginas)")
-    if paginas > 3:
-        print("AVISO: pasa de 3 páginas. Acorta textos, reduce filas del extracto o el ancho de las capturas.")
+    if paginas > 4:
+        print("AVISO: pasa de 4 páginas. Acorta textos, reduce filas del extracto o el ancho de las capturas.")
 
 
 if __name__ == "__main__":

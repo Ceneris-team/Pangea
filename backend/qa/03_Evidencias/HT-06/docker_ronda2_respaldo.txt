@@ -1,15 +1,19 @@
-# HT-06 ronda 2 - respaldo (PP-129) probado en local con Docker. Rama origin/feature/HT06-job-respaldo @3950274
-## 1. Build del Dockerfile tal como esta (python:3.12-slim = Debian 13 trixie, pgdg bookworm)
-RESULTADO: FALLA (exit 100): libpq5 pgdg12 depende de libldap-2.5-0, que no existe en trixie. Con 'trixie-pgdg' compila: pg_dump 16.15.
+# HT-06 ronda 2 - pruebas en local con Docker, 04/11/2026. Codigo: origin/main @e1ae09b (incluye PP-127 af6b279 y PP-129)
 
-## 2. Respaldo real (imagen con trixie-pgdg, Postgres 16 local, S3 simulado moto)
-RESULTADO {"clave": "respaldos/pangea-2026-11-02.sql.gz.enc", "bytes": 2672, "borrados_por_retencion": 0}
-OBJETOS [('respaldos/pangea-2026-11-02.sql.gz.enc', 2672)]
-RETENCION_400D_BORRADOS ['respaldos/pangea-2026-11-02.sql.gz.enc']
-OBJETOS_TRAS []
+## 1. Primera revision (02/11/2026, rama feature/HT06-job-respaldo @3950274) - DEF-08
+docker build del Dockerfile: FALLO (exit 100). python:3.12-slim ya es Debian 13 (trixie) y el Dockerfile fijaba bookworm-pgdg:
+libpq5 pgdg12 depende de libldap-2.5-0, que no existe en trixie.
 
-## 3. Cifrado y restauracion
-CIFRADO_SALT_HEADER b'Salted__' | contiene 'CREATE TABLE' en claro: False
-CLAVE_INCORRECTA_rc 0 salida: b''
-DESCIFRADO_OK lineas COPY/INSERT: 1
-Restauracion en BD nueva: 500 filas de telemetria (origen 500)
+## 2. Reprueba (04/11/2026, main @e1ae09b)
+docker build -t pangea-main-qa backend/  -> OK (FROM python:3.12-slim-trixie + trixie-pgdg)
+pg_dump (PostgreSQL) 16.15 (Debian 16.15-1.pgdg13+2) | Python 3.12.16
+
+## 3. Respaldo, .dat crudo, cifrado, retencion y restauracion (imagen pangea-main-qa, Postgres 16 local, S3 simulado moto)
+RESPALDO {"clave": "respaldos/pangea-2026-11-04.sql.gz.enc", "bytes": 2672, "borrados_por_retencion": 0}
+CIFRADO: cabecera b'Salted__' | 'CREATE TABLE' en claro: False
+DAT_CRUDO clave: datos-crudos/cnxn-7/2026/11/prueba.dat | listado: ['datos-crudos/cnxn-7/2026/11/prueba.dat']
+RETENCION +400d borrados: ['respaldos/pangea-2026-11-04.sql.gz.enc']
+Restauracion en una base nueva: 500 filas de telemetria (origen: 500)
+
+## 4. Pruebas unitarias del backend (tests/services/test_object_storage.py, test_respaldos.py, tests/tasks/test_ingesta.py)
+24 passed (PostgreSQL real). Informe: pytest_backend_ht06.html

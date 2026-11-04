@@ -1,0 +1,44 @@
+# HT-06 ronda 2 - complemento de la verificacion de Lightsail, 04/11/2026 (AWS CloudShell, us-east-1, y SSH a Servidores-ceneris)
+Solo lectura. Resumen fiel de las salidas; no se imprimieron valores de variables ni contrasenas.
+
+RESPALDO Y PERSISTENCIA (CP-013, indirecta; CP-343)
+  respaldos/pangea-2026-11-03.sql.gz.enc: subido 2026-11-03 15:50:33 UTC, 4545072 bytes (4.33 MiB). Cabecera: Salted__.
+  Reloj de CloudShell en UTC. Bucket pangea-storage-prod: estado OK, acceso private, versionado NeverEnabled.
+  Contenido del bucket: respaldos/ con 1 objeto; datos-crudos/ con 0 objetos.
+  Despliegues: v18 15:47:51 | v19 15:57:02 | v20 16:02:23 | v21 16:40:29 UTC (activo, servicio RUNNING).
+  El respaldo se subio con v18 y sigue en el bucket tras v19, v20 y v21.
+  Limite: el objeto comprobado es un respaldo, no un .dat, y las exportaciones van a otro bucket (OBS-48).
+
+VERSION ACTIVA v21: CONTENEDORES Y VARIABLES (solo nombres; CP-022)
+  api                  :pangea-api.api-f9c0967.17
+  beat                 :pangea-api.worker.19
+  redis                redis:7
+  worker               :pangea-api.worker.19
+  worker-exportaciones :pangea-api.api-f9c0967.17
+  worker: OBJECT_STORAGE_BUCKET = pangea-storage-prod, BACKUP_RETENTION_DAYS = 365; ninguna variable obligatoria falta.
+  api y beat tienen OBJECT_STORAGE_ACCESS_KEY/SECRET_KEY sin OBJECT_STORAGE_BUCKET; worker-exportaciones tiene BACKUP_ENCRYPTION_KEY (OBS-52).
+
+ROTACION CONTRA v21 (CP-023, CP-024)
+  Comparacion por prefijo SHA-256 contra los valores del historial de git, sin mostrar valores.
+  api, beat, worker y worker-exportaciones: JWT_SECRET, FTP_CREDENTIAL_KEY y contrasena de DATABASE_URL = distinto. redis no tiene secretos.
+
+BASE DE DATOS (CP-006, CP-007)
+  pangea-db: available, publiclyAccessible = False, respaldoAuto = True. TCP desde CloudShell: sin conexion.
+
+INGESTA, LOGS DEL WORKER (DEF-09, OBS-51)
+  Desde v21: 1400 sondeos (11-03 16:41 a 11-04 15:58), maximo 2 conexiones, 0 archivos encolados, 0 .dat procesados, 0 .dat archivados.
+  Contadores en 0: marcado Fallido, ClientError, NoCredentialsError, ObjectStorageNoConfigurado, password authentication failed.
+  Fallos de sondeo: 2816 = conexion 1 (1408 veces) y conexion 3 (1408 veces), siempre "530 User cannot log in".
+  Host de ambas conexiones: 100.24.110.86 (ejemplo a las 2026-11-04 16:20:56).
+  Por dia (UTC): 25/10 a 31/10 sin logs disponibles; 01/11 a 04/11 sondeo SI, fallo FTP SI, .dat procesado NO.
+  La rotacion de DEF-02 consta del 03/11, despues de que el fallo ya existiera. Antes del 01/11 no hay logs: se desconoce el inicio.
+
+SERVIDORES FTP
+  Servidor_Prueba (100.24.110.86): Windows Server 2022, creado 2026-04-20; firewall con 21 y 50000-50100 abiertos. Segun el equipo, no se usa y aun se esta preparando.
+  Servidores-ceneris (44.197.10.113), por SSH: vsftpd activo, usuario pangea_ftp (/home/pangea_ftp), local_root=/home/$USER/ftp, pasivos 40000-50000.
+    Sin contenedores con pangea, frontend o backend en su nombre o imagen. Carpeta FTP sin permiso de lectura para el usuario ubuntu.
+    Firewall de Lightsail sin 21 ni rango pasivo; TCP al 21 desde CloudShell: CERRADO.
+
+UBICACION DE LOS COMPONENTES
+  Frontend: https://pangea.ceneris.com responde HTTP 200; CloudFront E1A9VD9V7K0DUQ Deployed, alias pangea.ceneris.com, origen pangea-frontend-prod.
+  Backend: Container Service pangea-api, unico servicio de contenedores de la region. No hay contenedor frontend (OBS-02).

@@ -1,8 +1,27 @@
-# HT-06 ronda 2 - verificacion en solo lectura de Lightsail (CloudShell, us-east-1), 02/11/2026
-$ aws lightsail get-relational-database --relational-database-name pangea-db --region us-east-1 --query 'relationalDatabase.{publica:publiclyAccessible,estado:state,version:engine}'
-{ "publica": false, "estado": "available", "version": "postgres" }
+# HT-06 ronda 2 - verificacion de Lightsail en solo lectura (AWS CloudShell, us-east-1 y consola web), 02/11 y 04/11/2026
 
-$ aws lightsail get-buckets --region us-east-1 --query 'buckets[].{nombre:name,acceso:accessRules.getObject,publico:accessRules.allowPublicOverrides,versionado:objectVersioning}'
-[ { "nombre": "pangea-storage-prod", "acceso": "private", "publico": false, "versionado": "NeverEnabled" } ]
+CA2 - base de datos (02/11/2026)
+  pangea-db: publiclyAccessible = false, estado available, postgres 16. DEF-01 cerrado.
 
-Resultado: la base pangea-db ya NO es publica (DEF-01 cerrado). El bucket es privado y sigue sin versionado (OBS-04).
+CA3 - Object Storage
+  Bucket pangea-storage-prod: acceso private, sin override publico, versionado NeverEnabled (OBS-04).
+  Consola web, carpeta respaldos/: pangea-2026-11-03.sql.gz.enc, 4.3 MB, modificado 11/3/2026 (EV-CP-343_bucket-respaldos.png).
+  Raiz del bucket: solo existe respaldos/; no existe datos-crudos/ porque aun no entro ningun .dat por FTP tras el despliegue (EV-CP-343_bucket-raiz.png).
+  Metricas del bucket (NumberOfObjects, BucketSizeBytes): sin datos.
+  Exportaciones (HU33): EXPORT_S3_BUCKET = ceneris-pangea-archivos-prod (otro bucket, no pangea-storage-prod; OBS-48).
+
+CA1 - Container Service pangea-api, despliegue ACTIVO version 21 (03/11/2026 16:40 UTC), 5 contenedores:
+  api                       :pangea-api.api-f9c0967.17
+  beat                      :pangea-api.worker.19   celery -A app.core.celery_app beat --loglevel=info
+  redis                     redis:7
+  worker                    :pangea-api.worker.19   celery -A app.core.celery_app worker --loglevel=info --concurrency=2
+  worker de exportaciones   :pangea-api.api-f9c0967.17   celery ... worker --queues=exportaciones --concurrency=1 --prefetch-multiplier=1
+  No existe contenedor de receptor FTP/TCP (PEN-01, OBS-01).
+
+CA5 - variables (solo nombres, despliegue version 10 del 02/11/2026)
+  api: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, CELERY_*, CORS_ALLOWED_ORIGINS, DATABASE_URL, EXPORT_S3_BUCKET, EXPORT_S3_REGION,
+       FRONTEND_URL, FTP_CREDENTIAL_KEY, JWT_SECRET, PLAN_LIMITS_REQUIRE_SUBSCRIPTION, RATELIMIT_STORAGE_URL, SMTP_*.
+  worker: las anteriores mas BACKUP_ENCRYPTION_KEY, BACKUP_RETENTION_DAYS y OBJECT_STORAGE_ACCESS_KEY/BUCKET/ENDPOINT/REGION/SECRET_KEY.
+  Rotacion (DEF-02, 04/11/2026): se comparo el hash SHA-256 (primeros 12 caracteres, sin mostrar el valor) de JWT_SECRET,
+  FTP_CREDENTIAL_KEY y la contrasena de DATABASE_URL en produccion con el de los valores del historial de git (commit dba450f):
+  los tres hashes DIFIEREN, es decir, los valores filtrados ya no son los de produccion.

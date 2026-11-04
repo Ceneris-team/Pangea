@@ -2,7 +2,7 @@ import { chromium } from '@playwright/test';
 import { pathToFileURL } from 'node:url';
 import path from 'node:path';
 const dir = path.resolve('..', '03_Evidencias', 'HT-06');
-const FILAS = 22;
+const FILAS = 12;
 const browser = await chromium.launch({ channel: 'msedge' });
 const page = await browser.newPage({ viewport: { width: 900, height: 900 }, deviceScaleFactor: 2 });
 await page.goto(pathToFileURL(path.join(dir, 'pytest_ht06_ronda2.html')).href);
