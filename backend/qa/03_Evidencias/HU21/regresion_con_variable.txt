@@ -1,0 +1,6 @@
+  C:\Users\COMERCIAL\Desktop\Proyectos\pangea\Pangea-hu21\backend\app\routers\mediciones.py:371: SADeprecationWarning: Passing expression to
+    query = query.distinct(modelo.id_dspstv, modelo.id_prmtr, bucket)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+- Generated html report: file:///C:/Users/COMERCIAL/Desktop/Proyectos/pangea/Pangea-hu21/backend/../../Pangea/backend/qa/03_Evidencias/HU21/
+1080 passed, 15 warnings in 479.79s (0:07:59)

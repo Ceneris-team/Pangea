@@ -1,0 +1,60 @@
+$ npm run test:series  (04/11/2026, commit 5430e91)
+
+> frontend@0.0.0 test:series
+> node --experimental-strip-types --test tests/*.test.ts
+
+✔ una respuesta lenta se publica y los ticks pendientes se reducen al más reciente (36.5109ms)
+✔ cambiar de filtros cancela la conexión, la cola y los resultados antiguos (5.9885ms)
+✔ un error permite procesar el refresco siguiente y terminar el indicador de carga (23.9547ms)
+✔ actualizar manualmente el mismo rango vuelve a consultar (2.892ms)
+✔ el zoom se conserva dentro de la ventana móvil (2.6644ms)
+✔ un zoom que sale de la ventana se acota o se restaura al rango completo (4.6685ms)
+✔ el selector solo ofrece planes con estado Activo (9.0015ms)
+✔ el vencimiento es la fecha de inicio más 30 días calendario (7.2822ms)
+✔ las fechas se muestran como DD/MM/AAAA (0.7317ms)
+✔ hay que elegir plan y una fecha de inicio desde hoy (0.5274ms)
+✔ un detail de texto se muestra tal cual (7.2339ms)
+✔ un 422 de Pydantic muestra el msg sin el prefijo «Value error, » (DEF-02) (1.0424ms)
+✔ varios errores se unen sin repetir (0.6257ms)
+✔ sin detail o con una forma desconocida se usa el mensaje genérico (3.8408ms)
+✔ nunca devuelve «[object Object]» (0.6091ms)
+✔ un nombre de texto con espacios, tildes y puntuación habitual es válido (2.7116ms)
+✔ el nombre es obligatorio (1.5282ms)
+✔ un nombre solo de símbolos o con símbolos no admitidos se rechaza (2.2614ms)
+✔ el nombre admite como máximo 100 caracteres (1.5069ms)
+✔ mover un widget conserva los demás y envía el orden completo (3.4765ms)
+✔ soltar fuera del panel no modifica el orden (0.6839ms)
+✔ separa lecturas antiguas de estaciones que nunca enviaron datos (4.3599ms)
+✔ resumen operativo respeta el umbral elegido (5.7366ms)
+✔ datos válidos no tienen errores, con o sin teléfono (4.9918ms)
+✔ el formulario vacío marca los tres obligatorios y no el teléfono (1.1662ms)
+✔ el RUC debe tener exactamente 11 dígitos numéricos (0.7853ms)
+✔ el correo debe tener formato usuario@dominio.com (0.4452ms)
+✔ el teléfono solo admite números, espacios, + y - (0.6507ms)
+✔ el cuerpo para la API recorta espacios y manda el teléfono vacío como null (1.5015ms)
+✔ los métodos de pago de v1.0 son transferencia bancaria, efectivo y cheque (4.7721ms)
+✔ datos válidos no tienen errores (1.1778ms)
+✔ el formulario vacío marca los tres obligatorios (0.4406ms)
+✔ el monto es un decimal mayor que 0 con hasta 2 decimales (0.5321ms)
+✔ la fecha de cobro no puede ser futura (0.4275ms)
+✔ solo se aceptan los métodos de la lista (0.2668ms)
+✔ el cuerpo para la API usa punto decimal (0.3605ms)
+✔ el monto se muestra con separador de miles y 2 decimales (201.0488ms)
+✔ seis dataloggers con dos parámetros generan dos grupos con seis fuentes (4.4805ms)
+✔ no compara unidades diferentes ni confunde mV con MV (1.2595ms)
+✔ no mezcla contador de eventos, secuencia y estado aunque compartan parámetro (3.5556ms)
+✔ mantiene separados encabezados con significado desconocido (0.6937ms)
+✔ conserva formatos y reglas de reinicio propios de cada fuente al comparar (0.4713ms)
+✔ no mezcla proyectos distintos (0.7559ms)
+✔ el filtro ofrece todos, vencidos, vencen hoy, próximos 7 y próximos 30 días (4.243ms)
+✔ solo los valores de la lista son rangos válidos (1.1661ms)
+✔ los días restantes se leen en palabras (0.8132ms)
+✔ renovar antes del vencimiento empieza al día siguiente; vencido, empieza hoy (17.8607ms)
+ℹ tests 47
+ℹ suites 0
+ℹ pass 47
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 998.4198

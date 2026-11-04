@@ -1,0 +1,95 @@
+  C:\Users\COMERCIAL\Desktop\Proyectos\pangea\Pangea\backend\venv\Lib\site-packages\fastapi\testclient.py:1: StarletteDeprecationW
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/routers/test_cache_ht10.py::TestCA2Invalidacion::test_carga_manual_invalida_la_cache
+FAILED tests/routers/test_dispositivo_ficha.py::TestCargaArchivo::test_caso_feliz_guarda_en_tlmtr_y_deja_log
+FAILED tests/routers/test_dispositivo_ficha.py::TestCargaArchivo::test_carga_con_prefijo_nuevo_crea_trama_automatica_y_la_audita
+FAILED tests/routers/test_dispositivo_ficha.py::TestCargaArchivo::test_trama_nueva_con_columna_desconocida_autocrea_parametro_y_gu
+FAILED tests/routers/test_dispositivo_ficha.py::TestCargaArchivo::test_nombre_sin_prefijo_conocido_devuelve_422
+FAILED tests/routers/test_dispositivo_ficha.py::TestCargaArchivo::test_respeta_el_delimitador_decimal_del_mapeo
+FAILED tests/routers/test_dispositivo_ficha.py::TestCargaManual::test_caso_feliz_guarda_el_punto
+FAILED tests/routers/test_dispositivo_ficha.py::TestCargaManual::test_parametro_no_mapeado_devuelve_422
+FAILED tests/routers/test_dispositivo_ficha.py::TestCargaManual::test_sin_mapeo_h_devuelve_422
+FAILED tests/routers/test_dispositivo_ficha.py::TestCargaManual::test_fecha_futura_devuelve_422
+FAILED tests/routers/test_dispositivos.py::TestCrearDispositivo::test_se_crea_sin_mapeo_de_formato_previo
+FAILED tests/routers/test_dispositivos.py::TestCrearDispositivo::test_crear_devuelve_201_y_mensaje
+FAILED tests/routers/test_dispositivos.py::TestCrearDispositivo::test_queda_activo_por_defecto
+FAILED tests/routers/test_dispositivos.py::TestCrearDispositivo::test_modelo_es_opcional
+FAILED tests/routers/test_dispositivos.py::TestCrearDispositivo::test_guarda_el_modelo_cuando_se_envia
+FAILED tests/routers/test_dispositivos.py::TestCrearDispositivo::test_lttd_lngtd_copian_los_de_la_ubicacion
+FAILED tests/routers/test_dispositivos.py::TestCrearDispositivo::test_conexion_con_dispositivo_activo_devuelve_409
+FAILED tests/routers/test_dispositivos.py::TestCrearDispositivo::test_conexion_con_dispositivo_inactivo_permite_crear
+FAILED tests/routers/test_dispositivos.py::TestPuntoGpsPropio::test_sin_coordenadas_cae_al_centro_de_la_ubicacion
+FAILED tests/routers/test_dispositivos.py::TestPuntoGpsPropio::test_con_coordenadas_propias_no_las_pisa_el_centro
+FAILED tests/routers/test_dispositivos.py::TestPuntoGpsPropio::test_la_ficha_expone_el_punto
+FAILED tests/routers/test_dispositivos.py::TestPuntoGpsPropio::test_editar_actualiza_el_punto
+FAILED tests/routers/test_dispositivos.py::TestPuntoGpsPropio::test_editar_rango_invalido_da_422
+FAILED tests/routers/test_dispositivos.py::TestPuntoGpsPropio::test_editar_otro_campo_no_toca_el_punto
+FAILED tests/routers/test_dispositivos.py::TestPuntoGpsPropio::test_null_explicito_no_rompe_la_columna_not_null
+FAILED tests/routers/test_dispositivos.py::TestEliminarDispositivo::test_desactiva_el_dispositivo
+FAILED tests/routers/test_dispositivos.py::TestReactivarDispositivo::test_reactiva_el_dispositivo
+FAILED tests/routers/test_ingesta_cola.py::TestReintentarArchivoIngesta::test_reencola_un_archivo_fallido
+FAILED tests/routers/test_mapa_cliente_ws.py::TestAutenticacionDelCanal::test_ticket_valido_sin_permiso_sobre_tableros_cierra_con_
+FAILED tests/routers/test_mapeos.py::TestEliminarParametro::test_no_elimina_un_parametro_en_uso_por_un_mapeo
+FAILED tests/routers/test_mapeos.py::TestCrearMapeo::test_crea_y_devuelve_el_mensaje_de_la_hu
+FAILED tests/routers/test_mapeos.py::TestCrearMapeo::test_guarda_el_formato_de_fecha_como_strptime
+FAILED tests/routers/test_mapeos.py::TestCrearMapeo::test_crea_las_filas_de_mp_clmn
+FAILED tests/routers/test_mapeos.py::TestCrearMapeo::test_duplicado_para_el_mismo_dispositivo_y_trama_devuelve_409
+FAILED tests/routers/test_mapeos.py::TestCrearMapeo::test_mismo_dispositivo_distinto_tipo_de_trama_si_se_permite
+FAILED tests/routers/test_mapeos.py::TestCrearMapeo::test_misma_marca_y_sede_dispositivos_distintos_no_chocan
+FAILED tests/routers/test_mapeos.py::TestCrearMapeo::test_tipo_de_trama_ya_no_es_un_catalogo_cerrado
+FAILED tests/routers/test_mapeos.py::TestCrearMapeo::test_tipo_de_trama_se_normaliza_a_mayuscula
+FAILED tests/routers/test_mapeos.py::TestCrearMapeo::test_tipo_de_trama_de_mas_de_una_letra_ahora_es_valido
+FAILED tests/routers/test_mapeos.py::TestCrearMapeo::test_tipo_de_trama_alfanumerico_ahora_es_valido
+FAILED tests/routers/test_mapeos.py::TestCrearMapeo::test_guarda_la_descripcion_de_la_trama
+FAILED tests/routers/test_mapeos.py::TestCrearMapeo::test_descripcion_es_opcional
+FAILED tests/routers/test_mapeos.py::TestCrearMapeo::test_parametro_inexistente_devuelve_422
+FAILED tests/routers/test_mapeos.py::TestCrearMapeo::test_dos_parametros_en_el_mismo_indice_devuelve_422
+FAILED tests/routers/test_mapeos.py::TestListarYObtenerMapeos::test_el_mapeo_nuevo_aparece_asociado_a_su_dispositivo
+FAILED tests/routers/test_mapeos.py::TestListarYObtenerMapeos::test_filtro_por_marca
+FAILED tests/routers/test_mapeos.py::TestListarYObtenerMapeos::test_filtro_por_dispositivo
+FAILED tests/routers/test_mapeos.py::TestListarYObtenerMapeos::test_detalle_incluye_la_tabla_de_asignacion
+FAILED tests/routers/test_mapeos.py::TestListarYObtenerMapeos::test_usuario_de_otra_sede_no_ve_el_mapeo
+FAILED tests/routers/test_mapeos.py::TestActualizarMapeo::test_actualiza_un_campo_y_devuelve_el_mensaje_de_la_hu
+FAILED tests/routers/test_mapeos.py::TestActualizarMapeo::test_omitir_columnas_conserva_la_asignacion
+FAILED tests/routers/test_mapeos.py::TestActualizarMapeo::test_enviar_columnas_reemplaza_la_asignacion
+FAILED tests/routers/test_mapeos.py::TestActualizarMapeo::test_delimitador_invalido_devuelve_422
+FAILED tests/routers/test_mapeos.py::TestActualizarMapeo::test_cambiar_solo_el_decimal_a_coma_choca_con_la_coma_de_columna
+FAILED tests/routers/test_mapeos.py::TestActualizarMapeo::test_decimal_coma_con_columna_punto_y_coma_se_acepta
+FAILED tests/routers/test_mapeos.py::TestActualizarMapeo::test_denegado_con_permiso_de_solo_lectura
+FAILED tests/routers/test_mapeos.py::TestEliminarMapeo::test_marca_el_mapeo_como_inactivo
+FAILED tests/routers/test_mapeos.py::TestEliminarMapeo::test_no_borra_la_fila_ni_las_columnas
+FAILED tests/routers/test_mapeos.py::TestEliminarMapeo::test_libera_la_letra_para_un_mapeo_nuevo
+FAILED tests/routers/test_mapeos.py::TestEliminarMapeo::test_eliminar_un_mapeo_ya_inactivo_devuelve_409
+FAILED tests/routers/test_mapeos.py::TestEliminarMapeo::test_usuario_de_otra_sede_no_puede_eliminar
+FAILED tests/routers/test_mapeos.py::TestEliminarMapeo::test_denegado_con_permiso_de_solo_lectura
+FAILED tests/routers/test_mapeos_columnas_pendientes.py::TestResolverColumnaPendiente::test_resuelve_y_crea_la_columna_real
+FAILED tests/routers/test_mapeos_columnas_pendientes.py::TestResolverColumnaPendiente::test_parametro_inexistente_devuelve_422
+FAILED tests/routers/test_mapeos_columnas_pendientes.py::TestIgnorarColumnaPendiente::test_ignora_sin_crear_columna
+FAILED tests/routers/test_ubicaciones.py::test_crear_ubicacion_devuelve_201_y_mensaje
+FAILED tests/routers/test_ubicaciones.py::test_crear_ubicacion_guarda_el_poligono_completo
+FAILED tests/routers/test_ubicaciones.py::test_crear_ubicacion_queda_activa_por_defecto
+FAILED tests/routers/test_ubicaciones.py::test_descripcion_es_opcional - asse...
+FAILED tests/routers/test_ubicaciones.py::test_nombre_duplicado_en_la_misma_sede_devuelve_409
+FAILED tests/routers/test_ubicaciones.py::test_nombre_duplicado_ignora_mayusculas
+FAILED tests/routers/test_ubicaciones.py::test_mismo_nombre_en_otra_sede_si_se_permite
+FAILED tests/routers/test_ubicaciones.py::test_la_ubicacion_creada_aparece_en_el_listado
+FAILED tests/routers/test_ubicaciones.py::test_editar_actualiza_los_campos - ...
+FAILED tests/routers/test_ubicaciones.py::test_editar_cambia_el_estado - asse...
+FAILED tests/routers/test_ubicaciones.py::test_estado_invalido_devuelve_422
+FAILED tests/routers/test_ubicaciones.py::test_guardar_el_mismo_nombre_sin_cambios_no_choca_consigo_misma
+FAILED tests/routers/test_ubicaciones.py::test_nombre_de_otra_ubicacion_de_la_misma_sede_devuelve_409
+FAILED tests/routers/test_ubicaciones.py::test_editar_con_rango_invalido_devuelve_422[lttd-95]
+FAILED tests/routers/test_ubicaciones.py::test_editar_con_rango_invalido_devuelve_422[lttd--91]
+FAILED tests/routers/test_ubicaciones.py::test_editar_con_rango_invalido_devuelve_422[lngtd-181]
+FAILED tests/routers/test_ubicaciones.py::test_editar_con_rango_invalido_devuelve_422[lngtd--180.5]
+FAILED tests/routers/test_ubicaciones.py::test_editar_con_poligono_invalido_devuelve_422[poligono0]
+FAILED tests/routers/test_ubicaciones.py::test_editar_con_poligono_invalido_devuelve_422[poligono1]
+FAILED tests/routers/test_ubicaciones.py::test_editar_con_poligono_invalido_devuelve_422[poligono2]
+FAILED tests/routers/test_ubicaciones.py::test_id_sd_en_el_body_se_ignora - a...
+FAILED tests/routers/test_ubicaciones.py::test_editar_solo_un_campo_no_toca_los_demas
+FAILED tests/routers/test_ubicaciones.py::test_editar_denegado_sin_permiso_de_edicion
+FAILED tests/services/test_limites_plan.py::test_suscripcion_vencida_bloquea_altas
+89 failed, 225 passed, 1 warning in 86.20s (0:01:26)
