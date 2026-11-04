@@ -48,7 +48,7 @@ KPIS = [
     ("2", "defectos abiertos<br/>(3 cerrados)", "warn"),
     ("39 / 46", "pruebas automatizadas<br/>aprobadas (pytest)", "warn"),
     ("3 / 8", "requisitos aprobados<br/>(8 con casos en RTM)", "warn"),
-    ("15", "observaciones<br/>(4 para el PO)", "warn"),
+    ("16", "observaciones<br/>(4 para el PO)", "warn"),
 ]
 
 SUBTAREAS = [
@@ -136,6 +136,7 @@ OBSERVACIONES = [
     ("OBS-51", "Por confirmar: respaldo automático del 08/11/2026 y primer .dat real en datos-crudos/ (bloqueado por DEF-09).", "QA"),
     ("OBS-52", "api, beat y worker-exportaciones tienen credenciales que no necesitan.", "Dev"),
     ("OBS-53", "No se ha restaurado un respaldo real: solo se probó en local, con 500 filas.", "Dev"),
+    ("OBS-54", "Sin confirmar la rotación de la access key del bucket usada en las pruebas.", "Dev"),
     ("DEF-01", "Cerrados DEF-01, DEF-02 y DEF-08: base pública, claves en el historial de git y Dockerfile que no compilaba.", "QA"),
     ("DEF-03", "Abierto (Media): usuario de la base distinto al de DATABASE_URL en docker compose.", "Dev"),
     ("DEF-09", "Abierto (Media, por confirmar; HU-05): FTP con 530. Crítica si son dataloggers reales; Baja si son de prueba.", "Dev"),
@@ -172,6 +173,7 @@ PENDIENTES = [
     ("Documentar umbral y PostGIS, y llevar la documentación de PP-126 a PP-129 al repositorio (PEN-05, OBS-47).", "Dev", "No"),
     ("Subir un archivo de prueba y redesplegar pangea-api (OBS-05).", "Dev", "No"),
     ("Restaurar un respaldo real en una base de prueba y comprobar sus datos (OBS-53).", "Dev", "No"),
+    ("Confirmar si se rotó la access key del bucket (OBS-54).", "Dev", "No"),
     ("Decidir si exportaciones, respaldos y .dat usan un solo bucket (OBS-48).", "PO", "No"),
     ("Mirar el bucket el 08/11/2026 y cuando entre el primer .dat (OBS-51).", "QA", "No"),
     ("Cambiar los estados de las subtareas en Jira según la sección 1.", "QA", "No"),
