@@ -1,0 +1,66 @@
+
+> frontend@0.0.0 test:series
+> node --experimental-strip-types --test tests/*.test.ts
+
+✔ una respuesta lenta se publica y los ticks pendientes se reducen al más reciente (12.6059ms)
+✔ cambiar de filtros cancela la conexión, la cola y los resultados antiguos (2.1305ms)
+✔ un error permite procesar el refresco siguiente y terminar el indicador de carga (1.7331ms)
+✔ actualizar manualmente el mismo rango vuelve a consultar (1.8506ms)
+✔ el zoom se conserva dentro de la ventana móvil (0.6702ms)
+✔ un zoom que sale de la ventana se acota o se restaura al rango completo (0.3054ms)
+✔ el selector solo ofrece planes con estado Activo (9.9277ms)
+✔ el vencimiento es la fecha de inicio más 30 días calendario (19.6069ms)
+✔ las fechas se muestran como DD/MM/AAAA (4.3249ms)
+✔ hay que elegir plan y una fecha de inicio desde hoy (2.0885ms)
+✔ un detail de texto se muestra tal cual (25.5303ms)
+✔ un 422 de Pydantic muestra el msg sin el prefijo «Value error, » (DEF-02) (1.8794ms)
+✔ varios errores se unen sin repetir (0.4109ms)
+✔ sin detail o con una forma desconocida se usa el mensaje genérico (2.3691ms)
+✔ nunca devuelve «[object Object]» (0.6604ms)
+✔ un nombre de texto con espacios, tildes y puntuación habitual es válido (2.5921ms)
+✔ el nombre es obligatorio (0.5555ms)
+✔ un nombre solo de símbolos o con símbolos no admitidos se rechaza (0.6046ms)
+✔ el nombre admite como máximo 100 caracteres (0.3162ms)
+✔ mover un widget conserva los demás y envía el orden completo (30.3183ms)
+✔ soltar fuera del panel no modifica el orden (0.6917ms)
+✔ separa lecturas antiguas de estaciones que nunca enviaron datos (1.7169ms)
+✔ resumen operativo respeta el umbral elegido (2.1918ms)
+✔ datos válidos no tienen errores, con o sin teléfono (2.8297ms)
+✔ el formulario vacío marca los tres obligatorios y no el teléfono (0.7288ms)
+✔ el RUC debe tener exactamente 11 dígitos numéricos (0.5987ms)
+✔ el correo debe tener formato usuario@dominio.com (0.3813ms)
+✔ el teléfono solo admite números, espacios, + y - (0.3766ms)
+✔ el cuerpo para la API recorta espacios y manda el teléfono vacío como null (0.2835ms)
+✔ los métodos de pago de v1.0 son transferencia bancaria, efectivo y cheque (12.7385ms)
+✔ datos válidos no tienen errores (0.652ms)
+✔ el formulario vacío marca los tres obligatorios (0.2275ms)
+✔ el monto es un decimal mayor que 0 con hasta 2 decimales (0.3707ms)
+✔ la fecha de cobro no puede ser futura (0.2369ms)
+✔ solo se aceptan los métodos de la lista (0.1708ms)
+✔ el cuerpo para la API usa punto decimal (0.1997ms)
+✔ el monto se muestra con separador de miles y 2 decimales (166.2843ms)
+✔ seis dataloggers con dos parámetros generan dos grupos con seis fuentes (2.7729ms)
+✔ no compara unidades diferentes ni confunde mV con MV (0.3091ms)
+✔ no mezcla contador de eventos, secuencia y estado aunque compartan parámetro (0.2101ms)
+✔ mantiene separados encabezados con significado desconocido (0.2247ms)
+✔ conserva formatos y reglas de reinicio propios de cada fuente al comparar (0.2667ms)
+✔ no mezcla proyectos distintos (0.174ms)
+✔ el filtro ofrece todos, vencidos, vencen hoy, próximos 7 y próximos 30 días (1.7662ms)
+✔ solo los valores de la lista son rangos válidos (0.3454ms)
+✔ los días restantes se leen en palabras (0.5142ms)
+✔ renovar antes del vencimiento empieza al día siguiente; vencido, empieza hoy (2.345ms)
+✔ la primera lectura tras recargar conserva la versión anterior de la misma cuenta (1.2895ms)
+✔ cambiar de cuenta descarta la versión de la persona anterior (0.1648ms)
+✔ una sesión sin versión válida requiere validar el acceso: null (0.1387ms)
+✔ una sesión sin versión válida requiere validar el acceso: {inválido (1.3132ms)
+✔ una sesión sin versión válida requiere validar el acceso: null (0.1285ms)
+✔ una sesión sin versión válida requiere validar el acceso: "texto" (0.0884ms)
+✔ una sesión sin versión válida requiere validar el acceso: {"usuario":"lector@test.example","version":7} (0.1158ms)
+ℹ tests 54
+ℹ suites 0
+ℹ pass 54
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 873.7306

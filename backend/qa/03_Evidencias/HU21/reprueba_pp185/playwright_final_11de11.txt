@@ -1,0 +1,22 @@
+<stdin>:84: SyntaxWarning: invalid escape sequence '\/'
+ℹ tests 10
+ℹ pass 10
+ℹ fail 0
+ frontend/src/components/VigenciaAcceso.tsx | 24 ++++++++++++++----------
+ frontend/src/services/vigenciaAcceso.ts    |  6 ++++++
+ frontend/tests/vigenciaAcceso.test.ts      | 17 ++++++++++++++++-
+ 3 files changed, 36 insertions(+), 11 deletions(-)
+  ok  1 retest_pp185.spec.mjs:42:3 › RG-38 anterior: revocación antes de la primera respuesta, sin cargar datos retirados (22.8s)
+  ok  2 retest_pp185.spec.mjs:42:3 › RG-38 empresa: revocación antes de la primera respuesta, sin cargar datos retirados (12.9s)
+  ok  3 retest_pp185.spec.mjs:86:1 › RG-38 versión por usuario detecta cambio al recargar sin selección guardada (11.9s)
+  ok  4 retest_pp185.spec.mjs:103:1 › RG-38 sesión abierta descarta resultados tras revocar sin nuevo login (36.2s)
+  ok  5 retest_pp185.spec.mjs:116:1 › RG-37 interfaz: el motivo de proyecto inactivo llega a pantalla y conserva la selección (6.9s)
+  ok  6 retest_pp185.spec.mjs:135:1 › DEF-12: un fallo de /auth/acceso muestra salida y se recupera al reintentar (7.5s)
+  ok  7 retest_pp185.spec.mjs:147:1 › DEF-12: el fallo de red también ofrece salida y el intervalo se recupera sin recargar (28.7s)
+  ok  8 retest_pp185.spec.mjs:155:1 › DEF-12: un fallo durante la sesión no expulsa de la pantalla ya validada (8.2s)
+  ok  9 retest_pp185.spec.mjs:163:1 › DEF-13: un enlace nunca autorizado se limpia sin informar un cambio de permisos falso (8.5s)
+  ok 10 retest_pp185.spec.mjs:175:1 › DEF-13: el Lector conserva su proyecto válido al abrir un enlace ajeno (10.2s)
+  ok 11 retest_pp185.spec.mjs:182:1 › Riesgo: /graficos con proyecto retirado tampoco muestra datos (14.4s)
+  11 passed (2.9m)
+
+[exited with code 0]

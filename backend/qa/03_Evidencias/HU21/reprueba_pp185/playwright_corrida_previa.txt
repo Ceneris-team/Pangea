@@ -1,0 +1,32 @@
+    Error Context: ..\03_Evidencias\HU21\reprueba_pp185\test-results\retest_pp185-Riesgo-un-fal-e6634-uario-sin-salida-ni-mensaje\error-context.md
+
+  4) retest_pp185.spec.mjs:137:1 › Riesgo: un enlace con proyecto nunca autorizado no informa un cambio de permisos falso 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: 0
+    Received: 1
+
+      142 |   console.log('RIESGO_AVISO_FALSO:', aviso);
+      143 |   await page.screenshot({ path: path.join(EV, 'riesgo-enlace-no-autorizado.png'), fullPage: true });
+    > 144 |   expect(aviso).toBe(0);
+          |                 ^
+      145 | });
+      146 | test('Riesgo: /graficos con proyecto retirado tampoco muestra datos', async ({ browser }) => {
+      147 |   const admin = await login(browser, 'admin@pangea-dev.com');
+        at C:\Users\COMERCIAL\Desktop\Proyectos\pangea\Pangea\backend\qa\playwright_hu21\retest_pp185.spec.mjs:144:17
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ..\03_Evidencias\HU21\reprueba_pp185\test-results\retest_pp185-Riesgo-un-enl-806c4-un-cambio-de-permisos-falso\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ..\03_Evidencias\HU21\reprueba_pp185\test-results\retest_pp185-Riesgo-un-enl-806c4-un-cambio-de-permisos-falso\error-context.md
+
+  4 failed
+    retest_pp185.spec.mjs:34:3 › RG-38 anterior: revocación antes de la primera respuesta, sin cargar datos retirados 
+    retest_pp185.spec.mjs:94:1 › RG-38 sesión abierta descarta resultados tras revocar sin nuevo login 
+    retest_pp185.spec.mjs:126:1 › Riesgo: un fallo de /auth/acceso no deja al usuario sin salida ni mensaje 
+    retest_pp185.spec.mjs:137:1 › Riesgo: un enlace con proyecto nunca autorizado no informa un cambio de permisos falso 
+  4 passed (7.4m)
+
+[exited with code 0]

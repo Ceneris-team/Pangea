@@ -1,0 +1,115 @@
+src/pages/Clientes.tsx:39:          <button type="button" onClick={() => abrirEntorno(c.id_clnt)} className="mt-auto rounded-xl bg-[#ccff00] px-4 py-2.5 text-sm font-semibold text-gray-950">Entrar al entorno de {c.nombre}</button>
+src/pages/Empresas.tsx:250:              {puedeOperar && <button type="button" className={boton} onClick={() => abrirEntorno(empresa.id_clnt, null, "/ubicaciones?crear=1")}>Agregar proyecto</button>}
+src/pages/Empresas.tsx:252:            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{proyectos.map((p) => <button key={p.id_ubccn} type="button" onClick={() => abrirEntorno(empresa.id_clnt, p.id_ubccn)} className="rounded-xl border border-gray-200 p-4 text-left hover:border-lime-400 dark:border-white/10"><strong className="text-gray-900 dark:text-white">{p.nombre}</strong><p className="mt-1 text-sm text-gray-600 dark:text-gray-300">{p.dispositivos_total} dispositivos · {p.estado === "Activa" ? "Activo" : "Inactivo"}</p><span className="mt-2 inline-block text-sm font-semibold text-lime-700 dark:text-lime-300">Entrar al proyecto →</span></button>)}</div>
+[12.0s admin] 200 /auth/perfil
+[12.3s admin] NAV http://localhost:5200/clientes
+[12.3s admin] NAV http://localhost:5200/clientes
+[40.2s cf] NAV http://localhost:5200/consulta-datos
+[71.9s cf] NAV http://localhost:5200/consulta-datos
+[74.6s cf] 200 /auth/perfil
+[74.7s cf] 200 /auth/perfil
+[76.9s cf] FALLO /auth/acceso net::ERR_ABORTED
+  x  3 retest_pp185.spec.mjs:86:1 › RG-38 versión por usuario detecta cambio al recargar sin selección guardada (1.7m)
+[2.6s admin] NAV http://localhost:5200/consulta-datos
+[3.5s admin] NAV http://localhost:5200/consulta-datos
+[3.9s admin] 200 /auth/perfil
+[3.9s admin] 200 /auth/perfil
+[4.0s admin] NAV http://localhost:5200/clientes
+[4.6s admin] NAV http://localhost:5200/clientes
+[1.4s cf] NAV http://localhost:5200/consulta-datos
+[2.3s cf] NAV http://localhost:5200/consulta-datos
+[2.3s cf] 200 /auth/perfil
+[2.3s cf] 200 /auth/perfil
+[2.4s cf] FALLO /auth/acceso net::ERR_ABORTED
+[2.4s cf] 200 /auth/acceso
+[revoke] inicio anterior
+[revoke] fin 200 300 ms
+[22.4s cf] 200 /auth/acceso
+[22.5s cf] NAV http://localhost:5200/consulta-datos
+[23.1s cf] 200 /auth/perfil
+[23.2s cf] 200 /auth/perfil
+[23.2s cf] FALLO /auth/acceso net::ERR_ABORTED
+[23.2s cf] 200 /auth/acceso
+  ok 4 retest_pp185.spec.mjs:103:1 › RG-38 sesión abierta descarta resultados tras revocar sin nuevo login (45.8s)
+[0.6s admin] NAV http://localhost:5200/consulta-datos
+[1.0s admin] NAV http://localhost:5200/consulta-datos
+[1.1s admin] 200 /auth/perfil
+[1.1s admin] 200 /auth/perfil
+[1.1s admin] NAV http://localhost:5200/clientes
+[1.1s admin] NAV http://localhost:5200/clientes
+[1.6s admin] NAV http://localhost:5200/empresas?cliente=5983
+[2.0s admin] NAV http://localhost:5200/empresas?cliente=5983
+[2.0s admin] 200 /auth/perfil
+[2.1s admin] 200 /auth/perfil
+  ok 5 retest_pp185.spec.mjs:116:1 › RG-37 interfaz: el motivo de proyecto inactivo llega a pantalla y conserva la selección (8.2s)
+[1.5s cf] NAV http://localhost:5200/consulta-datos
+[2.2s cf] NAV http://localhost:5200/consulta-datos
+[2.3s cf] 200 /auth/perfil
+[2.3s cf] 200 /auth/perfil
+[2.4s cf] FALLO /auth/acceso net::ERR_ABORTED
+[2.4s cf] 200 /auth/acceso
+[2.8s cf] NAV http://localhost:5200/consulta-datos
+[3.1s cf] 200 /auth/perfil
+[3.1s cf] 200 /auth/perfil
+[3.1s cf] FALLO /auth/acceso net::ERR_ABORTED
+[3.1s cf] 500 /auth/acceso
+[23.1s cf] 500 /auth/acceso
+RIESGO_500: "Comprobando tus permisos…"
+  x  6 retest_pp185.spec.mjs:135:1 › Riesgo: un fallo de /auth/acceso no deja al usuario sin salida ni mensaje (31.9s)
+[8.6s cf] NAV http://localhost:5200/consulta-datos
+[9.7s cf] NAV http://localhost:5200/consulta-datos
+[10.1s cf] 200 /auth/perfil
+[10.2s cf] 200 /auth/perfil
+[10.2s cf] FALLO /auth/acceso net::ERR_ABORTED
+[10.2s cf] 200 /auth/acceso
+[11.4s cf] NAV http://localhost:5200/consulta-datos?ubicacion_id=4678
+[11.6s cf] NAV http://localhost:5200/consulta-datos?ubicacion_id=4678
+[11.6s cf] 200 /auth/perfil
+[11.7s cf] 200 /auth/perfil
+[11.7s cf] FALLO /auth/acceso net::ERR_ABORTED
+[11.7s cf] 200 /auth/acceso
+[11.7s cf] NAV http://localhost:5200/consulta-datos
+[11.8s cf] NAV http://localhost:5200/consulta-datos
+[11.9s cf] 200 /auth/perfil
+[11.9s cf] 200 /auth/perfil
+[11.9s cf] FALLO /auth/acceso net::ERR_ABORTED
+[11.9s cf] 200 /auth/acceso
+RIESGO_AVISO_FALSO: 1
+  x  7 retest_pp185.spec.mjs:146:1 › Riesgo: un enlace con proyecto nunca autorizado no informa un cambio de permisos falso (27.4s)
+[1.3s admin] NAV http://localhost:5200/consulta-datos
+[1.9s admin] NAV http://localhost:5200/consulta-datos
+[1.9s admin] 200 /auth/perfil
+[1.9s admin] 200 /auth/perfil
+[1.9s admin] NAV http://localhost:5200/clientes
+[1.9s admin] NAV http://localhost:5200/clientes
+[0.9s cf] NAV http://localhost:5200/consulta-datos
+[1.6s cf] NAV http://localhost:5200/consulta-datos
+[1.7s cf] 200 /auth/perfil
+[1.7s cf] 200 /auth/perfil
+[1.7s cf] FALLO /auth/acceso net::ERR_ABORTED
+[1.7s cf] 200 /auth/acceso
+[revoke] inicio anterior
+[revoke] fin 200 55 ms
+[2.3s cf] NAV http://localhost:5200/graficos?ubicacion_id=4674
+[2.5s cf] NAV http://localhost:5200/graficos?ubicacion_id=4674
+[2.5s cf] 200 /auth/perfil
+[2.6s cf] 200 /auth/perfil
+[2.6s cf] FALLO /auth/acceso net::ERR_ABORTED
+[2.6s cf] 200 /auth/acceso
+[2.6s cf] NAV http://localhost:5200/consulta-datos
+[2.7s cf] NAV http://localhost:5200/consulta-datos
+[2.8s cf] 200 /auth/perfil
+[2.8s cf] 200 /auth/perfil
+[2.8s cf] FALLO /auth/acceso net::ERR_ABORTED
+[2.8s cf] 200 /auth/acceso
+RIESGO_GRAFICOS: {"series":[],"norte":false,"url":"http://localhost:5200/consulta-datos"}
+  ok 8 retest_pp185.spec.mjs:155:1 › Riesgo: /graficos con proyecto retirado tampoco muestra datos (11.8s)
+    Error: expect(locator).toBeVisible() failed
+    Error: Test ended.
+    Error: expect(received).not.toContain(expected) // indexOf
+    Error: expect(received).toBe(expected) // Object.is equality
+      151 |   console.log('RIESGO_AVISO_FALSO:', aviso);
+  3 failed
+  5 passed (7.8m)
+
+[exited with code 0]
