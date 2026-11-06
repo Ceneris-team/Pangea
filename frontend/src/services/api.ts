@@ -33,6 +33,8 @@ export const CLAVES_SESION_UI = [
   "pangea_cliente",
   "pangea_proyecto",
   "pangea_proyecto_v2",
+  "pangea_acceso",
+  "pangea_aviso_acceso",
 ] as const;
 
 export function limpiarDatosDeSesion(): void {
