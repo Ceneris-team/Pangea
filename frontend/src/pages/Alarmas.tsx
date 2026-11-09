@@ -4,6 +4,7 @@ import { apiFetch, ApiError } from "../services/api";
 import { useAuth } from "../hooks/useAuth";
 import Sidebar from "../components/layout/Sidebar";
 import Topbar from "../components/layout/Topbar";
+import NotificacionesAlarma from "../components/NotificacionesAlarma";
 
 interface AlarmaListItem {
   id_alrm: number;
@@ -62,6 +63,8 @@ export default function Alarmas() {
   const [data, setData] = useState<ListadoPaginado | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [alarmaSeleccionada, setAlarmaSeleccionada] = useState<AlarmaListItem | null>(null);
+  const [version, setVersion] = useState(0);
 
   // Los setState van en microtarea y no síncronos dentro del efecto (regla
   // react-hooks/set-state-in-effect de dev), igual que en ColaIngesta.tsx.
@@ -101,7 +104,7 @@ export default function Alarmas() {
     };
   }
 
-  useEffect(cargarAlarmas, [busqueda, estado, pagina]);
+  useEffect(cargarAlarmas, [busqueda, estado, pagina, version]);
 
   const totalPaginas = data ? Math.max(1, Math.ceil(data.total / data.por_pagina)) : 1;
   const inicioRango = data ? (data.pagina - 1) * data.por_pagina + 1 : 0;
@@ -282,16 +285,14 @@ export default function Alarmas() {
                               {a.estd}
                             </span>
                           </td>
-                          {/* Editar/eliminar/activar-desactivar son HUs
-                              aparte (HU28+): acá solo se deja el punto de
-                              entrada visual, sin funcionalidad todavía. */}
+                          {/* HT-14: destinatarios e historial de esta alarma. */}
                           <td className="px-6 py-4 text-right whitespace-nowrap">
-                            <span
-                              title="Disponible próximamente"
-                              className="inline-flex items-center justify-center px-3 py-1.5 text-sm font-medium text-gray-400 dark:text-gray-500 bg-transparent border border-black/10 dark:border-white/10 rounded-lg cursor-not-allowed"
+                            <button
+                              onClick={() => setAlarmaSeleccionada(a)}
+                              className="inline-flex items-center justify-center px-3 py-1.5 text-sm font-medium border border-black/20 dark:border-white/20 rounded-lg hover:bg-black/5 dark:hover:bg-white/5"
                             >
-                              Gestionar
-                            </span>
+                              Notificaciones
+                            </button>
                           </td>
                         </tr>
                       ))}
@@ -326,6 +327,12 @@ export default function Alarmas() {
                 </div>
               )}
             </div>
+            {alarmaSeleccionada && <NotificacionesAlarma key={alarmaSeleccionada.id_alrm}
+              alarma={alarmaSeleccionada} onClose={() => setAlarmaSeleccionada(null)}
+              onUpdate={() => {
+                setAlarmaSeleccionada(a => a ? { ...a, estd: a.estd === "Activa" ? "Inactiva" : "Activa" } : null);
+                setVersion(v => v + 1);
+              }} />}
           </main>
         </div>
       </div>

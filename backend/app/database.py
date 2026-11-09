@@ -21,7 +21,7 @@ DATABASE_URL = os.environ.get(
     "DATABASE_URL", "postgresql+psycopg2://postgres:postgres@localhost:5432/pangea_dev"
 )
 
-engine = create_engine(os.environ.get("DATABASE_RUNTIME_URL", DATABASE_URL), hide_parameters=True)
+engine = create_engine(os.environ.get("DATABASE_RUNTIME_URL") or DATABASE_URL, hide_parameters=True)
 
 
 class RuntimeSession(Session):

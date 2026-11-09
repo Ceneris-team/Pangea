@@ -2,6 +2,8 @@ from app.models.alarma import (
     Alarma,
     CondicionAlarma,
     DestinatarioAlarma,
+    EstadoAlarma,
+    IntentoNotificacion,
     NotificacionEnviada,
 )
 from app.models.archivo_ingesta import ArchivoIngesta

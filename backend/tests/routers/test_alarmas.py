@@ -461,6 +461,154 @@ class TestAislamientoYPermisos:
         assert alarma.id_usr == escenario["usuario"].id_usr
 
 
+class TestNotificacionesHT14:
+    def crear(self, client, escenario, **extra):
+        resp = client.post("/alarmas", json=cuerpo_valido(escenario, **extra))
+        assert resp.status_code == 201, resp.text
+        return resp.json()["alarma"]["id_alrm"]
+
+    def test_crea_varios_destinatarios_y_normaliza_correo(self, client, escenario):
+        id_alarma = self.crear(
+            client, escenario, destinatarios=["UNO@example.com", "dos@example.com"]
+        )
+        respuesta = client.get(f"/alarmas/{id_alarma}/destinatarios")
+        assert respuesta.status_code == 200
+        assert {d["correo"] for d in respuesta.json()["items"]} == {
+            "uno@example.com",
+            "dos@example.com",
+        }
+
+    def test_agrega_rechaza_duplicado_y_quita_destinatario(self, client, escenario):
+        id_alarma = self.crear(client, escenario)
+        ruta = f"/alarmas/{id_alarma}/destinatarios"
+        agregado = client.post(ruta, json={"correo": "UNO@example.com"})
+        assert agregado.status_code == 201
+        assert client.post(ruta, json={"correo": "uno@example.com"}).status_code == 409
+        assert client.delete(f"{ruta}/{agregado.json()['id']}").status_code == 204
+        assert client.get(ruta).json()["items"] == []
+
+    def test_rechaza_correo_invalido_y_duplicados_en_alta(self, client, escenario):
+        for correos in (["invalido"], ["uno@example.com", "UNO@example.com"]):
+            assert (
+                client.post(
+                    "/alarmas", json=cuerpo_valido(escenario, destinatarios=correos)
+                ).status_code
+                == 422
+            )
+
+    def test_no_gestiona_destinatarios_de_otro_usuario(
+        self, client, escenario, db_session, fabrica
+    ):
+        id_alarma = self.crear(client, escenario)
+        otro = fabrica.usuario(rol=escenario["rol"])
+        agregar_permiso(db_session, otro, escenario["sede"], "Alarmas", "Edición", escenario["rol"])
+        asignar_ubicacion(db_session, otro, escenario["ubicacion"])
+        app.dependency_overrides[get_current_user] = lambda: usuario_jwt(
+            otro, escenario["rol"].nmbr, sede_id=escenario["sede"].id_sd
+        )
+        assert client.get(f"/alarmas/{id_alarma}/destinatarios").status_code == 404
+        assert (
+            client.post(
+                f"/alarmas/{id_alarma}/destinatarios", json={"correo": "uno@example.com"}
+            ).status_code
+            == 404
+        )
+        assert (
+            client.get("/alarmas/notificaciones", params={"alarma_id": id_alarma}).status_code
+            == 404
+        )
+
+    def test_puede_consultar_historial_con_intentos_y_filtros(self, client, escenario, db_session):
+        from app.models import IntentoNotificacion, NotificacionEnviada
+        from app.services.notificaciones import crear_notificacion
+
+        id_alarma = self.crear(client, escenario)
+        for estado in ("Enviado", "Fallido"):
+            n = crear_notificacion(
+                db_session,
+                destinatario="uno@example.com",
+                tipo="alarma_activada",
+                contexto={},
+                id_usr=escenario["usuario"].id_usr,
+                id_alrm=id_alarma,
+                id_sd=escenario["sede"].id_sd,
+            )
+            n.estd = estado
+            db_session.flush()
+            db_session.add(IntentoNotificacion(id_ntfccn=n.id_ntfccn, numero=1, resultado=estado))
+        db_session.flush()
+        res = client.get(
+            "/alarmas/notificaciones",
+            params={"alarma_id": id_alarma, "estado": "Fallido", "destinatario": "UNO@example.com"},
+        )
+        assert res.status_code == 200, res.text
+        assert res.json()["total"] == 1
+        assert res.json()["items"][0]["intentos"][0]["resultado"] == "Fallido"
+        assert db_session.query(NotificacionEnviada).count() == 2
+        assert (
+            client.get("/alarmas/notificaciones", params={"desde": "2026-11-01"}).status_code == 422
+        )
+
+    def test_historial_no_expone_avisos_ajenos(self, client, escenario, db_session, fabrica):
+        from app.services.notificaciones import crear_notificacion
+
+        otro = fabrica.usuario()
+        crear_notificacion(
+            db_session,
+            destinatario="otro@example.com",
+            tipo="generica",
+            contexto={},
+            id_usr=otro.id_usr,
+        )
+        db_session.flush()
+        assert client.get("/alarmas/notificaciones").json()["total"] == 0
+
+    def test_pausa_alarma_y_actualiza_condicion(self, client, escenario, db_session):
+        id_alarma = self.crear(client, escenario)
+        res = client.patch(
+            f"/alarmas/{id_alarma}",
+            json={"estado": "Inactiva", "condiciones": [{"oprdr": ">=", "vlr_umbrl": 10}]},
+        )
+        assert res.status_code == 200
+        assert res.json()["estado"] == "Inactiva"
+        condicion = db_session.query(CondicionAlarma).filter_by(id_alrm=id_alarma).one()
+        assert condicion.oprdr == ">=" and condicion.vlr_umbrl == 10
+
+    def test_sin_operacion_no_puede_agregar_destinatarios(self, client, escenario, db_session):
+        id_alarma = self.crear(client, escenario)
+        db_session.query(Suscripcion).filter_by(id_clnt=escenario["sede"].id_clnt).update(
+            {"estd": "Cancelada"}
+        )
+        db_session.flush()
+        assert (
+            client.post(
+                f"/alarmas/{id_alarma}/destinatarios", json={"correo": "uno@example.com"}
+            ).status_code
+            == 409
+        )
+
+    def test_sin_asignacion_no_ve_historial_ni_destinatarios(self, client, escenario, db_session):
+        id_alarma = self.crear(client, escenario)
+        db_session.query(PermisoUbicacion).filter_by(id_usr=escenario["usuario"].id_usr).delete()
+        db_session.flush()
+        assert client.get(f"/alarmas/{id_alarma}/destinatarios").status_code == 404
+        assert client.get("/alarmas").json()["total"] == 0
+
+    def test_permiso_solo_lectura_no_modifica(self, client, escenario, db_session):
+        id_alarma = self.crear(client, escenario)
+        db_session.query(PermisoUsuarioSede).filter_by(
+            id_usr=escenario["usuario"].id_usr, mdl="Alarmas"
+        ).update({"nvl": "Lectura"})
+        db_session.flush()
+        assert client.get(f"/alarmas/{id_alarma}/destinatarios").status_code == 200
+        assert (
+            client.post(
+                f"/alarmas/{id_alarma}/destinatarios", json={"correo": "uno@example.com"}
+            ).status_code
+            == 403
+        )
+
+
 # ---------------------------------------------------------------------------
 # PP-72 - HU 27 Listar alarmas (GET /alarmas)
 #

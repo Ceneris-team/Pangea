@@ -28,6 +28,7 @@ from app.models.mapeo_dispositivo import Dispositivo, Parametro
 from app.models.telemetria import Telemetria
 from app.models.ubicacion_conexion import Ubicacion
 from app.services.cache.invalidacion import invalidar_por_lectura
+from app.services.notificaciones import evaluar_alarmas
 from app.services.particiones import (
     ParticionInexistenteError,
     es_error_de_particion_faltante,
@@ -199,6 +200,7 @@ def guardar_lecturas(
     # aparece otro llamador de guardar_lecturas() que no sea la tarea de
     # Celery actual.
     if guardadas:
+        evaluar_alarmas(db, lecturas=lecturas, dispositivo=dispositivo, id_sd=ubicacion.id_sd)
         invalidar_por_lectura(id_sd=ubicacion.id_sd, id_ubccn=dispositivo.id_ubccn)
 
     return ResultadoPersistencia(

@@ -27,6 +27,7 @@ services:
       - ./.env
     environment:
       DATABASE_URL: postgresql+psycopg2://postgres:postgres@db:5432/pangea_dev
+      DATABASE_RUNTIME_URL: ${DATABASE_CONTAINER_RUNTIME_URL:-}
       CELERY_BROKER_URL: redis://redis:6379/2
       CELERY_RESULT_BACKEND: redis://redis:6379/3
       RATELIMIT_STORAGE_URL: redis://redis:6379/1
@@ -44,6 +45,7 @@ services:
       - ./.env
     environment:
       DATABASE_URL: postgresql+psycopg2://postgres:postgres@db:5432/pangea_dev
+      DATABASE_RUNTIME_URL: ${DATABASE_CONTAINER_RUNTIME_URL:-}
       CELERY_BROKER_URL: redis://redis:6379/2
       CELERY_RESULT_BACKEND: redis://redis:6379/3
     command: celery -A app.core.celery_app worker --loglevel=info --concurrency=4
@@ -59,6 +61,7 @@ services:
       - ./.env
     environment:
       DATABASE_URL: postgresql+psycopg2://postgres:postgres@db:5432/pangea_dev
+      DATABASE_RUNTIME_URL: ${DATABASE_CONTAINER_RUNTIME_URL:-}
       CELERY_BROKER_URL: redis://redis:6379/2
       CELERY_RESULT_BACKEND: redis://redis:6379/3
     command: celery -A app.core.celery_app worker --loglevel=info --queues=exportaciones --concurrency=1 --prefetch-multiplier=1
@@ -76,6 +79,7 @@ services:
       - ./.env
     environment:
       DATABASE_URL: postgresql+psycopg2://postgres:postgres@db:5432/pangea_dev
+      DATABASE_RUNTIME_URL: ${DATABASE_CONTAINER_RUNTIME_URL:-}
       CELERY_BROKER_URL: redis://redis:6379/2
       CELERY_RESULT_BACKEND: redis://redis:6379/3
     command: celery -A app.core.celery_app beat --loglevel=info

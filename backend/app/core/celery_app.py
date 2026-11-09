@@ -74,6 +74,10 @@ celery_app.conf.update(
 # posible, así que ninguna frcnc_mnts configurada por debajo de eso puede
 # cumplirse igual.
 celery_app.conf.beat_schedule = {
+    "despachar-notificaciones-cada-5-segundos": {
+        "task": "app.tasks.notificaciones.despachar_pendientes",
+        "schedule": 5.0,
+    },
     "mantener-exportaciones-cada-minuto": {
         "task": "app.tasks.exportaciones.mantener_exportaciones",
         "schedule": 60.0,

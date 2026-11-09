@@ -175,5 +175,6 @@ async function manejarRespuesta<T>(
     throw new ApiError(mensajeDeDetalle(data?.detail), res.status);
   }
 
+  if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
 }

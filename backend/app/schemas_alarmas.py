@@ -7,7 +7,7 @@ creciendo schemas.py.
 
 import re
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 
 class AlarmaListItem(BaseModel):
@@ -67,7 +67,7 @@ class CondicionAlarmaCrear(BaseModel):
     operador dentro del CHECK."""
 
     oprdr: str
-    vlr_umbrl: float
+    vlr_umbrl: float = Field(allow_inf_nan=False, ge=-9999999999.9999, le=9999999999.9999)
 
     @field_validator("oprdr")
     @classmethod
@@ -87,6 +87,15 @@ class AlarmaCrear(BaseModel):
     id_prmtr: int
     id_ubccn: int
     condiciones: list[CondicionAlarmaCrear] = Field(default_factory=list)
+    destinatarios: list[EmailStr] = Field(default_factory=list, max_length=100)
+
+    @field_validator("destinatarios")
+    @classmethod
+    def _correos_unicos(cls, valores):
+        correos = [str(c).lower() for c in valores]
+        if len(correos) != len(set(correos)) or any(len(c) > 150 for c in correos):
+            raise ValueError("Los destinatarios deben ser distintos y tener hasta 150 caracteres")
+        return correos
 
     @field_validator("nmbr")
     @classmethod
@@ -110,3 +119,14 @@ class AlarmaCreada(BaseModel):
 
     mensaje: str = "Alarma creada correctamente"
     alarma: AlarmaListItem
+
+
+class DestinatarioCrear(BaseModel):
+    correo: EmailStr = Field(max_length=150)
+
+
+class AlarmaActualizar(BaseModel):
+    estado: str | None = Field(default=None, pattern="^(Activa|Inactiva)$")
+    condiciones: list[CondicionAlarmaCrear] | None = Field(
+        default=None, min_length=1, max_length=20
+    )

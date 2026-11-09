@@ -57,22 +57,35 @@ Abierta", ver models/evento_texto.py- no admite ">= 3.5": ofrecerlo en el
 selector sería dejar armar una alarma que no puede dispararse nunca.
 """
 
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func
+from sqlalchemy import func, or_
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models.alarma import Alarma, CondicionAlarma
+from app.models.alarma import (
+    Alarma,
+    CondicionAlarma,
+    DestinatarioAlarma,
+    EstadoAlarma,
+    IntentoNotificacion,
+    NotificacionEnviada,
+)
 from app.models.cliente_sede import Sede
 from app.models.mapeo_dispositivo import Dispositivo, MapeoColumna, MapeoFormato, Parametro
 from app.models.ubicacion_conexion import Ubicacion
 from app.schemas import ParametroListItem
 from app.schemas_alarmas import (
+    AlarmaActualizar,
     AlarmaCreada,
     AlarmaCrear,
     AlarmaListItem,
+    DestinatarioCrear,
     UbicacionParaAlarma,
 )
+from app.security.entorno import sedes_permitidas
 from app.security.permisos import EDICION, LECTURA, require_permiso
 from app.security.ubicaciones_permitidas import ubicaciones_permitidas
 from app.services.contratos import exigir_operacion
@@ -173,6 +186,7 @@ def listar_alarmas(
         db.query(Alarma, Parametro.nmbr, Parametro.undd)
         .join(Parametro, Parametro.id_prmtr == Alarma.id_prmtr)
         .filter(Alarma.id_usr == id_usr)
+        .filter(Alarma.id_ubccn.in_(ubicaciones_permitidas(db, usuario)))
     )
 
     if busqueda:
@@ -292,6 +306,12 @@ def crear_alarma(
         for condicion in body.condiciones
     ]
     db.add_all(condiciones)
+    db.add_all(
+        [
+            DestinatarioAlarma(id_alrm=alarma.id_alrm, cnl="email", crr=str(correo).lower())
+            for correo in body.destinatarios
+        ]
+    )
 
     db.commit()
     db.refresh(alarma)
@@ -306,3 +326,195 @@ def crear_alarma(
             estd=alarma.estd,
         )
     )
+
+
+def _alarma_propia(db, usuario, id_alarma, *, editar=False):
+    query = db.query(Alarma).filter(
+        Alarma.id_alrm == id_alarma,
+        Alarma.id_usr == int(usuario["sub"]),
+        Alarma.id_ubccn.in_(ubicaciones_permitidas(db, usuario)),
+    )
+    if editar:
+        query = query.with_for_update()
+    alarma = query.first()
+    if alarma is None:
+        raise HTTPException(404, "Alarma no encontrada")
+    if editar:
+        sede = db.get(Sede, alarma.id_sd)
+        exigir_operacion(db, sede.id_clnt)
+    return alarma
+
+
+@router.get("/notificaciones")
+def historial_notificaciones(
+    alarma_id: int | None = None,
+    tipo: str | None = None,
+    estado: str | None = None,
+    destinatario: str | None = None,
+    desde: datetime | None = None,
+    hasta: datetime | None = None,
+    pagina: int = Query(1, ge=1),
+    por_pagina: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(require_permiso("Alarmas", LECTURA)),
+):
+    if any(f is not None and f.tzinfo is None for f in (desde, hasta)):
+        raise HTTPException(422, "Las fechas deben incluir zona horaria")
+    if desde and hasta and desde > hasta:
+        raise HTTPException(422, "La fecha inicial no puede superar la final")
+    propias = db.query(Alarma.id_alrm).filter(
+        Alarma.id_usr == int(usuario["sub"]),
+        Alarma.id_ubccn.in_(ubicaciones_permitidas(db, usuario)),
+    )
+    q = db.query(NotificacionEnviada).filter(
+        NotificacionEnviada.id_usr == int(usuario["sub"]),
+        or_(NotificacionEnviada.id_alrm.is_(None), NotificacionEnviada.id_alrm.in_(propias)),
+    )
+    sedes = sedes_permitidas(db, usuario)
+    if sedes is not None:
+        q = q.filter(or_(NotificacionEnviada.id_sd.is_(None), NotificacionEnviada.id_sd.in_(sedes)))
+    if alarma_id is not None:
+        _alarma_propia(db, usuario, alarma_id)
+        q = q.filter(NotificacionEnviada.id_alrm == alarma_id)
+    for campo, valor in ((NotificacionEnviada.tipo, tipo), (NotificacionEnviada.estd, estado)):
+        if valor:
+            q = q.filter(campo == valor)
+    if destinatario:
+        q = q.filter(func.lower(NotificacionEnviada.dstn) == destinatario.strip().lower())
+    if desde:
+        q = q.filter(NotificacionEnviada.fch_crcn >= desde)
+    if hasta:
+        q = q.filter(NotificacionEnviada.fch_crcn <= hasta)
+    total = q.count()
+    filas = (
+        q.order_by(NotificacionEnviada.fch_crcn.desc(), NotificacionEnviada.id_ntfccn.desc())
+        .offset((pagina - 1) * por_pagina)
+        .limit(por_pagina)
+        .all()
+    )
+    intentos = {}
+    if filas:
+        for intento in (
+            db.query(IntentoNotificacion)
+            .filter(
+                IntentoNotificacion.id_ntfccn.in_([n.id_ntfccn for n in filas]),
+            )
+            .order_by(IntentoNotificacion.id_intnt)
+            .all()
+        ):
+            intentos.setdefault(intento.id_ntfccn, []).append(
+                {
+                    "numero": intento.numero,
+                    "fecha": intento.fecha,
+                    "resultado": intento.resultado,
+                    "error": intento.error,
+                    "mensaje_id": intento.mensaje_id,
+                }
+            )
+    return {
+        "total": total,
+        "pagina": pagina,
+        "por_pagina": por_pagina,
+        "items": [
+            {
+                "id": n.id_ntfccn,
+                "alarma_id": n.id_alrm,
+                "tipo": n.tipo,
+                "destinatario": n.dstn,
+                "estado": n.estd,
+                "creada": n.fch_crcn,
+                "enviada": n.fch_env,
+                "proximo_intento": (
+                    n.prxm_intnt if n.estd in {"Pendiente", "Reintentando", "Encolado"} else None
+                ),
+                "reintentos": n.rntnts,
+                "ultimo_error": n.ultimo_error,
+                "mensaje_id": n.mensaje_id,
+                "intentos": intentos.get(n.id_ntfccn, []),
+            }
+            for n in filas
+        ],
+    }
+
+
+@router.get("/{id_alarma}/destinatarios")
+def listar_destinatarios(
+    id_alarma: int,
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(require_permiso("Alarmas", LECTURA)),
+):
+    _alarma_propia(db, usuario, id_alarma)
+    filas = (
+        db.query(DestinatarioAlarma)
+        .filter_by(id_alrm=id_alarma, cnl="email")
+        .order_by(DestinatarioAlarma.crr)
+        .all()
+    )
+    return {"items": [{"id": d.id_dstntr, "correo": d.crr} for d in filas]}
+
+
+@router.post("/{id_alarma}/destinatarios", status_code=201)
+def agregar_destinatario(
+    id_alarma: int,
+    body: DestinatarioCrear,
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(require_permiso("Alarmas", EDICION)),
+):
+    _alarma_propia(db, usuario, id_alarma, editar=True)
+    correo = str(body.correo).lower()
+    actuales = db.query(DestinatarioAlarma).filter_by(id_alrm=id_alarma, cnl="email")
+    if actuales.filter(func.lower(DestinatarioAlarma.crr) == correo).first():
+        raise HTTPException(409, "Este correo ya recibe notificaciones de la alarma")
+    if actuales.count() >= 100:
+        raise HTTPException(422, "La alarma admite hasta 100 destinatarios")
+    d = DestinatarioAlarma(id_alrm=id_alarma, cnl="email", crr=correo)
+    db.add(d)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(409, "Este correo ya recibe notificaciones de la alarma") from None
+    return {"id": d.id_dstntr, "correo": d.crr}
+
+
+@router.delete("/{id_alarma}/destinatarios/{id_destinatario}", status_code=204)
+def quitar_destinatario(
+    id_alarma: int,
+    id_destinatario: int,
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(require_permiso("Alarmas", EDICION)),
+):
+    _alarma_propia(db, usuario, id_alarma, editar=True)
+    d = (
+        db.query(DestinatarioAlarma)
+        .filter_by(id_alrm=id_alarma, id_dstntr=id_destinatario, cnl="email")
+        .first()
+    )
+    if d is None:
+        raise HTTPException(404, "Destinatario no encontrado")
+    db.delete(d)
+    db.commit()
+
+
+@router.patch("/{id_alarma}")
+def actualizar_alarma(
+    id_alarma: int,
+    body: AlarmaActualizar,
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(require_permiso("Alarmas", EDICION)),
+):
+    alarma = _alarma_propia(db, usuario, id_alarma, editar=True)
+    if body.estado is not None:
+        alarma.estd = body.estado
+    if body.condiciones is not None:
+        db.query(CondicionAlarma).filter_by(id_alrm=id_alarma).delete()
+        db.add_all(
+            [
+                CondicionAlarma(id_alrm=id_alarma, oprdr=c.oprdr, vlr_umbrl=c.vlr_umbrl)
+                for c in body.condiciones
+            ]
+        )
+    if body.estado is not None or body.condiciones is not None:
+        db.query(EstadoAlarma).filter_by(id_alrm=id_alarma).update({"en_alarma": False})
+    db.commit()
+    return {"mensaje": "Alarma actualizada", "estado": alarma.estd}

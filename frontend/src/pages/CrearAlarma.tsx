@@ -61,6 +61,7 @@ export default function CrearAlarma() {
   // Paso 2 (HU29).
   const [operador, setOperador] = useState<string>(">");
   const [umbral, setUmbral] = useState("");
+  const [correos, setCorreos] = useState("");
 
   const [ubicaciones, setUbicaciones] = useState<UbicacionOpcion[]>([]);
   const [parametros, setParametros] = useState<ParametroOpcion[]>([]);
@@ -174,6 +175,7 @@ export default function CrearAlarma() {
           id_ubccn: Number(ubicacionId),
           id_prmtr: Number(parametroId),
           condiciones: [{ oprdr: operador, vlr_umbrl: Number(umbral) }],
+          destinatarios: correos.split(/[;,\n]+/).map(c => c.trim()).filter(Boolean),
         },
       });
 
@@ -396,6 +398,12 @@ export default function CrearAlarma() {
                   <p className="text-xs text-gray-500 dark:text-gray-400">
                     La alarma se creará en estado <span className="font-semibold">Activa</span>.
                   </p>
+                  <div>
+                    <label className={labelClase} htmlFor="correos-alarma">Correos para notificaciones</label>
+                    <textarea id="correos-alarma" value={correos} onChange={e => setCorreos(e.target.value)}
+                      rows={3} className={inputClase} placeholder="operaciones@empresa.com; supervisor@empresa.com" />
+                    <p className="text-xs mt-2 text-gray-500 dark:text-gray-400">Separa los correos con punto y coma, coma o salto de línea. También puedes añadirlos después desde Notificaciones.</p>
+                  </div>
                 </div>
               )}
 
