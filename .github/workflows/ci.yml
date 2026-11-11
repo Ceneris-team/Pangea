@@ -114,7 +114,14 @@ jobs:
       # Suite completa: autenticación, permisos, modelo de datos y el resto
       # (246 tests verificados en local a la fecha de esta HT).
       - name: pytest (suite completa)
-        run: python -m pytest -v -o faulthandler_timeout=120
+        run: python -m pytest -v -k "not test_mes_completo_por_minuto_con_memoria_acotada" -o faulthandler_timeout=120
+
+      - name: Rendimiento de exportaciones en procesos independientes
+        run: |
+          set -euo pipefail
+          for formato in csv xlsx; do
+            python -m pytest "tests/routers/test_exportaciones.py::test_mes_completo_por_minuto_con_memoria_acotada[$formato]" -v -s -o faulthandler_timeout=120
+          done
 
   build:
     name: Build imagen Docker
