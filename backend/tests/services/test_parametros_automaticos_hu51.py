@@ -510,7 +510,9 @@ class TestConvergenciaDelAutoAlta:
             tareas = [(id_dspstv, f"CONCHU51_{i}.dat", contenido) for i in range(4)]
 
             with mp.get_context("spawn").Pool(4) as pool:
-                ids = pool.map_async(_procesar_columna_para_test_concurrencia, tareas).get(timeout=60)
+                ids = pool.map_async(_procesar_columna_para_test_concurrencia, tareas).get(
+                    timeout=60
+                )
 
             ids_no_nulos = [i for i in ids if i is not None]
             assert ids_no_nulos, "ningún proceso llegó a crear el parámetro"
