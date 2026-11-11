@@ -327,7 +327,11 @@ def test_renderizado_no_depende_del_directorio_de_trabajo(monkeypatch, tmp_path)
 
 
 def test_bienvenida_cifra_credencial_y_la_elimina_tras_el_envio(db_session, caso, monkeypatch):
+    from cryptography.fernet import Fernet
+
     from app.services.correo_ses import cifrar_password_temporal
+
+    monkeypatch.setenv("NOTIFICATION_CREDENTIAL_KEY", Fernet.generate_key().decode())
 
     temporal = "TemporalDePrueba2026"
     cifrada = cifrar_password_temporal(temporal)

@@ -17,9 +17,14 @@ def resolver_entorno(db: Session, usuario: dict, cliente_id=None, proyecto_id=No
     resultado = dict(usuario)
     resultado.update(cliente_id=cliente_id, proyecto_id=proyecto_id, rol_empresa=None)
     if usuario.get("scope") == "por_cliente":
-        query = db.query(UsuarioCliente).join(Cliente, Cliente.id_clnt == UsuarioCliente.id_clnt).filter(
-            UsuarioCliente.id_usr == int(usuario["sub"]), UsuarioCliente.estd == "Activo",
-            Cliente.estd == "Activo",
+        query = (
+            db.query(UsuarioCliente)
+            .join(Cliente, Cliente.id_clnt == UsuarioCliente.id_clnt)
+            .filter(
+                UsuarioCliente.id_usr == int(usuario["sub"]),
+                UsuarioCliente.estd == "Activo",
+                Cliente.estd == "Activo",
+            )
         )
         if cliente_id is not None:
             query = query.filter(UsuarioCliente.id_clnt == cliente_id)
@@ -41,9 +46,14 @@ def resolver_entorno(db: Session, usuario: dict, cliente_id=None, proyecto_id=No
         if resultado["cliente_id"] is not None and empresa_proyecto != resultado["cliente_id"]:
             raise HTTPException(403, "El proyecto no pertenece a la empresa seleccionada")
         if resultado.get("scope") == "por_cliente" and resultado["rol_empresa"] == "Lector":
-            asignado = db.query(UsuarioProyecto).filter(
-                UsuarioProyecto.id_mmb == miembro.id_mmb, UsuarioProyecto.id_ubccn == proyecto_id
-            ).first()
+            asignado = (
+                db.query(UsuarioProyecto)
+                .filter(
+                    UsuarioProyecto.id_mmb == miembro.id_mmb,
+                    UsuarioProyecto.id_ubccn == proyecto_id,
+                )
+                .first()
+            )
             if asignado is None:
                 raise HTTPException(403, "No tienes acceso a este proyecto")
         elif not es_ceneris(usuario) and resultado.get("scope") != "por_cliente":
@@ -72,17 +82,24 @@ def sedes_permitidas(db: Session, usuario: dict) -> list[int] | None:
     else:
         return []
     if usuario.get("proyecto_id") is not None:
-        query = query.filter(Sede.id_sd.in_(
-            db.query(Ubicacion.id_sd).filter(Ubicacion.id_ubccn == usuario["proyecto_id"])
-        ))
+        query = query.filter(
+            Sede.id_sd.in_(
+                db.query(Ubicacion.id_sd).filter(Ubicacion.id_ubccn == usuario["proyecto_id"])
+            )
+        )
     if usuario.get("scope") == "por_cliente" and usuario["rol_empresa"] == "Lector":
-        asignados = db.query(UsuarioProyecto.id_ubccn).join(
-            UsuarioCliente, UsuarioCliente.id_mmb == UsuarioProyecto.id_mmb
-        ).filter(UsuarioCliente.id_usr == int(usuario["sub"]),
-                 UsuarioCliente.id_clnt == usuario["cliente_id"], UsuarioCliente.estd == "Activo")
-        query = query.filter(Sede.id_sd.in_(
-            db.query(Ubicacion.id_sd).filter(Ubicacion.id_ubccn.in_(asignados))
-        ))
+        asignados = (
+            db.query(UsuarioProyecto.id_ubccn)
+            .join(UsuarioCliente, UsuarioCliente.id_mmb == UsuarioProyecto.id_mmb)
+            .filter(
+                UsuarioCliente.id_usr == int(usuario["sub"]),
+                UsuarioCliente.id_clnt == usuario["cliente_id"],
+                UsuarioCliente.estd == "Activo",
+            )
+        )
+        query = query.filter(
+            Sede.id_sd.in_(db.query(Ubicacion.id_sd).filter(Ubicacion.id_ubccn.in_(asignados)))
+        )
     return [fila[0] for fila in query.all()]
 
 
@@ -98,18 +115,25 @@ def filtrar_proyectos(query, columna, db: Session, usuario: dict):
     if usuario.get("proyecto_id") is not None:
         visibles = visibles.filter(Ubicacion.id_ubccn == usuario["proyecto_id"])
     if usuario.get("scope") == "por_cliente" and usuario["rol_empresa"] == "Lector":
-        asignados = db.query(UsuarioProyecto.id_ubccn).join(
-            UsuarioCliente, UsuarioCliente.id_mmb == UsuarioProyecto.id_mmb
-        ).filter(UsuarioCliente.id_usr == int(usuario["sub"]),
-                 UsuarioCliente.id_clnt == usuario["cliente_id"], UsuarioCliente.estd == "Activo")
+        asignados = (
+            db.query(UsuarioProyecto.id_ubccn)
+            .join(UsuarioCliente, UsuarioCliente.id_mmb == UsuarioProyecto.id_mmb)
+            .filter(
+                UsuarioCliente.id_usr == int(usuario["sub"]),
+                UsuarioCliente.id_clnt == usuario["cliente_id"],
+                UsuarioCliente.estd == "Activo",
+            )
+        )
         visibles = visibles.filter(Ubicacion.id_ubccn.in_(asignados))
     return query.filter(columna.in_(visibles))
 
 
 def verificar_proyecto(db: Session, usuario: dict, proyecto_id: int) -> None:
-    existe = filtrar_proyectos(db.query(Ubicacion.id_ubccn), Ubicacion.id_ubccn, db, usuario).filter(
-        Ubicacion.id_ubccn == proyecto_id
-    ).first()
+    existe = (
+        filtrar_proyectos(db.query(Ubicacion.id_ubccn), Ubicacion.id_ubccn, db, usuario)
+        .filter(Ubicacion.id_ubccn == proyecto_id)
+        .first()
+    )
     if existe is None:
         raise HTTPException(403, "No tienes acceso a este proyecto")
 

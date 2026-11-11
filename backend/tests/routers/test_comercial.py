@@ -84,7 +84,9 @@ def test_nombre_duplicado_y_limites_negativos(comercial, fabrica):
     nombre = f"Plan único {fabrica.cliente().id_clnt}"
     primero = comercial.post("/comercial/planes", json={"nombre": nombre, "precio_mensual": "0.00"})
     assert primero.status_code == 201
-    repetido = comercial.post("/comercial/planes", json={"nombre": nombre.lower(), "precio_mensual": "1.00"})
+    repetido = comercial.post(
+        "/comercial/planes", json={"nombre": nombre.lower(), "precio_mensual": "1.00"}
+    )
     assert repetido.status_code == 409
     plan_id = primero.json()["plan"]["id_pln"]
     invalidos = comercial.put(
@@ -100,9 +102,14 @@ def test_mi_plan_solo_expone_cliente_de_su_sede(comercial, fabrica):
     sede = fabrica.sede(cliente)
     otra_sede = fabrica.sede(cliente)
     usuario = fabrica.usuario(fabrica.rol("Cliente Final"))
-    poligono = {"type": "Polygon", "coordinates": [[[-77, -12], [-77.1, -12], [-77, -12.1], [-77, -12]]]}
+    poligono = {
+        "type": "Polygon",
+        "coordinates": [[[-77, -12], [-77.1, -12], [-77, -12.1], [-77, -12]]],
+    }
     asignada = Ubicacion(id_sd=sede.id_sd, nmbr="Asignada", lttd=-12, lngtd=-77, plgn_gjsn=poligono)
-    no_asignada = Ubicacion(id_sd=otra_sede.id_sd, nmbr="Otra sede", lttd=-12, lngtd=-77, plgn_gjsn=poligono)
+    no_asignada = Ubicacion(
+        id_sd=otra_sede.id_sd, nmbr="Otra sede", lttd=-12, lngtd=-77, plgn_gjsn=poligono
+    )
     fabrica.db.add_all([asignada, no_asignada])
     fabrica.db.flush()
     fabrica.db.add(PermisoUbicacion(id_usr=usuario.id_usr, id_ubccn=asignada.id_ubccn))
@@ -125,13 +132,15 @@ def test_listado_comercial_muestra_plan_vencido(comercial, fabrica):
     plan = PlanSuscripcion(nmbr=f"Plan vencido {cliente.id_clnt}", prc_mnsl=99)
     fabrica.db.add(plan)
     fabrica.db.flush()
-    fabrica.db.add(Suscripcion(
-        id_clnt=cliente.id_clnt,
-        id_pln=plan.id_pln,
-        fch_inc=fecha_comercial() - timedelta(days=40),
-        fch_vncmnt=fecha_comercial() - timedelta(days=1),
-        estd="Activa",
-    ))
+    fabrica.db.add(
+        Suscripcion(
+            id_clnt=cliente.id_clnt,
+            id_pln=plan.id_pln,
+            fch_inc=fecha_comercial() - timedelta(days=40),
+            fch_vncmnt=fecha_comercial() - timedelta(days=1),
+            estd="Activa",
+        )
+    )
     fabrica.db.flush()
 
     respuesta = comercial.get("/comercial/clientes")
@@ -145,19 +154,26 @@ def test_administrador_ceneris_consulta_y_crea_planes(comercial, fabrica):
     rol = fabrica.rol("Administrador")
     sede = fabrica.sede()
     usuario = fabrica.usuario(rol, scp="global")
-    fabrica.db.add(PermisoUsuarioSede(
-        id_usr=usuario.id_usr,
-        id_sd=sede.id_sd,
-        id_rl=rol.id_rl,
-        mdl="Comercial",
-        nvl="Lectura",
-    ))
+    fabrica.db.add(
+        PermisoUsuarioSede(
+            id_usr=usuario.id_usr,
+            id_sd=sede.id_sd,
+            id_rl=rol.id_rl,
+            mdl="Comercial",
+            nvl="Lectura",
+        )
+    )
     fabrica.db.flush()
     app.dependency_overrides[get_current_user] = lambda: {
-        "sub": str(usuario.id_usr), "sede_id": None, "scope": "global", "rol": "Administrador"
+        "sub": str(usuario.id_usr),
+        "sede_id": None,
+        "scope": "global",
+        "rol": "Administrador",
     }
 
     assert comercial.get("/comercial/clientes").status_code == 200
     assert comercial.get("/comercial/planes").status_code == 200
-    respuesta = comercial.post("/comercial/planes", json={"nombre": "Plan CENERIS", "precio_mensual": "99"})
+    respuesta = comercial.post(
+        "/comercial/planes", json={"nombre": "Plan CENERIS", "precio_mensual": "99"}
+    )
     assert respuesta.status_code == 201, respuesta.text

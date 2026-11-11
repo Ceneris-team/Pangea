@@ -641,7 +641,7 @@ def test_nombre_de_otra_ubicacion_de_la_misma_sede_devuelve_409(client, tecnico_
     assert "Ya existe una ubicación con ese nombre" in respuesta.json()["detail"]
 
 
-def test_nombre_duplicado_ignora_mayusculas(client, tecnico_editor):
+def test_editar_nombre_duplicado_ignora_mayusculas(client, tecnico_editor):
     crear_para_editar(client, nmbr="Estación Norte")
     id_segunda = crear_para_editar(client, nmbr="Estación Sur")
 
@@ -692,9 +692,7 @@ def test_id_sd_en_el_body_se_ignora(client, db_session, tecnico_editor, fabrica)
     silencio -mover la ubicación de sede arrastraría a sus dispositivos y
     a los permisos ya concedidos sobre ella-."""
     id_ubccn = crear_para_editar(client)
-    sede_original = (
-        db_session.query(Ubicacion).filter(Ubicacion.id_ubccn == id_ubccn).one().id_sd
-    )
+    sede_original = db_session.query(Ubicacion).filter(Ubicacion.id_ubccn == id_ubccn).one().id_sd
     otra_sede = fabrica.sede()
 
     respuesta = client.put(

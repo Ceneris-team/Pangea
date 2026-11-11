@@ -74,14 +74,10 @@ def encolados(monkeypatch):
     return llamadas
 
 
-def test_reencola_pendiente_mas_viejo_que_el_umbral(
-    sesion_de_prueba, encolados, fabrica
-):
+def test_reencola_pendiente_mas_viejo_que_el_umbral(sesion_de_prueba, encolados, fabrica):
     sede = fabrica.sede()
     conexion = crear_conexion(sesion_de_prueba, sede)
-    viejo = dt.datetime.now(dt.timezone.utc) - dt.timedelta(
-        minutes=MINUTOS_PENDIENTE_ATASCADO + 5
-    )
+    viejo = dt.datetime.now(dt.timezone.utc) - dt.timedelta(minutes=MINUTOS_PENDIENTE_ATASCADO + 5)
     archivo = crear_archivo(sesion_de_prueba, conexion, "H_atascado.dat", fch_dtccn=viejo)
 
     resultado = reencolar_pendientes_atascados()
@@ -105,13 +101,13 @@ def test_no_reencola_pendiente_reciente(sesion_de_prueba, encolados, fabrica):
     assert encolados == []
 
 
-def test_no_reencola_archivos_procesando_o_ya_resueltos(
-    sesion_de_prueba, encolados, fabrica
-):
+def test_no_reencola_archivos_procesando_o_ya_resueltos(sesion_de_prueba, encolados, fabrica):
     sede = fabrica.sede()
     conexion = crear_conexion(sesion_de_prueba, sede)
     viejo = dt.datetime.now(dt.timezone.utc) - dt.timedelta(hours=1)
-    crear_archivo(sesion_de_prueba, conexion, "H_procesando.dat", estd="Procesando", fch_dtccn=viejo)
+    crear_archivo(
+        sesion_de_prueba, conexion, "H_procesando.dat", estd="Procesando", fch_dtccn=viejo
+    )
     crear_archivo(sesion_de_prueba, conexion, "H_exitoso.dat", estd="Exitoso", fch_dtccn=viejo)
     crear_archivo(sesion_de_prueba, conexion, "H_fallido.dat", estd="Fallido", fch_dtccn=viejo)
 
@@ -127,9 +123,7 @@ def test_reencola_varios_en_orden_de_deteccion(sesion_de_prueba, encolados, fabr
     ahora = dt.datetime.now(dt.timezone.utc)
     margen = dt.timedelta(minutes=MINUTOS_PENDIENTE_ATASCADO + 5)
 
-    mas_nuevo = crear_archivo(
-        sesion_de_prueba, conexion, "H_b.dat", fch_dtccn=ahora - margen
-    )
+    mas_nuevo = crear_archivo(sesion_de_prueba, conexion, "H_b.dat", fch_dtccn=ahora - margen)
     mas_viejo = crear_archivo(
         sesion_de_prueba, conexion, "H_a.dat", fch_dtccn=ahora - margen - dt.timedelta(minutes=10)
     )

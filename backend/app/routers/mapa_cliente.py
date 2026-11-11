@@ -112,9 +112,9 @@ def mapa_del_cliente(
                 "unidad": dato["unidad"],
                 # float() y no Decimal: Decimal no es serializable a JSON.
                 # Un evento de texto (evnt_txt) llega como str y se deja tal cual.
-                "valor": float(dato["valor"])
-                if not isinstance(dato["valor"], str)
-                else dato["valor"],
+                "valor": (
+                    float(dato["valor"]) if not isinstance(dato["valor"], str) else dato["valor"]
+                ),
                 "fch_hr": dato["fch_hr"].isoformat() if dato["fch_hr"] else None,
             }
             for dato in sorted(por_parametro.values(), key=lambda d: d["parametro"])
@@ -186,20 +186,30 @@ def _autenticar_websocket(ticket: str | None) -> dict | None:
     try:
         seleccion = json.loads(token) if token.startswith("{") else {"token": token}
         payload = decode_access_token(seleccion["token"])
-        return {**payload, "cliente_id": seleccion.get("cliente_id"),
-                "proyecto_id": seleccion.get("proyecto_id"), "_token_crudo": seleccion["token"]}
+        return {
+            **payload,
+            "cliente_id": seleccion.get("cliente_id"),
+            "proyecto_id": seleccion.get("proyecto_id"),
+            "_token_crudo": seleccion["token"],
+        }
     except (TokenExpirado, TokenInvalido, ValueError, KeyError):
         return None
 
 
 def _acceso_ws(db, usuario):
     if usuario.get("_token_crudo"):
-        actual = get_current_user(usuario["_token_crudo"], db, usuario.get("cliente_id"), usuario.get("proyecto_id"))
+        actual = get_current_user(
+            usuario["_token_crudo"], db, usuario.get("cliente_id"), usuario.get("proyecto_id")
+        )
     else:
-        actual = resolver_entorno(db, usuario, usuario.get("cliente_id"), usuario.get("proyecto_id"))
+        actual = resolver_entorno(
+            db, usuario, usuario.get("cliente_id"), usuario.get("proyecto_id")
+        )
     permitido = permiso_del_entorno(db, actual, "Tableros", LECTURA)
     if permitido is None:
-        permitido = tiene_permiso(db, int(actual["sub"]), actual.get("sede_id"), "Tableros", LECTURA)
+        permitido = tiene_permiso(
+            db, int(actual["sub"]), actual.get("sede_id"), "Tableros", LECTURA
+        )
     if not permitido:
         raise HTTPException(403, "Sin permiso sobre Tableros")
     return ubicaciones_permitidas(db, actual)

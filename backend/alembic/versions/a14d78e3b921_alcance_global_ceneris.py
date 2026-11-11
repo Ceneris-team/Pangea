@@ -13,8 +13,10 @@ depends_on = None
 
 
 def upgrade():
-    op.execute("UPDATE usr SET scp = 'global' FROM rl WHERE usr.id_rl = rl.id_rl "
-               "AND rl.nmbr IN ('Administrador', 'Técnico CENERIS', 'Tecnico CENERIS')")
+    op.execute(
+        "UPDATE usr SET scp = 'global' FROM rl WHERE usr.id_rl = rl.id_rl "
+        "AND rl.nmbr IN ('Administrador', 'Técnico CENERIS', 'Tecnico CENERIS')"
+    )
 
 
 def downgrade():

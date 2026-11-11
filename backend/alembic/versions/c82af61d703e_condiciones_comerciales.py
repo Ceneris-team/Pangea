@@ -16,19 +16,36 @@ depends_on = None
 
 
 def upgrade():
-    op.add_column("pln_sscrpcn", sa.Column("moneda", sa.String(3), nullable=False, server_default="PEN"))
-    op.add_column("pln_sscrpcn", sa.Column("revision", sa.Integer(), nullable=False, server_default="1"))
-    op.add_column("pln_sscrpcn", sa.Column("funcionalidades", postgresql.JSONB(), nullable=False, server_default="[]"))
+    op.add_column(
+        "pln_sscrpcn", sa.Column("moneda", sa.String(3), nullable=False, server_default="PEN")
+    )
+    op.add_column(
+        "pln_sscrpcn", sa.Column("revision", sa.Integer(), nullable=False, server_default="1")
+    )
+    op.add_column(
+        "pln_sscrpcn",
+        sa.Column("funcionalidades", postgresql.JSONB(), nullable=False, server_default="[]"),
+    )
     op.add_column("sscrpcn", sa.Column("condiciones", postgresql.JSONB()))
     op.add_column("sscrpcn", sa.Column("clave_idempotencia", sa.String(64)))
-    op.create_unique_constraint("uq_suscripcion_idempotencia", "sscrpcn", ["id_clnt", "clave_idempotencia"])
-    op.create_index("uq_suscripcion_programada", "sscrpcn", ["id_clnt"], unique=True,
-                    postgresql_where=sa.text("estd = 'Programada'"))
-    op.create_table("funcionalidad_comercial",
+    op.create_unique_constraint(
+        "uq_suscripcion_idempotencia", "sscrpcn", ["id_clnt", "clave_idempotencia"]
+    )
+    op.create_index(
+        "uq_suscripcion_programada",
+        "sscrpcn",
+        ["id_clnt"],
+        unique=True,
+        postgresql_where=sa.text("estd = 'Programada'"),
+    )
+    op.create_table(
+        "funcionalidad_comercial",
         sa.Column("codigo", sa.String(80), primary_key=True),
         sa.Column("nombre", sa.String(150), nullable=False),
-        sa.Column("disponible", sa.Integer(), nullable=False, server_default="0"))
-    op.create_table("complemento_comercial",
+        sa.Column("disponible", sa.Integer(), nullable=False, server_default="0"),
+    )
+    op.create_table(
+        "complemento_comercial",
         sa.Column("id", sa.Integer(), primary_key=True),
         sa.Column("nombre", sa.String(150), nullable=False, unique=True),
         sa.Column("tipo", sa.String(20), nullable=False),
@@ -36,7 +53,8 @@ def upgrade():
         sa.Column("moneda", sa.String(3), nullable=False, server_default="PEN"),
         sa.Column("cupos", postgresql.JSONB(), nullable=False, server_default="{}"),
         sa.Column("funcionalidades", postgresql.JSONB(), nullable=False, server_default="[]"),
-        sa.Column("activo", sa.Integer(), nullable=False, server_default="1"))
+        sa.Column("activo", sa.Integer(), nullable=False, server_default="1"),
+    )
     op.execute("""INSERT INTO funcionalidad_comercial (codigo, nombre, disponible) VALUES
         ('tableros', 'Tableros personalizables', 1),
         ('ml_predicciones', 'Predicciones con machine learning', 0),

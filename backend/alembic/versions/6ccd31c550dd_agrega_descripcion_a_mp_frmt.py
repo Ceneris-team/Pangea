@@ -9,14 +9,15 @@ no se explica sola en la UI -nadie sabe qué es "X" sin abrir el mapeo y
 mirar las columnas-. Se agrega una descripción corta y opcional, mismo
 patrón que prmtr.dscrpcn.
 """
+
 from typing import Sequence, Union
 
 import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = '6ccd31c550dd'
-down_revision: Union[str, Sequence[str], None] = 'c4680495205f'
+revision: str = "6ccd31c550dd"
+down_revision: Union[str, Sequence[str], None] = "c4680495205f"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

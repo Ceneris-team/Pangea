@@ -105,9 +105,7 @@ def listar_ubicaciones(
         # no debe duplicarse en el listado -acá solo importa "tiene o no
         # tiene", no cuántos-.
         query = query.filter(
-            db.query(Dispositivo)
-            .filter(Dispositivo.id_ubccn == Ubicacion.id_ubccn)
-            .exists()
+            db.query(Dispositivo).filter(Dispositivo.id_ubccn == Ubicacion.id_ubccn).exists()
         )
 
     total = query.count()
@@ -175,8 +173,9 @@ def ubicaciones_para_mapa(
         db.query(Ubicacion, func.count(Dispositivo.id_dspstv))
         # LEFT JOIN: una ubicación sin dispositivos tiene que aparecer en
         # el mapa igual, con el conteo en 0.
-        .outerjoin(Dispositivo, Dispositivo.id_ubccn == Ubicacion.id_ubccn)
-        .group_by(Ubicacion.id_ubccn)
+        .outerjoin(Dispositivo, Dispositivo.id_ubccn == Ubicacion.id_ubccn).group_by(
+            Ubicacion.id_ubccn
+        )
     )
 
     if usuario.get("scope") != "por_cliente" and usuario.get("rol") not in ROLES_CON_ACCESO_TOTAL:

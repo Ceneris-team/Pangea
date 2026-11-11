@@ -114,7 +114,9 @@ class TestListarColumnasPendientes:
         assert len(items) == 1
         assert items[0]["nmbr_clmn_orgn"] == "DeA"
 
-    def test_usuario_de_otra_sede_no_ve_pendientes_ajenas(self, client, db_session, tecnico_editor, fabrica):
+    def test_usuario_de_otra_sede_no_ve_pendientes_ajenas(
+        self, client, db_session, tecnico_editor, fabrica
+    ):
         sede, _ = tecnico_editor
         dispositivo = crear_dispositivo(db_session, sede)
         formato = crear_formato(db_session, dispositivo)

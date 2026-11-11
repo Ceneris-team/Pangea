@@ -455,7 +455,9 @@ class TestMarcasDisponibles:
         agregar_permiso(db_session, usuario, sede, "Dispositivos", "Lectura", rol)
 
         ubicacion_asignada = crear_ubicacion(db_session, sede, nombre="Asignada")
-        db_session.add(PermisoUbicacion(id_usr=usuario.id_usr, id_ubccn=ubicacion_asignada.id_ubccn))
+        db_session.add(
+            PermisoUbicacion(id_usr=usuario.id_usr, id_ubccn=ubicacion_asignada.id_ubccn)
+        )
         db_session.flush()
         preparar_dispositivo(
             db_session, sede, nombre="Disp-Asignado", marca="Campbell", ubicacion=ubicacion_asignada
@@ -921,9 +923,9 @@ class TestPuntoGpsPropio:
         sede, _ = tecnico_editor
         ubicacion = crear_ubicacion(db_session, sede)
         conexion = crear_conexion(db_session, sede)
-        id_dspstv = client.post(
-            "/dispositivos", json=cuerpo_valido(ubicacion, conexion)
-        ).json()["dispositivo"]["id_dspstv"]
+        id_dspstv = client.post("/dispositivos", json=cuerpo_valido(ubicacion, conexion)).json()[
+            "dispositivo"
+        ]["id_dspstv"]
 
         resp = client.put(f"/dispositivos/{id_dspstv}", json={"lttd": -12.5, "lngtd": -77.5})
 
@@ -937,9 +939,9 @@ class TestPuntoGpsPropio:
         sede, _ = tecnico_editor
         ubicacion = crear_ubicacion(db_session, sede)
         conexion = crear_conexion(db_session, sede)
-        id_dspstv = client.post(
-            "/dispositivos", json=cuerpo_valido(ubicacion, conexion)
-        ).json()["dispositivo"]["id_dspstv"]
+        id_dspstv = client.post("/dispositivos", json=cuerpo_valido(ubicacion, conexion)).json()[
+            "dispositivo"
+        ]["id_dspstv"]
 
         resp = client.put(f"/dispositivos/{id_dspstv}", json={"lttd": 200})
 
@@ -965,9 +967,7 @@ class TestPuntoGpsPropio:
         assert float(guardado.lttd) == -12.1212
         assert float(guardado.lngtd) == -77.0303
 
-    def test_null_explicito_no_rompe_la_columna_not_null(
-        self, client, db_session, tecnico_editor
-    ):
+    def test_null_explicito_no_rompe_la_columna_not_null(self, client, db_session, tecnico_editor):
         """lttd/lngtd son NOT NULL. Un null explícito en el body pasa el
         filtro de exclude_unset (se envió, solo que vacío), así que el
         router lo descarta: 'null' significa 'no lo toques'. Sin esa
@@ -1001,9 +1001,7 @@ class TestDispositivosParaMapa:
     Endpoint separado de /ubicaciones/mapa a propósito: "Ubicaciones" y
     "Dispositivos" son módulos de permiso distintos (HT-03)."""
 
-    def test_devuelve_el_punto_propio_de_cada_dispositivo(
-        self, client, db_session, tecnico_lector
-    ):
+    def test_devuelve_el_punto_propio_de_cada_dispositivo(self, client, db_session, tecnico_lector):
         """DEC-28: el punto es del dispositivo, no una copia del centro de
         su ubicación; el endpoint tiene que devolver el suyo."""
         sede, _ = tecnico_lector
@@ -1191,7 +1189,10 @@ class TestEliminarDispositivo:
 
         client.delete(f"/dispositivos/{id_dspstv}")
 
-        assert db_session.query(Dispositivo).filter(Dispositivo.id_dspstv == id_dspstv).first() is not None
+        assert (
+            db_session.query(Dispositivo).filter(Dispositivo.id_dspstv == id_dspstv).first()
+            is not None
+        )
 
     def test_ya_inactivo_da_409(self, client, db_session, tecnico_editor):
         sede, _ = tecnico_editor

@@ -78,9 +78,7 @@ def _limpiar_corrida_anterior(db) -> None:
         db.query(Dispositivo).filter(Dispositivo.id_ubccn.in_(ids_ubicaciones)).delete(
             synchronize_session=False
         )
-        db.query(Ubicacion).filter(Ubicacion.id_sd.in_(ids_sedes)).delete(
-            synchronize_session=False
-        )
+        db.query(Ubicacion).filter(Ubicacion.id_sd.in_(ids_sedes)).delete(synchronize_session=False)
         db.query(ConexionFTP).filter(ConexionFTP.id_sd.in_(ids_sedes)).delete(
             synchronize_session=False
         )
@@ -270,9 +268,7 @@ def main():
             "valor_max": "90",
             "por_pagina": 50,
         }
-        tiempos, status = _cronometrar_http(
-            client, ("/mediciones", params_hu32), args.repeticiones
-        )
+        tiempos, status = _cronometrar_http(client, ("/mediciones", params_hu32), args.repeticiones)
         resultados.append(
             {
                 "nombre": "HU32 GET /mediciones (valor_min/max, 7 días, cursor)",

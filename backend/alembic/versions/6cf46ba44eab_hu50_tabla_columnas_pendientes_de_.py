@@ -64,9 +64,7 @@ def upgrade() -> None:
         sa.Column("id_mp", sa.Integer(), nullable=False),
         sa.Column("indc_clmn", sa.Integer(), nullable=False),
         sa.Column("nmbr_clmn_orgn", sa.String(length=200), nullable=False),
-        sa.Column(
-            "estd", sa.String(length=20), nullable=False, server_default="Pendiente"
-        ),
+        sa.Column("estd", sa.String(length=20), nullable=False, server_default="Pendiente"),
         sa.Column(
             "fch_dtccn",
             sa.TIMESTAMP(timezone=True),
@@ -83,9 +81,7 @@ def upgrade() -> None:
         ),
         sa.UniqueConstraint("id_mp", "indc_clmn", name="uq_mpclmnpnd_mp_indccolmn"),
     )
-    op.create_index(
-        "idx_mpclmnpnd_mp_estd", "mp_clmn_pendiente", ["id_mp", "estd"]
-    )
+    op.create_index("idx_mpclmnpnd_mp_estd", "mp_clmn_pendiente", ["id_mp", "estd"])
 
 
 def downgrade() -> None:

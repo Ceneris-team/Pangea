@@ -20,7 +20,6 @@ from fastapi.testclient import TestClient
 
 from app.database import get_db
 from app.main import app
-from app.models import PermisoUbicacion, Ubicacion
 from app.models.suscripcion import PermisoUsuarioSede
 from app.security.jwt_auth import create_access_token
 from app.security.ws_tickets import canjear_ticket, emitir_ticket
@@ -30,8 +29,10 @@ POLIGONO_DUMMY = {"type": "Polygon", "coordinates": [[[0, 0], [0, 1], [1, 1], [1
 
 
 @pytest.fixture()
-def client(db_session):
+def client(db_session, monkeypatch):
     app.dependency_overrides[get_db] = lambda: db_session
+    monkeypatch.setattr("app.routers.mapa_cliente.SessionLocal", lambda: db_session)
+    monkeypatch.setattr(db_session, "close", lambda: None)
     try:
         yield TestClient(app)
     finally:
@@ -171,16 +172,16 @@ class TestUsuarioSinUbicaciones:
         # de esta transacción de test -que nunca se confirma-. Se apunta la
         # consulta de permisos a la sesión del test y se fuerza el caso bajo
         # prueba: usuario válido, cero ubicaciones asignadas.
-        monkeypatch.setattr(
-            "app.routers.mapa_cliente.tiene_permiso", lambda *a, **k: True
-        )
-        monkeypatch.setattr(
-            "app.routers.mapa_cliente.ubicaciones_permitidas", lambda *a, **k: []
-        )
+        monkeypatch.setattr("app.routers.mapa_cliente.tiene_permiso", lambda *a, **k: True)
+        monkeypatch.setattr("app.routers.mapa_cliente.ubicaciones_permitidas", lambda *a, **k: [])
         monkeypatch.setattr(
             "app.routers.mapa_cliente.get_current_user",
-            lambda *a, **k: {"sub": str(usuario.id_usr), "sede_id": sede.id_sd,
-                           "scope": "por_sede", "rol": "Cliente Final"},
+            lambda *a, **k: {
+                "sub": str(usuario.id_usr),
+                "sede_id": sede.id_sd,
+                "scope": "por_sede",
+                "rol": "Cliente Final",
+            },
         )
 
         with client.websocket_connect(f"/mapa-cliente/ws?ticket={ticket}") as ws:

@@ -24,6 +24,7 @@ class Proyecto(Base):
     El proyecto operativo actual es Ubicacion; los flujos de la aplicación
     no crean ni consultan este agrupador.
     """
+
     __tablename__ = "pryct"
     __table_args__ = (UniqueConstraint("id_clnt", "nmbr", name="uq_pryct_clnt_nmbr"),)
 

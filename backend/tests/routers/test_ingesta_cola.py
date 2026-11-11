@@ -340,9 +340,7 @@ class TestIntentosArchivoIngesta:
         conexion = crear_conexion(db_session, sede)
         archivo = crear_archivo(db_session, conexion, estd="Fallido")
         ahora = dt.datetime.now(dt.timezone.utc)
-        crear_intento(
-            db_session, archivo, "Fallido", fch_intnt=ahora - dt.timedelta(hours=2)
-        )
+        crear_intento(db_session, archivo, "Fallido", fch_intnt=ahora - dt.timedelta(hours=2))
         crear_intento(db_session, archivo, "Fallido", fch_intnt=ahora)
 
         resp = client.get(f"/ingesta/cola/{archivo.id_archv}/intentos")

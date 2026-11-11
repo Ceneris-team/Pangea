@@ -333,9 +333,9 @@ class TestCA2Invalidacion:
             id_archv=None,
         )
 
-        assert cache.obtener(clave) is None, (
-            "CA2: una lectura nueva del pipeline debe invalidar la caché de su sede"
-        )
+        assert (
+            cache.obtener(clave) is None
+        ), "CA2: una lectura nueva del pipeline debe invalidar la caché de su sede"
 
     def test_guardar_lecturas_no_invalida_otras_sedes(self, db_session, fabrica):
         """Punto 3 de la HT: la invalidación es DIRIGIDA.
@@ -370,9 +370,9 @@ class TestCA2Invalidacion:
             id_archv=None,
         )
 
-        assert cache.obtener(clave_b) is not None, (
-            "una lectura de la sede A no puede tirar la caché de la sede B"
-        )
+        assert (
+            cache.obtener(clave_b) is not None
+        ), "una lectura de la sede A no puede tirar la caché de la sede B"
 
     def test_carga_manual_invalida_la_cache(self, client, db_session, fabrica):
         """Camino 2: POST /dispositivos/{id}/carga-manual, que escribe
@@ -392,9 +392,7 @@ class TestCA2Invalidacion:
         )
         db_session.add(formato)
         db_session.flush()
-        db_session.add(
-            MapeoColumna(id_mp=formato.id_mp, id_prmtr=parametro.id_prmtr, indc_clmn=1)
-        )
+        db_session.add(MapeoColumna(id_mp=formato.id_mp, id_prmtr=parametro.id_prmtr, indc_clmn=1))
         db_session.flush()
 
         rol = fabrica.rol("Administrador")
@@ -409,23 +407,24 @@ class TestCA2Invalidacion:
         cache.guardar(
             clave,
             {"items": []},
-            indices=[cache.indice_de_sede(sede.id_sd), cache.indice_de_ubicacion(ubicacion.id_ubccn)],
+            indices=[
+                cache.indice_de_sede(sede.id_sd),
+                cache.indice_de_ubicacion(ubicacion.id_ubccn),
+            ],
         )
         assert cache.obtener(clave) is not None
 
         respuesta = client.post(
             f"/dispositivos/{dispositivo.id_dspstv}/carga-manual",
             json={
-                "fch_hr": dt.datetime.now(dt.timezone.utc)
-                .replace(microsecond=0)
-                .isoformat(),
+                "fch_hr": dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat(),
                 "valores": [{"id_prmtr": parametro.id_prmtr, "vlr": 33.3}],
             },
         )
         assert respuesta.status_code == 201, respuesta.text
-        assert cache.obtener(clave) is None, (
-            "CA2: la carga manual también debe invalidar la caché de su sede/ubicación"
-        )
+        assert (
+            cache.obtener(clave) is None
+        ), "CA2: la carga manual también debe invalidar la caché de su sede/ubicación"
 
 
 # ---------------------------------------------------------------------

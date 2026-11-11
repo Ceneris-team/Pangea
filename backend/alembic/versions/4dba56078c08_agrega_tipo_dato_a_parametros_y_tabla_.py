@@ -14,14 +14,15 @@ migración grande sobre una tabla en producción-, así que los eventos de
 texto van a una tabla nueva y separada (evnt_txt), sin particionar (bajo
 volumen esperado frente a la telemetría numérica).
 """
+
 from typing import Sequence, Union
 
 import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = '4dba56078c08'
-down_revision: Union[str, Sequence[str], None] = '6ccd31c550dd'
+revision: str = "4dba56078c08"
+down_revision: Union[str, Sequence[str], None] = "6ccd31c550dd"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
@@ -53,9 +54,7 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["id_archv"], ["archv_ingst.id_archv"]),
         sa.PrimaryKeyConstraint("id_evnt"),
     )
-    op.create_index(
-        "idx_evnttxt_dspstv_prmtr", "evnt_txt", ["id_dspstv", "id_prmtr", "fch_hr"]
-    )
+    op.create_index("idx_evnttxt_dspstv_prmtr", "evnt_txt", ["id_dspstv", "id_prmtr", "fch_hr"])
     op.create_index("idx_evnttxt_fchhr", "evnt_txt", ["fch_hr"])
 
 

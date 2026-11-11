@@ -32,8 +32,13 @@ def flujo(entorno):
 def crear(flujo, **cambios):
     client, db, empresas, cuentas, id_plan, actual = flujo
     autenticar(client, cuentas["Administrador"])
-    body = {"tipo": "Ampliar cupos", "incrementos": {"ubicaciones": 1, "dispositivos": 0, "usuarios": 5},
-            "descripcion": "Necesitamos ampliar el equipo de monitoreo", "clave_idempotencia": str(uuid4()), **cambios}
+    body = {
+        "tipo": "Ampliar cupos",
+        "incrementos": {"ubicaciones": 1, "dispositivos": 0, "usuarios": 5},
+        "descripcion": "Necesitamos ampliar el equipo de monitoreo",
+        "clave_idempotencia": str(uuid4()),
+        **cambios,
+    }
     respuesta = client.post(BASE, json=body)
     assert respuesta.status_code == 201, respuesta.text
     return respuesta.json(), body
@@ -42,11 +47,22 @@ def crear(flujo, **cambios):
 def proponer(flujo, fila, **cambios):
     client, db, empresas, cuentas, id_plan, actual = flujo
     autenticar(client, cuentas["Administrador CENERIS"])
-    contrato = datos(id_plan, operacion="Cambiar", suscripcion_actual_id=actual,
-        revision_plan=db.get(PlanSuscripcion, id_plan).revision, precio_acordado="150.00",
-        limites_acordados={"ubicaciones": 4, "dispositivos": 10, "usuarios": 15})
-    body = {"revision": fila["revision"], "contrato": contrato, "mensaje": "Incluye cinco usuarios adicionales para la empresa",
-            "valida_hasta": str(fecha_comercial() + timedelta(days=7)), "inicio_al_activar": True, **cambios}
+    contrato = datos(
+        id_plan,
+        operacion="Cambiar",
+        suscripcion_actual_id=actual,
+        revision_plan=db.get(PlanSuscripcion, id_plan).revision,
+        precio_acordado="150.00",
+        limites_acordados={"ubicaciones": 4, "dispositivos": 10, "usuarios": 15},
+    )
+    body = {
+        "revision": fila["revision"],
+        "contrato": contrato,
+        "mensaje": "Incluye cinco usuarios adicionales para la empresa",
+        "valida_hasta": str(fecha_comercial() + timedelta(days=7)),
+        "inicio_al_activar": True,
+        **cambios,
+    }
     respuesta = client.post(f"{BASE}/{fila['id']}/propuesta", json=body)
     assert respuesta.status_code == 200, respuesta.text
     return respuesta.json()
@@ -55,7 +71,10 @@ def proponer(flujo, fila, **cambios):
 def actuar(flujo, fila, accion, rol="Administrador", status=200):
     client, db, empresas, cuentas, id_plan, actual = flujo
     autenticar(client, cuentas[rol])
-    respuesta = client.post(f"{BASE}/{fila['id']}/accion", json={"accion": accion, "revision": fila["revision"], "motivo": "Condiciones revisadas"})
+    respuesta = client.post(
+        f"{BASE}/{fila['id']}/accion",
+        json={"accion": accion, "revision": fila["revision"], "motivo": "Condiciones revisadas"},
+    )
     assert respuesta.status_code == status, respuesta.text
     return respuesta.json()
 
@@ -80,9 +99,18 @@ def test_flujo_completo_con_aceptacion_auditoria_y_notificaciones(flujo):
     assert aplicada["resultado"]["estado"] == "Vigente"
     assert resumen_cliente(db, empresas[0])["limites"]["usuarios"] == 15
     assert db.get(Suscripcion, actual).estd == "Reemplazada"
-    assert actuar(flujo, fila, "Aplicar", "Administrador CENERIS")["resultado"]["id"] == aplicada["resultado"]["id"]
+    assert (
+        actuar(flujo, fila, "Aplicar", "Administrador CENERIS")["resultado"]["id"]
+        == aplicada["resultado"]["id"]
+    )
     eventos = client.get(f"{BASE}/{fila['id']}").json()["eventos"]
-    assert {e["accion"] for e in eventos} == {"solicitar", "evaluar", "proponer", "aceptar", "aplicar"}
+    assert {e["accion"] for e in eventos} == {
+        "solicitar",
+        "evaluar",
+        "proponer",
+        "aceptar",
+        "aplicar",
+    }
     assert db.query(Suscripcion).filter(Suscripcion.id_clnt == empresas[0].id_clnt).count() == 2
 
 
@@ -106,7 +134,13 @@ def test_admin_no_puede_ver_ni_aceptar_solicitud_ajena(flujo, fabrica):
     autenticar(client, (otro, None))
     assert client.get(BASE).json() == []
     assert client.get(f"{BASE}/{fila['id']}").status_code == 404
-    assert client.post(f"{BASE}/{fila['id']}/accion", json={"accion": "Aceptar", "revision": 0, "motivo": "Intento ajeno"}).status_code == 404
+    assert (
+        client.post(
+            f"{BASE}/{fila['id']}/accion",
+            json={"accion": "Aceptar", "revision": 0, "motivo": "Intento ajeno"},
+        ).status_code
+        == 404
+    )
     client.headers["X-Cliente-Id"] = str(empresas[0].id_clnt)
     assert client.get(BASE).status_code == 403
 
@@ -115,7 +149,12 @@ def test_creacion_idempotente_duplicado_y_campos_no_permitidos(flujo):
     fila, body = crear(flujo)
     client = flujo[0]
     assert client.post(BASE, json=body).json()["id"] == fila["id"]
-    assert client.post(BASE, json={**body, "descripcion": "Otra necesidad completamente diferente"}).status_code == 409
+    assert (
+        client.post(
+            BASE, json={**body, "descripcion": "Otra necesidad completamente diferente"}
+        ).status_code
+        == 409
+    )
     assert client.post(BASE, json={**body, "clave_idempotencia": str(uuid4())}).status_code == 409
     assert client.post(BASE, json={**body, "cliente_id": flujo[2][1].id_clnt}).status_code == 422
     assert client.post(BASE, json={**body, "precio_acordado": 0}).status_code == 422
@@ -152,7 +191,13 @@ def test_contrato_conserva_precio_cupos_aceptados_y_desplaza_vigencia(flujo, mon
     fila = actuar(flujo, proponer(flujo, fila), "Aceptar")
     client, db, empresas, cuentas, id_plan, actual = flujo
     autenticar(client, cuentas["Administrador CENERIS"])
-    assert client.put(f"/comercial/planes/{id_plan}/limites", json={"ubicaciones": 1, "dispositivos": 1, "usuarios": 1}).status_code == 200
+    assert (
+        client.put(
+            f"/comercial/planes/{id_plan}/limites",
+            json={"ubicaciones": 1, "dispositivos": 1, "usuarios": 1},
+        ).status_code
+        == 200
+    )
     futuro = fecha_comercial() + timedelta(days=2)
     monkeypatch.setattr(solicitudes, "fecha_comercial", lambda: futuro)
     monkeypatch.setattr(limites_plan, "fecha_comercial", lambda: futuro)
@@ -169,7 +214,13 @@ def test_cambio_de_contrato_o_suspension_requiere_nueva_propuesta(flujo):
     fila = actuar(flujo, proponer(flujo, fila), "Aceptar")
     client, db, empresas, cuentas, id_plan, actual = flujo
     autenticar(client, cuentas["Administrador CENERIS"])
-    assert client.post(f"/comercial/clientes/{empresas[0].id_clnt}/suscripciones/{actual}/estado", json={"accion": "Suspender", "motivo": "Cambio administrativo"}).status_code == 200
+    assert (
+        client.post(
+            f"/comercial/clientes/{empresas[0].id_clnt}/suscripciones/{actual}/estado",
+            json={"accion": "Suspender", "motivo": "Cambio administrativo"},
+        ).status_code
+        == 200
+    )
     actuar(flujo, fila, "Aplicar", "Administrador CENERIS", status=409)
 
 
@@ -177,9 +228,15 @@ def test_renovacion_programada_no_cambia_derechos_antes_de_inicio(flujo):
     fila, _ = crear(flujo, tipo="Renovar")
     client, db, empresas, cuentas, id_plan, actual = flujo
     inicio = db.get(Suscripcion, actual).fch_vncmnt + timedelta(days=1)
-    contrato = datos(id_plan, operacion="Renovar", fecha_inicio=str(inicio), fecha_vencimiento=str(inicio + timedelta(days=364)),
-                     revision_plan=db.get(PlanSuscripcion, id_plan).revision, suscripcion_actual_id=actual,
-                     limites_acordados={"ubicaciones": 4, "dispositivos": 10, "usuarios": 15})
+    contrato = datos(
+        id_plan,
+        operacion="Renovar",
+        fecha_inicio=str(inicio),
+        fecha_vencimiento=str(inicio + timedelta(days=364)),
+        revision_plan=db.get(PlanSuscripcion, id_plan).revision,
+        suscripcion_actual_id=actual,
+        limites_acordados={"ubicaciones": 4, "dispositivos": 10, "usuarios": 15},
+    )
     fila = actuar(flujo, proponer(flujo, fila, contrato=contrato), "Aceptar")
     aplicada = actuar(flujo, fila, "Aplicar", "Administrador CENERIS")
     assert aplicada["resultado"]["estado"] == "Programada"
@@ -192,8 +249,10 @@ def test_aplicacion_y_solicitud_se_revierten_juntas_si_falla_auditoria(flujo, mo
     fila = actuar(flujo, proponer(flujo, fila), "Aceptar")
     client, db, empresas, cuentas, id_plan, actual = flujo
     eventos = db.query(LogAuditoria).count()
+
     def fallar(*args, **kwargs):
         raise RuntimeError("Fallo de escritura simulado")
+
     monkeypatch.setattr(solicitudes, "registrar_evento", fallar)
     with pytest.raises(RuntimeError):
         actuar(flujo, fila, "Aplicar", "Administrador CENERIS")

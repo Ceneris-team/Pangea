@@ -72,9 +72,7 @@ def _limpiar_corrida_anterior(db) -> None:
         db.query(Dispositivo).filter(Dispositivo.id_ubccn.in_(ids_ubicaciones)).delete(
             synchronize_session=False
         )
-        db.query(Ubicacion).filter(Ubicacion.id_sd.in_(ids_sedes)).delete(
-            synchronize_session=False
-        )
+        db.query(Ubicacion).filter(Ubicacion.id_sd.in_(ids_sedes)).delete(synchronize_session=False)
         db.query(ConexionFTP).filter(ConexionFTP.id_sd.in_(ids_sedes)).delete(
             synchronize_session=False
         )
@@ -264,7 +262,9 @@ def _explain(db, id_sd: int, dias: int) -> str:
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--meses", type=int, default=6, help="meses de datos a generar (default: 6)")
+    parser.add_argument(
+        "--meses", type=int, default=6, help="meses de datos a generar (default: 6)"
+    )
     parser.add_argument(
         "--minutos",
         type=int,
@@ -313,9 +313,7 @@ def main():
 
         resultados = []
         for nombre, dias in consultas_referencia:
-            resultados.append(
-                _medir_consulta(db, nombre, sede.id_sd, dias, args.repeticiones)
-            )
+            resultados.append(_medir_consulta(db, nombre, sede.id_sd, dias, args.repeticiones))
 
         encabezado = (
             f"{'Consulta':<24}{'Filas':>8}{'ANTES p95':>12}{'DESPUES p95':>13}"

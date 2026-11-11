@@ -58,9 +58,8 @@ def consumo_cliente(db: Session, id_clnt: int) -> dict[str, int]:
         .join(Sede, Sede.id_sd == Ubicacion.id_sd)
         .where(Sede.id_clnt == id_clnt)
     )
-    miembros_empresa = (
-        select(UsuarioCliente.id_usr)
-        .where(UsuarioCliente.id_clnt == id_clnt, UsuarioCliente.estd == "Activo")
+    miembros_empresa = select(UsuarioCliente.id_usr).where(
+        UsuarioCliente.id_clnt == id_clnt, UsuarioCliente.estd == "Activo"
     )
     usuarios = (
         db.query(Usuario)
@@ -83,9 +82,15 @@ def consumo_cliente(db: Session, id_clnt: int) -> dict[str, int]:
 def resumen_cliente(db: Session, cliente: Cliente) -> dict:
     hoy = fecha_comercial()
     suscripcion = ultimo_contrato(db, cliente.id_clnt, hoy)
-    programada = db.query(Suscripcion).filter(
-        Suscripcion.id_clnt == cliente.id_clnt, Suscripcion.estd == "Programada", Suscripcion.fch_inc > hoy,
-    ).first()
+    programada = (
+        db.query(Suscripcion)
+        .filter(
+            Suscripcion.id_clnt == cliente.id_clnt,
+            Suscripcion.estd == "Programada",
+            Suscripcion.fch_inc > hoy,
+        )
+        .first()
+    )
     condiciones = condiciones_de(db, suscripcion) if suscripcion else None
     return {
         "id_clnt": cliente.id_clnt,
@@ -100,8 +105,16 @@ def resumen_cliente(db: Session, cliente: Cliente) -> dict:
         "consumo": consumo_cliente(db, cliente.id_clnt),
         "limites": condiciones["limites"] if condiciones else None,
         "condiciones": condiciones,
-        "programada": {"id": programada.id_sscrpcn, "fecha_inicio": programada.fch_inc,
-                       "fecha_vencimiento": programada.fch_vncmnt, "condiciones": condiciones_de(db, programada)} if programada else None,
+        "programada": (
+            {
+                "id": programada.id_sscrpcn,
+                "fecha_inicio": programada.fch_inc,
+                "fecha_vencimiento": programada.fch_vncmnt,
+                "condiciones": condiciones_de(db, programada),
+            }
+            if programada
+            else None
+        ),
         "aviso_vencimiento": ((suscripcion.fch_vncmnt - hoy).days <= 30) if suscripcion else False,
     }
 
@@ -114,8 +127,14 @@ def comprobar_cupo(db: Session, id_clnt: int, recurso: str) -> None:
     db.query(Cliente).filter(Cliente.id_clnt == id_clnt).with_for_update().one()
     suscripcion = suscripcion_vigente(db, id_clnt)
     if suscripcion is None:
-        tenia_suscripcion = db.query(Suscripcion.id_sscrpcn).filter(Suscripcion.id_clnt == id_clnt).first()
-        exigir = os.getenv("PLAN_LIMITS_REQUIRE_SUBSCRIPTION", "true").lower() in {"1", "true", "yes"}
+        tenia_suscripcion = (
+            db.query(Suscripcion.id_sscrpcn).filter(Suscripcion.id_clnt == id_clnt).first()
+        )
+        exigir = os.getenv("PLAN_LIMITS_REQUIRE_SUBSCRIPTION", "true").lower() in {
+            "1",
+            "true",
+            "yes",
+        }
         if tenia_suscripcion or exigir:
             raise HTTPException(status_code=409, detail="Este cliente no tiene un plan vigente")
         return  # Clientes históricos aún no migrados a un plan.

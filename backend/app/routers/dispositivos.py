@@ -130,7 +130,9 @@ router = APIRouter(prefix="/dispositivos", tags=["Dispositivos"])
 ROLES_CON_ACCESO_TOTAL = {"Administrador", "Tecnico CENERIS", "Técnico CENERIS"}
 
 
-def _requerir_tecnico_o_admin(usuario: dict = Depends(get_current_user), db: Session = Depends(get_db)) -> dict:
+def _requerir_tecnico_o_admin(
+    usuario: dict = Depends(get_current_user), db: Session = Depends(get_db)
+) -> dict:
     """HU19: 'Solo los roles Técnico CENERIS y Administrador tienen acceso
     a esta vista' -una restricción de rol explícita, distinta del permiso
     de Lectura sobre 'Dispositivos' que también tiene Cliente Final (ve el
@@ -188,7 +190,8 @@ def listar_marcas_disponibles(
     """
     query = _query_dispositivos_visibles(db, usuario)
     marcas = [
-        fila[0] for fila in query.with_entities(Dispositivo.mrc).distinct().order_by(Dispositivo.mrc)
+        fila[0]
+        for fila in query.with_entities(Dispositivo.mrc).distinct().order_by(Dispositivo.mrc)
     ]
     return {"items": marcas}
 
@@ -439,9 +442,7 @@ def actualizar_dispositivo(
     if body.id_cnxn is not None and body.id_cnxn != dispositivo.id_cnxn:
         conexion_nueva = db.query(ConexionFTP).filter(ConexionFTP.id_cnxn == body.id_cnxn).first()
         if conexion_nueva is None:
-            raise HTTPException(
-                status_code=422, detail=f"La conexión FTP {body.id_cnxn} no existe"
-            )
+            raise HTTPException(status_code=422, detail=f"La conexión FTP {body.id_cnxn} no existe")
         verificar_sede(usuario, conexion_nueva.id_sd, db, modulo="Ingesta", accion=EDICION)
         if conexion_nueva.id_sd != ubicacion.id_sd:
             raise HTTPException(422, "La conexión FTP debe pertenecer a la sede de la ubicación")

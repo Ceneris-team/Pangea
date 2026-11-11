@@ -77,7 +77,7 @@ class TestEvaluarParametro:
         assert evaluar_parametro("Oxigeno Disuelto", 3) == ROJO
 
     def test_parametro_sin_umbrales_es_verde(self):
-        """"Sin condición de alarma definida" no es lo mismo que "en
+        """ "Sin condición de alarma definida" no es lo mismo que "en
         alarma": un parámetro desconocido no puede pintar la estación."""
         assert evaluar_parametro("parametro_inventado", 99999) == VERDE
 

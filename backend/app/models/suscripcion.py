@@ -71,7 +71,12 @@ class Suscripcion(Base):
     __tablename__ = "sscrpcn"
     __table_args__ = (
         UniqueConstraint("id_clnt", "clave_idempotencia", name="uq_suscripcion_idempotencia"),
-        Index("uq_suscripcion_programada", "id_clnt", unique=True, postgresql_where=text("estd = 'Programada'")),
+        Index(
+            "uq_suscripcion_programada",
+            "id_clnt",
+            unique=True,
+            postgresql_where=text("estd = 'Programada'"),
+        ),
         Index("idx_sscrpcn_vncmnt", "fch_vncmnt", "estd"),
         Index(
             "uq_sscrpcn_clnt_activa",

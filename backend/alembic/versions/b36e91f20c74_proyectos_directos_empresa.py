@@ -21,7 +21,12 @@ def upgrade():
     op.create_table(
         "usr_pryct_ubccn",
         sa.Column("id_usr_pryct", sa.Integer(), primary_key=True, autoincrement=True),
-        sa.Column("id_mmb", sa.Integer(), sa.ForeignKey("usr_clnt.id_mmb", ondelete="CASCADE"), nullable=False),
+        sa.Column(
+            "id_mmb",
+            sa.Integer(),
+            sa.ForeignKey("usr_clnt.id_mmb", ondelete="CASCADE"),
+            nullable=False,
+        ),
         sa.Column("id_ubccn", sa.Integer(), sa.ForeignKey("ubccn.id_ubccn"), nullable=False),
         sa.UniqueConstraint("id_mmb", "id_ubccn", name="uq_usrpryctubccn_mmb_ubccn"),
     )

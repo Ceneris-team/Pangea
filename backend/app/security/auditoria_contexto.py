@@ -2,9 +2,10 @@
 
 from uuid import uuid4
 
-from fastapi import Depends, Request
+from fastapi import Depends
 from sqlalchemy import event, text
 from sqlalchemy.orm import Session
+from starlette.requests import HTTPConnection
 
 from app.database import get_db
 
@@ -42,15 +43,15 @@ def _contexto_transaccion(session, transaction, connection):
     aplicar_contexto(connection, session.info.get(CLAVE_CONTEXTO, {"origen": "SQL"}))
 
 
-def preparar_peticion(request: Request, db: Session = Depends(get_db)):
+def preparar_peticion(request: HTTPConnection, db: Session = Depends(get_db)):
     """No exige autenticación a login/health; la identidad la valida get_current_user."""
-    if request.url.path in {"/", "/health"}:
+    if request.scope["type"] != "http" or request.url.path in {"/", "/health"}:
         yield
         return
     contexto = {
         "origen": "API",
         "solicitud": str(uuid4()),
-        "operacion": f"{request.method} {request.scope['route'].path}",
+        "operacion": f"{request.scope['method']} {request.scope['route'].path}",
     }
     db.info[CLAVE_CONTEXTO] = contexto
     db.info.pop("auditoria_denegacion", None)

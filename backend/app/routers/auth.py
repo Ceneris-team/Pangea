@@ -37,7 +37,9 @@ router = APIRouter(prefix="/auth", tags=["Autenticación"])
 
 @router.get("/acceso")
 def consultar_acceso(
-    response: Response, usuario: dict = Depends(get_current_user), db: Session = Depends(get_db),
+    response: Response,
+    usuario: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     response.headers["Cache-Control"] = "no-store"
     return estado_acceso(db, usuario)
@@ -130,12 +132,18 @@ def _resolver_sede_id_login(db: Session, usuario: Usuario) -> int | None:
         return None
 
     if usuario.scp == "por_cliente":
-        membresia = db.query(UsuarioCliente.id_mmb).filter(
-            UsuarioCliente.id_usr == usuario.id_usr,
-            UsuarioCliente.estd == "Activo",
-        ).first()
+        membresia = (
+            db.query(UsuarioCliente.id_mmb)
+            .filter(
+                UsuarioCliente.id_usr == usuario.id_usr,
+                UsuarioCliente.estd == "Activo",
+            )
+            .first()
+        )
         if membresia is None:
-            raise HTTPException(status_code=403, detail="Tu cuenta no tiene una empresa activa asignada")
+            raise HTTPException(
+                status_code=403, detail="Tu cuenta no tiene una empresa activa asignada"
+            )
         return None
 
     ids_sd = {
@@ -253,10 +261,16 @@ def crear_ticket_websocket(
     routers/mapa_cliente.py.
     """
     import json
+
     contenido = token_crudo
     if usuario_token.get("cliente_id") is not None:
-        contenido = json.dumps({"token": token_crudo, "cliente_id": usuario_token["cliente_id"],
-                                "proyecto_id": usuario_token.get("proyecto_id")})
+        contenido = json.dumps(
+            {
+                "token": token_crudo,
+                "cliente_id": usuario_token["cliente_id"],
+                "proyecto_id": usuario_token.get("proyecto_id"),
+            }
+        )
     return {"ticket": emitir_ticket(contenido)}
 
 

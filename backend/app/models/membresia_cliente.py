@@ -9,7 +9,9 @@ class UsuarioCliente(Base):
     __tablename__ = "usr_clnt"
     __table_args__ = (
         UniqueConstraint("id_usr", "id_clnt", name="uq_usrclnt_usr_clnt"),
-        CheckConstraint("rol_emp IN ('Administrador','Tecnico','Lector')", name="usrclnt_rol_check"),
+        CheckConstraint(
+            "rol_emp IN ('Administrador','Tecnico','Lector')", name="usrclnt_rol_check"
+        ),
         CheckConstraint("estd IN ('Activo','Inactivo')", name="usrclnt_estd_check"),
     )
 

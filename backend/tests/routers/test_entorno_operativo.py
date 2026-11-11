@@ -101,7 +101,9 @@ def test_estado_acceso_cambia_con_revocacion_y_no_expone_proyectos_ajenos(entorn
     antes = client.get("/auth/acceso")
     assert antes.status_code == 200
     assert antes.headers["cache-control"] == "no-store"
-    assert antes.json()["empresas"] == [{"id_clnt": empresas[0].id_clnt, "rol": "Lector", "proyecto_ids": [recursos[0][0].id_ubccn]}]
+    assert antes.json()["empresas"] == [
+        {"id_clnt": empresas[0].id_clnt, "rol": "Lector", "proyecto_ids": [recursos[0][0].id_ubccn]}
+    ]
     db.query(UsuarioProyecto).filter_by(id_mmb=cuentas["Lector"][1].id_mmb).delete()
     db.flush()
     despues = client.get("/auth/acceso").json()
@@ -132,7 +134,12 @@ def test_solo_administrador_puede_cambiar_membresias_por_api(entorno, rol):
     objetivo = cuentas["Lector"][1]
     autenticar(client, cuentas[rol])
     ruta = f"/empresas/{empresas[0].id_clnt}/usuarios/{objetivo.id_mmb}"
-    assert client.patch(ruta, json={"rol": "Lector", "estado": "Inactivo", "proyecto_ids": []}).status_code == 403
+    assert (
+        client.patch(
+            ruta, json={"rol": "Lector", "estado": "Inactivo", "proyecto_ids": []}
+        ).status_code
+        == 403
+    )
     db.refresh(objetivo)
     assert objetivo.estd == "Activo"
 

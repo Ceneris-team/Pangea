@@ -28,6 +28,7 @@ env:
   # llegue a consumir la tarea dentro del test.
   CELERY_BROKER_URL: redis://localhost:6379/2
   CELERY_RESULT_BACKEND: redis://localhost:6379/3
+  PLAN_LIMITS_REQUIRE_SUBSCRIPTION: "false"
   # FTP_CREDENTIAL_KEY se deja sin declarar a propósito: si se pone como
   # string vacío, os.environ.get(...) en app/security/ftp_crypto.py
   # devuelve "" (no None) y el fallback dev-safe del código no se activa,

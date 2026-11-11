@@ -25,7 +25,9 @@ class Rol(Base):
 
 class Usuario(Base):
     __tablename__ = "usr"
-    __table_args__ = (CheckConstraint("scp IN ('global','por_sede','por_cliente')", name="usr_scp_check"),)
+    __table_args__ = (
+        CheckConstraint("scp IN ('global','por_sede','por_cliente')", name="usr_scp_check"),
+    )
 
     id_usr = Column(Integer, primary_key=True, autoincrement=True)
     id_rl = Column(Integer, ForeignKey("rl.id_rl"), nullable=False)

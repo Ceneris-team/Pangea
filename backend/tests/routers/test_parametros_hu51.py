@@ -16,7 +16,6 @@ from fastapi.testclient import TestClient
 from app.database import get_db
 from app.main import app
 from app.models import (
-    Alarma,
     MapeoColumna,
     MapeoFormato,
     Parametro,
@@ -87,9 +86,7 @@ class TestListadoCA3:
     def test_los_fusionados_nunca_aparecen(self, client, db_session, tecnico_editor):
         """CA5: un fusionado no debe volver a aparecer en NINGÚN selector,
         ni siquiera pidiendo el listado completo sin filtro."""
-        db_session.add(
-            Parametro(nmbr="fusionado_listado_hu51", undd="m", estd="Fusionado")
-        )
+        db_session.add(Parametro(nmbr="fusionado_listado_hu51", undd="m", estd="Fusionado"))
         db_session.flush()
 
         resp = client.get("/parametros")
@@ -135,9 +132,7 @@ class TestActivarCA4:
         assert parametro.orgn_crcn == "Automatico"
         assert parametro.estd == "Activo"
 
-    def test_activar_con_nombre_ya_usado_devuelve_409(
-        self, client, db_session, tecnico_editor
-    ):
+    def test_activar_con_nombre_ya_usado_devuelve_409(self, client, db_session, tecnico_editor):
         db_session.add(Parametro(nmbr="ya_tomado_hu51", undd="m"))
         parametro = crear_parametro_automatico(db_session, "a_renombrar_hu51")
         db_session.flush()
@@ -184,9 +179,7 @@ class TestFusionarCA5:
         )
         db_session.add(formato)
         db_session.flush()
-        db_session.add(
-            MapeoColumna(id_mp=formato.id_mp, indc_clmn=1, id_prmtr=parametro.id_prmtr)
-        )
+        db_session.add(MapeoColumna(id_mp=formato.id_mp, indc_clmn=1, id_prmtr=parametro.id_prmtr))
         base = dt.datetime(2026, 9, 2, 10, 0, tzinfo=dt.timezone.utc)
         for i in range(cantidad):
             db_session.add(
@@ -220,26 +213,17 @@ class TestFusionarCA5:
         assert resp.status_code == 200, resp.text
         # Sin pérdida de datos: las 3 lecturas ahora son del destino.
         assert (
-            db_session.query(Telemetria)
-            .filter(Telemetria.id_prmtr == destino.id_prmtr)
-            .count()
+            db_session.query(Telemetria).filter(Telemetria.id_prmtr == destino.id_prmtr).count()
             == 3
         )
         assert (
-            db_session.query(Telemetria)
-            .filter(Telemetria.id_prmtr == origen.id_prmtr)
-            .count()
-            == 0
+            db_session.query(Telemetria).filter(Telemetria.id_prmtr == origen.id_prmtr).count() == 0
         )
         # Y el mapeo de columna también quedó apuntando al destino.
-        columna = (
-            db_session.query(MapeoColumna).filter(MapeoColumna.id_mp == formato.id_mp).one()
-        )
+        columna = db_session.query(MapeoColumna).filter(MapeoColumna.id_mp == formato.id_mp).one()
         assert columna.id_prmtr == destino.id_prmtr
 
-    def test_origen_queda_fusionado_y_no_reutilizable(
-        self, client, db_session, tecnico_editor
-    ):
+    def test_origen_queda_fusionado_y_no_reutilizable(self, client, db_session, tecnico_editor):
         origen = crear_parametro_automatico(db_session, "a_fusionar_hu51")
         destino = Parametro(nmbr="destino_hu51", undd="m")
         db_session.add(destino)
@@ -295,9 +279,7 @@ class TestFusionarCA5:
 
         assert resp.status_code == 404
 
-    def test_no_se_puede_fusionar_contra_un_fusionado(
-        self, client, db_session, tecnico_editor
-    ):
+    def test_no_se_puede_fusionar_contra_un_fusionado(self, client, db_session, tecnico_editor):
         origen = crear_parametro_automatico(db_session, "origen_x_hu51")
         ya_fusionado = Parametro(nmbr="destino_muerto_hu51", undd="m", estd="Fusionado")
         db_session.add(ya_fusionado)
@@ -316,8 +298,6 @@ class TestFusionarCA5:
         db_session.add(fusionado)
         db_session.flush()
 
-        resp = client.post(
-            f"/parametros/{fusionado.id_prmtr}/activar", json={"undd": "m"}
-        )
+        resp = client.post(f"/parametros/{fusionado.id_prmtr}/activar", json={"undd": "m"})
 
         assert resp.status_code == 409

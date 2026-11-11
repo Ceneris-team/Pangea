@@ -169,7 +169,9 @@ class TestCA1FiltroDePermisos:
         )
 
         item = next(
-            i for i in client.get("/mapa-cliente").json()["items"] if i["nmbr"] == "Estacion Asignada"
+            i
+            for i in client.get("/mapa-cliente").json()["items"]
+            if i["nmbr"] == "Estacion Asignada"
         )
         assert item["lttd"] == 10
         assert item["lngtd"] == -70
@@ -227,8 +229,22 @@ class TestCA2UltimoValorPorParametro:
         temperatura = crear_parametro(db_session, "temperatura", "°C")
 
         ahora = dt.datetime.now(dt.timezone.utc)
-        agregar_lectura(db_session, dispositivo, temperatura, escenario["sede"], 10, ahora - dt.timedelta(hours=2))
-        agregar_lectura(db_session, dispositivo, temperatura, escenario["sede"], 20, ahora - dt.timedelta(hours=1))
+        agregar_lectura(
+            db_session,
+            dispositivo,
+            temperatura,
+            escenario["sede"],
+            10,
+            ahora - dt.timedelta(hours=2),
+        )
+        agregar_lectura(
+            db_session,
+            dispositivo,
+            temperatura,
+            escenario["sede"],
+            20,
+            ahora - dt.timedelta(hours=1),
+        )
         agregar_lectura(db_session, dispositivo, temperatura, escenario["sede"], 25, ahora)
 
         app.dependency_overrides[get_current_user] = lambda: usuario_jwt(
@@ -236,7 +252,9 @@ class TestCA2UltimoValorPorParametro:
         )
 
         item = next(
-            i for i in client.get("/mapa-cliente").json()["items"] if i["nmbr"] == "Estacion Asignada"
+            i
+            for i in client.get("/mapa-cliente").json()["items"]
+            if i["nmbr"] == "Estacion Asignada"
         )
         parametros = {p["parametro"]: p for p in item["parametros"]}
         assert parametros["temperatura"]["valor"] == 25
@@ -257,7 +275,9 @@ class TestCA2UltimoValorPorParametro:
         )
 
         item = next(
-            i for i in client.get("/mapa-cliente").json()["items"] if i["nmbr"] == "Estacion Asignada"
+            i
+            for i in client.get("/mapa-cliente").json()["items"]
+            if i["nmbr"] == "Estacion Asignada"
         )
         parametros = {p["parametro"]: p["valor"] for p in item["parametros"]}
         assert parametros == {"temperatura": 25, "ph": 7}
@@ -269,7 +289,9 @@ class TestCA2UltimoValorPorParametro:
         humedad = crear_parametro(db_session, "ph", "pH")
 
         ahora = dt.datetime.now(dt.timezone.utc).replace(microsecond=0)
-        agregar_lectura(db_session, dispositivo, humedad, escenario["sede"], 7, ahora - dt.timedelta(hours=3))
+        agregar_lectura(
+            db_session, dispositivo, humedad, escenario["sede"], 7, ahora - dt.timedelta(hours=3)
+        )
         agregar_lectura(db_session, dispositivo, temperatura, escenario["sede"], 25, ahora)
 
         app.dependency_overrides[get_current_user] = lambda: usuario_jwt(
@@ -277,7 +299,9 @@ class TestCA2UltimoValorPorParametro:
         )
 
         item = next(
-            i for i in client.get("/mapa-cliente").json()["items"] if i["nmbr"] == "Estacion Asignada"
+            i
+            for i in client.get("/mapa-cliente").json()["items"]
+            if i["nmbr"] == "Estacion Asignada"
         )
         assert item["ultima_lectura"].startswith(ahora.isoformat()[:19])
 
@@ -289,7 +313,9 @@ class TestCA2UltimoValorPorParametro:
         )
 
         item = next(
-            i for i in client.get("/mapa-cliente").json()["items"] if i["nmbr"] == "Estacion Asignada"
+            i
+            for i in client.get("/mapa-cliente").json()["items"]
+            if i["nmbr"] == "Estacion Asignada"
         )
         assert item["parametros"] == []
         assert item["ultima_lectura"] is None
@@ -316,7 +342,9 @@ class TestCA2UltimoValorPorParametro:
         )
 
         item = next(
-            i for i in client.get("/mapa-cliente").json()["items"] if i["nmbr"] == "Estacion Asignada"
+            i
+            for i in client.get("/mapa-cliente").json()["items"]
+            if i["nmbr"] == "Estacion Asignada"
         )
         parametros = {p["parametro"]: p["valor"] for p in item["parametros"]}
         assert parametros["mensaje_puerta"] == "Puerta Abierta"
@@ -327,7 +355,12 @@ class TestSemaforoEnElEndpoint:
         dispositivo = crear_dispositivo(db_session, escenario["asignada"], escenario["sede"])
         temperatura = crear_parametro(db_session, "temperatura", "°C")
         agregar_lectura(
-            db_session, dispositivo, temperatura, escenario["sede"], 20, dt.datetime.now(dt.timezone.utc)
+            db_session,
+            dispositivo,
+            temperatura,
+            escenario["sede"],
+            20,
+            dt.datetime.now(dt.timezone.utc),
         )
 
         app.dependency_overrides[get_current_user] = lambda: usuario_jwt(
@@ -335,7 +368,9 @@ class TestSemaforoEnElEndpoint:
         )
 
         item = next(
-            i for i in client.get("/mapa-cliente").json()["items"] if i["nmbr"] == "Estacion Asignada"
+            i
+            for i in client.get("/mapa-cliente").json()["items"]
+            if i["nmbr"] == "Estacion Asignada"
         )
         assert item["semaforo"] == "verde"
 
@@ -344,7 +379,12 @@ class TestSemaforoEnElEndpoint:
         dispositivo = crear_dispositivo(db_session, escenario["asignada"], escenario["sede"])
         temperatura = crear_parametro(db_session, "temperatura", "°C")
         agregar_lectura(
-            db_session, dispositivo, temperatura, escenario["sede"], 35, dt.datetime.now(dt.timezone.utc)
+            db_session,
+            dispositivo,
+            temperatura,
+            escenario["sede"],
+            35,
+            dt.datetime.now(dt.timezone.utc),
         )
 
         app.dependency_overrides[get_current_user] = lambda: usuario_jwt(
@@ -352,6 +392,8 @@ class TestSemaforoEnElEndpoint:
         )
 
         item = next(
-            i for i in client.get("/mapa-cliente").json()["items"] if i["nmbr"] == "Estacion Asignada"
+            i
+            for i in client.get("/mapa-cliente").json()["items"]
+            if i["nmbr"] == "Estacion Asignada"
         )
         assert item["semaforo"] == "rojo"

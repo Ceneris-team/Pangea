@@ -376,19 +376,25 @@ def test_listado_muestra_planes_de_todos_los_clientes_del_usuario(
     plan = PlanSuscripcion(nmbr=f"Plan para usuario {usuario.id_usr}", prc_mnsl=299)
     db_session.add(plan)
     db_session.flush()
-    db_session.add(Suscripcion(
-        id_clnt=cliente_con_plan.id_clnt,
-        id_pln=plan.id_pln,
-        fch_inc=date.today() - timedelta(days=1),
-        fch_vncmnt=date.today() + timedelta(days=30),
-        estd="Activa",
-    ))
+    db_session.add(
+        Suscripcion(
+            id_clnt=cliente_con_plan.id_clnt,
+            id_pln=plan.id_pln,
+            fch_inc=date.today() - timedelta(days=1),
+            fch_vncmnt=date.today() + timedelta(days=30),
+            estd="Activa",
+        )
+    )
     db_session.flush()
 
     respuesta = client.get("/usuarios", params={"busqueda": usuario.crr})
     assert respuesta.status_code == 200, respuesta.text
     assert respuesta.json()["items"][0]["clientes"] == [
-        {"id_clnt": cliente_con_plan.id_clnt, "cliente": cliente_con_plan.rzn_scl, "plan": plan.nmbr},
+        {
+            "id_clnt": cliente_con_plan.id_clnt,
+            "cliente": cliente_con_plan.rzn_scl,
+            "plan": plan.nmbr,
+        },
         {"id_clnt": cliente_sin_plan.id_clnt, "cliente": cliente_sin_plan.rzn_scl, "plan": None},
     ]
 
