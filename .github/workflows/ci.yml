@@ -62,6 +62,7 @@ jobs:
 
   test:
     name: Tests (pytest)
+    timeout-minutes: 20
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -73,7 +74,7 @@ jobs:
         ports:
           - 5432:5432
         options: >-
-          --health-cmd pg_isready
+          --health-cmd "pg_isready -U postgres -d pangea_dev"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
@@ -113,7 +114,7 @@ jobs:
       # Suite completa: autenticación, permisos, modelo de datos y el resto
       # (246 tests verificados en local a la fecha de esta HT).
       - name: pytest (suite completa)
-        run: python -m pytest -v
+        run: python -m pytest -v -o faulthandler_timeout=120
 
   build:
     name: Build imagen Docker

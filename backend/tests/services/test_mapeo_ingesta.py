@@ -813,8 +813,8 @@ class TestConvergenciaDeHU49TrasArchivoFallido:
             contenido = "Fecha,ColumnaZ\n2026-09-02 10:00:00,1\n"
             tareas = [(id_dspstv, f"RACE_{i}.dat", contenido) for i in range(4)]
 
-            with mp.Pool(4) as pool:
-                ids_mp = pool.map(_procesar_archivo_para_test_concurrencia, tareas)
+            with mp.get_context("spawn").Pool(4) as pool:
+                ids_mp = pool.map_async(_procesar_archivo_para_test_concurrencia, tareas).get(timeout=60)
 
             # Los 4 procesos concurrentes deben haber convergido a LA MISMA
             # trama -no 4 tramas distintas creadas y perdidas en paralelo.
