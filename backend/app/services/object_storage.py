@@ -22,6 +22,7 @@ import datetime as dt
 import os
 
 import boto3
+from botocore.config import Config
 
 PREFIJO_DAT = "datos-crudos/"
 
@@ -74,12 +75,21 @@ def cliente_s3():
     """
     region = _requerido("OBJECT_STORAGE_REGION")
     endpoint = os.environ.get("OBJECT_STORAGE_ENDPOINT") or f"https://s3.{region}.amazonaws.com"
+    access = os.environ.get("OBJECT_STORAGE_ACCESS_KEY")
+    secret = os.environ.get("OBJECT_STORAGE_SECRET_KEY")
+    if bool(access) != bool(secret):
+        raise ObjectStorageNoConfigurado(
+            "Define ambas credenciales de Object Storage o utiliza un perfil/rol AWS"
+        )
+    credenciales = {"aws_access_key_id": access, "aws_secret_access_key": secret} if access else {}
     return boto3.client(
         "s3",
         region_name=region,
         endpoint_url=endpoint,
-        aws_access_key_id=_requerido("OBJECT_STORAGE_ACCESS_KEY"),
-        aws_secret_access_key=_requerido("OBJECT_STORAGE_SECRET_KEY"),
+        config=Config(
+            connect_timeout=5, read_timeout=30, retries={"max_attempts": 3, "mode": "standard"}
+        ),
+        **credenciales,
     )
 
 
@@ -121,4 +131,6 @@ def eliminar(claves: list[str]) -> None:
     nombre = bucket()
     for inicio in range(0, len(claves), 1000):
         lote = claves[inicio : inicio + 1000]
-        s3.delete_objects(Bucket=nombre, Delete={"Objects": [{"Key": k} for k in lote]})
+        respuesta = s3.delete_objects(Bucket=nombre, Delete={"Objects": [{"Key": k} for k in lote]})
+        if respuesta.get("Errors"):
+            raise RuntimeError("Object Storage rechazó una o más eliminaciones")

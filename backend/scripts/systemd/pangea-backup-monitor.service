@@ -1,0 +1,18 @@
+[Unit]
+Description=Monitor independiente de respaldos Pangea
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=pangea
+WorkingDirectory=/opt/pangea/backend
+EnvironmentFile=/etc/pangea/backup-monitor.env
+Environment=BACKUP_MONITOR_STATE_DIR=/var/lib/pangea-backup-monitor
+StateDirectory=pangea-backup-monitor
+StateDirectoryMode=0700
+ExecStart=/opt/pangea/backend/venv/bin/python -m scripts.gestionar_respaldos vigilar
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/pangea-backup-monitor
