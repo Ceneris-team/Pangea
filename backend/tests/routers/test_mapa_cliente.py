@@ -25,6 +25,8 @@ from fastapi.testclient import TestClient
 from app.database import get_db
 from app.main import app
 from app.models import (
+    Alarma,
+    CondicionAlarma,
     ConexionFTP,
     Dispositivo,
     EventoTexto,
@@ -374,8 +376,10 @@ class TestSemaforoEnElEndpoint:
         )
         assert item["semaforo"] == "verde"
 
-    def test_valor_fuera_de_rango_pinta_rojo(self, client, db_session, escenario):
-        """Con los umbrales TEMPORALES de HU 28 simulada: >32 °C es rojo."""
+    # HU29 (PP-230): el color sale de las condiciones de las alarmas activas
+    # de la ubicación, ya no de umbrales fijos en memoria.
+
+    def _color_con_alarma(self, client, db_session, escenario, valor, condicion, estado="Activa"):
         dispositivo = crear_dispositivo(db_session, escenario["asignada"], escenario["sede"])
         temperatura = crear_parametro(db_session, "temperatura", "°C")
         agregar_lectura(
@@ -383,17 +387,49 @@ class TestSemaforoEnElEndpoint:
             dispositivo,
             temperatura,
             escenario["sede"],
-            35,
+            valor,
             dt.datetime.now(dt.timezone.utc),
         )
+        if condicion is not None:
+            alarma = Alarma(
+                id_usr=escenario["usuario"].id_usr,
+                id_sd=escenario["sede"].id_sd,
+                nmbr="Temperatura alta",
+                id_prmtr=temperatura.id_prmtr,
+                id_ubccn=escenario["asignada"].id_ubccn,
+                estd=estado,
+            )
+            db_session.add(alarma)
+            db_session.flush()
+            db_session.add(
+                CondicionAlarma(id_alrm=alarma.id_alrm, oprdr=condicion[0], vlr_umbrl=condicion[1])
+            )
+            db_session.flush()
 
         app.dependency_overrides[get_current_user] = lambda: usuario_jwt(
             escenario["usuario"], "Cliente Final", escenario["sede"].id_sd
         )
-
-        item = next(
+        return next(
             i
             for i in client.get("/mapa-cliente").json()["items"]
             if i["nmbr"] == "Estacion Asignada"
-        )
-        assert item["semaforo"] == "rojo"
+        )["semaforo"]
+
+    def test_alarma_activa_que_se_cumple_pinta_rojo(self, client, db_session, escenario):
+        assert self._color_con_alarma(client, db_session, escenario, 35, (">", 32)) == "rojo"
+
+    def test_cerca_del_umbral_pinta_amarillo(self, client, db_session, escenario):
+        """31 está a menos del 10 % de 32 (margen 3.2) sin cumplir > 32."""
+        assert self._color_con_alarma(client, db_session, escenario, 31, (">", 32)) == "amarillo"
+
+    def test_lejos_del_umbral_pinta_verde(self, client, db_session, escenario):
+        assert self._color_con_alarma(client, db_session, escenario, 20, (">", 32)) == "verde"
+
+    def test_alarma_pausada_no_pinta(self, client, db_session, escenario):
+        color = self._color_con_alarma(client, db_session, escenario, 35, (">", 32), "Inactiva")
+        assert color == "verde"
+
+    def test_sin_alarma_un_valor_alto_sigue_verde(self, client, db_session, escenario):
+        """Antes los umbrales fijos pintaban 35 °C de rojo sin que nadie
+        configurara nada; ahora solo pinta una alarma real."""
+        assert self._color_con_alarma(client, db_session, escenario, 35, None) == "verde"

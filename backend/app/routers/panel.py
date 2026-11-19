@@ -81,7 +81,7 @@ from app.security.permisos import EDICION, LECTURA, require_permiso, verificar_s
 from app.security.ubicaciones_permitidas import ubicaciones_permitidas
 from app.services.contratos import condiciones_de, ultimo_contrato
 from app.services.limites_plan import fecha_comercial
-from app.services.mapa.semaforo import evaluar_semaforo
+from app.services.mapa.semaforo import condiciones_por_ubicacion, evaluar_semaforo
 from app.services.mapa.ultimos_valores import ultimos_valores_por_ubicacion
 
 
@@ -424,6 +424,8 @@ def obtener_contenido_panel(
         .all()
     )
     ultimos = ultimos_valores_por_ubicacion(db, [u.id_ubccn for u in ubicaciones], dispositivo_id)
+    # HU29 (PP-230): el semáforo usa las condiciones de las alarmas activas.
+    condiciones = condiciones_por_ubicacion(db, [u.id_ubccn for u in ubicaciones])
     dispositivos = (
         db.query(Dispositivo)
         .filter(Dispositivo.id_ubccn.in_([u.id_ubccn for u in ubicaciones]))
@@ -467,9 +469,10 @@ def obtener_contenido_panel(
                 "semaforo": (
                     evaluar_semaforo(
                         {
-                            nombre: dato["valor"]
-                            for nombre, dato in ultimos.get(u.id_ubccn, {}).items()
-                        }
+                            dato["id_prmtr"]: dato["valor"]
+                            for dato in ultimos.get(u.id_ubccn, {}).values()
+                        },
+                        condiciones.get(u.id_ubccn, {}),
                     )
                     if ultimos.get(u.id_ubccn)
                     else "sin_datos"
