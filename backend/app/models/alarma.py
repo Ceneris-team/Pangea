@@ -31,6 +31,9 @@ class Alarma(Base):
     id_ubccn = Column(Integer, ForeignKey("ubccn.id_ubccn"), nullable=False)
     estd = Column(String(20), nullable=False, server_default="Activa")
     fch_crcn = Column(TIMESTAMP(timezone=True), nullable=False, server_default=text("NOW()"))
+    # HU30 (PP-232): canal de correo de la alarma. Desactivado conserva los
+    # destinatarios pero no envía avisos (CA4). Migración a75n20261119.
+    cnl_crr_actv = Column(Boolean, nullable=False, server_default=text("true"))
 
 
 class CondicionAlarma(Base):

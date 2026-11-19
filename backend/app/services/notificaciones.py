@@ -111,11 +111,14 @@ def evaluar_alarmas(db, *, lecturas, dispositivo, id_sd):
     condiciones = {}
     for c in db.query(CondicionAlarma).filter(CondicionAlarma.id_alrm.in_(ids)).all():
         condiciones.setdefault(c.id_alrm, []).append(c)
+    # HU30 CA4 (PP-232): con el canal de correo apagado la alarma se sigue
+    # evaluando -su estado por dispositivo se actualiza-, pero no envía avisos.
+    con_correo = [a.id_alrm for a in alarmas if a.cnl_crr_actv]
     destinatarios = {}
     for d in (
         db.query(DestinatarioAlarma)
         .filter(
-            DestinatarioAlarma.id_alrm.in_(ids),
+            DestinatarioAlarma.id_alrm.in_(con_correo),
             DestinatarioAlarma.cnl == "email",
         )
         .all()
