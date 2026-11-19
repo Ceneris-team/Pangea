@@ -1,1 +1,1 @@
-Alarma activada: {{ alarma | replace('\n', ' ') | replace('\r', ' ') }}
+Alarma activada: {{ alarma | replace('\n', ' ') | replace('\r', ' ') }}{% if ubicacion is defined %} · {{ ubicacion | replace('\n', ' ') | replace('\r', ' ') }}{% endif %}
