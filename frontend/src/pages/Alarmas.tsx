@@ -5,6 +5,7 @@ import { useAuth } from "../hooks/useAuth";
 import Sidebar from "../components/layout/Sidebar";
 import Topbar from "../components/layout/Topbar";
 import NotificacionesAlarma from "../components/NotificacionesAlarma";
+import EditarCondicionAlarma from "../components/EditarCondicionAlarma";
 
 interface AlarmaListItem {
   id_alrm: number;
@@ -64,6 +65,8 @@ export default function Alarmas() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [alarmaSeleccionada, setAlarmaSeleccionada] = useState<AlarmaListItem | null>(null);
+  // HU29 (PP-228): alarma cuya condición se está viendo/actualizando.
+  const [alarmaCondicion, setAlarmaCondicion] = useState<AlarmaListItem | null>(null);
   const [version, setVersion] = useState(0);
 
   // Los setState van en microtarea y no síncronos dentro del efecto (regla
@@ -285,8 +288,15 @@ export default function Alarmas() {
                               {a.estd}
                             </span>
                           </td>
-                          {/* HT-14: destinatarios e historial de esta alarma. */}
-                          <td className="px-6 py-4 text-right whitespace-nowrap">
+                          {/* HU29: condición. HT-14: destinatarios e historial. */}
+                          <td className="px-6 py-4 text-right whitespace-nowrap space-x-2">
+                            <button
+                              onClick={() => setAlarmaCondicion(a)}
+                              aria-label={`Condición de ${a.nmbr}`}
+                              className="inline-flex items-center justify-center px-3 py-1.5 text-sm font-medium border border-black/20 dark:border-white/20 rounded-lg hover:bg-black/5 dark:hover:bg-white/5"
+                            >
+                              Condición
+                            </button>
                             <button
                               onClick={() => setAlarmaSeleccionada(a)}
                               className="inline-flex items-center justify-center px-3 py-1.5 text-sm font-medium border border-black/20 dark:border-white/20 rounded-lg hover:bg-black/5 dark:hover:bg-white/5"
@@ -327,6 +337,18 @@ export default function Alarmas() {
                 </div>
               )}
             </div>
+            {alarmaCondicion && (
+              <EditarCondicionAlarma
+                key={alarmaCondicion.id_alrm}
+                alarma={alarmaCondicion}
+                onClose={() => setAlarmaCondicion(null)}
+                onUpdate={(mensaje) => {
+                  setAlarmaCondicion(null);
+                  setMensajeExito(mensaje);
+                  setVersion((v) => v + 1);
+                }}
+              />
+            )}
             {alarmaSeleccionada && <NotificacionesAlarma key={alarmaSeleccionada.id_alrm}
               alarma={alarmaSeleccionada} onClose={() => setAlarmaSeleccionada(null)}
               onUpdate={() => {
