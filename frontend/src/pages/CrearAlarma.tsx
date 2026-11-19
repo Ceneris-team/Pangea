@@ -5,6 +5,13 @@ import { useAuth } from "../hooks/useAuth";
 import Sidebar from "../components/layout/Sidebar";
 import Topbar from "../components/layout/Topbar";
 import { errorNombreAlarma, MAX_NOMBRE_ALARMA } from "./nombreAlarma";
+import {
+  OPERADORES_ALARMA,
+  condicionParaEnviar,
+  errorUmbral,
+  fraseCondicion,
+  type OperadorAlarma,
+} from "./condicionAlarma";
 
 /**
  * HU28 - Crear alarma.
@@ -23,10 +30,11 @@ import { errorNombreAlarma, MAX_NOMBRE_ALARMA } from "./nombreAlarma";
  * paso 2 -si no, volver atrás perdería lo tecleado- y nada se persiste
  * hasta el GUARDAR final, que es lo que hace cierto el CA4.
  *
- * El paso 2 que se implementa acá es el mínimo que HU28 necesita para
- * poder llegar a su CA3 (una condición operador + umbral, que es lo que
- * admite cndcn_alrm). Las reglas de negocio de las condiciones -cuántas,
- * con qué combinaciones, histéresis- son de HU29.
+ * El paso 2 es la condición de HU29 (PP-74, PP-228): UNA condición por
+ * alarma en v1.0 (operador + valor umbral), con las mismas reglas que el
+ * backend (condicionAlarma.ts) y una frase de vista previa ("Se activará
+ * cuando Temperatura sea mayor que 30 °C"). La condición de una alarma ya
+ * creada se ve y se actualiza desde el listado (EditarCondicionAlarma).
  */
 
 interface UbicacionOpcion {
@@ -42,9 +50,6 @@ interface ParametroOpcion {
   tipo_dato: string;
 }
 
-/** Mismos operadores que admite el CHECK de cndcn_alrm. */
-const OPERADORES = [">", ">=", "<", "<=", "="] as const;
-
 const MAX_NOMBRE = MAX_NOMBRE_ALARMA;
 
 export default function CrearAlarma() {
@@ -59,8 +64,11 @@ export default function CrearAlarma() {
   const [parametroId, setParametroId] = useState("");
 
   // Paso 2 (HU29).
-  const [operador, setOperador] = useState<string>(">");
+  const [operador, setOperador] = useState<OperadorAlarma>(">");
   const [umbral, setUmbral] = useState("");
+  // El error del umbral se muestra recién al intentar GUARDAR o al salir
+  // del campo, no mientras se teclea el primer dígito.
+  const [umbralTocado, setUmbralTocado] = useState(false);
   const [correos, setCorreos] = useState("");
 
   const [ubicaciones, setUbicaciones] = useState<UbicacionOpcion[]>([]);
@@ -160,8 +168,10 @@ export default function CrearAlarma() {
       return;
     }
 
-    if (umbral.trim() === "" || Number.isNaN(Number(umbral))) {
-      setError("Indica el valor umbral de la condición");
+    const errorDelUmbral = errorUmbral(umbral);
+    if (errorDelUmbral) {
+      setUmbralTocado(true);
+      setError(errorDelUmbral);
       return;
     }
 
@@ -174,7 +184,8 @@ export default function CrearAlarma() {
           nmbr: nombre.trim(),
           id_ubccn: Number(ubicacionId),
           id_prmtr: Number(parametroId),
-          condiciones: [{ oprdr: operador, vlr_umbrl: Number(umbral) }],
+          // HU29 v1.0: exactamente una condición.
+          condiciones: [condicionParaEnviar(operador, umbral)],
           destinatarios: correos.split(/[;,\n]+/).map(c => c.trim()).filter(Boolean),
         },
       });
@@ -195,6 +206,8 @@ export default function CrearAlarma() {
 
   const parametroElegido = parametros.find((p) => String(p.id_prmtr) === parametroId);
   const ubicacionElegida = ubicaciones.find((u) => String(u.id_ubccn) === ubicacionId);
+  const mensajeUmbral = umbralTocado ? errorUmbral(umbral) : null;
+  const frase = fraseCondicion(parametroElegido?.nmbr ?? "", operador, umbral, parametroElegido?.undd);
 
   const inputClase =
     "bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block w-full p-2.5 outline-none";
@@ -362,12 +375,12 @@ export default function CrearAlarma() {
                       <select
                         id="oprdr"
                         value={operador}
-                        onChange={(e) => setOperador(e.target.value)}
+                        onChange={(e) => setOperador(e.target.value as OperadorAlarma)}
                         className={inputClase + " cursor-pointer"}
                       >
-                        {OPERADORES.map((op) => (
-                          <option key={op} value={op}>
-                            {op}
+                        {OPERADORES_ALARMA.map((op) => (
+                          <option key={op.valor} value={op.valor}>
+                            {op.valor} {op.texto}
                           </option>
                         ))}
                       </select>
@@ -383,17 +396,38 @@ export default function CrearAlarma() {
                           </span>
                         )}
                       </label>
+                      {/* type="text" + inputMode="decimal": un type="number"
+                          entrega "" ante "12,5" o "abc" y el error diría
+                          "obligatorio" en vez de "debe ser un número". */}
                       <input
                         id="vlr_umbrl"
-                        type="number"
-                        step="any"
+                        type="text"
+                        inputMode="decimal"
+                        autoComplete="off"
                         value={umbral}
                         onChange={(e) => setUmbral(e.target.value)}
+                        onBlur={() => setUmbralTocado(true)}
                         placeholder="3.5"
+                        aria-invalid={mensajeUmbral ? true : undefined}
+                        aria-describedby={mensajeUmbral ? "vlr_umbrl-error" : undefined}
                         className={inputClase}
                       />
+                      {mensajeUmbral && (
+                        <p id="vlr_umbrl-error" className="mt-1 text-xs text-red-600 dark:text-red-400">
+                          {mensajeUmbral}
+                        </p>
+                      )}
                     </div>
                   </div>
+
+                  {/* PP-228: vista previa de la condición en lenguaje natural. */}
+                  <p
+                    aria-live="polite"
+                    data-testid="frase-condicion"
+                    className="rounded-xl border border-[#ccff00]/40 bg-[#ccff00]/10 px-4 py-3 text-sm text-gray-800 dark:text-gray-100"
+                  >
+                    {frase ?? "Elige el operador y escribe el valor umbral para ver cuándo se activará."}
+                  </p>
 
                   <p className="text-xs text-gray-500 dark:text-gray-400">
                     La alarma se creará en estado <span className="font-semibold">Activa</span>.

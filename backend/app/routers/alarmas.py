@@ -41,9 +41,10 @@ usuario pulsa GUARDAR al final del paso 2 (CA3). Por eso el POST recibe
 las condiciones junto con los datos generales en vez de crear la alarma
 al pasar de paso: si HU28 persistiera al pulsar SIGUIENTE, abandonar el
 paso 2 dejaría alarmas a medio configurar, y CA4 dice explícitamente que
-salir del alta no crea ningún registro. HU29 define las reglas de negocio
-de esas condiciones; acá solo se valida lo que ya exige el modelo (el
-operador dentro del CHECK de cndcn_alrm).
+salir del alta no crea ningún registro. Las reglas de la condición son de
+HU29 (PP-74, ver schemas_alarmas.CondicionAlarmaCrear): exactamente una
+por alarma, operador del CHECK de cndcn_alrm y umbral numérico finito con
+hasta 4 decimales. Se ve y se ACTUALIZA en /alarmas/{id}/condicion.
 
 Qué ubicaciones y parámetros ofrece el formulario: las asignadas al
 usuario según HU 21 (security/ubicaciones_permitidas.py), igual que HU13
@@ -82,6 +83,8 @@ from app.schemas_alarmas import (
     AlarmaCreada,
     AlarmaCrear,
     AlarmaListItem,
+    CondicionAlarmaCrear,
+    CondicionAlarmaDetalle,
     DestinatarioCrear,
     UbicacionParaAlarma,
 )
@@ -212,9 +215,9 @@ def listar_alarmas(
             .order_by(CondicionAlarma.id_cndcn)
             .all()
         ):
-            # Una alarma puede tener más de una condición (HU29); el
-            # listado solo necesita una referencia rápida, así que se
-            # queda con la primera encontrada.
+            # HU29 v1.0: una condición por alarma. Las creadas antes de
+            # PP-74 pueden tener varias; el listado muestra la primera y
+            # al ACTUALIZARlas quedan con una.
             condiciones_por_alarma.setdefault(condicion.id_alrm, condicion)
 
     items = [
@@ -504,17 +507,104 @@ def actualizar_alarma(
     usuario: dict = Depends(require_permiso("Alarmas", EDICION)),
 ):
     alarma = _alarma_propia(db, usuario, id_alarma, editar=True)
-    if body.estado is not None:
+    cambio = False
+    if body.estado is not None and body.estado != alarma.estd:
         alarma.estd = body.estado
+        cambio = True
     if body.condiciones is not None:
-        db.query(CondicionAlarma).filter_by(id_alrm=id_alarma).delete()
-        db.add_all(
-            [
-                CondicionAlarma(id_alrm=id_alarma, oprdr=c.oprdr, vlr_umbrl=c.vlr_umbrl)
-                for c in body.condiciones
-            ]
-        )
-    if body.estado is not None or body.condiciones is not None:
-        db.query(EstadoAlarma).filter_by(id_alrm=id_alarma).update({"en_alarma": False})
+        cambio = _reemplazar_condicion(db, id_alarma, body.condiciones[0]) or cambio
+    if cambio:
+        _reiniciar_evaluacion(db, id_alarma)
     db.commit()
     return {"mensaje": "Alarma actualizada", "estado": alarma.estd}
+
+
+# ── HU29 (PP-74): condición de la alarma ────────────────────────────────────
+#
+# "Una condición por alarma en v1.0, modelo flexible (HT-13)" (Diccionario de
+# Datos, CONDICION_ALARMA). ACTUALIZAR reemplaza la condición en vez de
+# agregar otra. La evaluación contra la telemetría vive en
+# services/notificaciones.evaluar_alarmas (PP-230).
+
+
+def _condiciones_de(db: Session, id_alarma: int) -> list[CondicionAlarma]:
+    return (
+        db.query(CondicionAlarma)
+        .filter(CondicionAlarma.id_alrm == id_alarma)
+        .order_by(CondicionAlarma.id_cndcn)
+        .all()
+    )
+
+
+def _reemplazar_condicion(db: Session, id_alarma: int, nueva) -> bool:
+    """Deja la alarma con UNA condición. Devuelve False si ya era esa misma
+    (no se toca la base ni se reinicia la evaluación)."""
+    actuales = _condiciones_de(db, id_alarma)
+    if (
+        len(actuales) == 1
+        and actuales[0].oprdr == nueva.oprdr
+        and float(actuales[0].vlr_umbrl) == float(nueva.vlr_umbrl)
+    ):
+        return False
+    db.query(CondicionAlarma).filter_by(id_alrm=id_alarma).delete()
+    db.add(CondicionAlarma(id_alrm=id_alarma, oprdr=nueva.oprdr, vlr_umbrl=nueva.vlr_umbrl))
+    db.flush()
+    return True
+
+
+def _reiniciar_evaluacion(db: Session, id_alarma: int) -> None:
+    """Con otra regla (o al pausar/reactivar), el estado 'en alarma' de cada
+    dispositivo ya no vale: la próxima lectura se evalúa desde cero y, si
+    cumple la nueva condición, notifica."""
+    db.query(EstadoAlarma).filter_by(id_alrm=id_alarma).update({"en_alarma": False})
+
+
+def _detalle_condicion(db: Session, alarma: Alarma) -> CondicionAlarmaDetalle:
+    parametro = db.get(Parametro, alarma.id_prmtr)
+    unidad = (parametro.undd or "") if parametro else ""
+    condiciones = _condiciones_de(db, alarma.id_alrm)
+    vigente = condiciones[0] if condiciones else None
+    return CondicionAlarmaDetalle(
+        id_alrm=alarma.id_alrm,
+        alarma=alarma.nmbr,
+        parametro=parametro.nmbr if parametro else "",
+        unidad=unidad,
+        oprdr=vigente.oprdr if vigente else None,
+        vlr_umbrl=float(vigente.vlr_umbrl) if vigente else None,
+        condicion=_formatear_condicion(vigente, unidad),
+        condiciones_guardadas=len(condiciones),
+    )
+
+
+@router.get("/{id_alarma}/condicion", response_model=CondicionAlarmaDetalle)
+def ver_condicion(
+    id_alarma: int,
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(require_permiso("Alarmas", LECTURA)),
+):
+    """HU29: la condición vigente de una alarma propia."""
+    alarma = _alarma_propia(db, usuario, id_alarma)
+    return _detalle_condicion(db, alarma)
+
+
+@router.put("/{id_alarma}/condicion")
+def actualizar_condicion(
+    id_alarma: int,
+    body: CondicionAlarmaCrear,
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(require_permiso("Alarmas", EDICION)),
+):
+    """HU29 "ACTUALIZAR": reemplaza la condición de la alarma (no agrega
+    otra). Exige Edición en Alarmas y la suscripción vigente, igual que el
+    resto de la edición de alarmas."""
+    alarma = _alarma_propia(db, usuario, id_alarma, editar=True)
+    cambio = _reemplazar_condicion(db, id_alarma, body)
+    if cambio:
+        _reiniciar_evaluacion(db, id_alarma)
+    db.commit()
+    return {
+        "mensaje": (
+            "Condición actualizada correctamente" if cambio else "La condición no tuvo cambios"
+        ),
+        "condicion": _detalle_condicion(db, alarma),
+    }

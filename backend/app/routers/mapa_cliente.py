@@ -38,7 +38,7 @@ from app.security.ubicaciones_permitidas import ubicaciones_permitidas
 from app.security.ws_tickets import canjear_ticket
 from app.services.cache import consultas as cache
 from app.services.mapa.eventos import canal_de_ubicacion, cliente_asincrono
-from app.services.mapa.semaforo import evaluar_semaforo
+from app.services.mapa.semaforo import condiciones_por_ubicacion, evaluar_semaforo
 from app.services.mapa.ultimos_valores import (
     ubicaciones_con_coordenadas,
     ultimos_valores_por_ubicacion,
@@ -101,6 +101,8 @@ def mapa_del_cliente(
 
     ubicaciones = ubicaciones_con_coordenadas(db, ids_permitidas)
     ultimos = ultimos_valores_por_ubicacion(db, ids_permitidas)
+    # HU29 (PP-230): el color sale de las condiciones de las alarmas activas.
+    condiciones = condiciones_por_ubicacion(db, ids_permitidas)
 
     items = []
     for ubicacion in ubicaciones:
@@ -134,7 +136,8 @@ def mapa_del_cliente(
                 "lngtd": float(ubicacion.lngtd),
                 "estd": ubicacion.estd,
                 "semaforo": evaluar_semaforo(
-                    {nombre: dato["valor"] for nombre, dato in por_parametro.items()}
+                    {dato["id_prmtr"]: dato["valor"] for dato in por_parametro.values()},
+                    condiciones.get(ubicacion.id_ubccn, {}),
                 ),
                 "ultima_lectura": ultima_lectura,
                 "parametros": parametros,

@@ -299,19 +299,14 @@ class TestCA3Guardar:
         assert resp.status_code == 200
         assert [a["nmbr"] for a in resp.json()["items"]] == ["Crecida del río"]
 
-    def test_persiste_las_condiciones_del_paso_2(self, client, db_session, escenario):
-        """El alta es de dos pasos pero una sola escritura: las
-        condiciones de HU29 llegan en el mismo POST del GUARDAR.
-
-        Se comprueban en cndcn_alrm y no en la respuesta: la fila de HU27
-        resume la alarma con UNA condición formateada, así que por la
-        respuesta sola no se vería que se guardaron las dos."""
+    def test_persiste_la_condicion_del_paso_2(self, client, db_session, escenario):
+        """El alta es de dos pasos pero una sola escritura: la condición de
+        HU29 llega en el mismo POST del GUARDAR. HU29 v1.0 (PP-74): una
+        condición por alarma; dos se rechazan (ver
+        tests/routers/test_condiciones_alarma.py)."""
         resp = client.post(
             "/alarmas",
-            json=cuerpo_valido(
-                escenario,
-                condiciones=[{"oprdr": ">=", "vlr_umbrl": 3.5}, {"oprdr": "<", "vlr_umbrl": 0.2}],
-            ),
+            json=cuerpo_valido(escenario, condiciones=[{"oprdr": ">=", "vlr_umbrl": 3.5}]),
         )
         assert resp.status_code == 201
 
@@ -322,7 +317,7 @@ class TestCA3Guardar:
             .order_by(CondicionAlarma.id_cndcn)
             .all()
         )
-        assert [(c.oprdr, float(c.vlr_umbrl)) for c in condiciones] == [(">=", 3.5), ("<", 0.2)]
+        assert [(c.oprdr, float(c.vlr_umbrl)) for c in condiciones] == [(">=", 3.5)]
 
     def test_la_sede_sale_de_la_ubicacion_no_del_jwt(self, client, db_session, escenario):
         """alrm.id_sd es NOT NULL y tiene que ser la sede del recurso: un
