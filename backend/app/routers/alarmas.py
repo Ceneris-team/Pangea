@@ -76,6 +76,7 @@ from app.models.alarma import (
 )
 from app.models.cliente_sede import Sede
 from app.models.mapeo_dispositivo import Dispositivo, MapeoColumna, MapeoFormato, Parametro
+from app.models.rol_usuario import Usuario
 from app.models.ubicacion_conexion import Ubicacion
 from app.schemas import ParametroListItem
 from app.schemas_alarmas import (
@@ -83,9 +84,13 @@ from app.schemas_alarmas import (
     AlarmaCreada,
     AlarmaCrear,
     AlarmaListItem,
+    CanalNotificacion,
     CondicionAlarmaCrear,
     CondicionAlarmaDetalle,
     DestinatarioCrear,
+    DestinatarioDetalle,
+    NotificacionesAlarma,
+    NotificacionesGuardar,
     UbicacionParaAlarma,
 )
 from app.security.entorno import sedes_permitidas
@@ -497,6 +502,96 @@ def quitar_destinatario(
         raise HTTPException(404, "Destinatario no encontrado")
     db.delete(d)
     db.commit()
+
+
+# ── HU30 (PP-75 / PP-232): configurar notificaciones ────────────────────────
+#
+#   CA1  el panel muestra los canales disponibles y los destinatarios
+#   CA2  activar el canal de correo y GUARDAR persiste y muestra
+#        "Notificaciones configuradas correctamente"
+#   CA4  desactivar el canal y GUARDAR hace que deje de notificar
+#
+# El canal es un interruptor de la alarma (alrm.cnl_crr_actv): desactivarlo
+# conserva la lista de destinatarios (HT-14) para volver a activarlo sin
+# reescribirla; evaluar_alarmas no envía avisos mientras esté apagado.
+
+MENSAJE_NOTIFICACIONES = "Notificaciones configuradas correctamente"
+
+
+def _correo_de_la_cuenta(db: Session, usuario: dict) -> str:
+    fila = db.get(Usuario, int(usuario["sub"]))
+    if fila is None:
+        raise HTTPException(404, "Usuario no encontrado")
+    return fila.crr.lower()
+
+
+def _panel_notificaciones(db: Session, alarma: Alarma, correo_cuenta: str) -> NotificacionesAlarma:
+    destinatarios = (
+        db.query(DestinatarioAlarma)
+        .filter_by(id_alrm=alarma.id_alrm, cnl="email")
+        .order_by(DestinatarioAlarma.crr)
+        .all()
+    )
+    return NotificacionesAlarma(
+        id_alrm=alarma.id_alrm,
+        alarma=alarma.nmbr,
+        canal_email_activo=alarma.cnl_crr_actv,
+        canales=[
+            CanalNotificacion(
+                canal="email",
+                nombre="Correo electrónico",
+                disponible=True,
+                activo=alarma.cnl_crr_actv,
+            ),
+            CanalNotificacion(canal="telegram", nombre="Telegram", disponible=False, activo=False),
+        ],
+        destinatarios=[DestinatarioDetalle(id=d.id_dstntr, correo=d.crr) for d in destinatarios],
+        correo_cuenta=correo_cuenta,
+    )
+
+
+@router.get("/{id_alarma}/notificaciones", response_model=NotificacionesAlarma)
+def ver_notificaciones(
+    id_alarma: int,
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(require_permiso("Alarmas", LECTURA)),
+):
+    """HU30 CA1: canales disponibles y destinatarios actuales."""
+    alarma = _alarma_propia(db, usuario, id_alarma)
+    return _panel_notificaciones(db, alarma, _correo_de_la_cuenta(db, usuario))
+
+
+@router.put("/{id_alarma}/notificaciones")
+def guardar_notificaciones(
+    id_alarma: int,
+    body: NotificacionesGuardar,
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(require_permiso("Alarmas", EDICION)),
+):
+    """HU30 CA2/CA4: activa o desactiva el canal de correo de la alarma.
+
+    Activarlo sin destinatarios agrega el correo de la cuenta del usuario
+    ("activar el canal de correo electrónico de la cuenta"): un canal activo
+    sin nadie a quien escribir no notificaría a nadie."""
+    alarma = _alarma_propia(db, usuario, id_alarma, editar=True)
+    correo_cuenta = _correo_de_la_cuenta(db, usuario)
+    if body.canal_email_activo and not alarma.cnl_crr_actv:
+        # Al reactivar, si la alarma ya está disparada, la próxima lectura
+        # que la cumpla avisa (igual que al cambiar la condición).
+        _reiniciar_evaluacion(db, id_alarma)
+    alarma.cnl_crr_actv = body.canal_email_activo
+    if body.canal_email_activo:
+        hay_destinatarios = (
+            db.query(DestinatarioAlarma).filter_by(id_alrm=id_alarma, cnl="email").first()
+        )
+        if hay_destinatarios is None:
+            db.add(DestinatarioAlarma(id_alrm=id_alarma, cnl="email", crr=correo_cuenta))
+    db.commit()
+    db.refresh(alarma)
+    return {
+        "mensaje": MENSAJE_NOTIFICACIONES,
+        "notificaciones": _panel_notificaciones(db, alarma, correo_cuenta),
+    }
 
 
 @router.patch("/{id_alarma}")

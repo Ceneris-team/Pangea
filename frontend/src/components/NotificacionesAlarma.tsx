@@ -1,7 +1,22 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ApiError, apiFetch } from "../services/api";
+import { MENSAJE_GUARDADO, ayudaCanalCorreo, estadoCanal, type CanalNotificacion } from "./configNotificaciones";
+
+/**
+ * HU30 (PP-75 / PP-231) "Configurar notificaciones" de una alarma:
+ *   CA1  canales disponibles y destinatarios actuales
+ *   CA2  activar el canal de correo y GUARDAR -> "Notificaciones configuradas correctamente"
+ *   CA4  desactivar el canal y GUARDAR -> deja de notificar
+ * Más los destinatarios (HT-14) y el historial de envíos (PP-424).
+ */
 
 interface Destinatario { id: number; correo: string }
+interface ConfigNotificaciones {
+  canal_email_activo: boolean;
+  canales: CanalNotificacion[];
+  destinatarios: Destinatario[];
+  correo_cuenta: string;
+}
 interface Intento { numero: number; fecha: string; resultado: string; error: string | null }
 interface Envio {
   id: number; destinatario: string; tipo: string; estado: string; creada: string;
@@ -30,10 +45,51 @@ export default function NotificacionesAlarma({ alarma, onClose, onUpdate }: Prop
   const [error, setError] = useState("");
   const [cargando, setCargando] = useState(true);
   const [ocupado, setOcupado] = useState(false);
+  // CA1/CA2/CA4: configuración del canal. `canalElegido` es lo que el
+  // usuario marcó y todavía no guardó (null = sin cambios).
+  const [config, setConfig] = useState<ConfigNotificaciones | null>(null);
+  const [canalElegido, setCanalElegido] = useState<boolean | null>(null);
+  const [mensaje, setMensaje] = useState("");
 
   useEffect(() => {
     dialogo.current?.showModal();
   }, []);
+
+  // La configuración no entra en el refresco de 10 s del historial: así no
+  // se pisa lo que el usuario está marcando.
+  useEffect(() => {
+    let cancelado = false;
+    apiFetch<ConfigNotificaciones>(`/alarmas/${alarma.id_alrm}/notificaciones`)
+      .then((c) => { if (!cancelado) setConfig(c); })
+      .catch((err) => {
+        if (!cancelado) setError(err instanceof ApiError ? err.message : "No se pudo cargar la configuración");
+      });
+    return () => { cancelado = true; };
+  }, [alarma.id_alrm]);
+
+  const canalCorreo = canalElegido ?? config?.canal_email_activo ?? true;
+  // Mientras la lista de destinatarios carga, se usa la que trae la
+  // configuración: si no, la ayuda diría "sin destinatarios" un instante.
+  const cantidadDestinatarios = cargando ? (config?.destinatarios.length ?? 0) : destinatarios.length;
+  const hayCambios = config !== null && canalElegido !== null && canalElegido !== config.canal_email_activo;
+
+  async function guardarCanales() {
+    setOcupado(true); setError(""); setMensaje("");
+    try {
+      const res = await apiFetch<{ mensaje: string; notificaciones: ConfigNotificaciones }>(
+        `/alarmas/${alarma.id_alrm}/notificaciones`,
+        { method: "PUT", body: { canal_email_activo: canalCorreo } },
+      );
+      setConfig(res.notificaciones);
+      setCanalElegido(null);
+      setMensaje(res.mensaje || MENSAJE_GUARDADO);
+      setVersion(v => v + 1); // activar puede haber agregado el correo de la cuenta
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "No se pudo guardar la configuración");
+    } finally {
+      setOcupado(false);
+    }
+  }
 
   useEffect(() => {
     const intervalo = setInterval(() => setVersion(v => v + 1), 10000);
@@ -75,13 +131,60 @@ export default function NotificacionesAlarma({ alarma, onClose, onUpdate }: Prop
       className="w-[calc(100%-2rem)] max-w-4xl max-h-[90vh] rounded-2xl p-0 bg-white dark:bg-gray-950 text-gray-900 dark:text-white backdrop:bg-black/50">
       <div className="p-5 sm:p-7 space-y-6">
         <header className="flex justify-between gap-4 items-start">
-          <div><h2 id="notificaciones-titulo" className="text-xl font-bold">Notificaciones de {alarma.nmbr}</h2>
+          <div><h2 id="notificaciones-titulo" className="text-xl font-bold">Configurar notificaciones de {alarma.nmbr}</h2>
             <p className="text-sm mt-1">Estado de la alarma: {alarma.estd}</p></div>
           <button type="button" onClick={onClose} className={boton} disabled={ocupado}>Cerrar</button>
         </header>
         {error && <p role="alert" className="text-red-600 dark:text-red-400">{error}</p>}
+        {mensaje && (
+          <p role="status" className="rounded-lg border border-[#ccff00]/40 bg-[#ccff00]/15 px-3 py-2 text-sm text-[#5a7000] dark:text-[#ccff00]">
+            {mensaje}
+          </p>
+        )}
+
+        {/* HU30 CA1/CA2/CA4: canales disponibles y su estado. */}
+        <section aria-labelledby="canales-titulo" className="space-y-3">
+          <h3 id="canales-titulo" className="font-semibold">1. Canales de notificación</h3>
+          {!config && !error && <p role="status" className="text-sm">Cargando canales…</p>}
+          {config && (
+            <ul className="space-y-2">
+              {config.canales.map(c => (
+                <li key={c.canal} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-black/15 dark:border-white/15 p-3">
+                  <div className="min-w-0">
+                    <p className="font-medium">{c.nombre}</p>
+                    <p className="text-xs text-gray-600 dark:text-gray-300">
+                      {c.canal === "email"
+                        ? ayudaCanalCorreo(canalCorreo, cantidadDestinatarios, config.correo_cuenta)
+                        : estadoCanal(c)}
+                    </p>
+                  </div>
+                  {c.canal === "email" ? (
+                    <label className="flex items-center gap-2 text-sm cursor-pointer">
+                      <input type="checkbox" role="switch" checked={canalCorreo} disabled={ocupado}
+                        aria-describedby="canal-email-estado"
+                        onChange={e => { setMensaje(""); setCanalElegido(e.target.checked); }} />
+                      <span id="canal-email-estado">{canalCorreo ? "Activo" : "Desactivado"}</span>
+                    </label>
+                  ) : (
+                    <span className="text-xs rounded-full border border-black/15 dark:border-white/15 px-2 py-1">{estadoCanal(c)}</span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+          <button type="button" onClick={() => void guardarCanales()} disabled={ocupado || !hayCambios}
+            className="rounded-lg px-4 py-2 text-sm font-bold bg-[#ccff00] text-[#1a202c] hover:bg-[#b8e600] disabled:opacity-50">
+            {ocupado ? "Guardando…" : "Guardar"}
+          </button>
+        </section>
+
         <section aria-labelledby="destinatarios-titulo" className="space-y-3">
-          <h3 id="destinatarios-titulo" className="font-semibold">1. Correos que recibirán la alarma</h3>
+          <h3 id="destinatarios-titulo" className="font-semibold">2. Correos que recibirán la alarma</h3>
+          {config && !config.canal_email_activo && (
+            <p className="text-sm rounded-lg border border-amber-400/50 bg-amber-50 dark:bg-amber-900/20 px-3 py-2 text-amber-800 dark:text-amber-200">
+              El canal de correo está desactivado: estos destinatarios no recibirán avisos hasta que lo actives.
+            </p>
+          )}
           <p className="text-sm">Se enviará un aviso a cada correo cuando la condición se active. Para recibir otro, primero debe volver a la normalidad.</p>
           <form onSubmit={agregar} className="flex flex-col sm:flex-row gap-2">
             <label className="sr-only" htmlFor="destinatario-correo">Correo del destinatario</label>
@@ -103,7 +206,7 @@ export default function NotificacionesAlarma({ alarma, onClose, onUpdate }: Prop
           })}>{alarma.estd === "Activa" ? "Pausar alarma" : "Activar alarma"}</button>
         </section>
         <section aria-labelledby="historial-titulo" className="space-y-3">
-          <h3 id="historial-titulo" className="font-semibold">2. Historial de notificaciones</h3>
+          <h3 id="historial-titulo" className="font-semibold">3. Historial de notificaciones</h3>
           <p className="text-sm">«Enviado» significa que el proveedor aceptó el correo; la llegada a la bandeja de entrada se verifica con el destinatario.</p>
           <div className="flex flex-wrap gap-2">
             <label htmlFor="estado-envio" className="self-center text-sm">Resultado</label>

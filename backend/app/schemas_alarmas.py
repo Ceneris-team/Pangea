@@ -16,7 +16,7 @@ con varias condiciones no se rompen.
 import re
 from decimal import Decimal, InvalidOperation
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, StrictBool, field_validator
 
 
 class AlarmaListItem(BaseModel):
@@ -204,3 +204,41 @@ class AlarmaActualizar(BaseModel):
     @classmethod
     def _una_condicion(cls, valores):
         return _exigir_una_condicion(valores)
+
+
+# ── HU30 (PP-75): configurar notificaciones ─────────────────────────────────
+#
+# CA1: el panel muestra los canales disponibles y los destinatarios actuales.
+# En v1.0 el único canal disponible es el correo (Diccionario de Datos,
+# DESTINATARIO_ALARMA: "correos destinatarios"); Telegram existe en el
+# modelo pero no tiene HU que lo habilite, así que se muestra como no
+# disponible.
+
+
+class CanalNotificacion(BaseModel):
+    canal: str
+    nombre: str
+    disponible: bool
+    activo: bool
+
+
+class DestinatarioDetalle(BaseModel):
+    id: int
+    correo: str
+
+
+class NotificacionesAlarma(BaseModel):
+    id_alrm: int
+    alarma: str
+    canal_email_activo: bool
+    canales: list[CanalNotificacion]
+    destinatarios: list[DestinatarioDetalle]
+    # Se agrega al activar el canal si la alarma no tiene destinatarios.
+    correo_cuenta: str
+
+
+class NotificacionesGuardar(BaseModel):
+    """CA2/CA4: activar o desactivar el canal de correo y GUARDAR.
+    StrictBool: "si" o 1 no se aceptan como verdadero."""
+
+    canal_email_activo: StrictBool

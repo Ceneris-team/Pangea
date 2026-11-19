@@ -75,7 +75,8 @@ def test_bordes_de_cada_operador_con_lecturas_reales(db_session, caso, operador,
 def test_el_aviso_lleva_la_condicion_vigente(db_session, caso):
     evaluar(db_session, caso, [Decimal("35")])
     contexto = db_session.query(NotificacionEnviada).first().contexto
-    assert contexto["condicion"] == "> 30.0000"
+    # PP-233: sin ceros de relleno y con la unidad.
+    assert contexto["condicion"] == "> 30 °C"
     assert contexto["valor"] == "35"
 
 
@@ -98,7 +99,7 @@ def test_actualizar_la_condicion_cambia_la_regla_de_la_lectura_siguiente(db_sess
     ultimo = (
         db_session.query(NotificacionEnviada).order_by(NotificacionEnviada.id_ntfccn.desc()).first()
     )
-    assert ultimo.contexto["condicion"] == "> 50.0000"
+    assert ultimo.contexto["condicion"] == "> 50 °C"
 
 
 def test_con_la_regla_nueva_vuelve_a_avisar_aunque_ya_estuviera_en_alarma(db_session, caso):
