@@ -21,7 +21,7 @@ agregó la suscripción vigente de la empresa (dev exige una para dar de
 alta configuración operativa) y el caso de empresa en modo consulta.
 """
 
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from fastapi.testclient import TestClient
@@ -394,6 +394,111 @@ class TestValidacionesDelFormulario:
         assert resp.status_code == 409
         assert "modo consulta" in resp.json()["detail"]
         assert db_session.query(Alarma).filter(Alarma.nmbr == "Crecida del río").count() == 0
+
+
+class TestEstadoOperativo:
+    def test_un_equipo_sin_evaluar_no_se_presenta_como_normal(self, client, escenario):
+        id_alarma = client.post("/alarmas", json=cuerpo_valido(escenario)).json()["alarma"][
+            "id_alrm"
+        ]
+        equipo = client.get(f"/alarmas/{id_alarma}").json()["dispositivos"][0]
+        assert equipo["pendiente_evaluacion"] is True
+        assert equipo["ultima_evaluacion"] is None
+        assert equipo["desde"] is None
+
+    def test_detalle_y_listado_muestran_reglas_completas_y_fecha_real(
+        self, client, escenario, db_session
+    ):
+        from app.models import EstadoAlarma
+
+        condiciones = [{"oprdr": ">", "vlr_umbrl": 5}, {"oprdr": "<", "vlr_umbrl": 1}]
+        creada = client.post("/alarmas", json=cuerpo_valido(escenario, condiciones=condiciones))
+        id_alarma = creada.json()["alarma"]["id_alrm"]
+        inicio = datetime(2026, 11, 13, 12, tzinfo=timezone.utc)
+        ultima = inicio + timedelta(minutes=10)
+        db_session.add(
+            EstadoAlarma(
+                id_alrm=id_alarma,
+                id_dspstv=escenario["dispositivo"].id_dspstv,
+                en_alarma=True,
+                inicio_alarma=inicio,
+                ultima_fecha=ultima,
+            )
+        )
+        db_session.flush()
+        detalle = client.get(f"/alarmas/{id_alarma}")
+        assert detalle.status_code == 200
+        assert len(detalle.json()["condiciones"]) == 2
+        dispositivo = detalle.json()["dispositivos"][0]
+        assert dispositivo["en_alarma"] is True
+        assert datetime.fromisoformat(dispositivo["desde"]) == inicio
+        assert datetime.fromisoformat(dispositivo["ultima_evaluacion"]) == ultima
+        fila = client.get("/alarmas").json()["items"][0]
+        assert fila["condicion"] == "> 5 m o < 1 m"
+        assert fila["dispositivos"] == detalle.json()["dispositivos"]
+
+    def test_editar_exige_lectura_nueva_y_conserva_el_limite_historico(
+        self, client, escenario, db_session
+    ):
+        from app.models import EstadoAlarma
+
+        id_alarma = client.post("/alarmas", json=cuerpo_valido(escenario)).json()["alarma"][
+            "id_alrm"
+        ]
+        fecha = datetime(2026, 11, 13, 12, tzinfo=timezone.utc)
+        db_session.add(
+            EstadoAlarma(
+                id_alrm=id_alarma,
+                id_dspstv=escenario["dispositivo"].id_dspstv,
+                en_alarma=True,
+                inicio_alarma=fecha,
+                ultima_fecha=fecha,
+            )
+        )
+        db_session.flush()
+        respuesta = client.patch(
+            f"/alarmas/{id_alarma}",
+            json={
+                "condiciones": [{"oprdr": ">=", "vlr_umbrl": 10}],
+            },
+        )
+        assert respuesta.status_code == 200
+        estado = db_session.get(EstadoAlarma, (id_alarma, escenario["dispositivo"].id_dspstv))
+        db_session.refresh(estado)
+        assert estado.pendiente_evaluacion is True
+        assert estado.en_alarma is False
+        assert estado.inicio_alarma is None
+        assert estado.ultima_fecha == fecha
+
+    def test_perfil_informa_edicion_real_y_el_lector_no_modifica(
+        self, client, escenario, db_session
+    ):
+        id_alarma = client.post("/alarmas", json=cuerpo_valido(escenario)).json()["alarma"][
+            "id_alrm"
+        ]
+        assert client.get("/auth/perfil").json()["puede_editar_alarmas"] is True
+        permiso = (
+            db_session.query(PermisoUsuarioSede)
+            .filter_by(id_usr=escenario["usuario"].id_usr, mdl="Alarmas")
+            .one()
+        )
+        permiso.nvl = "Lectura"
+        db_session.flush()
+        assert client.get("/auth/perfil").json()["puede_editar_alarmas"] is False
+        assert client.get(f"/alarmas/{id_alarma}").status_code == 200
+        assert client.patch(f"/alarmas/{id_alarma}", json={"estado": "Inactiva"}).status_code == 403
+
+    def test_no_expone_detalle_de_otro_usuario(self, client, escenario, db_session, fabrica):
+        id_alarma = client.post("/alarmas", json=cuerpo_valido(escenario)).json()["alarma"][
+            "id_alrm"
+        ]
+        otro = fabrica.usuario(rol=escenario["rol"])
+        agregar_permiso(db_session, otro, escenario["sede"], "Alarmas", "Lectura", escenario["rol"])
+        asignar_ubicacion(db_session, otro, escenario["ubicacion"])
+        app.dependency_overrides[get_current_user] = lambda: usuario_jwt(
+            otro, escenario["rol"].nmbr, sede_id=escenario["sede"].id_sd
+        )
+        assert client.get(f"/alarmas/{id_alarma}").status_code == 404
 
 
 class TestCA4Cancelar:

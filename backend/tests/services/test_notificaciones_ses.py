@@ -128,6 +128,20 @@ def test_lectura_antigua_no_rearma_una_alarma_activa(db_session, caso):
     assert db_session.query(EstadoAlarma).one().en_alarma
 
 
+def test_inicio_de_incidente_no_cambia_con_lecturas_posteriores(db_session, caso):
+    evaluar(db_session, caso, [20, 35, 36])
+    estado = db_session.query(EstadoAlarma).one()
+    inicio = lecturas(caso, [35], inicio=1)[0].fecha_hora
+    assert estado.inicio_alarma == inicio
+    evaluar(db_session, caso, [40], inicio=10)
+    assert estado.inicio_alarma == inicio
+    evaluar(db_session, caso, [10], inicio=11)
+    assert estado.inicio_alarma is None
+    evaluar(db_session, caso, [40], inicio=12)
+    assert estado.inicio_alarma == lecturas(caso, [40], inicio=12)[0].fecha_hora
+    assert estado.pendiente_evaluacion is False
+
+
 def test_alarma_inactiva_no_notifica(db_session, caso):
     caso["alarma"].estd = "Inactiva"
     db_session.flush()

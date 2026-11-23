@@ -44,6 +44,7 @@ def test_destinatarios_historial_y_alta_en_navegador(ancho):
                 "debe_cambiar_contrasena": False,
                 "zona_horaria": "America/Lima",
                 "operacion_habilitada": True,
+                "puede_editar_alarmas": True,
                 "rol_empresa": None,
                 "cliente_id": None,
                 "proyecto_id": None,
@@ -137,7 +138,7 @@ def test_destinatarios_historial_y_alta_en_navegador(ancho):
             dialogo.get_by_text("Ver diagnóstico e intentos").click()
             expect(dialogo.get_by_text("Último error: MessageRejected")).to_be_visible()
             dialogo.get_by_role("button", name="Pausar alarma").click()
-            expect(dialogo.get_by_text("Estado de la alarma: Inactiva")).to_be_visible()
+            expect(dialogo.get_by_text("Regla: pausada")).to_be_visible()
             assert dialogo.evaluate("e => e.scrollWidth <= e.clientWidth + 1")
             pagina.keyboard.press("Escape")
             expect(dialogo).to_have_count(0)

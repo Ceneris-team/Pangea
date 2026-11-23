@@ -60,7 +60,7 @@ selector sería dejar armar una alarma que no puede dispararse nunca.
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, or_
+from sqlalchemy import and_, func, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -81,6 +81,7 @@ from app.schemas_alarmas import (
     AlarmaActualizar,
     AlarmaCreada,
     AlarmaCrear,
+    AlarmaDetalle,
     AlarmaListItem,
     DestinatarioCrear,
     UbicacionParaAlarma,
@@ -91,6 +92,48 @@ from app.security.ubicaciones_permitidas import ubicaciones_permitidas
 from app.services.contratos import exigir_operacion
 
 router = APIRouter(prefix="/alarmas", tags=["Alarmas"])
+
+
+def _estados_dispositivos(db, ids_alarma):
+    estados = {}
+    if not ids_alarma:
+        return estados
+    filas = (
+        db.query(Alarma.id_alrm, Dispositivo.id_dspstv, Dispositivo.nmbr, EstadoAlarma)
+        .select_from(Alarma)
+        .join(Dispositivo, Dispositivo.id_ubccn == Alarma.id_ubccn)
+        .join(MapeoFormato, MapeoFormato.id_dspstv == Dispositivo.id_dspstv)
+        .join(
+            MapeoColumna,
+            and_(
+                MapeoColumna.id_mp == MapeoFormato.id_mp,
+                MapeoColumna.id_prmtr == Alarma.id_prmtr,
+            ),
+        )
+        .outerjoin(
+            EstadoAlarma,
+            and_(
+                EstadoAlarma.id_alrm == Alarma.id_alrm,
+                EstadoAlarma.id_dspstv == Dispositivo.id_dspstv,
+            ),
+        )
+        .filter(Alarma.id_alrm.in_(ids_alarma))
+        .distinct()
+        .order_by(Dispositivo.nmbr, Dispositivo.id_dspstv)
+        .all()
+    )
+    for id_alarma, id_dispositivo, nombre, estado in filas:
+        estados.setdefault(id_alarma, []).append(
+            {
+                "id_dspstv": id_dispositivo,
+                "nombre": nombre,
+                "en_alarma": estado.en_alarma if estado else False,
+                "desde": estado.inicio_alarma if estado else None,
+                "ultima_evaluacion": estado.ultima_fecha if estado else None,
+                "pendiente_evaluacion": estado.pendiente_evaluacion if estado else True,
+            }
+        )
+    return estados
 
 
 def _formatear_condicion(condicion: CondicionAlarma | None, unidad: str) -> str | None:
@@ -204,7 +247,7 @@ def listar_alarmas(
 
     # Las condiciones de esta página, en una sola consulta (evita N+1).
     ids_alarma = [alarma.id_alrm for alarma, _nombre, _undd in filas]
-    condiciones_por_alarma: dict[int, CondicionAlarma] = {}
+    condiciones_por_alarma: dict[int, list[CondicionAlarma]] = {}
     if ids_alarma:
         for condicion in (
             db.query(CondicionAlarma)
@@ -212,18 +255,22 @@ def listar_alarmas(
             .order_by(CondicionAlarma.id_cndcn)
             .all()
         ):
-            # Una alarma puede tener más de una condición (HU29); el
-            # listado solo necesita una referencia rápida, así que se
-            # queda con la primera encontrada.
-            condiciones_por_alarma.setdefault(condicion.id_alrm, condicion)
+            condiciones_por_alarma.setdefault(condicion.id_alrm, []).append(condicion)
+
+    estados = _estados_dispositivos(db, ids_alarma)
 
     items = [
         AlarmaListItem(
             id_alrm=alarma.id_alrm,
             nmbr=alarma.nmbr,
             parametro_nombre=nombre_parametro,
-            condicion=_formatear_condicion(condiciones_por_alarma.get(alarma.id_alrm), unidad),
+            condicion=" o ".join(
+                _formatear_condicion(c, unidad)
+                for c in condiciones_por_alarma.get(alarma.id_alrm, [])
+            )
+            or None,
             estd=alarma.estd,
+            dispositivos=estados.get(alarma.id_alrm, []),
         )
         for alarma, nombre_parametro, unidad in filas
     ]
@@ -515,6 +562,33 @@ def actualizar_alarma(
             ]
         )
     if body.estado is not None or body.condiciones is not None:
-        db.query(EstadoAlarma).filter_by(id_alrm=id_alarma).update({"en_alarma": False})
+        db.query(EstadoAlarma).filter_by(id_alrm=id_alarma).update(
+            {"en_alarma": False, "inicio_alarma": None, "pendiente_evaluacion": True}
+        )
     db.commit()
     return {"mensaje": "Alarma actualizada", "estado": alarma.estd}
+
+
+@router.get("/{id_alarma}", response_model=AlarmaDetalle)
+def detalle_alarma(
+    id_alarma: int,
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(require_permiso("Alarmas", LECTURA)),
+):
+    alarma = _alarma_propia(db, usuario, id_alarma)
+    parametro = db.get(Parametro, alarma.id_prmtr)
+    condiciones = (
+        db.query(CondicionAlarma)
+        .filter_by(id_alrm=id_alarma)
+        .order_by(CondicionAlarma.id_cndcn)
+        .all()
+    )
+    return {
+        "id_alrm": alarma.id_alrm,
+        "nmbr": alarma.nmbr,
+        "estd": alarma.estd,
+        "parametro_nombre": parametro.nmbr,
+        "unidad": parametro.undd,
+        "condiciones": [{"oprdr": c.oprdr, "vlr_umbrl": c.vlr_umbrl} for c in condiciones],
+        "dispositivos": _estados_dispositivos(db, [id_alarma]).get(id_alarma, []),
+    }

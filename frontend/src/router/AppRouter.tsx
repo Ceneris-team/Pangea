@@ -316,7 +316,7 @@ export default function AppRouter() {
           <Route
             path="/alarmas/nueva"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requiereEdicionAlarmas>
                 <CrearAlarma />
               </ProtectedRoute>
             }

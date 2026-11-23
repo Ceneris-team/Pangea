@@ -6,8 +6,18 @@ creciendo schemas.py.
 """
 
 import re
+from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+
+
+class EstadoDispositivoAlarma(BaseModel):
+    id_dspstv: int
+    nombre: str
+    en_alarma: bool
+    desde: datetime | None
+    ultima_evaluacion: datetime | None
+    pendiente_evaluacion: bool
 
 
 class AlarmaListItem(BaseModel):
@@ -27,6 +37,7 @@ class AlarmaListItem(BaseModel):
     parametro_nombre: str
     condicion: str | None
     estd: str
+    dispositivos: list[EstadoDispositivoAlarma] = Field(default_factory=list)
 
 
 # Mismos operadores que admite el CHECK de cndcn_alrm
@@ -76,6 +87,16 @@ class CondicionAlarmaCrear(BaseModel):
         if valor not in OPERADORES_ALARMA:
             raise ValueError(f"El operador debe ser uno de: {', '.join(OPERADORES_ALARMA)}")
         return valor
+
+
+class AlarmaDetalle(BaseModel):
+    id_alrm: int
+    nmbr: str
+    estd: str
+    parametro_nombre: str
+    unidad: str | None
+    condiciones: list[CondicionAlarmaCrear]
+    dispositivos: list[EstadoDispositivoAlarma]
 
 
 class AlarmaCrear(BaseModel):

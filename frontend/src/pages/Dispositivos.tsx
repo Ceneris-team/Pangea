@@ -411,12 +411,10 @@ export default function Dispositivos() {
     navigate(`/cola-ingesta?id_cnxn=${estadisticas.id_cnxn}`);
   }
 
-  /** HU19 CA4: redirige a Consulta de Datos con la ubicación de este
-   *  dispositivo preseleccionada -el módulo no filtra por dispositivo,
-   *  solo por ubicación (mismo criterio que HU17 CA4 en Gráficos)-. */
+  /** El historial conserva el equipo analizado, igual que el enlace de su ficha. */
   function irAHistorialDeDatos() {
-    if (!estadisticas) return;
-    navigate(`/consulta-datos?ubicacion_id=${estadisticas.id_ubccn}`);
+    if (!estadisticas || !dispositivoEstadisticas) return;
+    navigate(`/consulta-datos?ubicacion_id=${estadisticas.id_ubccn}&dispositivo_ids=${dispositivoEstadisticas.id_dspstv}`);
   }
 
   const inputClaseDispositivo =

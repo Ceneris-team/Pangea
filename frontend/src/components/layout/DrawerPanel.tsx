@@ -25,6 +25,10 @@ const ANCHOS = {
   xl: "max-w-[80vw]",
 } as const;
 
+// Solo el panel superior gestiona el teclado cuando se abren paneles anidados.
+const panelesAbiertos: HTMLElement[] = [];
+const SELECTOR_FOCO = 'a[href], button, input, select, textarea, [tabindex]';
+
 interface DrawerPanelProps {
   abierto: boolean;
   onCerrar: () => void;
@@ -48,24 +52,53 @@ export default function DrawerPanel({
   pie,
 }: DrawerPanelProps) {
   const panelRef = useRef<HTMLDivElement>(null);
+  const cerrarRef = useRef(onCerrar);
+
+  useEffect(() => { cerrarRef.current = onCerrar; }, [onCerrar]);
 
   useEffect(() => {
     if (!abierto) return;
+    if (!panelRef.current) return;
+    const panel = panelRef.current;
     const focoAnterior = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    panelRef.current?.focus({ preventScroll: true });
-    return () => focoAnterior?.focus({ preventScroll: true });
-  }, [abierto]);
+    panelesAbiertos.push(panel);
+    const enfocable = () => [...panel.querySelectorAll<HTMLElement>(SELECTOR_FOCO)]
+      .filter(el => el.tabIndex >= 0 && !el.matches(':disabled') && !el.closest('[inert]') && el.getClientRects().length > 0);
+    const esSuperior = () => panelesAbiertos.at(-1) === panel;
+    panel.focus({ preventScroll: true });
 
-  // Escape cierra el panel, igual que clickear el overlay -consistente
-  // con cualquier otro diálogo del sistema operativo o del navegador-.
-  useEffect(() => {
-    if (!abierto) return;
     function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") onCerrar();
+      if (!esSuperior()) return;
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        cerrarRef.current();
+      }
+      if (e.key !== "Tab") return;
+      const elementos = enfocable();
+      const primero = elementos[0];
+      const ultimo = elementos.at(-1);
+      if (!primero || !ultimo) { e.preventDefault(); panel.focus(); return; }
+      if (e.shiftKey && (document.activeElement === primero || document.activeElement === panel)) {
+        e.preventDefault(); ultimo.focus();
+      } else if (!e.shiftKey && (document.activeElement === ultimo || document.activeElement === panel)) {
+        e.preventDefault(); primero.focus();
+      }
     }
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [abierto, onCerrar]);
+    function mantenerFoco(e: FocusEvent) {
+      if (esSuperior() && e.target instanceof Node && !panel.contains(e.target)) {
+        (enfocable()[0] ?? panel).focus({ preventScroll: true });
+      }
+    }
+    document.addEventListener("keydown", onKeyDown, true);
+    document.addEventListener("focusin", mantenerFoco);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown, true);
+      document.removeEventListener("focusin", mantenerFoco);
+      panelesAbiertos.splice(panelesAbiertos.indexOf(panel), 1);
+      if (focoAnterior?.isConnected) focoAnterior.focus({ preventScroll: true });
+    };
+  }, [abierto]);
 
   return createPortal(
     <>

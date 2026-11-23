@@ -126,6 +126,8 @@ class EstadoAlarma(Base):
         Integer, ForeignKey("dspstv.id_dspstv", ondelete="CASCADE"), primary_key=True
     )
     en_alarma = Column(Boolean, nullable=False, server_default=text("false"))
+    inicio_alarma = Column(TIMESTAMP(timezone=True), nullable=True)
+    pendiente_evaluacion = Column(Boolean, nullable=False, server_default=text("false"))
     ultima_fecha = Column(TIMESTAMP(timezone=True), nullable=False)
 
 

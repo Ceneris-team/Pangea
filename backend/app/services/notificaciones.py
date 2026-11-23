@@ -151,6 +151,7 @@ def evaluar_alarmas(db, *, lecturas, dispositivo, id_sd):
                 )
                 db.add(estado)
             if activa and not estado.en_alarma:
+                estado.inicio_alarma = fecha
                 contexto = {
                     "alarma": alarma.nmbr,
                     "ubicacion": ubicacion.nmbr,
@@ -174,4 +175,7 @@ def evaluar_alarmas(db, *, lecturas, dispositivo, id_sd):
                         clave=f"alarma:{alarma.id_alrm}:{dispositivo.id_dspstv}:{fecha.isoformat()}:{correo.lower()}",
                     )
             estado.en_alarma = activa
+            if not activa:
+                estado.inicio_alarma = None
+            estado.pendiente_evaluacion = False
             estado.ultima_fecha = fecha

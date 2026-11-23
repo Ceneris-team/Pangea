@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ApiError, apiFetch } from "../services/api";
+import { useAuth } from "../hooks/useAuth";
+import { formatearFechaHoraEnZona } from "../utils/fechas";
 
 interface Destinatario { id: number; correo: string }
 interface Intento { numero: number; fecha: string; resultado: string; error: string | null }
@@ -13,13 +15,15 @@ interface Props {
   alarma: { id_alrm: number; nmbr: string; estd: string };
   onClose: () => void;
   onUpdate: () => void;
+  puedeEditar: boolean;
 }
 
 const campo = "rounded-lg border border-black/20 dark:border-white/20 bg-white dark:bg-gray-900 px-3 py-2 text-sm min-w-0";
 const boton = "rounded-lg border border-black/20 dark:border-white/20 px-3 py-2 text-sm disabled:opacity-40";
-const fecha = (valor: string) => new Date(valor).toLocaleString("es-PE");
 
-export default function NotificacionesAlarma({ alarma, onClose, onUpdate }: Props) {
+export default function NotificacionesAlarma({ alarma, onClose, onUpdate, puedeEditar }: Props) {
+  const { zonaHoraria } = useAuth();
+  const fecha = (valor: string) => formatearFechaHoraEnZona(valor, zonaHoraria);
   const dialogo = useRef<HTMLDialogElement>(null);
   const [destinatarios, setDestinatarios] = useState<Destinatario[]>([]);
   const [historial, setHistorial] = useState<Historial>({ total: 0, items: [] });
@@ -48,7 +52,7 @@ export default function NotificacionesAlarma({ alarma, onClose, onUpdate }: Prop
         params: { alarma_id: alarma.id_alrm, estado: estado || undefined, pagina, por_pagina: 10 },
       }),
     ]).then(([lista, envios]) => {
-      if (!cancelado) { setDestinatarios(lista.items); setHistorial(envios); }
+      if (!cancelado) { setDestinatarios(lista.items); setHistorial(envios); setError(""); }
     }).catch(err => {
       if (!cancelado) setError(err instanceof ApiError ? err.message : "No se pudo cargar la información");
     }).finally(() => { if (!cancelado) setCargando(false); });
@@ -76,34 +80,35 @@ export default function NotificacionesAlarma({ alarma, onClose, onUpdate }: Prop
       <div className="p-5 sm:p-7 space-y-6">
         <header className="flex justify-between gap-4 items-start">
           <div><h2 id="notificaciones-titulo" className="text-xl font-bold">Notificaciones de {alarma.nmbr}</h2>
-            <p className="text-sm mt-1">Estado de la alarma: {alarma.estd}</p></div>
+            <p className="text-sm mt-1">Regla: {alarma.estd === "Activa" ? "habilitada" : "pausada"}</p></div>
           <button type="button" onClick={onClose} className={boton} disabled={ocupado}>Cerrar</button>
         </header>
         {error && <p role="alert" className="text-red-600 dark:text-red-400">{error}</p>}
         <section aria-labelledby="destinatarios-titulo" className="space-y-3">
           <h3 id="destinatarios-titulo" className="font-semibold">1. Correos que recibirán la alarma</h3>
           <p className="text-sm">Se enviará un aviso a cada correo cuando la condición se active. Para recibir otro, primero debe volver a la normalidad.</p>
-          <form onSubmit={agregar} className="flex flex-col sm:flex-row gap-2">
+          {puedeEditar && <form onSubmit={agregar} className="flex flex-col sm:flex-row gap-2">
             <label className="sr-only" htmlFor="destinatario-correo">Correo del destinatario</label>
             <input id="destinatario-correo" type="email" required maxLength={150} placeholder="operaciones@empresa.com"
               value={correo} onChange={e => setCorreo(e.target.value)} className={`${campo} flex-1`} disabled={ocupado} />
             <button className={boton} disabled={ocupado || destinatarios.length >= 100}>Añadir correo</button>
-          </form>
-          {!cargando && destinatarios.length === 0 && <p className="text-sm">Aún no hay destinatarios. Añade al menos uno para recibir avisos.</p>}
+          </form>}
+          {!cargando && destinatarios.length === 0 && <p className="text-sm">Aún no hay destinatarios. {puedeEditar ? "Añade al menos uno para recibir avisos." : "Solicita su configuración a una persona con permiso de edición."}</p>}
           <ul className="space-y-2">{destinatarios.map(d => (
             <li key={d.id} className="flex items-center justify-between gap-3 border-b border-black/10 dark:border-white/10 pb-2">
               <span className="break-all">{d.correo}</span>
-              <button className={boton} disabled={ocupado} aria-label={`Quitar ${d.correo}`}
-                onClick={() => void operar(() => apiFetch(`/alarmas/${alarma.id_alrm}/destinatarios/${d.id}`, { method: "DELETE" }))}>Quitar</button>
+              {puedeEditar && <button className={boton} disabled={ocupado} aria-label={`Quitar ${d.correo}`}
+                onClick={() => void operar(() => apiFetch(`/alarmas/${alarma.id_alrm}/destinatarios/${d.id}`, { method: "DELETE" }))}>Quitar</button>}
             </li>
           ))}</ul>
-          <button className={boton} disabled={ocupado} onClick={() => void operar(async () => {
+          {puedeEditar && <button className={boton} disabled={ocupado} onClick={() => void operar(async () => {
             await apiFetch(`/alarmas/${alarma.id_alrm}`, { method: "PATCH", body: { estado: alarma.estd === "Activa" ? "Inactiva" : "Activa" } });
             onUpdate();
-          })}>{alarma.estd === "Activa" ? "Pausar alarma" : "Activar alarma"}</button>
+          })}>{alarma.estd === "Activa" ? "Pausar alarma" : "Activar alarma"}</button>}
         </section>
         <section aria-labelledby="historial-titulo" className="space-y-3">
           <h3 id="historial-titulo" className="font-semibold">2. Historial de notificaciones</h3>
+          <p className="text-xs text-gray-600 dark:text-gray-400">Horarios en {zonaHoraria}</p>
           <p className="text-sm">«Enviado» significa que el proveedor aceptó el correo; la llegada a la bandeja de entrada se verifica con el destinatario.</p>
           <div className="flex flex-wrap gap-2">
             <label htmlFor="estado-envio" className="self-center text-sm">Resultado</label>

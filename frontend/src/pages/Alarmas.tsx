@@ -5,6 +5,8 @@ import { useAuth } from "../hooks/useAuth";
 import Sidebar from "../components/layout/Sidebar";
 import Topbar from "../components/layout/Topbar";
 import NotificacionesAlarma from "../components/NotificacionesAlarma";
+import EditarAlarma from "../components/EditarAlarma";
+import EstadoLecturasAlarma, { type EstadoDispositivoAlarma } from "../components/EstadoLecturasAlarma";
 
 interface AlarmaListItem {
   id_alrm: number;
@@ -12,6 +14,7 @@ interface AlarmaListItem {
   parametro_nombre: string;
   condicion: string | null;
   estd: string;
+  dispositivos?: EstadoDispositivoAlarma[];
 }
 
 interface ListadoPaginado {
@@ -33,7 +36,7 @@ function useDebouncedValue<T>(value: T, delayMs: number): T {
 }
 
 export default function Alarmas() {
-  const { nombreCompleto, rol, logout } = useAuth();
+  const { nombreCompleto, rol, logout, puedeEditarAlarmas } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -60,11 +63,19 @@ export default function Alarmas() {
   const [estado, setEstado] = useState("");
   const [pagina, setPagina] = useState(1);
 
-  const [data, setData] = useState<ListadoPaginado | null>(null);
+  const consulta = JSON.stringify([busqueda, estado, pagina]);
+  const [resultado, setResultado] = useState<{ consulta: string; datos: ListadoPaginado } | null>(null);
+  const data = resultado?.consulta === consulta ? resultado.datos : null;
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [alarmaSeleccionada, setAlarmaSeleccionada] = useState<AlarmaListItem | null>(null);
   const [version, setVersion] = useState(0);
+  const [editando, setEditando] = useState<number | null>(null);
+
+  useEffect(() => {
+    const intervalo = window.setInterval(() => setVersion(v => v + 1), 30_000);
+    return () => window.clearInterval(intervalo);
+  }, []);
 
   // Los setState van en microtarea y no síncronos dentro del efecto (regla
   // react-hooks/set-state-in-effect de dev), igual que en ColaIngesta.tsx.
@@ -89,7 +100,7 @@ export default function Alarmas() {
       },
     })
       .then((res) => {
-        if (!cancelado) setData(res);
+        if (!cancelado) setResultado({ consulta, datos: res });
       })
       .catch((err) => {
         if (cancelado) return;
@@ -104,7 +115,7 @@ export default function Alarmas() {
     };
   }
 
-  useEffect(cargarAlarmas, [busqueda, estado, pagina, version]);
+  useEffect(cargarAlarmas, [busqueda, estado, pagina, version, consulta]);
 
   const totalPaginas = data ? Math.max(1, Math.ceil(data.total / data.por_pagina)) : 1;
   const inicioRango = data ? (data.pagina - 1) * data.por_pagina + 1 : 0;
@@ -145,7 +156,9 @@ export default function Alarmas() {
                 </p>
               </div>
 
-              <button
+              <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={() => setVersion(v => v + 1)} disabled={loading} className="rounded-xl border border-black/20 px-4 py-2 text-sm text-gray-700 dark:border-white/20 dark:text-gray-200 disabled:opacity-50">Actualizar</button>
+              {puedeEditarAlarmas && <button
                 onClick={() => navigate("/alarmas/nueva")}
                 className="inline-flex items-center px-4 py-2.5 text-sm font-semibold text-[#5a7000] dark:text-[#ccff00] bg-[#ccff00]/10 hover:bg-[#ccff00]/20 border border-[#ccff00]/30 rounded-xl transition-colors"
               >
@@ -161,7 +174,8 @@ export default function Alarmas() {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
                 </svg>
                 Crear alarma
-              </button>
+              </button>}
+              </div>
             </header>
 
             {mensajeExito && (
@@ -223,21 +237,23 @@ export default function Alarmas() {
               )}
 
               {/* Tabla */}
+              {loading && data && <p role="status" className="px-5 py-2 text-xs text-gray-600 dark:text-gray-300">Actualizando alarmas…</p>}
               <div className="overflow-x-auto">
-                <table className="w-full text-sm text-left text-gray-600 dark:text-gray-300">
+                <table className="tabla-alarmas w-full text-sm text-left text-gray-600 dark:text-gray-300">
                   <thead className="text-xs text-gray-600 dark:text-gray-300 uppercase bg-black/5 dark:bg-white/5 border-b border-black/10 dark:border-white/10">
                     <tr>
                       <th className="px-6 py-4 font-bold tracking-wider">Nombre</th>
                       <th className="px-6 py-4 font-bold tracking-wider">Parámetro</th>
                       <th className="px-6 py-4 font-bold tracking-wider">Condición</th>
-                      <th className="px-6 py-4 font-bold tracking-wider">Estado</th>
+                      <th className="px-6 py-4 font-bold tracking-wider">Regla</th>
+                      <th className="px-6 py-4 font-bold tracking-wider">Estado de lecturas</th>
                       <th className="px-6 py-4 font-bold tracking-wider text-right">Acciones</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {loading && (
+                    {loading && !data && (
                       <tr>
-                        <td colSpan={5} className="px-6 py-8 text-center text-gray-600 dark:text-gray-300">
+                        <td colSpan={6} className="px-6 py-8 text-center text-gray-600 dark:text-gray-300">
                           <div className="flex justify-center items-center gap-2">
                             <div className="w-4 h-4 rounded-full bg-[#ccff00] animate-bounce"></div>
                             <span>Cargando datos...</span>
@@ -248,7 +264,7 @@ export default function Alarmas() {
 
                     {sinAlarmasConfiguradas && (
                       <tr>
-                        <td colSpan={5} className="px-6 py-8 text-center text-gray-600 dark:text-gray-300">
+                        <td colSpan={6} className="px-6 py-8 text-center text-gray-600 dark:text-gray-300">
                           Aún no tienes alarmas configuradas.
                         </td>
                       </tr>
@@ -256,22 +272,21 @@ export default function Alarmas() {
 
                     {sinResultadosPorFiltro && (
                       <tr>
-                        <td colSpan={5} className="px-6 py-8 text-center text-gray-600 dark:text-gray-300">
+                        <td colSpan={6} className="px-6 py-8 text-center text-gray-600 dark:text-gray-300">
                           No se encontraron alarmas con ese criterio.
                         </td>
                       </tr>
                     )}
 
-                    {!loading &&
-                      data?.items.map((a) => (
+                    {data?.items.map((a) => (
                         <tr
                           key={a.id_alrm}
                           className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm border-b border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
                         >
-                          <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">{a.nmbr}</td>
-                          <td className="px-6 py-4">{a.parametro_nombre}</td>
-                          <td className="px-6 py-4">{a.condicion ?? "Sin condición configurada"}</td>
-                          <td className="px-6 py-4">
+                          <td data-label="Nombre" className="px-6 py-4 font-medium text-gray-900 dark:text-white">{a.nmbr}</td>
+                          <td data-label="Parámetro" className="px-6 py-4">{a.parametro_nombre}</td>
+                          <td data-label="Condición" className="px-6 py-4">{a.condicion ?? "Sin condición configurada"}</td>
+                          <td data-label="Regla" className="px-6 py-4">
                             <span
                               className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold border ${
                                 a.estd === "Activa"
@@ -282,11 +297,13 @@ export default function Alarmas() {
                               {a.estd === "Activa" && (
                                 <span className="w-1.5 h-1.5 mr-1.5 rounded-full bg-[#ccff00]"></span>
                               )}
-                              {a.estd}
+                              {a.estd === "Activa" ? "Habilitada" : "Pausada"}
                             </span>
                           </td>
+                          <td data-label="Estado de lecturas" className="px-6 py-4"><EstadoLecturasAlarma regla={a.estd} dispositivos={a.dispositivos} /></td>
                           {/* HT-14: destinatarios e historial de esta alarma. */}
-                          <td className="px-6 py-4 text-right whitespace-nowrap">
+                          <td data-label="Acciones" className="px-6 py-4 text-right whitespace-nowrap">
+                            {puedeEditarAlarmas && <button type="button" onClick={() => setEditando(a.id_alrm)} className="mr-2 rounded-lg border border-black/20 px-3 py-1.5 text-sm dark:border-white/20">Editar condiciones</button>}
                             <button
                               onClick={() => setAlarmaSeleccionada(a)}
                               className="inline-flex items-center justify-center px-3 py-1.5 text-sm font-medium border border-black/20 dark:border-white/20 rounded-lg hover:bg-black/5 dark:hover:bg-white/5"
@@ -302,7 +319,7 @@ export default function Alarmas() {
 
               {/* Paginación */}
               {data && data.total > 0 && (
-                <div className="p-5 border-t border-black/10 dark:border-white/10 flex items-center justify-between">
+                <div className="p-5 border-t border-black/10 dark:border-white/10 flex flex-wrap gap-3 items-center justify-between">
                   <span className="text-sm text-gray-600 dark:text-gray-300">
                     Mostrando <span className="font-semibold text-gray-900 dark:text-white">{inicioRango}</span> a{" "}
                     <span className="font-semibold text-gray-900 dark:text-white">{finRango}</span> de{" "}
@@ -327,8 +344,10 @@ export default function Alarmas() {
                 </div>
               )}
             </div>
+            <p className="mt-3 text-xs text-gray-600 dark:text-gray-400">El estado corresponde a la última lectura evaluada. Consulta su fecha para comprobar la antigüedad. Se actualiza cada 30 segundos.</p>
+            {editando !== null && <EditarAlarma id={editando} onCerrar={() => setEditando(null)} onGuardar={() => { setEditando(null); setVersion(v => v + 1); setMensajeExito("Condiciones guardadas. Se evaluarán con la siguiente lectura nueva."); }} />}
             {alarmaSeleccionada && <NotificacionesAlarma key={alarmaSeleccionada.id_alrm}
-              alarma={alarmaSeleccionada} onClose={() => setAlarmaSeleccionada(null)}
+              alarma={alarmaSeleccionada} puedeEditar={puedeEditarAlarmas} onClose={() => setAlarmaSeleccionada(null)}
               onUpdate={() => {
                 setAlarmaSeleccionada(a => a ? { ...a, estd: a.estd === "Activa" ? "Inactiva" : "Activa" } : null);
                 setVersion(v => v + 1);

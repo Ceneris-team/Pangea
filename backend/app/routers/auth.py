@@ -289,6 +289,8 @@ def mi_perfil(
     if usuario is None:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
+    from app.security.entorno import permiso_del_entorno
+    from app.security.permisos import EDICION, tiene_permiso
     from app.services.contratos import exigir_operacion
 
     operacion_habilitada = True
@@ -297,7 +299,13 @@ def mi_perfil(
             exigir_operacion(db, usuario_token["cliente_id"])
         except HTTPException:
             operacion_habilitada = False
+    permiso_alarmas = permiso_del_entorno(db, usuario_token, "Alarmas", EDICION)
+    if permiso_alarmas is None:
+        permiso_alarmas = tiene_permiso(
+            db, usuario.id_usr, usuario_token.get("sede_id"), "Alarmas", EDICION
+        )
     return {
+        "puede_editar_alarmas": operacion_habilitada and permiso_alarmas,
         "nombre_completo": usuario.nmbr_cmplt,
         "correo": usuario.crr,
         "rol": usuario.rol.nmbr,

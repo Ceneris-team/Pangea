@@ -13,6 +13,8 @@ interface SidebarProps {
   onLogout: () => void;
   activo: SeccionActiva;
   rol: string | null;
+  movil?: boolean;
+  onNavegar?: () => void;
 }
 
 // El sidebar cambia de paleta completa según el tema, con su propio logo
@@ -153,7 +155,7 @@ const iconos = {
 
 type Entrada = { ruta: string; seccion: SeccionActiva; titulo: string; icono: keyof typeof iconos };
 
-export default function Sidebar({ onLogout, activo, rol }: SidebarProps) {
+export default function Sidebar({ onLogout, activo, rol, movil = false, onNavegar }: SidebarProps) {
   const { puedeOperar, rolEmpresa } = useAuth();
   const { pathname } = useLocation();
   const ceneris = esCeneris(rol);
@@ -193,15 +195,20 @@ export default function Sidebar({ onLogout, activo, rol }: SidebarProps) {
       { ruta: "/cola-ingesta", seccion: "cola-ingesta" as const, titulo: "Cola de ingesta", icono: "panel" as const },
     ] }] : []),
   ];
+  const seccionActiva = movil
+    ? [...principales, ...grupos.flatMap(g => g.entradas)]
+      .filter(item => pathname === item.ruta || pathname.startsWith(item.ruta + "/"))
+      .sort((a, b) => b.ruta.length - a.ruta.length)[0]?.seccion
+    : activo;
   function entrada(item: Entrada) {
     return <ItemMenu key={item.ruta} to={item.ruta}
-      activo={activo === item.seccion || (item.seccion === "planes" && activo === "suscripciones")}
+      activo={seccionActiva === item.seccion || (item.seccion === "planes" && seccionActiva === "suscripciones")}
       icono={<path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" d={iconos[item.icono]} />}>
       {item.titulo}
     </ItemMenu>;
   }
   return <MotionConfig reducedMotion="user">
-    <aside className="relative isolate flex-shrink-0 w-64 bg-gray-50 dark:bg-[#0a0e1a] border-r border-gray-200 dark:border-white/10 hidden md:flex flex-col transition-colors duration-300">
+    <aside onClick={e => { if ((e.target as HTMLElement).closest("a")) onNavegar?.(); }} className={`relative isolate flex-shrink-0 bg-gray-50 dark:bg-[#0a0e1a] border-r border-gray-200 dark:border-white/10 flex-col transition-colors duration-300 ${movil ? "flex h-full w-full" : "hidden md:flex w-64"}`}>
       <FranjaActiva />
       <Link to={ceneris ? (rol === ROLES.ADMINISTRADOR ? "/panel-admin" : "/clientes") : panelCliente}
         className="min-h-20 flex items-center gap-2.5 px-5 border-b border-gray-200 dark:border-white/10">
