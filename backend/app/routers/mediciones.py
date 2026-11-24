@@ -28,8 +28,6 @@ from app.database import get_db
 from app.models import (
     Dispositivo,
     EventoTexto,
-    MapeoColumna,
-    MapeoFormato,
     Parametro,
     Telemetria,
     Ubicacion,
@@ -53,6 +51,13 @@ from app.services.cache.downsampling import (
     MAXIMO_PUNTOS_DEFECTO,
     muestrear,
     rango_es_amplio,
+)
+from app.services.filtros_mediciones import (
+    admite_rango,
+    aplicar_condiciones,
+    fuentes_parametros,
+    leer_condiciones,
+    validar_contexto,
 )
 
 router = APIRouter(prefix="/mediciones", tags=["Mediciones"])
@@ -109,18 +114,24 @@ def listar_parametros_disponibles(
     # DEC-09: el mapeo ya no cuelga de dspstv.id_mp (columna eliminada),
     # sino al revés: mp_frmt.id_dspstv apunta al dispositivo. El join pasa
     # por mp_frmt para llegar del parámetro al dispositivo.
-    parametros = (
-        db.query(Parametro)
-        .join(MapeoColumna, MapeoColumna.id_prmtr == Parametro.id_prmtr)
-        .join(MapeoFormato, MapeoFormato.id_mp == MapeoColumna.id_mp)
-        .join(Dispositivo, Dispositivo.id_dspstv == MapeoFormato.id_dspstv)
-        .filter(Dispositivo.id_ubccn.in_(ids_ubicaciones))
-        .distinct()
-        .order_by(Parametro.nmbr)
-        .all()
-    )
-    items = [ParametroListItem.model_validate(p) for p in parametros]
-    return {"items": items}
+    equipos = db.query(Dispositivo.id_dspstv).filter(Dispositivo.id_ubccn.in_(ids_ubicaciones))
+    items = {}
+    for parametro, equipo, proyecto, visualizacion in fuentes_parametros(db, equipos):
+        item = items.setdefault(
+            parametro.id_prmtr,
+            {
+                **ParametroListItem.model_validate(parametro).model_dump(),
+                "fuentes": [],
+            },
+        )
+        fuente = {
+            "dispositivo_id": equipo,
+            "ubicacion_id": proyecto,
+            "admite_rango": admite_rango(parametro, visualizacion),
+        }
+        if fuente not in item["fuentes"]:
+            item["fuentes"].append(fuente)
+    return {"items": list(items.values())}
 
 
 def _enriquecer_items(db: Session, candidatos: list[tuple]) -> list[MedicionListItem]:
@@ -237,6 +248,9 @@ def listar_mediciones(
     # date_bin, mismo criterio que fecha_inicio/fecha_fin (ver comentario
     # en _query_base): así el planner lo resuelve sin traer filas de más.
     frecuencia_muestreo: int | None = Query(default=None, ge=1),
+    condiciones: str | None = Query(
+        default=None, max_length=30000, description="Condiciones por parámetro en JSON"
+    ),
     db: Session = Depends(get_db),
     # "Mediciones" no es un módulo válido en prms_usr_sd (HT-03: solo
     # Usuarios/Ubicaciones/Dispositivos/Ingesta/Tableros/Alarmas/Comercial).
@@ -261,6 +275,19 @@ def listar_mediciones(
     impide que la respuesta de una sede se sirva a otra (CA4).
     """
     ids_ubicaciones_permitidas = set(_ubicaciones_permitidas(db, usuario))
+    reglas = leer_condiciones(condiciones)
+    if reglas and any(v is not None for v in (valor_min, valor_max, frecuencia_muestreo)):
+        raise HTTPException(422, "Usa condiciones por parámetro sin límites globales ni muestreo")
+    if reglas:
+        sin_muestreo = True
+    equipos_contexto = db.query(Dispositivo.id_dspstv).filter(
+        Dispositivo.id_ubccn.in_(ids_ubicaciones_permitidas)
+    )
+    if ubicacion_ids:
+        equipos_contexto = equipos_contexto.filter(Dispositivo.id_ubccn.in_(ubicacion_ids))
+    if dispositivo_ids:
+        equipos_contexto = equipos_contexto.filter(Dispositivo.id_dspstv.in_(dispositivo_ids))
+    validar_contexto(db, reglas, equipos_contexto, parametro_ids)
 
     # HT-10 CA4: el ámbito entra en la clave, así que dos usuarios con
     # visibilidad distinta nunca comparten entrada aunque pidan la misma
@@ -282,6 +309,9 @@ def listar_mediciones(
         valor_max=valor_max,
         frecuencia_muestreo=frecuencia_muestreo,
         cursor=cursor,
+        condiciones=[
+            r.model_dump(mode="json") for r in sorted(reglas, key=lambda r: r.parametro_id)
+        ],
     )
     cacheado = cache.obtener(clave_cache)
     if cacheado is not None:
@@ -347,6 +377,7 @@ def listar_mediciones(
                 query = query.filter(modelo.vlr >= valor_min)
             if valor_max is not None:
                 query = query.filter(modelo.vlr <= valor_max)
+        query = aplicar_condiciones(query, modelo, reglas)
         if frecuencia_muestreo is not None:
             # HU32: "una lectura cada N minutos", no el downsampling de
             # HT-10 (services/cache/downsampling.py) -ver docstring del

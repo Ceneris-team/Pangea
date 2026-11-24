@@ -4,6 +4,8 @@ from typing import Literal
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
 
+from app.services.filtros_mediciones import Condiciones, validar_unicas
+
 
 class ExportacionCrear(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -17,9 +19,15 @@ class ExportacionCrear(BaseModel):
     valor_min: Decimal | None = None
     valor_max: Decimal | None = None
     frecuencia_muestreo: int | None = Field(default=None, ge=1, le=525600)
+    condiciones: Condiciones = Field(default_factory=list)
 
     @model_validator(mode="after")
     def validar(self):
+        validar_unicas(self.condiciones)
+        if self.condiciones and any(
+            v is not None for v in (self.valor_min, self.valor_max, self.frecuencia_muestreo)
+        ):
+            raise ValueError("Usa condiciones por parámetro sin límites globales ni muestreo")
         if self.fecha_fin <= self.fecha_inicio:
             raise ValueError("La fecha final debe ser posterior a la inicial")
         if (

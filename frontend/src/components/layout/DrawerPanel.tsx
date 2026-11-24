@@ -103,9 +103,8 @@ export default function DrawerPanel({
   return createPortal(
     <>
       <div
-        className={`fixed inset-0 bg-black/30 backdrop-blur-sm z-40 transition-opacity ${
-          abierto ? "opacity-100" : "opacity-0 pointer-events-none"
-        }`}
+        className="ui-panel-fondo fixed inset-0 bg-black/30 z-40"
+        data-abierto={abierto}
         onClick={onCerrar}
         aria-hidden="true"
       />
@@ -117,9 +116,8 @@ export default function DrawerPanel({
         aria-hidden={!abierto}
         inert={!abierto}
         tabIndex={-1}
-        className={`fixed top-0 right-0 h-full w-full ${ANCHOS[ancho]} bg-white dark:bg-[#1a202c] shadow-2xl z-50 transition-transform duration-300 flex flex-col ${panelClassName} ${
-          abierto ? "translate-x-0" : "translate-x-full"
-        }`}
+        data-abierto={abierto}
+        className={`ui-panel-lateral fixed top-0 right-0 h-full w-full ${ANCHOS[ancho]} bg-white dark:bg-[#1a202c] shadow-2xl z-50 flex flex-col ${panelClassName}`}
       >
         <div className="flex items-center justify-between p-5 border-b border-black/10 dark:border-white/10 shrink-0">
           <h2 className="text-sm font-bold text-gray-900 dark:text-white">{titulo}</h2>
@@ -135,7 +133,7 @@ export default function DrawerPanel({
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-5">{children}</div>
+        <div className="ui-panel-scroll flex-1 overflow-y-auto p-5">{children}</div>
 
         {pie && <div className="p-5 border-t border-black/10 dark:border-white/10 shrink-0">{pie}</div>}
       </div>

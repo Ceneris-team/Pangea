@@ -488,7 +488,9 @@ class TestEstadoOperativo:
         assert client.get(f"/alarmas/{id_alarma}").status_code == 200
         assert client.patch(f"/alarmas/{id_alarma}", json={"estado": "Inactiva"}).status_code == 403
 
-    def test_no_expone_detalle_de_otro_usuario(self, client, escenario, db_session, fabrica):
+    def test_otro_lector_del_proyecto_puede_consultar_detalle(
+        self, client, escenario, db_session, fabrica
+    ):
         id_alarma = client.post("/alarmas", json=cuerpo_valido(escenario)).json()["alarma"][
             "id_alrm"
         ]
@@ -498,7 +500,8 @@ class TestEstadoOperativo:
         app.dependency_overrides[get_current_user] = lambda: usuario_jwt(
             otro, escenario["rol"].nmbr, sede_id=escenario["sede"].id_sd
         )
-        assert client.get(f"/alarmas/{id_alarma}").status_code == 404
+        assert client.get(f"/alarmas/{id_alarma}").status_code == 200
+        assert client.patch(f"/alarmas/{id_alarma}", json={"estado": "Inactiva"}).status_code == 403
 
 
 class TestCA4Cancelar:
@@ -545,10 +548,7 @@ class TestAislamientoYPermisos:
     def test_la_alarma_creada_queda_a_nombre_de_quien_la_crea(
         self, client, db_session, fabrica, escenario
     ):
-        """El listado de HU27 filtra por dueño ("cada usuario solo ve y
-        gestiona sus propias alarmas"), así que el alta tiene que dejar
-        id_usr apuntando a quien guardó: otro usuario, aunque tenga la
-        misma ubicación asignada, no ve esa alarma."""
+        """La autoría se conserva aunque la regla sea compartida en el proyecto."""
         client.post("/alarmas", json=cuerpo_valido(escenario))
 
         rol = escenario["rol"]
@@ -560,7 +560,7 @@ class TestAislamientoYPermisos:
             otro, rol.nmbr, sede_id=escenario["sede"].id_sd
         )
 
-        assert client.get("/alarmas").json()["total"] == 0
+        assert client.get("/alarmas").json()["total"] == 1
 
         alarma = db_session.query(Alarma).filter(Alarma.nmbr == "Crecida del río").first()
         assert alarma.id_usr == escenario["usuario"].id_usr
@@ -601,7 +601,7 @@ class TestNotificacionesHT14:
                 == 422
             )
 
-    def test_no_gestiona_destinatarios_de_otro_usuario(
+    def test_otro_editor_del_proyecto_gestiona_destinatarios(
         self, client, escenario, db_session, fabrica
     ):
         id_alarma = self.crear(client, escenario)
@@ -611,16 +611,16 @@ class TestNotificacionesHT14:
         app.dependency_overrides[get_current_user] = lambda: usuario_jwt(
             otro, escenario["rol"].nmbr, sede_id=escenario["sede"].id_sd
         )
-        assert client.get(f"/alarmas/{id_alarma}/destinatarios").status_code == 404
+        assert client.get(f"/alarmas/{id_alarma}/destinatarios").status_code == 200
         assert (
             client.post(
                 f"/alarmas/{id_alarma}/destinatarios", json={"correo": "uno@example.com"}
             ).status_code
-            == 404
+            == 201
         )
         assert (
             client.get("/alarmas/notificaciones", params={"alarma_id": id_alarma}).status_code
-            == 404
+            == 200
         )
 
     def test_puede_consultar_historial_con_intentos_y_filtros(self, client, escenario, db_session):
@@ -785,7 +785,7 @@ def test_sin_alarmas_devuelve_lista_vacia(client, escenario):
 # --- PP-223: cada usuario solo ve las suyas ---------------------------------------
 
 
-def test_cada_usuario_solo_ve_sus_alarmas(client, db_session, fabrica, escenario):
+def test_los_miembros_del_proyecto_comparten_alarmas(client, db_session, fabrica, escenario):
     crear_alarma(db_session, escenario, "Mía")
     rol = escenario["rol"]
     otro = fabrica.usuario(rol=rol)
@@ -793,12 +793,12 @@ def test_cada_usuario_solo_ve_sus_alarmas(client, db_session, fabrica, escenario
     asignar_ubicacion(db_session, otro, escenario["ubicacion"])
     crear_alarma(db_session, escenario, "Del otro usuario", usuario=otro)
 
-    assert nombres(client.get("/alarmas")) == ["Mía"]
+    assert nombres(client.get("/alarmas")) == ["Del otro usuario", "Mía"]
 
     app.dependency_overrides[get_current_user] = lambda: usuario_jwt(
         otro, rol.nmbr, sede_id=escenario["sede"].id_sd
     )
-    assert nombres(client.get("/alarmas")) == ["Del otro usuario"]
+    assert nombres(client.get("/alarmas")) == ["Del otro usuario", "Mía"]
 
 
 # --- PP-224: filtro por estado -------------------------------------------------------

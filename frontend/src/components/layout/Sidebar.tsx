@@ -1,5 +1,5 @@
 import { useAuth } from "../../hooks/useAuth";
-import { motion, MotionConfig } from "framer-motion";
+import { useLayoutEffect, useRef } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { esAdministracion, esCeneris } from "../../config/espacios";
 import { volverAdministracion } from "../../services/api";
@@ -7,7 +7,7 @@ import pangeaIconLight from "../../assets/pangea-icon-light.png";
 import pangeaIconDark from "../../assets/pangea-icon-dark.png";
 import { ROLES, rutaPorRol } from "../../config/roles";
 
-export type SeccionActiva = "panel" | "usuarios" | "ubicaciones" | "dispositivos" | "conexiones-ftp" | "dashboard" | "configuracion" | "consulta-datos"| "mapeos" | "parametros" | "cola-ingesta" | "graficos" | "mapa-estaciones" | "mapa-ubicaciones" | "paneles" | "mi-perfil" | "planes" | "suscripciones" | "empresas" | "clientes" | "alarmas";
+export type SeccionActiva = "panel" | "usuarios" | "ubicaciones" | "dispositivos" | "conexiones-ftp" | "dashboard" | "configuracion" | "consulta-datos"| "mapeos" | "parametros" | "parametros-calculados" | "cola-ingesta" | "graficos" | "mapa-estaciones" | "mapa-ubicaciones" | "paneles" | "mi-perfil" | "planes" | "suscripciones" | "empresas" | "clientes" | "alarmas";
 
 interface SidebarProps {
   onLogout: () => void;
@@ -32,11 +32,8 @@ interface SidebarProps {
 // fija (ver FranjaActiva) pegada al borde izquierdo del sidebar -esa
 // franja es lo que marca "activo" con color de acento-.
 //
-// La cápsula (CapsulaActiva, más abajo) se monta y desmonta con Framer
-// Motion: cada vez que un item pasa a activo, React la crea de cero
-// adentro de ESE link, y Motion anima su aparición con un fundido de
-// opacidad -sin medir nada a mano con getBoundingClientRect ni
-// ResizeObserver, que es como estaba antes de esta migración-.
+// La cápsula se anima con CSS al activarse. No necesita medir el menú
+// con getBoundingClientRect ni observar cambios durante el scroll.
 // El link tiene la MISMA geometría activo o no (mismo ml-4, mismo
 // padding): solo cambia el color. Si el activo se ensanchara -como cuando
 // pintaba su propio fondo hasta el borde-, al seleccionarlo cambiaría el
@@ -85,13 +82,12 @@ const tituloGrupo =
 
 /** Espaciado entre grupos. El primero no lo lleva (va pegado al logo). */
 const grupo = "mt-5 first:mt-0";
+const posicionesMenu = new Map<string, number>();
 
 /** La cápsula clara del item activo + sus dos mordidas. Vive DENTRO del
  *  link activo (position: absolute, inset-0) y no en un elemento
  *  compartido en el <nav>: como cada item la vuelve a montar de cero al
- *  activarse, Framer Motion la anima con `initial`/`animate`. Es solo un
- *  fundido de opacidad -sin desplazamiento- para que la entrada se sienta
- *  ligera al clickear en vez de una transición vistosa.
+ *  activarse, CSS combina un fundido corto con una entrada desde el borde.
  *  z-[-1] la manda detrás del ícono y el texto del propio link. */
 function CapsulaActiva() {
   return (
@@ -101,16 +97,13 @@ function CapsulaActiva() {
     // llegue justo al borde izquierdo (donde está FranjaActiva) y se funda
     // con él -sin él, quedaba corta y el hueco se notaba en items con
     // label de dos líneas-.
-    <motion.span
+    <span
       aria-hidden="true"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.15 }}
-      className={`absolute top-0 bottom-0 right-0 left-[-1rem] z-[-1] rounded-r-lg ${capsulaColor}`}
+      className={`ui-menu-activo absolute top-0 bottom-0 right-0 left-[-1rem] z-[-1] rounded-r-lg ${capsulaColor}`}
     >
       <span className={notchArriba} />
       <span className={notchAbajo} />
-    </motion.span>
+    </span>
   );
 }
 
@@ -119,7 +112,7 @@ function CapsulaActiva() {
  *  estar activo (ver su comentario). */
 function ItemMenu({ to, activo, icono, children }: { to: string; activo: boolean; icono: React.ReactNode; children: React.ReactNode }) {
   return (
-    <Link to={to} className={linkBase + " " + (activo ? linkActivo : linkInactivo)}>
+    <Link to={to} aria-current={activo ? "page" : undefined} className={"ui-menu-enlace " + linkBase + " " + (activo ? linkActivo : linkInactivo)}>
       {activo && <CapsulaActiva />}
       <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         {icono}
@@ -160,6 +153,14 @@ export default function Sidebar({ onLogout, activo, rol, movil = false, onNavega
   const { pathname } = useLocation();
   const ceneris = esCeneris(rol);
   const administracion = ceneris && esAdministracion(pathname);
+  const menuRef = useRef<HTMLElement>(null);
+  const claveMenu = `${rol}:${administracion ? "administracion" : "operacion"}:${movil}`;
+  useLayoutEffect(() => {
+    const menu = menuRef.current;
+    if (!menu) return;
+    menu.scrollTop = posicionesMenu.get(claveMenu) ?? 0;
+    return () => { posicionesMenu.set(claveMenu, menu.scrollTop); };
+  }, [claveMenu]);
   const panelCliente = ceneris || rol === ROLES.USUARIO_EMPRESA ? "/paneles" : rutaPorRol(rol ?? "");
   const principales: Entrada[] = rol === ROLES.ADMINISTRADOR ? [
     { ruta: "/usuarios", seccion: "usuarios", titulo: "Gestión de usuarios", icono: "usuarios" },
@@ -185,6 +186,7 @@ export default function Sidebar({ onLogout, activo, rol, movil = false, onNavega
     { titulo: "Gestión", entradas: [
       { ruta: "/ubicaciones", seccion: "ubicaciones", titulo: "Proyectos", icono: "ubicaciones" },
       { ruta: "/dispositivos", seccion: "dispositivos", titulo: "Dispositivos", icono: "dispositivos" },
+      ...(puedeOperar ? [{ ruta: "/parametros-calculados", seccion: "parametros-calculados" as const, titulo: "Parámetros calculados", icono: "datos" as const }] : []),
       ...(!ceneris && rol === ROLES.USUARIO_EMPRESA && rolEmpresa === "Administrador" ? [
         { ruta: "/empresas", seccion: "empresas" as const, titulo: "Mi empresa y usuarios", icono: "empresa" as const },
       ] : []),
@@ -207,7 +209,7 @@ export default function Sidebar({ onLogout, activo, rol, movil = false, onNavega
       {item.titulo}
     </ItemMenu>;
   }
-  return <MotionConfig reducedMotion="user">
+  return <>
     <aside onClick={e => { if ((e.target as HTMLElement).closest("a")) onNavegar?.(); }} className={`relative isolate flex-shrink-0 bg-gray-50 dark:bg-[#0a0e1a] border-r border-gray-200 dark:border-white/10 flex-col transition-colors duration-300 ${movil ? "flex h-full w-full" : "hidden md:flex w-64"}`}>
       <FranjaActiva />
       <Link to={ceneris ? (rol === ROLES.ADMINISTRADOR ? "/panel-admin" : "/clientes") : panelCliente}
@@ -221,7 +223,7 @@ export default function Sidebar({ onLogout, activo, rol, movil = false, onNavega
       {!administracion && ceneris && <div className="border-b border-gray-200 p-4 dark:border-white/10">
         <button type="button" onClick={volverAdministracion} className="text-xs font-semibold text-gray-600 hover:text-gray-950 dark:text-gray-300 dark:hover:text-white">← Volver a {rol === ROLES.ADMINISTRADOR ? "administración" : "clientes"}</button>
       </div>}
-      <nav aria-label={administracion ? "Administración CENERIS" : "Módulos del cliente"} className="flex-1 pl-0 pr-4 py-4 overflow-y-auto scrollbar-oculta">
+      <nav ref={menuRef} aria-label={administracion ? "Administración CENERIS" : "Módulos del cliente"} className="flex-1 pl-0 pr-4 py-4 overflow-y-auto scrollbar-oculta">
         {administracion ? <div className={grupo + " space-y-2"}>{principales.map(entrada)}</div>
           : grupos.map((g) => <div key={g.titulo} className={grupo}><p className={tituloGrupo}>{g.titulo}</p><div className="space-y-1">{g.entradas.map(entrada)}</div></div>)}
         {rol === ROLES.ADMINISTRADOR_COMERCIAL && <div className={grupo}>{entrada({ruta:"/planes-suscripciones",seccion:"planes",titulo:"Planes y suscripciones",icono:"planes"})}</div>}
@@ -232,5 +234,5 @@ export default function Sidebar({ onLogout, activo, rol, movil = false, onNavega
         </button>
       </div>
     </aside>
-  </MotionConfig>;
+  </>;
 }

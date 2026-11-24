@@ -13,12 +13,11 @@ este mismo router: comparten módulo de permisos ('Ingesta') y tabla base
 (archv_ingst) con /metricas, que no se toca.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.ingesta.ftp_receptor import descargar_archivo_dat
 from app.models import ArchivoIngesta, ConexionFTP, Dispositivo, IntentoProcesamiento, Usuario
 from app.schemas import (
     ArchivoIngestaDetalle,
@@ -32,8 +31,9 @@ from app.schemas import (
 from app.security.entorno import filtrar_sedes
 from app.security.permisos import EDICION, LECTURA, require_permiso, verificar_sede
 from app.services.ingesta.mapeo import MapeoNoEncontradoError, resolver_formato
+from app.services.ingesta.originales import dispositivo_del_archivo, leer_original
 from app.services.ingesta.parser import parsear_dat
-from app.services.ingesta.persistencia import DispositivoNoResueltoError, resolver_dispositivo
+from app.services.ingesta.persistencia import DispositivoNoResueltoError
 from app.tasks.ingesta import normalizar_contenido_dat, procesar_archivo_dat
 
 router = APIRouter(prefix="/ingesta", tags=["Ingesta"])
@@ -66,34 +66,27 @@ def _validar_estado_negocio(estado: str) -> str:
     return ESTADO_NEGOCIO_A_BD[estado]
 
 
-def _mapa_dataloggers(db: Session, ids_cnxn: set[int]) -> dict[int, str]:
-    """ "Datalogger de origen" de cada archivo. cnxn_ftp.nmbr (HU05: "Nombre
-    del datalogger") ya es un nombre de negocio válido y sirve de fallback,
-    pero el dueño real del nombre del datalogger es dspstv.nmbr (HU10-11):
-    se prefiere ese cuando existe exactamente un dispositivo activo
-    resuelto para la conexión (mismo criterio que resolver_dispositivo en
-    services/ingesta/persistencia.py)."""
-    if not ids_cnxn:
+def _mapa_dataloggers(db: Session, archivos) -> dict[int, str]:
+    """Nombre del equipo vinculado al recibir el archivo, nunca el reemplazo actual."""
+    if not archivos:
         return {}
-
+    ids_cnxn = {a.id_cnxn for a in archivos}
     nombres = {
         c.id_cnxn: c.nmbr
         for c in db.query(ConexionFTP).filter(ConexionFTP.id_cnxn.in_(ids_cnxn)).all()
     }
 
-    dispositivos_por_cnxn: dict[int, list[str]] = {}
-    for id_cnxn, nombre in (
-        db.query(Dispositivo.id_cnxn, Dispositivo.nmbr)
-        .filter(Dispositivo.id_cnxn.in_(ids_cnxn), Dispositivo.estd == "Activo")
+    equipos = dict(
+        db.query(Dispositivo.id_dspstv, Dispositivo.nmbr)
+        .filter(Dispositivo.id_dspstv.in_([a.id_dspstv for a in archivos if a.id_dspstv]))
         .all()
-    ):
-        dispositivos_por_cnxn.setdefault(id_cnxn, []).append(nombre)
-
-    for id_cnxn, activos in dispositivos_por_cnxn.items():
-        if len(activos) == 1:
-            nombres[id_cnxn] = activos[0]
-
-    return nombres
+    )
+    return {
+        a.id_archv: equipos.get(
+            a.id_dspstv, f"{nombres.get(a.id_cnxn, 'FTP')} · equipo sin identificar"
+        )
+        for a in archivos
+    }
 
 
 @router.get("/metricas", response_model=MetricasColaIngesta)
@@ -139,7 +132,11 @@ def listar_dataloggers_cola(
     query = filtrar_sedes(query, ConexionFTP.id_sd, db, usuario)
 
     ids_cnxn = {id_cnxn for (id_cnxn,) in query.distinct().all()}
-    dataloggers = _mapa_dataloggers(db, ids_cnxn)
+    dataloggers = dict(
+        db.query(ConexionFTP.id_cnxn, ConexionFTP.nmbr)
+        .filter(ConexionFTP.id_cnxn.in_(ids_cnxn))
+        .all()
+    )
 
     items = sorted(
         (
@@ -153,6 +150,7 @@ def listar_dataloggers_cola(
 
 @router.get("/cola")
 def listar_cola_ingesta(
+    id_dspstv: int | None = Query(default=None, gt=0),
     estado: str | None = Query(
         default=None, description="En espera | Procesando | Procesado | Fallido"
     ),
@@ -182,6 +180,8 @@ def listar_cola_ingesta(
 
     if id_cnxn is not None:
         query = query.filter(ArchivoIngesta.id_cnxn == id_cnxn)
+    if id_dspstv is not None:
+        query = query.filter(ArchivoIngesta.id_dspstv == id_dspstv)
 
     total = query.count()
     archivos = (
@@ -191,12 +191,12 @@ def listar_cola_ingesta(
         .all()
     )
 
-    dataloggers = _mapa_dataloggers(db, {a.id_cnxn for a in archivos})
+    dataloggers = _mapa_dataloggers(db, archivos)
     items = [
         ArchivoIngestaListItem(
             id_archv=a.id_archv,
             nmbr_archv=a.nmbr_archv,
-            datalogger_nombre=dataloggers.get(a.id_cnxn, "Desconocido"),
+            datalogger_nombre=dataloggers.get(a.id_archv, "Desconocido"),
             fch_dtccn=a.fch_dtccn,
             estado=ESTADO_BD_A_NEGOCIO.get(a.estd, a.estd),
         )
@@ -273,7 +273,7 @@ def detalle_archivo_ingesta(
     conexion = db.get(ConexionFTP, archivo.id_cnxn)
     verificar_sede(usuario, conexion.id_sd, db, modulo="Ingesta", accion=LECTURA)
 
-    datalogger_nombre = _mapa_dataloggers(db, {archivo.id_cnxn}).get(archivo.id_cnxn, "Desconocido")
+    datalogger_nombre = _mapa_dataloggers(db, [archivo])[archivo.id_archv]
 
     return ArchivoIngestaDetalle(
         id_archv=archivo.id_archv,
@@ -337,6 +337,31 @@ def intentos_archivo_ingesta(
 FILAS_MOSTRADAS_REGISTROS_INGESTA = 50
 
 
+@router.get("/cola/{id_archv}/original")
+def descargar_original_ingesta(
+    id_archv: int,
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(require_permiso("Ingesta", LECTURA)),
+):
+    archivo = db.get(ArchivoIngesta, id_archv)
+    if archivo is None:
+        raise HTTPException(404, "Archivo no encontrado")
+    conexion = db.get(ConexionFTP, archivo.id_cnxn)
+    verificar_sede(usuario, conexion.id_sd, db, modulo="Ingesta", accion=LECTURA)
+    original = leer_original(archivo)
+    if original is None:
+        raise HTTPException(409, "Este registro aún no tiene una copia original archivada")
+    return Response(
+        original,
+        media_type="application/octet-stream",
+        headers={
+            "Content-Disposition": f'attachment; filename="original-{id_archv}.dat"',
+            "Cache-Control": "private, no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
 @router.get("/cola/{id_archv}/registros", response_model=RegistrosIngestaResponse)
 def registros_archivo_ingesta(
     id_archv: int,
@@ -348,12 +373,8 @@ def registros_archivo_ingesta(
     con datos reales -algo que ya no se distingue en tlmtr/evnt_txt, donde
     una columna sin mapeo activo ni siquiera llega a guardarse-.
 
-    El archivo no se persiste en archv_ingst (HU09 solo guarda el nombre y
-    el resultado), así que se vuelve a descargar del mismo FTP de origen
-    -que conserva el .dat tras procesarlo, ver app/ingesta/ftp_receptor.py-,
-    igual que hace app.tasks.ingesta.procesar_archivo_dat. Si el archivo ya
-    no está en el FTP (limpieza externa, rotación), se informa con 404 en
-    vez de un error crudo de conexión.
+    Se consulta la copia archivada. Un archivo del FTP con el mismo nombre
+    puede ser una versión diferente y nunca sustituye silenciosamente al original.
     """
     archivo = db.query(ArchivoIngesta).filter(ArchivoIngesta.id_archv == id_archv).first()
     if archivo is None:
@@ -363,7 +384,7 @@ def registros_archivo_ingesta(
     verificar_sede(usuario, conexion.id_sd, db, modulo="Ingesta", accion=LECTURA)
 
     try:
-        dispositivo = resolver_dispositivo(db, archivo.id_cnxn)
+        dispositivo = dispositivo_del_archivo(db, archivo)
         # HU49: esta es una vista de SOLO LECTURA (vuelve a resolver el
         # formato de un archivo ya procesado nada más que para mostrar su
         # contenido crudo), así que no debe tener el efecto secundario de
@@ -376,11 +397,25 @@ def registros_archivo_ingesta(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     try:
-        contenido = descargar_archivo_dat(conexion, archivo.nmbr_archv)
+        original = leer_original(archivo)
+        if original is None:
+            raise HTTPException(
+                409,
+                "Este registro no tiene una copia original archivada. No se sustituirá por el archivo actual del FTP.",
+            )
+        contenido = original.decode("utf-8-sig")
+    except HTTPException:
+        raise
+    except UnicodeDecodeError as exc:
+        raise HTTPException(
+            422, "El original no es texto UTF-8 válido; descárgalo para revisión"
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(409, "La copia original requiere revisión de integridad") from exc
     except Exception as exc:
         raise HTTPException(
-            status_code=404,
-            detail=f"No se pudo volver a leer '{archivo.nmbr_archv}' del FTP de origen: {exc}",
+            status_code=503,
+            detail="No se pudo recuperar la copia original archivada. Vuelve a intentarlo.",
         ) from exc
 
     resultado = parsear_dat(normalizar_contenido_dat(contenido), formato.config)
@@ -444,7 +479,7 @@ def reintentar_archivo_ingesta(
     # el usuario que lo pidió.
     procesar_archivo_dat.delay(id_archv=archivo.id_archv, id_usr_reintento=int(usuario["sub"]))
 
-    datalogger_nombre = _mapa_dataloggers(db, {archivo.id_cnxn}).get(archivo.id_cnxn, "Desconocido")
+    datalogger_nombre = _mapa_dataloggers(db, [archivo])[archivo.id_archv]
     return ArchivoIngestaDetalle(
         id_archv=archivo.id_archv,
         nmbr_archv=archivo.nmbr_archv,

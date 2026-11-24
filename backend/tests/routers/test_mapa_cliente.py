@@ -25,6 +25,8 @@ from fastapi.testclient import TestClient
 from app.database import get_db
 from app.main import app
 from app.models import (
+    Alarma,
+    CondicionAlarma,
     ConexionFTP,
     Dispositivo,
     EventoTexto,
@@ -303,7 +305,7 @@ class TestCA2UltimoValorPorParametro:
             for i in client.get("/mapa-cliente").json()["items"]
             if i["nmbr"] == "Estacion Asignada"
         )
-        assert item["ultima_lectura"].startswith(ahora.isoformat()[:19])
+        assert dt.datetime.fromisoformat(item["ultima_lectura"]) == ahora
 
     def test_estacion_sin_lecturas_no_rompe(self, client, db_session, escenario):
         """Una ubicación recién creada aparece en el mapa igual, con el
@@ -319,7 +321,7 @@ class TestCA2UltimoValorPorParametro:
         )
         assert item["parametros"] == []
         assert item["ultima_lectura"] is None
-        assert item["semaforo"] == "verde"
+        assert item["semaforo"] == "sin_datos"
 
     def test_incluye_eventos_de_texto(self, client, db_session, escenario):
         """evnt_txt es tan "último valor de un parámetro" como tlmtr."""
@@ -351,9 +353,23 @@ class TestCA2UltimoValorPorParametro:
 
 
 class TestSemaforoEnElEndpoint:
+    def regla_del_proyecto(self, db_session, escenario, parametro):
+        alarma = Alarma(
+            id_usr=escenario["usuario"].id_usr,
+            id_sd=escenario["sede"].id_sd,
+            id_ubccn=escenario["asignada"].id_ubccn,
+            id_prmtr=parametro.id_prmtr,
+            nmbr="Regla compartida",
+        )
+        db_session.add(alarma)
+        db_session.flush()
+        db_session.add(CondicionAlarma(id_alrm=alarma.id_alrm, oprdr=">", vlr_umbrl=30))
+        db_session.flush()
+
     def test_valor_en_rango_pinta_verde(self, client, db_session, escenario):
         dispositivo = crear_dispositivo(db_session, escenario["asignada"], escenario["sede"])
         temperatura = crear_parametro(db_session, "temperatura", "°C")
+        self.regla_del_proyecto(db_session, escenario, temperatura)
         agregar_lectura(
             db_session,
             dispositivo,
@@ -375,9 +391,10 @@ class TestSemaforoEnElEndpoint:
         assert item["semaforo"] == "verde"
 
     def test_valor_fuera_de_rango_pinta_rojo(self, client, db_session, escenario):
-        """Con los umbrales TEMPORALES de HU 28 simulada: >32 °C es rojo."""
+        """El color rojo proviene de la regla compartida del proyecto."""
         dispositivo = crear_dispositivo(db_session, escenario["asignada"], escenario["sede"])
         temperatura = crear_parametro(db_session, "temperatura", "°C")
+        self.regla_del_proyecto(db_session, escenario, temperatura)
         agregar_lectura(
             db_session,
             dispositivo,

@@ -29,6 +29,7 @@ def crear_notificacion(
     id_usr,
     id_sd=None,
     id_alrm=None,
+    id_ubccn=None,
     plantilla="generica",
     clave=None,
 ):
@@ -43,6 +44,7 @@ def crear_notificacion(
     clave = hashlib.sha256((clave or str(uuid.uuid4())).encode()).hexdigest()
     valores = dict(
         id_alrm=id_alrm,
+        id_ubccn=id_ubccn,
         id_usr=id_usr,
         id_sd=id_sd,
         cnl="email",
@@ -128,6 +130,9 @@ def evaluar_alarmas(db, *, lecturas, dispositivo, id_sd):
         .all()
     }
     ubicacion = db.get(Ubicacion, dispositivo.id_ubccn)
+    from app.services.monitoreo import correos_habilitados
+
+    enviar = ubicacion.monitoreo_activo and correos_habilitados(db, id_sd)
     for alarma in alarmas:
         reglas = condiciones.get(alarma.id_alrm, [])
         parametro = parametros[alarma.id_prmtr]
@@ -162,7 +167,7 @@ def evaluar_alarmas(db, *, lecturas, dispositivo, id_sd):
                     "fecha": fecha.isoformat(),
                     "condicion": " o ".join(f"{c.oprdr} {c.vlr_umbrl}" for c in reglas),
                 }
-                for correo in destinatarios.get(alarma.id_alrm, []):
+                for correo in destinatarios.get(alarma.id_alrm, []) if enviar else []:
                     crear_notificacion(
                         db,
                         destinatario=correo,
@@ -171,11 +176,16 @@ def evaluar_alarmas(db, *, lecturas, dispositivo, id_sd):
                         id_usr=alarma.id_usr,
                         id_sd=id_sd,
                         id_alrm=alarma.id_alrm,
+                        id_ubccn=alarma.id_ubccn,
                         plantilla="alarma_activada",
                         clave=f"alarma:{alarma.id_alrm}:{dispositivo.id_dspstv}:{fecha.isoformat()}:{correo.lower()}",
                     )
             estado.en_alarma = activa
+            estado.ultimo_valor = lectura.valor
+            if activa and not enviar:
+                estado.resumen_pendiente = True
             if not activa:
                 estado.inicio_alarma = None
+                estado.resumen_pendiente = False
             estado.pendiente_evaluacion = False
             estado.ultima_fecha = fecha

@@ -41,7 +41,7 @@ export default function DetallePanel() {
   const [filtroDispositivo, setFiltroDispositivo] = useState<number | null>(null);
   const [filtroParametro, setFiltroParametro] = useState<number | null>(null);
   const [filtroEstado, setFiltroEstado] = useState<EstadoLectura | null>(null);
-  const [umbralHoras, setUmbralHoras] = useState(24);
+  const [umbralHoras, setUmbralHoras] = useState(1);
   const [autoActualizar, setAutoActualizar] = useState(true);
   const [modoPresentacion, setModoPresentacion] = useState(false);
   const [ahora, setAhora] = useState(() => Date.now());
@@ -315,7 +315,7 @@ export default function DetallePanel() {
                 <label className="min-w-40 flex-1 text-xs font-medium text-gray-600 dark:text-gray-300">Proyecto / estación<select value={filtroUbicacion ?? ""} onChange={(e) => setFiltroUbicacion(e.target.value ? Number(e.target.value) : null)} className={`mt-1 ${INPUT}`}><option value="">Todas</option>{contenido.ubicaciones.map((u) => <option key={u.id_ubccn} value={u.id_ubccn}>{u.nmbr}</option>)}</select></label>
                 <label className="min-w-40 flex-1 text-xs font-medium text-gray-600 dark:text-gray-300">Dispositivo<select value={filtroDispositivo ?? ""} onChange={(e) => void seleccionarDispositivo(e.target.value ? Number(e.target.value) : null)} className={`mt-1 ${INPUT}`}><option value="">Todos</option>{contenido.dispositivos.map((d) => <option key={d.id_dspstv} value={d.id_dspstv}>{d.nmbr}</option>)}</select></label>
                 <label className="min-w-40 flex-1 text-xs font-medium text-gray-600 dark:text-gray-300">Parámetro<select value={filtroParametro ?? ""} onChange={(e) => setFiltroParametro(e.target.value ? Number(e.target.value) : null)} className={`mt-1 ${INPUT}`}><option value="">Todos</option>{parametrosPanel.map(([idParametro, nombre]) => <option key={idParametro} value={idParametro}>{nombre}</option>)}</select></label>
-                <label className="min-w-32 text-xs font-medium text-gray-600 dark:text-gray-300">Lectura reciente en<select value={umbralHoras} onChange={(e) => setUmbralHoras(Number(e.target.value))} className={`mt-1 ${INPUT}`}><option value={6}>6 horas</option><option value={24}>24 horas</option><option value={72}>72 horas</option></select></label>
+                <label className="min-w-32 text-xs font-medium text-gray-600 dark:text-gray-300">Lectura reciente en<select value={umbralHoras} onChange={(e) => setUmbralHoras(Number(e.target.value))} className={`mt-1 ${INPUT}`}><option value={1}>1 hora (prueba)</option><option value={6}>6 horas</option><option value={24}>24 horas</option><option value={72}>72 horas</option></select></label>
                 {(filtroUbicacion !== null || filtroDispositivo !== null || filtroParametro !== null || filtroEstado !== null) && <button type="button" onClick={() => { setFiltroUbicacion(null); setFiltroParametro(null); setFiltroEstado(null); void seleccionarDispositivo(null); }} className={ACCION}>Limpiar filtros</button>}
               </div>
               <PanelResumenOperativo ubicaciones={ubicacionesOperativas} dispositivos={contenido.dispositivos} seleccionada={filtroUbicacion} parametroId={filtroParametro} umbralHoras={umbralHoras} estadoFiltro={filtroEstado} zonaHoraria={zonaHoraria} puedeGestionar={puedeGestionar && !modoPresentacion} destelloEn={destelloEn} destelloSecuencia={destelloSecuencia} onSeleccionar={setFiltroUbicacion} onFiltrarEstado={setFiltroEstado} onQuitar={(ubicacion) => { setErrorAccion(null); setConfirmarUbicacion(ubicacion); }} />

@@ -8,6 +8,7 @@ tolerancia por fila, no por archivo completo-.
 import dataclasses
 import datetime as dt
 import logging
+import math
 
 from app.services.ingesta.estandarizador import LecturaEstandar
 
@@ -59,7 +60,10 @@ def _parsear_numero(valor_crudo, delimitador_decimal: str = "."):
     if delimitador_decimal == "," and isinstance(valor_crudo, str):
         valor_normalizado = valor_crudo.replace(",", ".", 1)
     try:
-        return float(valor_normalizado), None
+        numero = float(valor_normalizado)
+        if not math.isfinite(numero):
+            return None, "valor numérico no finito (NaN o infinito)"
+        return numero, None
     except (TypeError, ValueError):
         return None, f"valor '{valor_crudo}' no es numérico"
 
@@ -138,6 +142,15 @@ def validar_lecturas(
             )
             continue
 
+        if isinstance(lectura.valor_crudo, str) and "\x00" in lectura.valor_crudo:
+            errores.append(
+                ErrorValidacion(
+                    numero_fila=lectura.numero_fila,
+                    parametro=lectura.parametro,
+                    motivo="Lectura con caracteres de control inválidos; revisar el archivo original",
+                )
+            )
+            continue
         if tipos_parametro.get(lectura.parametro) == "texto":
             valor = _extraer_texto(lectura.valor_crudo)
         else:

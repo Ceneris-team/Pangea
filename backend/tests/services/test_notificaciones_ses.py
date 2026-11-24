@@ -27,6 +27,7 @@ from tests.routers.test_alarmas import (
     crear_dispositivo,
     crear_parametro,
     crear_ubicacion,
+    dar_suscripcion_vigente,
 )
 
 
@@ -39,6 +40,7 @@ def aislar_destinatario_pruebas(monkeypatch):
 @pytest.fixture()
 def caso(db_session, fabrica, monkeypatch):
     sede = fabrica.sede()
+    dar_suscripcion_vigente(db_session, sede)
     usuario = fabrica.usuario()
     ubicacion = crear_ubicacion(db_session, sede)
     conexion = crear_conexion(db_session, sede)

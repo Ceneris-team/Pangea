@@ -1,6 +1,7 @@
 import csv
 import datetime as dt
 import heapq
+import json
 import os
 from decimal import Decimal
 from pathlib import Path
@@ -25,6 +26,7 @@ from app.schemas_exportaciones import ExportacionCrear
 from app.security.entorno import permiso_del_entorno, resolver_entorno
 from app.security.permisos import LECTURA, tiene_permiso
 from app.security.ubicaciones_permitidas import ubicaciones_permitidas
+from app.services.filtros_mediciones import aplicar_condiciones, leer_condiciones, validar_contexto
 
 CABECERAS = [
     "Empresa",
@@ -76,6 +78,10 @@ def validar_solicitud(db, usuario, body: ExportacionCrear):
         }
         if validos != set(body.dispositivo_ids):
             raise HTTPException(403, "No tienes acceso a todos los dispositivos solicitados")
+    equipos = db.query(Dispositivo.id_dspstv).filter(Dispositivo.id_ubccn.in_(solicitadas))
+    if body.dispositivo_ids:
+        equipos = equipos.filter(Dispositivo.id_dspstv.in_(body.dispositivo_ids))
+    validar_contexto(db, body.condiciones, equipos, body.parametro_ids)
     filtros = body.model_dump(mode="json", exclude={"formato"})
     filtros.update(
         ubicacion_ids=sorted(solicitadas),
@@ -196,6 +202,9 @@ def _lecturas(db, modelo, filtros, lote):
             query = query.filter(modelo.vlr >= Decimal(filtros["valor_min"]))
         if filtros["valor_max"] is not None:
             query = query.filter(modelo.vlr <= Decimal(filtros["valor_max"]))
+    query = aplicar_condiciones(
+        query, modelo, leer_condiciones(json.dumps(filtros.get("condiciones", [])))
+    )
     if filtros["frecuencia_muestreo"] is not None:
         bucket = func.date_bin(
             dt.timedelta(minutes=filtros["frecuencia_muestreo"]),

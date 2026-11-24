@@ -8,13 +8,11 @@ import Topbar from "../components/layout/Topbar";
 import DrawerPanel from "../components/layout/DrawerPanel";
 import SelectorRangoFechas from "../components/SelectorRangoFechas";
 import ExportacionesPanel from "../components/ExportacionesPanel";
+import FiltrosAvanzadosPanel from "../components/FiltrosAvanzadosPanel";
+import { parametrosConRango, validarCondiciones, serializarCondiciones, describirCondicion, type CondicionBorrador, type ParametroFiltro } from "../services/filtrosAvanzados";
 import { formatearFechaHoraEnZona, rangoUltimas24Horas, type RangoFechas } from "../utils/fechas";
 
-interface ParametroItem {
-  id_prmtr: number;
-  nmbr: string;
-  undd: string;
-}
+type ParametroItem = ParametroFiltro;
 
 interface UbicacionItem {
   id_ubccn: number;
@@ -44,25 +42,11 @@ interface ListadoUbicaciones {
 
 interface DispositivoItem { id_dspstv: number; nmbr: string; id_ubccn: number }
 
-// HU32: valor mínimo/máximo (decimales) y frecuencia de muestreo
-// (minutos). Filtros v1.0, acumulativos entre sí (mín+máx = rango).
-interface FiltrosAvanzados {
-  valorMin: string;
-  valorMax: string;
-  frecuenciaMuestreo: string;
-}
-
-const FILTROS_AVANZADOS_VACIOS: FiltrosAvanzados = {
-  valorMin: "",
-  valorMax: "",
-  frecuenciaMuestreo: "",
-};
-
 function construirQuery(
   parametroIds: number[],
   ubicacionIds: number[],
   rangoFechas: RangoFechas | null,
-  filtrosAvanzados: FiltrosAvanzados,
+  filtrosAvanzados: CondicionBorrador[],
   dispositivoIds: number[],
 ): string {
   const params = new URLSearchParams();
@@ -75,18 +59,7 @@ function construirQuery(
     params.append("fecha_inicio", new Date(rangoFechas.inicio).toISOString());
     params.append("fecha_fin", new Date(rangoFechas.fin).toISOString());
   }
-  // CA3: se agregan a la misma query que parámetros/ubicaciones/fechas
-  // -el backend los intersecta, no hace falta nada especial acá para
-  // que HU32 se combine con el rango de HU12-.
-  if (filtrosAvanzados.valorMin !== "") {
-    params.append("valor_min", filtrosAvanzados.valorMin);
-  }
-  if (filtrosAvanzados.valorMax !== "") {
-    params.append("valor_max", filtrosAvanzados.valorMax);
-  }
-  if (filtrosAvanzados.frecuenciaMuestreo !== "") {
-    params.append("frecuencia_muestreo", filtrosAvanzados.frecuenciaMuestreo);
-  }
+  if (filtrosAvanzados.length) params.append("condiciones", JSON.stringify(serializarCondiciones(filtrosAvanzados)));
   const query = params.toString();
   return query ? `/mediciones?${query}` : "/mediciones";
 }
@@ -123,12 +96,9 @@ export default function ConsultaDatos() {
   const [filtroFechas, setFiltroFechas] = useState<RangoFechas>(rangoUltimas24Horas);
 
   // Los filtros avanzados siguen el mismo borrador que fechas, equipos y proyectos.
-  const [seleccionAvanzados, setSeleccionAvanzados] = useState<FiltrosAvanzados>(
-    FILTROS_AVANZADOS_VACIOS,
-  );
-  const [filtroAvanzados, setFiltroAvanzados] = useState<FiltrosAvanzados>(
-    FILTROS_AVANZADOS_VACIOS,
-  );
+  const [seleccionAvanzados, setSeleccionAvanzados] = useState<CondicionBorrador[]>([]);
+  const [filtroAvanzados, setFiltroAvanzados] = useState<CondicionBorrador[]>([]);
+  const [revisionConsulta, setRevisionConsulta] = useState(0);
   const [errorAvanzados, setErrorAvanzados] = useState<string | null>(null);
 
   const [mediciones, setMediciones] = useState<ListadoMediciones | null>(null);
@@ -228,7 +198,7 @@ export default function ConsultaDatos() {
     return () => {
       cancelado = true;
     };
-  }, [queryMediciones]);
+  }, [queryMediciones, revisionConsulta]);
 
   const hayMasMediciones = mediciones !== null && (
     usaCursor ? mediciones.next_cursor !== null : mediciones.items.length < mediciones.total
@@ -279,10 +249,8 @@ export default function ConsultaDatos() {
   // Conteo de filtros YA APLICADOS (no la selección en curso dentro del
   // panel) para el badge del botón "Filtros": deja ver de un vistazo que
   // hay algo filtrado sin tener que abrir el panel a revisar.
-  const cantidadFiltrosAvanzados =
-    (filtroAvanzados.valorMin !== "" ? 1 : 0) +
-    (filtroAvanzados.valorMax !== "" ? 1 : 0) +
-    (filtroAvanzados.frecuenciaMuestreo !== "" ? 1 : 0);
+  const cantidadFiltrosAvanzados = filtroAvanzados.length;
+  const parametrosConCondicion = parametrosConRango(parametros, seleccionUbicaciones, seleccionDispositivos, seleccionParametros);
   const filtrosActivos =
     filtroParametros.length + filtroUbicaciones.length + filtroDispositivos.length + cantidadFiltrosAvanzados;
 
@@ -293,16 +261,8 @@ export default function ConsultaDatos() {
       setErrorAvanzados("La fecha final debe ser posterior a la fecha inicial."); return;
     }
     if (fin > Date.now()) { setErrorAvanzados("No se permiten fechas futuras."); return; }
-    const { valorMin, valorMax, frecuenciaMuestreo } = seleccionAvanzados;
-    if ((valorMin !== "" && !Number.isFinite(Number(valorMin))) || (valorMax !== "" && !Number.isFinite(Number(valorMax)))) {
-      setErrorAvanzados("Introduce valores numéricos válidos."); return;
-    }
-    if (valorMin !== "" && valorMax !== "" && Number(valorMin) > Number(valorMax)) {
-      setErrorAvanzados("El valor mínimo no puede ser mayor que el valor máximo."); return;
-    }
-    if (frecuenciaMuestreo !== "" && (!Number.isInteger(Number(frecuenciaMuestreo)) || Number(frecuenciaMuestreo) < 1 || Number(frecuenciaMuestreo) > 525600)) {
-      setErrorAvanzados("La frecuencia debe ser un número entero entre 1 y 525600 minutos."); return;
-    }
+    const errorCondiciones = validarCondiciones(seleccionAvanzados, parametrosConCondicion);
+    if (errorCondiciones) { setErrorAvanzados(errorCondiciones); return; }
     if (seleccionDispositivos.some(id => !dispositivos.some(d => d.id_dspstv === id && (!seleccionUbicaciones.length || seleccionUbicaciones.includes(d.id_ubccn))))) {
       setErrorAvanzados("Selecciona equipos disponibles en los proyectos elegidos."); return;
     }
@@ -310,7 +270,7 @@ export default function ConsultaDatos() {
     setFiltroParametros(seleccionParametros);
     setFiltroUbicaciones(seleccionUbicaciones);
     setFiltroFechas(seleccionFechas);
-    setFiltroAvanzados(seleccionAvanzados);
+    setFiltroAvanzados(serializarCondiciones(seleccionAvanzados).map(c => ({ ...c, minimo: c.minimo ?? "", maximo: c.maximo ?? "" })));
     const siguiente = new URLSearchParams(searchParams);
     siguiente.delete("dispositivo_ids");
     if (seleccionUbicaciones.length === 1) siguiente.set("ubicacion_id", String(seleccionUbicaciones[0]));
@@ -350,8 +310,8 @@ export default function ConsultaDatos() {
   // Parte del restablecimiento completo del formulario.
   const handleLimpiarAvanzados = () => {
     setErrorAvanzados(null);
-    setSeleccionAvanzados(FILTROS_AVANZADOS_VACIOS);
-    setFiltroAvanzados(FILTROS_AVANZADOS_VACIOS);
+    setSeleccionAvanzados([]);
+    setFiltroAvanzados([]);
   };
 
   return (
@@ -408,6 +368,7 @@ export default function ConsultaDatos() {
               <p>{errorCatalogos || errorUbicaciones}</p><button type="button" onClick={() => setRevisionCatalogos(v => v + 1)} className="mt-2 underline">Reintentar catálogos</button>
             </div>}
 
+            {filtroAvanzados.length > 0 && <section aria-label="Condiciones aplicadas" className="mb-4 rounded-xl border border-black/10 p-4 text-sm text-gray-700 dark:border-white/20 dark:text-gray-200"><p className="mb-2 font-semibold">Condiciones aplicadas por parámetro</p><ul className="list-disc space-y-1 pl-5">{filtroAvanzados.map(c => <li key={c.parametro_id}>{describirCondicion(c, parametros)}</li>)}</ul><p className="mt-2 text-xs">Cada condición se evalúa sobre su propia serie. Los parámetros sin condición conservan sus lecturas.</p><button type="button" onClick={handleLimpiarAvanzados} className="mt-3 underline">Limpiar filtros avanzados</button></section>}
             {!sinUbicacionesAsignadas && !errorUbicaciones && <ExportacionesPanel
               idInicial={Number(searchParams.get("exportacion")) || undefined}
               filtros={{
@@ -416,9 +377,10 @@ export default function ConsultaDatos() {
                 ubicacion_ids: filtroUbicaciones,
                 parametro_ids: filtroParametros,
                 dispositivo_ids: filtroDispositivos,
-                valor_min: filtroAvanzados.valorMin || null,
-                valor_max: filtroAvanzados.valorMax || null,
-                frecuencia_muestreo: filtroAvanzados.frecuenciaMuestreo ? Number(filtroAvanzados.frecuenciaMuestreo) : null,
+                valor_min: null,
+                valor_max: null,
+                frecuencia_muestreo: null,
+                condiciones: serializarCondiciones(filtroAvanzados),
               }}
             />}
 
@@ -437,9 +399,7 @@ export default function ConsultaDatos() {
             <>
             <div className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl shadow-sm border border-black/10 dark:border-white/10">
               {error && (
-                <div className="p-4 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm border-b border-red-200 dark:border-red-800/30">
-                  {error}
-                </div>
+                <div role="alert" className="p-4 bg-red-50 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">{error}<button type="button" className="ml-3 underline" onClick={() => { if (mediciones && hayMasMediciones) void cargarMasMediciones(); else setRevisionConsulta(v => v + 1); }}>Reintentar consulta</button></div>
               )}
               <div className="overflow-x-auto">
                 <table className="w-full text-sm text-left text-gray-600 dark:text-gray-300">
@@ -623,58 +583,7 @@ export default function ConsultaDatos() {
                 />
               </div>
 
-              {/* Filtros avanzados incluidos en la acción común de aplicar. */}
-              <fieldset className="min-w-0 pt-5">
-                <legend className="text-sm font-bold text-gray-700 dark:text-gray-200 mb-3">
-                  Filtros avanzados
-                </legend>
-                <div className="grid min-w-0 grid-cols-1 gap-3 min-[380px]:grid-cols-2">
-                  <label className="flex min-w-0 flex-col gap-1 text-sm text-gray-700 dark:text-gray-200">
-                    Valor mínimo
-                    <input
-                      type="number"
-                      step="any"
-                      inputMode="decimal"
-                      value={seleccionAvanzados.valorMin}
-                      onChange={(e) =>
-                        setSeleccionAvanzados({ ...seleccionAvanzados, valorMin: e.target.value })
-                      }
-                      className="w-full min-w-0 rounded-xl border border-black/20 dark:border-white/20 bg-transparent px-3 py-2 text-sm text-gray-900 dark:text-white"
-                    />
-                  </label>
-                  <label className="flex min-w-0 flex-col gap-1 text-sm text-gray-700 dark:text-gray-200">
-                    Valor máximo
-                    <input
-                      type="number"
-                      step="any"
-                      inputMode="decimal"
-                      value={seleccionAvanzados.valorMax}
-                      onChange={(e) =>
-                        setSeleccionAvanzados({ ...seleccionAvanzados, valorMax: e.target.value })
-                      }
-                      className="w-full min-w-0 rounded-xl border border-black/20 dark:border-white/20 bg-transparent px-3 py-2 text-sm text-gray-900 dark:text-white"
-                    />
-                  </label>
-                  <label className="flex min-w-0 flex-col gap-1 text-sm text-gray-700 dark:text-gray-200 min-[380px]:col-span-2">
-                    Frecuencia de muestreo (min)
-                    <input
-                      type="number"
-                      step="1"
-                      min="1"
-                      inputMode="numeric"
-                      value={seleccionAvanzados.frecuenciaMuestreo}
-                      onChange={(e) =>
-                        setSeleccionAvanzados({
-                          ...seleccionAvanzados,
-                          frecuenciaMuestreo: e.target.value,
-                        })
-                      }
-                      className="w-full min-w-0 rounded-xl border border-black/20 dark:border-white/20 bg-transparent px-3 py-2 text-sm text-gray-900 dark:text-white"
-                    />
-                  </label>
-                </div>
-
-              </fieldset>
+              <FiltrosAvanzadosPanel parametros={parametros} disponibles={parametrosConCondicion} condiciones={seleccionAvanzados} onCambiar={condiciones => { setSeleccionAvanzados(condiciones); setErrorAvanzados(null); }} onLimpiar={handleLimpiarAvanzados} hayAplicadas={filtroAvanzados.length > 0} />
             </div>
       </DrawerPanel>
     </div>

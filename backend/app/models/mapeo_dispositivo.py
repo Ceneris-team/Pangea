@@ -213,6 +213,12 @@ class Dispositivo(Base):
         CheckConstraint("lttd BETWEEN -90 AND 90", name="dspstv_lttd_check"),
         CheckConstraint("lngtd BETWEEN -180 AND 180", name="dspstv_lngtd_check"),
         Index("idx_dspstv_ubccn", "id_ubccn"),
+        Index(
+            "uq_dspstv_conexion_activa",
+            "id_cnxn",
+            unique=True,
+            postgresql_where=text("estd = 'Activo'"),
+        ),
     )
 
     id_dspstv = Column(Integer, primary_key=True, autoincrement=True)
@@ -225,3 +231,6 @@ class Dispositivo(Base):
     lngtd = Column(Numeric(9, 6), nullable=False)
     estd = Column(String(20), nullable=False, server_default="Activo")
     fch_rgstr = Column(TIMESTAMP(timezone=True), nullable=False, server_default=text("NOW()"))
+    ultima_recepcion = Column(TIMESTAMP(timezone=True))
+    sin_datos_desde = Column(TIMESTAMP(timezone=True))
+    aviso_sin_datos = Column(TIMESTAMP(timezone=True))

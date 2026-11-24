@@ -167,6 +167,7 @@ class UbicacionListItem(BaseModel):
     lttd: float
     lngtd: float
     estd: str
+    monitoreo_activo: bool = True
 
 
 class UbicacionDetalle(UbicacionListItem):
@@ -319,6 +320,7 @@ class UbicacionActualizar(BaseModel):
     lngtd: float | None = Field(default=None, ge=-180, le=180)
     plgn_gjsn: dict | None = None
     estd: str | None = None
+    monitoreo_activo: bool | None = None
 
     @field_validator("nmbr")
     @classmethod
@@ -377,10 +379,14 @@ class DispositivoListItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id_dspstv: int
+    id_ubccn: int
     nmbr: str
     mrc: str
     ubicacion_nombre: str
     estd: str
+    ultima_recepcion: datetime | None = None
+    sin_datos_desde: datetime | None = None
+    monitoreo_activo: bool = True
 
 
 class DispositivoParaMapa(BaseModel):

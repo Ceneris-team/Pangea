@@ -53,11 +53,11 @@ export default function ConfirmarEliminacionModal({
 
   return (
     <div
-      className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+      className="ui-modal-fondo fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
       onClick={() => { if (!confirmando) onCancelar(); }}
     >
       <div
-        className="bg-white dark:bg-[#2d3748] rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 max-w-md w-full p-6"
+        className="ui-modal-superficie bg-white dark:bg-[#2d3748] rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 max-w-md w-full p-6"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start gap-3 mb-4">

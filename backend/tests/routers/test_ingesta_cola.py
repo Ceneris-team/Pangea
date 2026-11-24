@@ -85,7 +85,16 @@ def crear_conexion(db_session, sede, nombre="Datalogger Estacion A"):
 
 
 def crear_archivo(db_session, conexion, nombre="H_ejemplo.dat", estd="Pendiente", **overrides):
-    archivo = ArchivoIngesta(id_cnxn=conexion.id_cnxn, nmbr_archv=nombre, estd=estd, **overrides)
+    equipo = (
+        db_session.query(Dispositivo).filter_by(id_cnxn=conexion.id_cnxn, estd="Activo").first()
+    )
+    archivo = ArchivoIngesta(
+        id_cnxn=conexion.id_cnxn,
+        id_dspstv=equipo.id_dspstv if equipo else None,
+        nmbr_archv=nombre,
+        estd=estd,
+        **overrides,
+    )
     db_session.add(archivo)
     db_session.flush()
     return archivo
@@ -172,7 +181,10 @@ class TestListarColaIngesta:
         crear_archivo(db_session, conexion)
 
         resp = client.get("/ingesta/cola")
-        assert resp.json()["items"][0]["datalogger_nombre"] == "FTP Estacion Norte"
+        assert (
+            resp.json()["items"][0]["datalogger_nombre"]
+            == "FTP Estacion Norte · equipo sin identificar"
+        )
 
     def test_datalogger_de_origen_prefiere_el_nombre_del_dispositivo(
         self, client, db_session, tecnico_lector
@@ -441,12 +453,11 @@ def dat_falso(monkeypatch):
     tocar una conexión real."""
     contenidos = {}
 
-    def _fake(cnxn, nombre_archivo):
-        if nombre_archivo not in contenidos:
-            raise TimeoutError(f"'{nombre_archivo}' ya no está en el FTP (simulado)")
-        return contenidos[nombre_archivo]
+    def _fake(archivo):
+        contenido = contenidos.get(archivo.nmbr_archv)
+        return contenido.encode("utf-8") if contenido is not None else None
 
-    monkeypatch.setattr("app.routers.ingesta.descargar_archivo_dat", _fake)
+    monkeypatch.setattr("app.routers.ingesta.leer_original", _fake)
     return contenidos
 
 
@@ -479,7 +490,7 @@ class TestRegistrosArchivoIngesta:
         }
         assert body["filas"][1]["valores"]["Nivel"] == "12.5"
 
-    def test_archivo_ya_no_esta_en_el_ftp_devuelve_404(
+    def test_sin_original_archivado_no_lo_sustituye_por_el_ftp_actual(
         self, client, db_session, tecnico_lector, dat_falso
     ):
         sede, _ = tecnico_lector
@@ -489,7 +500,7 @@ class TestRegistrosArchivoIngesta:
         archivo = crear_archivo(db_session, conexion, nombre="H_perdido.dat", estd="Exitoso")
 
         resp = client.get(f"/ingesta/cola/{archivo.id_archv}/registros")
-        assert resp.status_code == 404
+        assert resp.status_code == 409
 
     def test_sin_mapeo_activo_devuelve_422(self, client, db_session, tecnico_lector, dat_falso):
         sede, _ = tecnico_lector
@@ -528,6 +539,28 @@ class TestRegistrosArchivoIngesta:
             usuario, rol.nmbr, sede_id=sede.id_sd
         )
         assert client.get("/ingesta/cola/1/registros").status_code == 403
+
+
+class TestOriginalArchivado:
+    def test_descarga_bytes_corruptos_sin_editar_y_rechaza_otra_sede(
+        self, client, db_session, tecnico_lector, fabrica, monkeypatch
+    ):
+        from app.services.ingesta.originales import conservar_original
+
+        monkeypatch.setenv("OBJECT_STORAGE_BUCKET", "")
+        sede, _ = tecnico_lector
+        conexion = crear_conexion(db_session, sede)
+        archivo = crear_archivo(db_session, conexion, nombre="H_corrupto.dat", estd="Fallido")
+        datos = b"\xff\x00original corrupto\r\n"
+        conservar_original(archivo, datos)
+        db_session.flush()
+        respuesta = client.get(f"/ingesta/cola/{archivo.id_archv}/original")
+        assert respuesta.status_code == 200
+        assert respuesta.content == datos
+        assert respuesta.headers["cache-control"] == "private, no-store"
+        otra = crear_conexion(db_session, fabrica.sede())
+        ajeno = crear_archivo(db_session, otra, nombre="H_ajeno.dat")
+        assert client.get(f"/ingesta/cola/{ajeno.id_archv}/original").status_code == 403
 
 
 @pytest.fixture()

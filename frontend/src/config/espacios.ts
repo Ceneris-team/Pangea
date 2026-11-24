@@ -11,6 +11,6 @@ export function esAdministracion(path: string): boolean {
 
 export function esModuloOperativo(path: string): boolean {
   return ["/entorno", "/ubicaciones", "/dispositivos", "/consulta-datos", "/graficos", "/mapa-estaciones",
-    "/conexiones-ftp", "/parametros", "/cola-ingesta", "/paneles"]
+    "/conexiones-ftp", "/parametros", "/parametros-calculados", "/cola-ingesta", "/paneles"]
     .some((ruta) => path === ruta || path.startsWith(ruta + "/"));
 }

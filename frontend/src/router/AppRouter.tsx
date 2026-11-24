@@ -28,6 +28,7 @@ import ConsultaDatos from "../pages/ConsultaDatos";
 import Graficos from "../pages/Graficos";
 import DispositivoDetalle from "../pages/DispositivoDetalle";
 import Parametros from "../pages/Parametros";
+import ParametrosCalculados from "../pages/ParametrosCalculados";
 import ColaIngesta from "../pages/ColaIngesta";
 import Paneles from "../pages/Paneles";
 import DetallePanel from "../pages/DetallePanel";
@@ -259,6 +260,15 @@ export default function AppRouter() {
             element={
               <ProtectedRoute requiereOperacion rolesPermitidos={ROLES_MAPEOS}>
                 <Parametros />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/parametros-calculados"
+            element={
+              <ProtectedRoute requiereOperacion rolesPermitidos={ROLES_MAPEOS}>
+                <ParametrosCalculados />
               </ProtectedRoute>
             }
           />

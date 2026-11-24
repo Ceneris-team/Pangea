@@ -73,7 +73,7 @@ export default function PanelResumenOperativo({ ubicaciones, dispositivos, selec
       <div className="overflow-hidden rounded-2xl border border-black/10 bg-white/40 dark:border-white/10 dark:bg-white/[0.04]">
         <div className="flex items-center justify-between px-4 py-3"><h2 className="font-semibold text-gray-900 dark:text-white">Mapa de estaciones</h2><span className="text-xs text-gray-500 dark:text-gray-400">Selecciona un marcador para filtrar</span></div>
         <div className="h-[340px] border-t border-black/10 dark:border-white/10"><MapaEstacionesCliente estaciones={estaciones} onSeleccionarEstacion={onSeleccionar} destelloEn={destelloEn} destelloSecuencia={destelloSecuencia} /></div>
-        <p className="px-4 py-2 text-xs text-gray-500 dark:text-gray-400">El color de las lecturas recientes usa umbrales de referencia; la antigüedad se evalúa por separado.</p>
+        <p className="px-4 py-2 text-xs text-gray-500 dark:text-gray-400">El color usa las alarmas activas compartidas del proyecto. Sin reglas o sin lecturas recientes se muestra gris.</p>
       </div>
       <div className="min-w-0 rounded-2xl border border-black/10 bg-white/40 p-4 dark:border-white/10 dark:bg-white/[0.04]">
         <div className="mb-3 flex items-center justify-between gap-2"><h2 className="font-semibold text-gray-900 dark:text-white">Estaciones del panel</h2><span className="text-xs text-gray-500 dark:text-gray-400">{visibles.length} de {ubicaciones.length}</span></div>

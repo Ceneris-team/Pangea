@@ -58,7 +58,10 @@ def entorno(db_session, fabrica):
         mapeo = mapear_parametro(db, dispositivo, parametro)
         crear_medicion(db, dispositivo, parametro, sede, valor=10 + i)
         archivo = ArchivoIngesta(
-            id_cnxn=conexion.id_cnxn, nmbr_archv=f"H_demo_{i}.dat", estd="Fallido"
+            id_cnxn=conexion.id_cnxn,
+            id_dspstv=dispositivo.id_dspstv,
+            nmbr_archv=f"H_demo_{i}.dat",
+            estd="Fallido",
         )
         db.add(archivo)
         db.flush()

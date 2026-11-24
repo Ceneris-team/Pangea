@@ -117,6 +117,9 @@ def interfaz():
                             "nmbr": "Temperatura",
                             "undd": "°C",
                             "tipo_dato": "numerico",
+                            "fuentes": [
+                                {"dispositivo_id": 1, "ubicacion_id": 1, "admite_rango": True}
+                            ],
                         }
                     ]
                 }
@@ -304,7 +307,7 @@ def test_consulta_aplica_y_restablece_todo_incluida_exportacion(interfaz):
     expect(parametros.get_by_role("checkbox")).to_be_checked()
     filtros.get_by_label("Fecha inicio", exact=True).fill("2020-01-01T00:00")
     filtros.get_by_label("Fecha fin", exact=True).fill("2020-01-03T00:00")
-    filtros.get_by_label("Frecuencia de muestreo (min)", exact=True).fill("5")
+    filtros.get_by_role("combobox", name="Añadir condición por parámetro").select_option("1")
     filtros.get_by_label("Valor mínimo", exact=True).fill("30")
     filtros.get_by_label("Valor máximo", exact=True).fill("20")
     filtros.get_by_role("button", name="Aplicar filtros", exact=True).click()
@@ -315,10 +318,11 @@ def test_consulta_aplica_y_restablece_todo_incluida_exportacion(interfaz):
     expect(pagina.locator("tbody").get_by_text("Equipo 1", exact=True)).to_be_visible()
     assert any(
         path == "/mediciones"
-        and query.get("valor_min") == ["10"]
+        and json.loads(query.get("condiciones", ["[]"])[0])
+        == [{"parametro_id": 1, "minimo": "10", "maximo": "20", "modo": "dentro"}]
         and query.get("dispositivo_ids") == ["1"]
         and query.get("parametro_ids") == ["1"]
-        and query.get("frecuencia_muestreo") == ["5"]
+        and "frecuencia_muestreo" not in query
         and query.get("fecha_inicio") == ["2020-01-01T05:00:00.000Z"]
         and query.get("fecha_fin") == ["2020-01-03T05:00:00.000Z"]
         for path, query in estado["consultas"]
@@ -327,11 +331,13 @@ def test_consulta_aplica_y_restablece_todo_incluida_exportacion(interfaz):
     pagina.get_by_role("button", name="Solicitar exportación").click()
     expect(pagina.get_by_text("Exportación solicitada", exact=True)).to_be_visible()
     assert estado["escrituras"][-1][1]["dispositivo_ids"] == [1]
-    pagina.get_by_role("button", name="Filtros", exact=False).click()
+    assert estado["escrituras"][-1][1]["condiciones"] == [
+        {"parametro_id": 1, "minimo": "10", "maximo": "20", "modo": "dentro"}
+    ]
+    pagina.locator("header").get_by_role("button", name="Filtros", exact=False).click()
     filtros.get_by_role("button", name="Restablecer todo").click()
-    expect(filtros.get_by_label("Valor mínimo", exact=True)).to_have_value("")
-    expect(filtros.get_by_label("Valor máximo", exact=True)).to_have_value("")
-    expect(filtros.get_by_label("Frecuencia de muestreo (min)", exact=True)).to_have_value("")
+    expect(filtros.get_by_label("Valor mínimo", exact=True)).to_have_count(0)
+    expect(filtros.get_by_label("Valor máximo", exact=True)).to_have_count(0)
     expect(filtros.locator('input[type="checkbox"]:checked')).to_have_count(0)
     expect(filtros.get_by_role("checkbox", name="Equipo 1", exact=True)).not_to_be_checked()
     pagina.keyboard.press("Escape")
@@ -339,6 +345,7 @@ def test_consulta_aplica_y_restablece_todo_incluida_exportacion(interfaz):
     ultima = [query for path, query in estado["consultas"] if path == "/mediciones"][-1]
     assert (
         "valor_min" not in ultima
+        and "condiciones" not in ultima
         and "ubicacion_ids" not in ultima
         and "dispositivo_ids" not in ultima
         and "parametro_ids" not in ultima

@@ -12,7 +12,7 @@ interface Envio {
 }
 interface Historial { total: number; items: Envio[] }
 interface Props {
-  alarma: { id_alrm: number; nmbr: string; estd: string };
+  alarma: { id_alrm: number; nmbr: string; estd: string; correos_habilitados?: boolean };
   onClose: () => void;
   onUpdate: () => void;
   puedeEditar: boolean;
@@ -94,6 +94,7 @@ export default function NotificacionesAlarma({ alarma, onClose, onUpdate, puedeE
             <button className={boton} disabled={ocupado || destinatarios.length >= 100}>Añadir correo</button>
           </form>}
           {!cargando && destinatarios.length === 0 && <p className="text-sm">Aún no hay destinatarios. {puedeEditar ? "Añade al menos uno para recibir avisos." : "Solicita su configuración a una persona con permiso de edición."}</p>}
+          <p className="text-xs text-gray-600 dark:text-gray-400">Los destinatarios de las alarmas activas también reciben avisos por ausencia de datos de los equipos del proyecto.</p>
           <ul className="space-y-2">{destinatarios.map(d => (
             <li key={d.id} className="flex items-center justify-between gap-3 border-b border-black/10 dark:border-white/10 pb-2">
               <span className="break-all">{d.correo}</span>
@@ -108,12 +109,13 @@ export default function NotificacionesAlarma({ alarma, onClose, onUpdate, puedeE
         </section>
         <section aria-labelledby="historial-titulo" className="space-y-3">
           <h3 id="historial-titulo" className="font-semibold">2. Historial de notificaciones</h3>
+          {alarma.correos_habilitados === false && <p role="status" className="rounded-lg bg-amber-500/10 p-3 text-sm">Los correos están pausados por la vigencia de la suscripción o porque se detuvo el monitoreo. Al regularizar se enviará un resumen de los últimos estados de alarma conocidos.</p>}
           <p className="text-xs text-gray-600 dark:text-gray-400">Horarios en {zonaHoraria}</p>
           <p className="text-sm">«Enviado» significa que el proveedor aceptó el correo; la llegada a la bandeja de entrada se verifica con el destinatario.</p>
           <div className="flex flex-wrap gap-2">
             <label htmlFor="estado-envio" className="self-center text-sm">Resultado</label>
             <select id="estado-envio" value={estado} onChange={e => { setEstado(e.target.value); setPagina(1); }} className={campo}>
-              <option value="">Todos</option>{["Pendiente", "Encolado", "Reintentando", "Enviado", "Fallido"].map(s => <option key={s}>{s}</option>)}
+              <option value="">Todos</option>{["Pendiente", "Encolado", "Reintentando", "Enviado", "Fallido", "Omitido"].map(s => <option key={s}>{s}</option>)}
             </select>
             <button className={boton} onClick={() => setVersion(v => v + 1)}>Actualizar</button>
           </div>
@@ -122,7 +124,7 @@ export default function NotificacionesAlarma({ alarma, onClose, onUpdate, puedeE
           <div className="space-y-3">{historial.items.map(n => (
             <article key={n.id} className="rounded-xl border border-black/15 dark:border-white/15 p-3 space-y-1 text-sm">
               <p className="font-semibold break-all">{n.destinatario} · {n.estado}</p>
-              <p>{n.tipo === "alarma_activada" ? "Alarma activada" : n.tipo} · {fecha(n.creada)}</p>
+              <p>{n.tipo === "alarma_activada" ? "Alarma activada" : n.tipo === "resumen_alarma_reanudada" ? "Resumen tras reanudar avisos" : n.tipo === "dispositivo_sin_datos" ? "Equipo sin datos" : n.tipo} · {fecha(n.creada)}</p>
               {n.enviada && <p>Aceptado por el proveedor: {fecha(n.enviada)}</p>}
               {n.estado === "Reintentando" && n.proximo_intento && <p>Próximo intento: {fecha(n.proximo_intento)}</p>}
               {(n.ultimo_error || n.intentos.length > 0) && <details><summary className="cursor-pointer">Ver diagnóstico e intentos</summary>

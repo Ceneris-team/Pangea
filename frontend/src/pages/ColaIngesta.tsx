@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { apiFetch, ApiError } from "../services/api";
+import { apiFetch, apiDownload, ApiError } from "../services/api";
 import { useAuth } from "../hooks/useAuth";
 import Sidebar from "../components/layout/Sidebar";
 import Topbar from "../components/layout/Topbar";
@@ -93,8 +93,9 @@ export default function ColaIngesta() {
   // un dispositivo llega acá con su conexión FTP preseleccionada. Se lee
   // con useSearchParams (mismo patrón que ubicacion_id en Graficos.tsx,
   // HU17 CA4) para que quede sincronizado con la navegación.
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const idCnxnParam = searchParams.get("id_cnxn");
+  const dispositivoFiltro = searchParams.get("dispositivo_id");
 
   const [pagina, setPagina] = useState(1);
   const [estadoFiltro, setEstadoFiltro] = useState("");
@@ -147,6 +148,7 @@ export default function ColaIngesta() {
           por_pagina: POR_PAGINA,
           estado: estadoFiltro || undefined,
           id_cnxn: dataloggerFiltro || undefined,
+          id_dspstv: dispositivoFiltro || undefined,
         },
       })
         .then((res) => {
@@ -177,7 +179,7 @@ export default function ColaIngesta() {
       cancelado = true;
       clearInterval(intervalo);
     };
-  }, [pagina, estadoFiltro, dataloggerFiltro]);
+  }, [pagina, estadoFiltro, dataloggerFiltro, dispositivoFiltro]);
 
   useEffect(() => {
     let cancelado = false;
@@ -367,6 +369,11 @@ export default function ColaIngesta() {
                   onChange={(e) => {
                     setPagina(1);
                     setDataloggerFiltro(e.target.value);
+                    if (dispositivoFiltro) {
+                      const siguientes = new URLSearchParams(searchParams);
+                      siguientes.delete("dispositivo_id");
+                      setSearchParams(siguientes, { replace: true });
+                    }
                   }}
                   className="bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] p-2.5 outline-none"
                 >
@@ -392,6 +399,9 @@ export default function ColaIngesta() {
                 )}
               </div>
 
+              {dispositivoFiltro && <p className="mb-3 text-sm text-gray-600 dark:text-gray-300">Se muestran los archivos del equipo seleccionado. <button type="button" className="font-semibold underline" onClick={() => {
+                const siguientes = new URLSearchParams(searchParams); siguientes.delete("dispositivo_id"); setSearchParams(siguientes, { replace: true }); setPagina(1);
+              }}>Quitar filtro de equipo</button></p>}
               {error && (
                 <div className="p-4 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm border-b border-red-200 dark:border-red-800/30">
                   {error}
@@ -513,11 +523,11 @@ export default function ColaIngesta() {
 
       {idSeleccionado !== null && (
         <div
-          className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+          className="ui-modal-fondo fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
           onClick={() => setIdSeleccionado(null)}
         >
           <div
-            className={`bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl shadow-xl border border-black/10 dark:border-white/10 w-full p-6 ${
+            className={`ui-modal-superficie bg-white dark:bg-[#1f2733] rounded-2xl shadow-xl border border-black/10 dark:border-white/10 w-full p-6 ${
               detalle?.estado === "Procesado" ? "max-w-4xl" : "max-w-lg"
             }`}
             onClick={(e) => e.stopPropagation()}
@@ -550,6 +560,13 @@ export default function ColaIngesta() {
                 <div className="flex justify-between gap-4">
                   <dt className="text-gray-600 dark:text-gray-300">Archivo</dt>
                   <dd className="font-medium text-gray-900 dark:text-white text-right">{detalle.nmbr_archv}</dd>
+                </div>
+                <div className="rounded-lg border border-black/10 p-3 dark:border-white/10">
+                  <p className="text-xs text-gray-600 dark:text-gray-300">El original se conserva sin editar. Las lecturas inválidas se excluyen con su motivo; no se rellenan con promedios.</p>
+                  <button type="button" className="mt-2 font-semibold text-[#5a7000] underline dark:text-[#ccff00]" onClick={() => {
+                    void apiDownload(`/ingesta/cola/${detalle.id_archv}/original`, `original-${detalle.nmbr_archv}`)
+                      .catch((err) => setDetalleError(err instanceof ApiError ? err.message : "No se pudo descargar el original"));
+                  }}>Descargar original para revisión</button>
                 </div>
                 <div className="flex justify-between gap-4">
                   <dt className="text-gray-600 dark:text-gray-300">Datalogger de origen</dt>
@@ -587,7 +604,7 @@ export default function ColaIngesta() {
                     {detalle.rgstrs_prcsds ?? "-"}
                   </dd>
                 </div>
-                {detalle.estado === "Fallido" && detalle.mnsj_errr && (
+                {detalle.mnsj_errr && (
                   <div>
                     <dt className="text-gray-600 dark:text-gray-300 mb-1">Mensaje de resultado</dt>
                     <dd className="text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 rounded-lg p-3">
@@ -745,11 +762,11 @@ export default function ColaIngesta() {
 
       {confirmandoReintentoMasivo && (
         <div
-          className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+          className="ui-modal-fondo fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
           onClick={() => !reintentandoMasivo && setConfirmandoReintentoMasivo(false)}
         >
           <div
-            className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl shadow-xl border border-black/10 dark:border-white/10 w-full max-w-md p-6"
+            className="ui-modal-superficie bg-white dark:bg-[#1f2733] rounded-2xl shadow-xl border border-black/10 dark:border-white/10 w-full max-w-md p-6"
             onClick={(e) => e.stopPropagation()}
           >
             <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-2">

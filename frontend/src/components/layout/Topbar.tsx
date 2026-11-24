@@ -163,7 +163,7 @@ export default function Topbar({ nombreCompleto, rol }: TopbarProps) {
           </button>
 
           {popoverAbierto && (
-            <div className="absolute right-0 mt-2 w-80 max-h-96 overflow-y-auto bg-white dark:bg-[#2d3748] border border-black/10 dark:border-white/10 rounded-xl shadow-xl z-50">
+            <div className="ui-popover-entrada absolute right-0 mt-2 w-80 max-h-96 overflow-y-auto bg-white dark:bg-[#2d3748] border border-black/10 dark:border-white/10 rounded-xl shadow-xl z-50">
               <div className="px-4 py-3 border-b border-black/10 dark:border-white/10">
                 <h3 className="text-sm font-bold text-gray-900 dark:text-white">
                   Columnas pendientes de asignar

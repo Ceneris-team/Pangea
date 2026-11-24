@@ -14,6 +14,7 @@ interface AlarmaListItem {
   parametro_nombre: string;
   condicion: string | null;
   estd: string;
+  correos_habilitados?: boolean;
   dispositivos?: EstadoDispositivoAlarma[];
 }
 
@@ -152,7 +153,7 @@ export default function Alarmas() {
                   Gestión de Alarmas y Notificaciones
                 </h1>
                 <p className="text-sm text-gray-600 dark:text-gray-300">
-                  Alarmas configuradas sobre tus parámetros de monitoreo.
+                  Alarmas compartidas de los proyectos a los que tienes acceso. Los permisos del proyecto determinan quién puede modificarlas.
                 </p>
               </div>
 

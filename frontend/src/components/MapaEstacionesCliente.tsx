@@ -80,19 +80,23 @@ const COLOR_SEMAFORO: Record<string, string> = {
   amarillo: "#eab308",
   rojo: "#dc2626",
   sin_datos: "#64748b",
+  sin_reglas: "#64748b",
+  detenido: "#64748b",
   desactualizada: "#d97706",
 };
 
 const ETIQUETA_SEMAFORO: Record<string, string> = {
-  verde: "Normal",
+  verde: "Sin umbrales excedidos",
   amarillo: "Atención",
-  rojo: "Crítico",
+  rojo: "Alarma activada",
   sin_datos: "Sin datos",
+  sin_reglas: "Sin reglas de alarma",
+  detenido: "Monitoreo detenido",
   desactualizada: "Lectura antigua",
 };
 
 function colorDe(semaforo: string): string {
-  return COLOR_SEMAFORO[semaforo] ?? COLOR_SEMAFORO.verde;
+  return COLOR_SEMAFORO[semaforo] ?? COLOR_SEMAFORO.sin_datos;
 }
 
 /** Marcador como SVG embebido en un data URI: igual que en HU22, así el

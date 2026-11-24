@@ -1,18 +1,18 @@
 import datetime as dt
 import ftplib
+import hashlib
 import logging
 
 from botocore.exceptions import BotoCoreError, ClientError
 
 from app.core.celery_app import celery_app
 from app.database import SessionLocal
-from app.ingesta.ftp_receptor import descargar_archivo_dat, listar_archivos_dat
+from app.ingesta.ftp_receptor import descargar_bytes_dat, listar_archivos_dat
 from app.models.archivo_ingesta import ArchivoIngesta
 from app.models.intento_procesamiento import IntentoProcesamiento
 from app.models.mapeo_dispositivo import Dispositivo, Parametro
-from app.models.ubicacion_conexion import ConexionFTP
+from app.models.ubicacion_conexion import ConexionFTP, Ubicacion
 from app.security.auditoria import limpiar_contexto_auditoria, marcar_contexto_auditoria
-from app.services import object_storage
 from app.services.cache.invalidacion import invalidar_por_lectura
 from app.services.ingesta.estandarizador import estandarizar_filas
 from app.services.ingesta.mapeo import (
@@ -22,11 +22,15 @@ from app.services.ingesta.mapeo import (
     resolver_formato,
     tipos_de_parametro,
 )
+from app.services.ingesta.originales import (
+    conservar_original,
+    dispositivo_del_archivo,
+    leer_original,
+)
 from app.services.ingesta.parser import parsear_dat
 from app.services.ingesta.persistencia import (
     DispositivoNoResueltoError,
     guardar_lecturas,
-    resolver_dispositivo,
 )
 from app.services.ingesta.usuario_sistema import resolver_id_usuario_sistema
 from app.services.ingesta.validador import validar_lecturas
@@ -69,7 +73,9 @@ def normalizar_contenido_dat(contenido: str) -> str:
     CRLF y a veces con NUL al final: sin esto el csv revienta con
     "new-line character seen in unquoted field".
     """
-    return contenido.replace("\x00", "").replace("\r\n", "\n").replace("\r", "\n")
+    # Solo se admite relleno al final. Quitar NUL internos convertiría, por
+    # ejemplo, "2\x001" en una medición inventada de 21.
+    return contenido.rstrip("\x00").replace("\r\n", "\n").replace("\r", "\n")
 
 
 def interpretar_y_guardar(
@@ -134,6 +140,11 @@ def interpretar_y_guardar(
         delimitador_decimal=formato.delimitador_decimal,
         tipos_parametro=tipos_de_parametro(db, formato.id_mp),
     )
+    if not any(lectura.valor is not None for lectura in resultado_validacion.validas):
+        raise ErrorDatosNoRecuperable(
+            "El archivo no contiene lecturas válidas. Se conserva el original; "
+            "no se sustituyen datos inválidos por promedios."
+        )
     resultado_persistencia = guardar_lecturas(
         db,
         resultado_validacion.validas,
@@ -205,6 +216,9 @@ def _publicar_eventos_mapa(db, resultado_persistencia) -> None:
         .filter(Parametro.nmbr.in_(list(ultimos.keys())))
         .all()
     }
+    from app.services.mapa.semaforo import semaforos_por_ubicacion
+
+    color = semaforos_por_ubicacion(db, [id_ubccn]).get(id_ubccn, "sin_reglas")
 
     eventos = [
         construir_evento(
@@ -216,6 +230,8 @@ def _publicar_eventos_mapa(db, resultado_persistencia) -> None:
         )
         for nombre, (valor, fecha_hora) in ultimos.items()
     ]
+    for evento in eventos:
+        evento["semaforo"] = color
     publicar_lecturas(eventos)
     logger.info("HU17: publicados %s evento(s) de mapa para ubicacion=%s", len(eventos), id_ubccn)
 
@@ -264,13 +280,20 @@ def procesar_archivo_dat(self, id_archv: int, id_usr_reintento: int | None = Non
     """
     db = SessionLocal()
     try:
-        archivo = db.get(ArchivoIngesta, id_archv)
+        archivo = db.query(ArchivoIngesta).filter_by(id_archv=id_archv).with_for_update().first()
         if archivo is None:
             logger.error("archv_ingst id=%s no existe, se descarta el job", id_archv)
             return {"id_archv": id_archv, "estado": "no_encontrado"}
 
+        if archivo.estd == "Exitoso":
+            return {"id_archv": id_archv, "estado": "Exitoso", "guardadas": 0}
         archivo.estd = "Procesando"
         db.commit()
+        # Reserva de la copia original: dos entregas del mismo job no pueden
+        # descargar y sobrescribir versiones distintas bajo un mismo archivo.
+        archivo = db.query(ArchivoIngesta).filter_by(id_archv=id_archv).with_for_update().first()
+        if archivo.estd == "Exitoso":
+            return {"id_archv": id_archv, "estado": "Exitoso", "guardadas": 0}
 
         logger.info(
             "Procesando archivo .dat: id_archv=%s cnxn=%s archivo=%s",
@@ -284,9 +307,22 @@ def procesar_archivo_dat(self, id_archv: int, id_usr_reintento: int | None = Non
             raise ErrorDatosNoRecuperable(f"cnxn_ftp id={archivo.id_cnxn} no existe")
 
         try:
-            dispositivo = resolver_dispositivo(db, archivo.id_cnxn)
+            dispositivo = dispositivo_del_archivo(db, archivo)
         except DispositivoNoResueltoError as exc:
             raise ErrorDatosNoRecuperable(str(exc)) from exc
+
+        datos = leer_original(archivo)
+        if datos is None:
+            datos = descargar_bytes_dat(cnxn, archivo.nmbr_archv)
+            conservar_original(archivo, datos)
+            # Confirmar el original antes del parseo: un rollback no lo pierde.
+            db.commit()
+        try:
+            contenido = datos.decode("utf-8-sig")
+        except UnicodeDecodeError as exc:
+            raise ErrorDatosNoRecuperable(
+                "El archivo no tiene codificación UTF-8 válida. Original conservado para revisión."
+            ) from exc
 
         # DEC-09 (PP-96): el formato aplicable sale de mp_frmt según el
         # DISPOSITIVO ya resuelto y el tipo de trama, que se deduce del
@@ -314,21 +350,6 @@ def procesar_archivo_dat(self, id_archv: int, id_usr_reintento: int | None = Non
         finally:
             limpiar_contexto_auditoria(db)
 
-        contenido = descargar_archivo_dat(cnxn, archivo.nmbr_archv)
-
-        # HT-06 CA3: archivar el .dat CRUDO en Object Storage. Se hace ANTES de
-        # parsear a propósito: así queda guardado el original aunque el parseo
-        # después falle, y si la subida falla se reintenta (BotoCoreError/
-        # ClientError son transitorios) sin duplicar telemetría -todavía no se
-        # insertó nada-. En entornos sin bucket (dev/CI) se saltea limpio.
-        if object_storage.esta_configurado():
-            object_storage.subir_contenido(
-                contenido.encode("utf-8"),
-                object_storage.clave_dat(archivo.id_cnxn, archivo.nmbr_archv),
-                content_type="text/plain; charset=utf-8",
-            )
-            logger.info("archv_ingst id=%s: .dat crudo archivado en Object Storage", id_archv)
-
         try:
             resultado_validacion, resultado_persistencia = interpretar_y_guardar(
                 db,
@@ -349,6 +370,13 @@ def procesar_archivo_dat(self, id_archv: int, id_usr_reintento: int | None = Non
         archivo.estd = "Exitoso"
         archivo.fch_prcsd = dt.datetime.now(dt.timezone.utc)
         archivo.rgstrs_prcsds = resultado_persistencia.guardadas
+        if resultado_persistencia.guardadas:
+            recepcion = archivo.fch_dtccn
+            if dispositivo.ultima_recepcion is None or recepcion > dispositivo.ultima_recepcion:
+                dispositivo.ultima_recepcion = recepcion
+                dispositivo.sin_datos_desde = None
+                dispositivo.aviso_sin_datos = None
+        archivo.mnsj_errr = None
         if resultado_validacion.errores:
             resumen_errores = "; ".join(
                 f"fila {e.numero_fila}: {e.motivo}" for e in resultado_validacion.errores[:5]
@@ -470,9 +498,13 @@ def sondear_conexiones_ftp() -> dict:
                 .filter(
                     Dispositivo.id_cnxn == ConexionFTP.id_cnxn,
                     Dispositivo.estd == "Activo",
+                    Dispositivo.id_ubccn.in_(
+                        db.query(Ubicacion.id_ubccn).filter(Ubicacion.monitoreo_activo.is_(True))
+                    ),
                 )
                 .exists(),
             )
+            .with_for_update(skip_locked=True)
             .all()
         )
 
@@ -496,20 +528,41 @@ def sondear_conexiones_ftp() -> dict:
                 )
                 continue
 
+            dispositivo = db.query(Dispositivo).filter_by(id_cnxn=cnxn.id_cnxn, estd="Activo").one()
             existentes = {
-                nombre
-                for (nombre,) in db.query(ArchivoIngesta.nmbr_archv)
+                (nombre, version)
+                for nombre, version in db.query(
+                    ArchivoIngesta.nmbr_archv, ArchivoIngesta.version_origen
+                )
                 .filter(ArchivoIngesta.id_cnxn == cnxn.id_cnxn)
                 .filter(ArchivoIngesta.nmbr_archv.in_(nombres))
                 .all()
             }
 
             for nombre in nombres:
-                if nombre in existentes:
+                version = getattr(nombre, "version", None)
+                datos = None
+                if hasattr(nombre, "version") and version is None:
+                    # FTP sin MLSD/MDTM/SIZE: comprobar contenido, no asumir
+                    # que un nombre repetido significa que no hay datos nuevos.
+                    try:
+                        datos = descargar_bytes_dat(cnxn, str(nombre))
+                    except ERRORES_TRANSITORIOS:
+                        logger.warning("No se pudo comprobar un archivo en cnxn=%s", cnxn.id_cnxn)
+                        continue
+                    version = hashlib.sha256(datos).hexdigest()
+                if (str(nombre), version) in existentes:
                     continue
-                archivo = ArchivoIngesta(id_cnxn=cnxn.id_cnxn, nmbr_archv=nombre)
+                archivo = ArchivoIngesta(
+                    id_cnxn=cnxn.id_cnxn,
+                    nmbr_archv=str(nombre),
+                    version_origen=version,
+                    id_dspstv=dispositivo.id_dspstv,
+                )
                 db.add(archivo)
                 db.flush()  # asigna id_archv, todavía sin confirmar
+                if datos is not None:
+                    conservar_original(archivo, datos)
                 por_encolar.append(archivo.id_archv)
 
             cnxn.ultm_snd = ahora

@@ -174,7 +174,16 @@ def crear_archivo(db_session, conexion, nombre="H_ejemplo.dat", estd="Pendiente"
     """Mismo helper que test_ingesta_cola.py: una fila de archv_ingst
     (HU09) sobre la conexión del dispositivo, para las estadísticas de
     HU19."""
-    archivo = ArchivoIngesta(id_cnxn=conexion.id_cnxn, nmbr_archv=nombre, estd=estd, **overrides)
+    equipo = (
+        db_session.query(Dispositivo).filter_by(id_cnxn=conexion.id_cnxn, estd="Activo").first()
+    )
+    archivo = ArchivoIngesta(
+        id_cnxn=conexion.id_cnxn,
+        id_dspstv=equipo.id_dspstv if equipo else None,
+        nmbr_archv=nombre,
+        estd=estd,
+        **overrides,
+    )
     db_session.add(archivo)
     db_session.flush()
     return archivo
@@ -188,15 +197,26 @@ def crear_archivo(db_session, conexion, nombre="H_ejemplo.dat", estd="Pendiente"
 class TestListarDispositivos:
     def test_devuelve_columnas_esperadas_sin_filtros(self, client, db_session, tecnico_lector):
         sede, _ = tecnico_lector
-        preparar_dispositivo(db_session, sede, nombre="CR1000-01")
+        dispositivo = preparar_dispositivo(db_session, sede, nombre="CR1000-01")
 
         resp = client.get("/dispositivos")
         assert resp.status_code == 200
         body = resp.json()
         assert body["total"] == 1
         item = body["items"][0]
-        assert set(item.keys()) == {"id_dspstv", "nmbr", "mrc", "ubicacion_nombre", "estd"}
+        assert set(item.keys()) == {
+            "id_dspstv",
+            "id_ubccn",
+            "nmbr",
+            "mrc",
+            "ubicacion_nombre",
+            "estd",
+            "ultima_recepcion",
+            "sin_datos_desde",
+            "monitoreo_activo",
+        }
         assert item["nmbr"] == "CR1000-01"
+        assert item["id_ubccn"] == dispositivo.id_ubccn
         assert item["mrc"] == "Campbell"
         assert item["ubicacion_nombre"] == "Ubicacion de CR1000-01"
         assert item["estd"] == "Activo"
@@ -416,6 +436,64 @@ class TestFiltroPorMarca:
 # ---------------------------------------------------------------------------
 # HU36 CA1 - GET /dispositivos/marcas (selector del filtro por marca)
 # ---------------------------------------------------------------------------
+
+
+class TestUbicacionesDisponibles:
+    def test_catalogo_completo_sin_limite_de_100(self, client, db_session, tecnico_lector):
+        sede, _ = tecnico_lector
+        crear_ubicacion(db_session, sede, nombre="Sin dispositivos")
+        for i in range(101):
+            preparar_dispositivo(db_session, sede, nombre=f"Equipo {i:03}")
+        # Un segundo dispositivo no duplica la opción del proyecto.
+        ubicacion = (
+            db_session.query(Ubicacion).filter(Ubicacion.nmbr == "Ubicacion de Equipo 000").one()
+        )
+        preparar_dispositivo(
+            db_session, sede, nombre="Adicional", ubicacion=ubicacion, estado="Inactivo"
+        )
+
+        resp = client.get("/dispositivos/ubicaciones")
+        assert resp.status_code == 200  # Solo tiene permiso Dispositivos.
+        items = resp.json()["items"]
+        assert len(items) == 101
+        assert items[-1]["nmbr"] == "Ubicacion de Equipo 100"
+        assert len({u["id_ubccn"] for u in items}) == 101
+
+    def test_no_expone_otra_sede(self, client, db_session, tecnico_lector, fabrica):
+        sede, _ = tecnico_lector
+        propio = preparar_dispositivo(db_session, sede)
+        preparar_dispositivo(db_session, fabrica.sede(), nombre="Ajeno")
+        resp = client.get("/dispositivos/ubicaciones")
+        assert [u["id_ubccn"] for u in resp.json()["items"]] == [propio.id_ubccn]
+
+    def test_cliente_solo_ve_proyectos_asignados(self, client, db_session, fabrica):
+        rol = fabrica.rol("Cliente Final")
+        sede = fabrica.sede()
+        usuario = fabrica.usuario(rol=rol)
+        agregar_permiso(db_session, usuario, sede, "Dispositivos", "Lectura", rol)
+        propio = preparar_dispositivo(db_session, sede, nombre="Asignado", estado="Inactivo")
+        preparar_dispositivo(db_session, sede, nombre="No asignado")
+        db_session.add(PermisoUbicacion(id_usr=usuario.id_usr, id_ubccn=propio.id_ubccn))
+        db_session.flush()
+        app.dependency_overrides[get_current_user] = lambda: usuario_jwt(
+            usuario, rol.nmbr, sede.id_sd
+        )
+        resp = client.get("/dispositivos/ubicaciones")
+        assert resp.status_code == 200
+        assert [u["id_ubccn"] for u in resp.json()["items"]] == [propio.id_ubccn]
+
+    @pytest.mark.parametrize("ruta", ["/dispositivos/ubicaciones", "/dispositivos/marcas"])
+    def test_catalogos_exigen_lectura(self, client, fabrica, ruta):
+        rol = fabrica.rol("Técnico CENERIS")
+        usuario = fabrica.usuario(rol=rol)
+        sede = fabrica.sede()
+        app.dependency_overrides[get_current_user] = lambda: usuario_jwt(
+            usuario, rol.nmbr, sede.id_sd
+        )
+        assert client.get(ruta).status_code == 403
+
+    def test_sin_dispositivos(self, client, tecnico_lector):
+        assert client.get("/dispositivos/ubicaciones").json() == {"items": []}
 
 
 class TestMarcasDisponibles:

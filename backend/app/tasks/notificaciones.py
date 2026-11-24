@@ -16,6 +16,7 @@ from app.services.correo_ses import (
     enviar_ses,
     error_transitorio,
 )
+from app.services.monitoreo import mantener_monitoreo, motivo_no_enviar, omitir_notificacion
 
 logger = logging.getLogger(__name__)
 MAX_REINTENTOS = int(os.environ.get("SES_MAX_RETRIES", "5"))
@@ -100,10 +101,15 @@ def enviar_notificacion(self, id_notificacion):
             .with_for_update(skip_locked=True)
             .one_or_none()
         )
-        if n is None or n.estd in {"Enviado", "Fallido"} or n.prxm_intnt > ahora():
+        if n is None or n.estd in {"Enviado", "Fallido", "Omitido"} or n.prxm_intnt > ahora():
             return {"estado": "omitido"}
         if n.cnl != "email":
             return {"estado": "canal_no_soportado"}
+        motivo = motivo_no_enviar(db, n)
+        if motivo:
+            omitir_notificacion(db, n, motivo)
+            db.commit()
+            return {"estado": "Omitido"}
         numero = (
             db.query(func.coalesce(func.max(IntentoNotificacion.numero), 0))
             .filter_by(id_ntfccn=n.id_ntfccn)
@@ -146,6 +152,14 @@ def enviar_notificacion(self, id_notificacion):
         # con un identificador nuevo. El fallo de publicación no pierde el aviso.
         raise self.retry(countdown=espera, max_retries=None)
     return {"estado": estado}
+
+
+@celery_app.task(name="app.tasks.notificaciones.mantener_monitoreo", ignore_result=True)
+def revisar_monitoreo():
+    with SessionLocal() as db:
+        resultado = mantener_monitoreo(db)
+        db.commit()
+        return resultado
 
 
 @celery_app.task(

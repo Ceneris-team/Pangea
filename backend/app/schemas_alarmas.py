@@ -37,6 +37,7 @@ class AlarmaListItem(BaseModel):
     parametro_nombre: str
     condicion: str | None
     estd: str
+    correos_habilitados: bool = True
     dispositivos: list[EstadoDispositivoAlarma] = Field(default_factory=list)
 
 
@@ -93,6 +94,7 @@ class AlarmaDetalle(BaseModel):
     id_alrm: int
     nmbr: str
     estd: str
+    correos_habilitados: bool = True
     parametro_nombre: str
     unidad: str | None
     condiciones: list[CondicionAlarmaCrear]

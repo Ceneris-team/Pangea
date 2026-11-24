@@ -56,9 +56,8 @@ html.dark select optgroup {
   display: none;
 }
 
-/* La animación de la cápsula activa del sidebar (Sidebar.tsx,
- * CapsulaActiva) se hace con Framer Motion, no con keyframes CSS; el
- * respeto a prefers-reduced-motion se resuelve ahí con MotionConfig. */
+/* Las transiciones de la interfaz y la preferencia de movimiento reducido
+ * se centralizan en styles/movimiento.css. */
 
 /* Textura de fondo global: el mapamundi de red de Fondo_Pangea.png (fondo
  * ya removido, ver assets/) como marca de agua fija de la página.
