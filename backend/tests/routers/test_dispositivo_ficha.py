@@ -473,8 +473,12 @@ class TestFichaYLogs:
         uno = preparar_dispositivo(db_session, sede, nombre="CR1000-log-A")
         dos = preparar_dispositivo(db_session, sede, nombre="CR1000-log-B")
 
-        db_session.add(ArchivoIngesta(id_cnxn=uno.id_cnxn, nmbr_archv="H_de_A.dat"))
-        db_session.add(ArchivoIngesta(id_cnxn=dos.id_cnxn, nmbr_archv="H_de_B.dat"))
+        db_session.add(
+            ArchivoIngesta(id_cnxn=uno.id_cnxn, id_dspstv=uno.id_dspstv, nmbr_archv="H_de_A.dat")
+        )
+        db_session.add(
+            ArchivoIngesta(id_cnxn=dos.id_cnxn, id_dspstv=dos.id_dspstv, nmbr_archv="H_de_B.dat")
+        )
         db_session.flush()
 
         resp = client.get(f"/dispositivos/{uno.id_dspstv}/logs")

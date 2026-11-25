@@ -1,46 +1,17 @@
-"""
-HU 17 - Semáforo de estado de una estación en el mapa, con las condiciones
-reales de las alarmas (HU 29, PP-74 / PP-230).
+"""El mapa utiliza las mismas condiciones compartidas que las alarmas."""
 
-Hasta PP-74 los colores salían de UMBRALES_TEMPORALES, un dict fijo en
-memoria que el propio módulo pedía reemplazar al implementar las
-condiciones de alarma. Ahora salen de cndcn_alrm:
-
-  ROJO      alguna alarma ACTIVA de la ubicación, sobre ese parámetro,
-            cumple su condición con el último valor.
-  AMARILLO  preaviso: el valor todavía no la cumple pero está a
-            MARGEN_PREAVISO (10 %) o menos del umbral, del lado en que se
-            dispararía (">"/">=": por debajo; "<"/"<=": por encima).
-  VERDE     el resto, incluidos los parámetros sin alarma configurada:
-            "sin condición definida" no es lo mismo que "en alarma".
-
-Decisión de Gean (PP-230, 19/11/2026) al pasar de umbrales de dos niveles
-a una condición binaria por alarma (v1.0: una condición por alarma).
-
-Qué alarmas cuentan: todas las ACTIVAS de la ubicación, de cualquier
-usuario. El color describe el estado de la ESTACIÓN (no revela qué alarma
-ni de quién) y la carga inicial del mapa se cachea por ámbito de
-ubicaciones, no por usuario (mapa_cliente.py): un color por usuario
-contaminaría esa caché. Las pausadas (Inactiva) no pintan.
-
-El vínculo es por id_prmtr y no por nombre: así lo guarda la alarma, y se
-elimina el problema de grafías ('Temperatura' vs 'temperatura') que el
-dict temporal tenía que normalizar.
-"""
-
+from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 
 from sqlalchemy.orm import Session
 
+# Los tres estados del semáforo (CA de HU 17: verde / amarillo / rojo).
+from app.models import Dispositivo, EventoTexto, Parametro, Telemetria, Ubicacion
 from app.models.alarma import Alarma, CondicionAlarma
 
-# Los tres estados del semáforo (CA de HU 17: verde / amarillo / rojo).
 VERDE = "verde"
-AMARILLO = "amarillo"
 ROJO = "rojo"
-
-# El orden de gravedad ES la precedencia al combinar los parámetros de una
-# estación: gana el más grave (ver evaluar_semaforo).
+AMARILLO = "amarillo"
 _GRAVEDAD = {VERDE: 0, AMARILLO: 1, ROJO: 2}
 
 # Preaviso: a 10 % del umbral (en valor absoluto) o menos.
@@ -154,3 +125,85 @@ def evaluar_semaforo(
         if _GRAVEDAD[color] > _GRAVEDAD[peor]:
             peor = color
     return peor
+
+
+def semaforos_por_ubicacion(db, ids_ubicaciones, dispositivo_id=None):
+    from app.services.monitoreo import umbral_sin_datos
+
+    proyectos = db.query(Ubicacion).filter(Ubicacion.id_ubccn.in_(ids_ubicaciones)).all()
+    resultado = {u.id_ubccn: "sin_datos" if u.monitoreo_activo else "detenido" for u in proyectos}
+    reglas = (
+        db.query(Alarma, CondicionAlarma)
+        .join(CondicionAlarma, CondicionAlarma.id_alrm == Alarma.id_alrm)
+        .join(Parametro, Parametro.id_prmtr == Alarma.id_prmtr)
+        .filter(Alarma.id_ubccn.in_(ids_ubicaciones), Alarma.estd == "Activa")
+        .all()
+    )
+    condiciones = {}
+    for alarma, condicion in reglas:
+        condiciones.setdefault(alarma.id_ubccn, {}).setdefault(alarma.id_prmtr, []).append(
+            (condicion.oprdr, condicion.vlr_umbrl)
+        )
+    limite = datetime.now(timezone.utc) - umbral_sin_datos()
+    consulta = (
+        db.query(
+            Dispositivo.id_ubccn,
+            Telemetria.id_dspstv,
+            Telemetria.id_prmtr,
+            Parametro.nmbr,
+            Telemetria.vlr,
+            Telemetria.fch_hr,
+        )
+        .select_from(Telemetria)
+        .join(Dispositivo, Dispositivo.id_dspstv == Telemetria.id_dspstv)
+        .join(Parametro, Parametro.id_prmtr == Telemetria.id_prmtr)
+        .filter(
+            Dispositivo.id_ubccn.in_(ids_ubicaciones),
+            Dispositivo.estd == "Activo",
+            Telemetria.fch_hr >= limite,
+        )
+    )
+    if dispositivo_id is not None:
+        consulta = consulta.filter(Dispositivo.id_dspstv == dispositivo_id)
+    ultimos = (
+        consulta.distinct(Telemetria.id_dspstv, Telemetria.id_prmtr)
+        .order_by(Telemetria.id_dspstv, Telemetria.id_prmtr, Telemetria.fch_hr.desc())
+        .all()
+    )
+    recientes = {fila[0] for fila in ultimos}
+    textos = (
+        db.query(Dispositivo.id_ubccn)
+        .join(EventoTexto, EventoTexto.id_dspstv == Dispositivo.id_dspstv)
+        .filter(
+            Dispositivo.id_ubccn.in_(ids_ubicaciones),
+            Dispositivo.estd == "Activo",
+            EventoTexto.fch_hr >= limite,
+        )
+    )
+    if dispositivo_id is not None:
+        textos = textos.filter(Dispositivo.id_dspstv == dispositivo_id)
+    recientes.update(proyecto for (proyecto,) in textos.distinct().all())
+    for proyecto in recientes:
+        if proyecto not in condiciones and resultado.get(proyecto) != "detenido":
+            resultado[proyecto] = "sin_reglas"
+    colores = {}
+    for proyecto, _equipo, _parametro, nombre, valor, fecha in ultimos:
+        if fecha < limite:
+            continue
+        color = (
+            evaluar_parametro(condiciones.get(proyecto, {}).get(_parametro, []), valor)
+            if _parametro in condiciones.get(proyecto, {})
+            else "sin_reglas"
+        )
+        if color in {ROJO, AMARILLO, VERDE}:
+            colores.setdefault(proyecto, set()).add(color)
+    for proyecto in condiciones:
+        if resultado.get(proyecto) == "detenido":
+            continue
+        actuales = colores.get(proyecto, set())
+        resultado[proyecto] = (
+            ROJO
+            if ROJO in actuales
+            else AMARILLO if AMARILLO in actuales else VERDE if VERDE in actuales else "sin_datos"
+        )
+    return resultado

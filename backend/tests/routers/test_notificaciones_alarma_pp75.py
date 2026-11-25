@@ -64,8 +64,14 @@ class TestCA1Panel:
         id_alarma = crear_por_api(client, escenario)
         assert db_session.get(Alarma, id_alarma).cnl_crr_actv is True
 
-    def test_alarma_ajena_o_inexistente_es_404(self, client, db_session, escenario, fabrica):
+    def test_otro_autor_es_visible_y_otro_proyecto_o_inexistente_es_404(
+        self, client, db_session, escenario, fabrica
+    ):
         ajena = crear_alarma(db_session, escenario, "Ajena", usuario=fabrica.usuario())
+        assert client.get(f"/alarmas/{ajena.id_alrm}/notificaciones").status_code == 200
+        fuera = base.crear_ubicacion(db_session, escenario["sede"], "Proyecto no asignado")
+        ajena.id_ubccn = fuera.id_ubccn
+        db_session.flush()
         assert client.get(f"/alarmas/{ajena.id_alrm}/notificaciones").status_code == 404
         assert client.get("/alarmas/999999/notificaciones").status_code == 404
 
@@ -163,8 +169,12 @@ class TestPermisos:
         )
         assert resp.status_code == 409
 
-    def test_alarma_ajena_no_se_modifica(self, client, db_session, escenario, fabrica):
+    def test_alarma_de_otro_proyecto_no_se_modifica(self, client, db_session, escenario, fabrica):
         ajena = crear_alarma(db_session, escenario, "Ajena", usuario=fabrica.usuario())
+        assert client.get(f"/alarmas/{ajena.id_alrm}/notificaciones").status_code == 200
+        fuera = base.crear_ubicacion(db_session, escenario["sede"], "Proyecto no asignado")
+        ajena.id_ubccn = fuera.id_ubccn
+        db_session.flush()
         resp = client.put(
             f"/alarmas/{ajena.id_alrm}/notificaciones", json={"canal_email_activo": False}
         )

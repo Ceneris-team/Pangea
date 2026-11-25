@@ -21,6 +21,8 @@ from app.routers import (
     mapeos,
     mediciones,
     panel,
+    parametros_calculados,
+    resultados_calculados,
     solicitudes_suscripcion,
     ubicaciones,
     usuarios,
@@ -64,6 +66,8 @@ app.include_router(mediciones.router)
 app.include_router(exportaciones.router)
 app.include_router(mapeos.router)
 app.include_router(mapeos.router_parametros)
+app.include_router(parametros_calculados.router)
+app.include_router(resultados_calculados.router)
 app.include_router(mapeos.router_sedes)
 app.include_router(mapeos.router_dispositivos_mapeo)
 app.include_router(dispositivos.router)

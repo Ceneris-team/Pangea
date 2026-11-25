@@ -505,8 +505,8 @@ export default function DispositivoDetalle() {
       <p>Proyecto: {dispositivo.ubicacion_nombre} · {dispositivo.mrc} · {dispositivo.mdl} · {dispositivo.estd}</p>
       <p>Ubicación del dispositivo: {dispositivo.lttd}, {dispositivo.lngtd}</p>
       <div className="flex flex-wrap gap-3">
-        <button className={botonPrimario} onClick={() => navigate(`/consulta-datos?ubicacion_id=${dispositivo.id_ubccn}`)}>Consultar datos</button>
-        <button className={botonPrimario} onClick={() => navigate(`/graficos?ubicacion_id=${dispositivo.id_ubccn}`)}>Ver gráficos</button>
+        <button className={botonPrimario} onClick={() => navigate(`/consulta-datos?ubicacion_id=${dispositivo.id_ubccn}&dispositivo_ids=${dispositivo.id_dspstv}`)}>Consultar datos</button>
+        <button className={botonPrimario} onClick={() => navigate(`/graficos?ubicacion_id=${dispositivo.id_ubccn}&dispositivo_ids=${dispositivo.id_dspstv}`)}>Ver gráficos</button>
       </div>
     </section> : <p className="text-gray-700 dark:text-gray-200">Cargando dispositivo...</p>}
   </DashboardLayout>;

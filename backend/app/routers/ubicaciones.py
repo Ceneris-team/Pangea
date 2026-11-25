@@ -60,6 +60,7 @@ from app.schemas import (
 from app.security.entorno import filtrar_proyectos, verificar_proyecto
 from app.security.permisos import EDICION, LECTURA, require_permiso, verificar_sede
 from app.services.cache import consultas as cache
+from app.services.cache.invalidacion import invalidar_por_lectura
 from app.services.limites_plan import comprobar_cupo
 
 router = APIRouter(prefix="/ubicaciones", tags=["Ubicaciones"])
@@ -194,6 +195,7 @@ def ubicaciones_para_mapa(
             lttd=ubicacion.lttd,
             lngtd=ubicacion.lngtd,
             estd=ubicacion.estd,
+            monitoreo_activo=ubicacion.monitoreo_activo,
             plgn_gjsn=ubicacion.plgn_gjsn,
             dispositivos_count=cantidad,
         )
@@ -420,7 +422,16 @@ def actualizar_ubicacion(
 
     datos = body.model_dump(exclude_unset=True)
 
-    if ubicacion.estd != "Activa" and datos.get("estd") == "Activa":
+    tiene_equipo_activo = (
+        db.query(Dispositivo).filter_by(id_ubccn=id_ubccn, estd="Activo").first() is not None
+    )
+    consumia_cupo = ubicacion.estd == "Activa" or (
+        ubicacion.monitoreo_activo and tiene_equipo_activo
+    )
+    consumira_cupo = datos.get("estd", ubicacion.estd) == "Activa" or (
+        datos.get("monitoreo_activo", ubicacion.monitoreo_activo) and tiene_equipo_activo
+    )
+    if not consumia_cupo and consumira_cupo:
         id_clnt = db.query(Sede.id_clnt).filter(Sede.id_sd == ubicacion.id_sd).scalar()
         comprobar_cupo(db, id_clnt, "ubicaciones")
 
@@ -430,12 +441,16 @@ def actualizar_ubicacion(
     # de reventar como IntegrityError en el commit.
     if "dscrpcn" in datos:
         datos["dscrpcn"] = (datos["dscrpcn"].strip() or None) if datos["dscrpcn"] else None
-    for campo in ("nmbr", "lttd", "lngtd", "plgn_gjsn", "estd"):
+    for campo in ("nmbr", "lttd", "lngtd", "plgn_gjsn", "estd", "monitoreo_activo"):
         if campo in datos and datos[campo] is None:
             del datos[campo]
 
     for campo, valor in datos.items():
         setattr(ubicacion, campo, valor)
+    if datos.get("monitoreo_activo") is False:
+        db.query(Dispositivo).filter_by(id_ubccn=id_ubccn).update(
+            {"sin_datos_desde": None, "aviso_sin_datos": None}
+        )
 
     try:
         db.commit()
@@ -447,6 +462,7 @@ def actualizar_ubicacion(
             status_code=409, detail="Ya existe una ubicación con ese nombre en esta sede"
         )
     db.refresh(ubicacion)
+    invalidar_por_lectura(id_sd=ubicacion.id_sd, id_ubccn=ubicacion.id_ubccn)
 
     return {
         "mensaje": "Ubicación actualizada correctamente",

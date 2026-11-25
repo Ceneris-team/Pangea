@@ -56,9 +56,8 @@ html.dark select optgroup {
   display: none;
 }
 
-/* La animación de la cápsula activa del sidebar (Sidebar.tsx,
- * CapsulaActiva) se hace con Framer Motion, no con keyframes CSS; el
- * respeto a prefers-reduced-motion se resuelve ahí con MotionConfig. */
+/* Las transiciones de la interfaz y la preferencia de movimiento reducido
+ * se centralizan en styles/movimiento.css. */
 
 /* Textura de fondo global: el mapamundi de red de Fondo_Pangea.png (fondo
  * ya removido, ver assets/) como marca de agua fija de la página.
@@ -92,10 +91,53 @@ body::before {
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
-  opacity: 0.06;
+  opacity: 0.025;
   pointer-events: none;
 }
 
 html.dark body::before {
-  opacity: 0.1;
+  opacity: 0.035;
+}
+
+/* Las superficies de lectura conservan un fondo uniforme sobre la marca de agua. */
+table {
+  background-color: #fff;
+}
+
+html.dark table {
+  background-color: #111a2a;
+}
+
+@media (max-width: 767px) {
+  .tabla-alarmas, .tabla-alarmas tbody, .tabla-alarmas tbody tr {
+    display: block;
+    width: 100%;
+  }
+
+  .tabla-alarmas thead { display: none; }
+
+  .tabla-alarmas tbody td {
+    display: block;
+    padding: 0.65rem 1rem;
+    text-align: left;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .tabla-alarmas td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 0.25rem;
+    font-size: 0.7rem;
+    font-weight: 600;
+    opacity: 0.75;
+  }
+
+  .tabla-alarmas td[data-label="Acciones"] {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .tabla-alarmas td[data-label="Acciones"]::before { width: 100%; }
 }

@@ -167,6 +167,7 @@ class UbicacionListItem(BaseModel):
     lttd: float
     lngtd: float
     estd: str
+    monitoreo_activo: bool = True
 
 
 class UbicacionDetalle(UbicacionListItem):
@@ -319,6 +320,7 @@ class UbicacionActualizar(BaseModel):
     lngtd: float | None = Field(default=None, ge=-180, le=180)
     plgn_gjsn: dict | None = None
     estd: str | None = None
+    monitoreo_activo: bool | None = None
 
     @field_validator("nmbr")
     @classmethod
@@ -377,10 +379,14 @@ class DispositivoListItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id_dspstv: int
+    id_ubccn: int
     nmbr: str
     mrc: str
     ubicacion_nombre: str
     estd: str
+    ultima_recepcion: datetime | None = None
+    sin_datos_desde: datetime | None = None
+    monitoreo_activo: bool = True
 
 
 class DispositivoParaMapa(BaseModel):
@@ -595,6 +601,7 @@ class ArchivoIngestaListItem(BaseModel):
     datalogger_nombre: str
     fch_dtccn: datetime
     estado: str
+    mnsj_errr: str | None = None
 
 
 class ArchivoIngestaDetalle(BaseModel):
@@ -608,6 +615,7 @@ class ArchivoIngestaDetalle(BaseModel):
     fch_prcsd: datetime | None
     rgstrs_prcsds: int | None
     mnsj_errr: str | None
+    puede_reprocesar: bool = False
 
 
 class IntentoProcesamientoListItem(BaseModel):
@@ -622,12 +630,14 @@ class IntentoProcesamientoListItem(BaseModel):
     mnsj_errr: str | None
     id_usr: int | None
     usuario_nombre: str | None
+    fch_inicio: datetime | None = None
+    fch_fin: datetime | None = None
+    reintentos: int = 0
+    registros_guardados: int | None = None
 
 
 class ReintentoMasivoResponse(BaseModel):
-    """Reintento masivo de todos los archivos Fallido de la sede del
-    usuario (extensión de HU31 a "en cantidad", ver
-    reintentar_fallidos_ingesta en routers/ingesta.py)."""
+    """Solicitudes durables aceptadas dentro del contexto y filtros indicados."""
 
     reencolados: int
 
@@ -687,6 +697,8 @@ class MedicionListItem(BaseModel):
     podía agrupar series por ubicación y mezclaba las lecturas de
     dataloggers distintos en una sola línea."""
 
+    origen: str = "telemetria"
+    id_calculado: int | None = None
     id_registro: int
     fch_hr: datetime
     id_ubccn: int

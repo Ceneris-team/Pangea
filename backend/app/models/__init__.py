@@ -7,6 +7,14 @@ from app.models.alarma import (
     NotificacionEnviada,
 )
 from app.models.archivo_ingesta import ArchivoIngesta
+from app.models.calculos import (
+    ConfiguracionCalculo,
+    DependenciaCalculo,
+    ResultadoCalculo,
+    RevisionCalculo,
+    SerieCalculada,
+    TrabajoCalculo,
+)
 from app.models.cliente_sede import Cliente, Proyecto, Sede
 from app.models.evento_texto import EventoTexto
 from app.models.intento_procesamiento import IntentoProcesamiento

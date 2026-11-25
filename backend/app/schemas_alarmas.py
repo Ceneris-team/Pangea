@@ -14,9 +14,19 @@ con varias condiciones no se rompen.
 """
 
 import re
+from datetime import datetime
 from decimal import Decimal, InvalidOperation
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, StrictBool, field_validator
+
+
+class EstadoDispositivoAlarma(BaseModel):
+    id_dspstv: int
+    nombre: str
+    en_alarma: bool
+    desde: datetime | None
+    ultima_evaluacion: datetime | None
+    pendiente_evaluacion: bool
 
 
 class AlarmaListItem(BaseModel):
@@ -36,6 +46,8 @@ class AlarmaListItem(BaseModel):
     parametro_nombre: str
     condicion: str | None
     estd: str
+    correos_habilitados: bool = True
+    dispositivos: list[EstadoDispositivoAlarma] = Field(default_factory=list)
 
 
 # Mismos operadores que admite el CHECK de cndcn_alrm
@@ -139,6 +151,17 @@ class CondicionAlarmaDetalle(BaseModel):
     vlr_umbrl: float | None
     condicion: str | None
     condiciones_guardadas: int
+
+
+class AlarmaDetalle(BaseModel):
+    id_alrm: int
+    nmbr: str
+    estd: str
+    correos_habilitados: bool = True
+    parametro_nombre: str
+    unidad: str | None
+    condiciones: list[CondicionAlarmaCrear]
+    dispositivos: list[EstadoDispositivoAlarma]
 
 
 class AlarmaCrear(BaseModel):

@@ -81,7 +81,7 @@ from app.security.permisos import EDICION, LECTURA, require_permiso, verificar_s
 from app.security.ubicaciones_permitidas import ubicaciones_permitidas
 from app.services.contratos import condiciones_de, ultimo_contrato
 from app.services.limites_plan import fecha_comercial
-from app.services.mapa.semaforo import condiciones_por_ubicacion, evaluar_semaforo
+from app.services.mapa.semaforo import semaforos_por_ubicacion
 from app.services.mapa.ultimos_valores import ultimos_valores_por_ubicacion
 
 
@@ -424,22 +424,21 @@ def obtener_contenido_panel(
         .all()
     )
     ultimos = ultimos_valores_por_ubicacion(db, [u.id_ubccn for u in ubicaciones], dispositivo_id)
-    # HU29 (PP-230): el semáforo usa las condiciones de las alarmas activas.
-    condiciones = condiciones_por_ubicacion(db, [u.id_ubccn for u in ubicaciones])
+    colores = semaforos_por_ubicacion(db, [u.id_ubccn for u in ubicaciones], dispositivo_id)
     dispositivos = (
         db.query(Dispositivo)
         .filter(Dispositivo.id_ubccn.in_([u.id_ubccn for u in ubicaciones]))
         .order_by(Dispositivo.nmbr, Dispositivo.id_dspstv)
         .all()
     )
-    conexiones = {d.id_cnxn for d in dispositivos}
+    conexiones = {d.id_dspstv for d in dispositivos}
     archivos = (
         (
             db.query(ArchivoIngesta)
-            .filter(ArchivoIngesta.id_cnxn.in_(conexiones))
-            .distinct(ArchivoIngesta.id_cnxn)
+            .filter(ArchivoIngesta.id_dspstv.in_(conexiones))
+            .distinct(ArchivoIngesta.id_dspstv)
             .order_by(
-                ArchivoIngesta.id_cnxn,
+                ArchivoIngesta.id_dspstv,
                 ArchivoIngesta.fch_dtccn.desc(),
                 ArchivoIngesta.id_archv.desc(),
             )
@@ -448,7 +447,7 @@ def obtener_contenido_panel(
         if conexiones
         else []
     )
-    ultimo_archivo = {a.id_cnxn: a for a in archivos}
+    ultimo_archivo = {a.id_dspstv: a for a in archivos}
     return {
         "proyecto_activo": (
             {
@@ -466,17 +465,8 @@ def obtener_contenido_panel(
                 "lttd": float(u.lttd),
                 "lngtd": float(u.lngtd),
                 "estd": u.estd,
-                "semaforo": (
-                    evaluar_semaforo(
-                        {
-                            dato["id_prmtr"]: dato["valor"]
-                            for dato in ultimos.get(u.id_ubccn, {}).values()
-                        },
-                        condiciones.get(u.id_ubccn, {}),
-                    )
-                    if ultimos.get(u.id_ubccn)
-                    else "sin_datos"
-                ),
+                "semaforo": colores.get(u.id_ubccn, "sin_reglas"),
+                "monitoreo_activo": u.monitoreo_activo,
                 "ultima_lectura": (
                     max(
                         (
@@ -518,10 +508,10 @@ def obtener_contenido_panel(
                 "estd": d.estd,
                 "ultima_ingesta": (
                     {
-                        "estado": ultimo_archivo[d.id_cnxn].estd,
-                        "fecha": ultimo_archivo[d.id_cnxn].fch_dtccn.isoformat(),
+                        "estado": ultimo_archivo[d.id_dspstv].estd,
+                        "fecha": ultimo_archivo[d.id_dspstv].fch_dtccn.isoformat(),
                     }
-                    if d.id_cnxn in ultimo_archivo
+                    if d.id_dspstv in ultimo_archivo
                     else None
                 ),
             }

@@ -130,6 +130,21 @@ router = APIRouter(prefix="/dispositivos", tags=["Dispositivos"])
 ROLES_CON_ACCESO_TOTAL = {"Administrador", "Tecnico CENERIS", "Técnico CENERIS"}
 
 
+def _confirmar_dispositivo(db):
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        if (
+            getattr(getattr(exc.orig, "diag", None), "constraint_name", None)
+            == "uq_dspstv_conexion_activa"
+        ):
+            raise HTTPException(
+                409, "Esta conexión FTP ya tiene un dispositivo activo asociado"
+            ) from None
+        raise
+
+
 def _requerir_tecnico_o_admin(
     usuario: dict = Depends(get_current_user), db: Session = Depends(get_db)
 ) -> dict:
@@ -171,6 +186,26 @@ def _query_dispositivos_visibles(db: Session, usuario: dict):
         ).filter(PermisoUbicacion.id_usr == id_usr)
 
     return query
+
+
+@router.get("/ubicaciones")
+def listar_ubicaciones_disponibles(
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(require_permiso("Dispositivos", LECTURA)),
+):
+    """HU36: catálogo completo de proyectos con dispositivos visibles.
+
+    Comparte permiso y alcance con el listado; no depende del permiso
+    de otro módulo ni del límite de 100 del listado de proyectos.
+    """
+    filas = (
+        _query_dispositivos_visibles(db, usuario)
+        .with_entities(Ubicacion.id_ubccn, Ubicacion.nmbr)
+        .distinct()
+        .order_by(Ubicacion.nmbr, Ubicacion.id_ubccn)
+        .all()
+    )
+    return {"items": [{"id_ubccn": id_ubccn, "nmbr": nombre} for id_ubccn, nombre in filas]}
 
 
 @router.get("/marcas")
@@ -235,10 +270,14 @@ def listar_dispositivos(
     items = [
         DispositivoListItem(
             id_dspstv=dispositivo.id_dspstv,
+            id_ubccn=dispositivo.id_ubccn,
             nmbr=dispositivo.nmbr,
             mrc=dispositivo.mrc,
             ubicacion_nombre=ubicacion_nombre,
             estd=dispositivo.estd,
+            ultima_recepcion=dispositivo.ultima_recepcion,
+            sin_datos_desde=dispositivo.sin_datos_desde,
+            monitoreo_activo=db.get(Ubicacion, dispositivo.id_ubccn).monitoreo_activo,
         )
         for dispositivo, ubicacion_nombre in filas
     ]
@@ -302,7 +341,9 @@ def crear_dispositivo(
     if ubicacion.estd != "Activa":
         raise HTTPException(status_code=422, detail="La ubicación elegida no está Activa")
 
-    conexion = db.query(ConexionFTP).filter(ConexionFTP.id_cnxn == body.id_cnxn).first()
+    conexion = (
+        db.query(ConexionFTP).filter(ConexionFTP.id_cnxn == body.id_cnxn).with_for_update().first()
+    )
     if conexion is None:
         raise HTTPException(status_code=422, detail=f"La conexión FTP {body.id_cnxn} no existe")
 
@@ -345,7 +386,7 @@ def crear_dispositivo(
         # estd lo pone el server_default 'Activo' del modelo.
     )
     db.add(dispositivo)
-    db.commit()
+    _confirmar_dispositivo(db)
     db.refresh(dispositivo)
 
     return {
@@ -440,7 +481,12 @@ def actualizar_dispositivo(
     dispositivo, ubicacion, _conexion_actual = _cargar_ficha(db, id_dspstv, usuario, EDICION)
 
     if body.id_cnxn is not None and body.id_cnxn != dispositivo.id_cnxn:
-        conexion_nueva = db.query(ConexionFTP).filter(ConexionFTP.id_cnxn == body.id_cnxn).first()
+        conexion_nueva = (
+            db.query(ConexionFTP)
+            .filter(ConexionFTP.id_cnxn == body.id_cnxn)
+            .with_for_update()
+            .first()
+        )
         if conexion_nueva is None:
             raise HTTPException(status_code=422, detail=f"La conexión FTP {body.id_cnxn} no existe")
         verificar_sede(usuario, conexion_nueva.id_sd, db, modulo="Ingesta", accion=EDICION)
@@ -478,7 +524,7 @@ def actualizar_dispositivo(
     for campo, valor in datos.items():
         setattr(dispositivo, campo, valor)
 
-    db.commit()
+    _confirmar_dispositivo(db)
     db.refresh(dispositivo)
 
     conexion = db.query(ConexionFTP).filter(ConexionFTP.id_cnxn == dispositivo.id_cnxn).first()
@@ -529,6 +575,8 @@ def eliminar_dispositivo(
     """
     dispositivo, ubicacion, _conexion = _cargar_ficha(db, id_dspstv, usuario, EDICION)
 
+    db.query(ConexionFTP).filter_by(id_cnxn=dispositivo.id_cnxn).with_for_update().one()
+
     if dispositivo.estd == "Inactivo":
         raise HTTPException(status_code=409, detail="Este dispositivo ya está inactivo")
 
@@ -555,6 +603,7 @@ def reactivar_dispositivo(
     reactivarlo también rompería esa resolución en silencio.
     """
     dispositivo, ubicacion, _conexion = _cargar_ficha(db, id_dspstv, usuario, EDICION)
+    db.query(ConexionFTP).filter_by(id_cnxn=dispositivo.id_cnxn).with_for_update().one()
 
     if dispositivo.estd == "Activo":
         raise HTTPException(status_code=409, detail="Este dispositivo ya está activo")
@@ -578,7 +627,7 @@ def reactivar_dispositivo(
     comprobar_cupo(db, id_clnt, "dispositivos")
 
     dispositivo.estd = "Activo"
-    db.commit()
+    _confirmar_dispositivo(db)
 
     return {"mensaje": "Dispositivo reactivado correctamente"}
 
@@ -592,18 +641,15 @@ def listar_logs_dispositivo(
 ):
     """Pestaña LOGS: los archivos procesados de ESTE dispositivo.
 
-    Reusa archv_ingst (el modelo de cola/log de HU09, ya presente en esta
-    rama), sin tabla nueva. archv_ingst referencia la CONEXIÓN, no el
-    dispositivo, así que el filtro va por id_cnxn: la equivalencia se
-    sostiene porque HU11 garantiza un solo dispositivo activo por conexión
-    (el 409 de crear_dispositivo), que es el mismo supuesto con el que
-    resolver_dispositivo() decide a qué dispositivo pertenece un archivo
-    entrante."""
+    Los archivos se vinculan al equipo de origen aunque después se reutilice
+    la conexión FTP para un reemplazo. Los registros sin equipo inequívoco
+    se conservan en la cola general sin atribuirlos al equipo actual.
+    """
     dispositivo, _ubicacion, _conexion = _cargar_ficha(db, id_dspstv, usuario, LECTURA)
 
     filas = (
         db.query(ArchivoIngesta)
-        .filter(ArchivoIngesta.id_cnxn == dispositivo.id_cnxn)
+        .filter(ArchivoIngesta.id_dspstv == dispositivo.id_dspstv)
         .order_by(ArchivoIngesta.fch_dtccn.desc())
         .limit(limite)
         .all()
@@ -646,7 +692,7 @@ def estadisticas_dispositivo(
         )
 
     base = db.query(ArchivoIngesta).filter(
-        ArchivoIngesta.id_cnxn == dispositivo.id_cnxn,
+        ArchivoIngesta.id_dspstv == dispositivo.id_dspstv,
         ArchivoIngesta.fch_dtccn >= inicio,
         ArchivoIngesta.fch_dtccn <= fin,
     )
@@ -657,7 +703,7 @@ def estadisticas_dispositivo(
     ultima_fecha_recepcion = (
         db.query(func.max(ArchivoIngesta.fch_dtccn))
         .filter(
-            ArchivoIngesta.id_cnxn == dispositivo.id_cnxn,
+            ArchivoIngesta.id_dspstv == dispositivo.id_dspstv,
             ArchivoIngesta.fch_dtccn >= inicio,
             ArchivoIngesta.fch_dtccn <= fin,
         )
@@ -733,11 +779,16 @@ async def cargar_archivo_dat(
 
     registro = ArchivoIngesta(
         id_cnxn=dispositivo.id_cnxn,
+        id_dspstv=dispositivo.id_dspstv,
         nmbr_archv=nombre,
         estd="Procesando",
     )
     db.add(registro)
     db.flush()  # necesitamos id_archv para las filas de tlmtr
+    from app.services.ingesta.originales import conservar_original
+
+    conservar_original(registro, contenido_bytes)
+    db.commit()
 
     try:
         resultado_validacion, resultado_persistencia = interpretar_y_guardar(
@@ -754,6 +805,10 @@ async def cargar_archivo_dat(
         # archv_ingst): no queda un log 'Procesando' colgado de una carga
         # que el usuario ya sabe que falló.
         db.rollback()
+        registro = db.get(ArchivoIngesta, registro.id_archv)
+        registro.estd = "Fallido"
+        registro.mnsj_errr = str(exc)[:500]
+        db.commit()
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     registro.estd = "Exitoso"

@@ -1,5 +1,5 @@
 import { estadoProyecto } from "../config/terminologia";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { apiFetch, ApiError } from "../services/api";
 import { useAuth } from "../hooks/useAuth";
@@ -11,6 +11,7 @@ import MapaDibujoPoligono, { type PoligonoGeoJSON } from "../components/MapaDibu
 import { centroideDePoligono } from "../components/poligono";
 
 interface UbicacionListItem {
+  monitoreo_activo?: boolean;
   id_ubccn: number;
   nmbr: string;
   dscrpcn: string | null;
@@ -35,6 +36,7 @@ interface Sede {
  *  edición -el listado (UbicacionListItem) no trae el polígono, que solo
  *  hace falta cuando se va a editar el contorno-. */
 interface UbicacionDetalle {
+  monitoreo_activo?: boolean;
   id_ubccn: number;
   nmbr: string;
   dscrpcn: string | null;
@@ -45,13 +47,14 @@ interface UbicacionDetalle {
 }
 
 interface UbicacionForm {
+  monitoreo_activo: boolean;
   nmbr: string;
   dscrpcn: string;
   id_sd: string;
   estd: string;
 }
 
-const FORM_VACIO: UbicacionForm = { nmbr: "", dscrpcn: "", id_sd: "", estd: "Activa" };
+const FORM_VACIO: UbicacionForm = { nmbr: "", dscrpcn: "", id_sd: "", estd: "Activa", monitoreo_activo: true };
 
 const INPUT_CLASE =
   "bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block w-full p-2.5 outline-none";
@@ -173,6 +176,14 @@ export default function Ubicaciones() {
   function actualizarCampo<K extends keyof UbicacionForm>(campo: K, valor: UbicacionForm[K]) {
     setForm((prev) => ({ ...prev, [campo]: valor }));
   }
+  const solicitudDetalle = useRef(0);
+  const monitoreoInicial = useRef(true);
+
+  function cerrarFormulario() {
+    if (guardando) return;
+    solicitudDetalle.current += 1;
+    setDrawerAbierto(false);
+  }
 
   // El punto de referencia se DERIVA del contorno, ya no se teclea: pedir
   // lat/lng a mano a quien ya dibujó la zona es redundante y permite que
@@ -180,6 +191,9 @@ export default function Ubicaciones() {
   const centro = useMemo(() => centroideDePoligono(poligono), [poligono]);
 
   function abrirCrear() {
+    solicitudDetalle.current += 1;
+    setCargandoDetalle(false);
+    monitoreoInicial.current = true;
     setIdEnEdicion(null);
     setForm(FORM_VACIO);
     setPoligono(null);
@@ -190,6 +204,7 @@ export default function Ubicaciones() {
   /** HU08 (ampliación) CA1: precarga nombre/descripción/estado/contorno
    *  desde GET /ubicaciones/:id -el listado no trae el polígono-. */
   function abrirEditar(id: number) {
+    const solicitud = ++solicitudDetalle.current;
     setIdEnEdicion(id);
     setForm(FORM_VACIO);
     setPoligono(null);
@@ -199,13 +214,16 @@ export default function Ubicaciones() {
 
     apiFetch<UbicacionDetalle>(`/ubicaciones/${id}`)
       .then((u) => {
-        setForm({ nmbr: u.nmbr, dscrpcn: u.dscrpcn ?? "", id_sd: "", estd: u.estd });
+        if (solicitud !== solicitudDetalle.current) return;
+        monitoreoInicial.current = u.monitoreo_activo ?? true;
+        setForm({ nmbr: u.nmbr, dscrpcn: u.dscrpcn ?? "", id_sd: "", estd: u.estd, monitoreo_activo: u.monitoreo_activo ?? true });
         setPoligono(u.plgn_gjsn ?? null);
       })
       .catch((err) => {
+        if (solicitud !== solicitudDetalle.current) return;
         setErrorForm(err instanceof ApiError ? err.message : "No se pudo cargar el proyecto");
       })
-      .finally(() => setCargandoDetalle(false));
+      .finally(() => { if (solicitud === solicitudDetalle.current) setCargandoDetalle(false); });
   }
 
   // HU22 CA3: "Editar ubicación" desde el popup del mapa llega acá con
@@ -254,6 +272,8 @@ export default function Ubicaciones() {
       return;
     }
 
+    if (idEnEdicion && monitoreoInicial.current && !form.monitoreo_activo
+      && !window.confirm("Al guardar se detendrá la recogida de datos y los avisos de todos los equipos de este proyecto. Las mediciones futuras podrían no recuperarse. El historial se conserva. ¿Detener el monitoreo?")) return;
     setGuardando(true);
     setErrorForm("");
     try {
@@ -270,6 +290,7 @@ export default function Ubicaciones() {
             lngtd: centro.lng,
             plgn_gjsn: poligono,
             estd: form.estd,
+            monitoreo_activo: form.monitoreo_activo,
           },
         });
         setDrawerAbierto(false);
@@ -330,7 +351,7 @@ export default function Ubicaciones() {
                 </p>
                 {rol === ROLES.CLIENTE_FINAL && (
                   <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
-                    Aquí solo aparecen los proyectos asignados a tu cuenta. El cupo del plan incluye todos los proyectos activos de tu empresa.{" "}
+                    Aquí solo aparecen los proyectos asignados a tu cuenta. El cupo incluye los proyectos activos y los archivados que siguen monitoreando equipos.{" "}
                     <Link to="/panel-cliente" className="font-semibold text-[#5a7000] underline dark:text-[#ccff00]">Ver consumo del plan</Link>
                   </p>
                 )}
@@ -417,7 +438,7 @@ export default function Ubicaciones() {
                   >
                     <option value="">Todos los estados</option>
                     <option value="Activa">Activo</option>
-                    <option value="Inactiva">Inactivo</option>
+                    <option value="Inactiva">Archivado</option>
                   </select>
                 </div>
               </div>
@@ -484,6 +505,7 @@ export default function Ubicaciones() {
                               )}
                               {estadoProyecto(u.estd)}
                             </span>
+                            <p className="mt-2 text-xs text-gray-500">{u.monitoreo_activo === false ? "Recogida detenida" : "Recogida habilitada"}</p>
                           </td>
                           <td className="px-6 py-4 text-right">
                             <div className="flex items-center justify-end gap-2">
@@ -564,7 +586,7 @@ export default function Ubicaciones() {
           espacio horizontal para ser usable. */}
       <DrawerPanel
         abierto={drawerAbierto}
-        onCerrar={() => setDrawerAbierto(false)}
+        onCerrar={cerrarFormulario}
         titulo={idEnEdicion ? "Editar proyecto" : "Agregar proyecto"}
         ancho="xl"
       >
@@ -607,7 +629,7 @@ export default function Ubicaciones() {
                 {idEnEdicion ? (
                   <div>
                     <label className={LABEL_CLASE} htmlFor="estd">
-                      Estado <span className="text-red-500">*</span>
+                      Organización del proyecto <span className="text-red-500">*</span>
                     </label>
                     <select
                       id="estd"
@@ -616,8 +638,13 @@ export default function Ubicaciones() {
                       className={INPUT_CLASE + " cursor-pointer"}
                     >
                       <option value="Activa">Activo</option>
-                      <option value="Inactiva">Inactivo</option>
+                      <option value="Inactiva">Archivado</option>
                     </select>
+                    <p className="mt-2 text-xs text-gray-500">Archivar conserva la recogida de datos. El monitoreo se controla por separado.</p>
+                    <label className="mt-4 flex items-start gap-2 text-sm text-gray-700 dark:text-gray-200">
+                      <input type="checkbox" className="mt-1" checked={form.monitoreo_activo} onChange={(e) => actualizarCampo("monitoreo_activo", e.target.checked)} />
+                      <span>Recoger datos de los equipos del proyecto<span className="mt-1 block text-xs text-gray-500">Desmarcar detiene la recepción y los avisos al guardar. No borra el historial.</span></span>
+                    </label>
                   </div>
                 ) : (
                   sedes.length > 0 && (
@@ -684,7 +711,7 @@ export default function Ubicaciones() {
             <div className="mt-6 pt-6 border-t border-black/10 dark:border-white/10 flex justify-end gap-3">
               <button
                 type="button"
-                onClick={() => setDrawerAbierto(false)}
+                onClick={cerrarFormulario}
                 className="px-4 py-2 text-sm font-medium rounded-xl border border-black/20 dark:border-white/20 text-gray-700 dark:text-gray-200 hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
               >
                 Cancelar

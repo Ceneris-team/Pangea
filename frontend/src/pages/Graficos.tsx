@@ -2,11 +2,13 @@ import KpisAmpliados from "../components/KpisAmpliados";
 import { acotarZoom, crearActualizadorSerial, type CambioRangoGrafico } from "./actualizacionGraficos";
 import { NOMBRES_VISTA, VISTAS_SERIE, type VistaSerie } from "../components/configuracionSerieUtils";
 import ComparacionDataloggers from "../components/ComparacionDataloggers";
+import ConsultaCalculo from "../components/ConsultaCalculo";
 import { agruparSeriesComparables, nombreFuente, colorDatalogger, type FuenteSerie, type SerieTelemetria, type DatosSerie } from "./seriesTelemetria";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useSearchParams } from "react-router-dom";
 import { apiFetch, ApiError } from "../services/api";
+import { listarTodasLasPaginas } from "../services/paginacion";
 import { useAuth } from "../hooks/useAuth";
 import { useTheme } from "../hooks/useTheme";
 import Sidebar from "../components/layout/Sidebar";
@@ -35,6 +37,7 @@ import type { RangoFechas } from "../utils/fechas";
  * anterior al rango. La reducción de puntos solo afecta al dibujo. */
 
 export default function Graficos() {
+  const [calculoAbierto, setCalculoAbierto] = useState<number | null>(null);
   const { nombreCompleto, rol, logout, zonaHoraria } = useAuth();
 
   // HU17 CA4: ubicación preseleccionada por query param. Se lee con
@@ -63,7 +66,12 @@ export default function Graficos() {
   // ubicación elegida no se listan -elegir la ubicación es el primer
   // paso-. Sin selección de dispositivos = "todos los de esa ubicación".
   const [dispositivos, setDispositivos] = useState<DispositivoItem[]>([]);
-  const [dispositivosSeleccionados, setDispositivosSeleccionados] = useState<number[]>([]);
+  const idsEnlace = searchParams.getAll("dispositivo_ids").join(",");
+  const dispositivosSeleccionados = useMemo(() => [...new Set(idsEnlace.split(",").map(Number).filter(id => Number.isInteger(id) && id !== 0))], [idsEnlace]);
+  const [errorParametros, setErrorParametros] = useState("");
+  const [errorProyectos, setErrorProyectos] = useState("");
+  const [errorDispositivos, setErrorDispositivos] = useState("");
+  const [revisionCatalogos, setRevisionCatalogos] = useState(0);
   // Panel lateral con los checkboxes de dataloggers: colapsado por
   // defecto para que la pantalla no se sienta lineal/apilada -se abre
   // como un drawer sobre el contenido, no como una sección fija más-.
@@ -99,22 +107,26 @@ export default function Graficos() {
   );
 
   useEffect(() => {
-    apiFetch<{ items: ParametroItem[] }>("/mediciones/parametros")
+    const controller = new AbortController();
+    apiFetch<{ items: ParametroItem[] }>("/mediciones/parametros", { signal: controller.signal })
       .then((res) => {
-        setParametros(res.items);
+        if (!controller.signal.aborted) { setParametros(res.items); setErrorParametros(""); }
       })
-      .catch(() => setParametros([]));
-  }, []);
+      .catch(() => { if (!controller.signal.aborted) setErrorParametros("No se pudieron cargar los parámetros."); });
+    return () => controller.abort();
+  }, [revisionCatalogos]);
 
   // Catálogo de ubicaciones para el selector, siempre cargado -ya no
   // depende de que llegue un ubicacion_id por query param, porque ahora
   // el selector se ofrece siempre, no solo cuando se llega desde el mapa
   // (HU17)-.
   useEffect(() => {
-    apiFetch<{ items: UbicacionItem[] }>("/ubicaciones", { params: { por_pagina: 100 } })
-      .then((res) => setUbicaciones(res.items))
-      .catch(() => setUbicaciones([]));
-  }, []);
+    const controller = new AbortController();
+    listarTodasLasPaginas<UbicacionItem>("/ubicaciones", {}, controller.signal)
+      .then(items => { if (!controller.signal.aborted) { setUbicaciones(items); setErrorProyectos(""); } })
+      .catch(() => { if (!controller.signal.aborted) setErrorProyectos("No se pudieron cargar todos los proyectos."); });
+    return () => controller.abort();
+  }, [revisionCatalogos]);
 
   // Catálogo de dispositivos de la ubicación elegida. Elegir la
   // ubicación es el primer paso para poder elegir DESPUÉS sus
@@ -125,18 +137,16 @@ export default function Graficos() {
     const controlador = new AbortController();
     queueMicrotask(() => {
       if (controlador.signal.aborted) return;
-      setDispositivosSeleccionados([]);
       setPanelDataloggersAbierto(false);
       setDispositivos([]);
+      setErrorDispositivos("");
     });
     if (!ubicacionIdValida) return () => controlador.abort();
-    apiFetch<{ items: DispositivoItem[] }>("/dispositivos", {
-      params: { por_pagina: 100, id_ubccn: ubicacionId as number }, signal: controlador.signal,
-    })
-      .then(res => { if (!controlador.signal.aborted) setDispositivos(res.items); })
-      .catch(() => { if (!controlador.signal.aborted) setDispositivos([]); });
+    listarTodasLasPaginas<DispositivoItem>("/dispositivos", { id_ubccn: ubicacionId as number }, controlador.signal)
+      .then(items => { if (!controlador.signal.aborted) setDispositivos([...items, { id_dspstv: -(ubicacionId as number), ubicacion_nombre: "Punto seleccionado", nmbr: "Cálculos del punto" }]); })
+      .catch(() => { if (!controlador.signal.aborted) setErrorDispositivos("No se pudieron cargar todos los dataloggers."); });
     return () => controlador.abort();
-  }, [ubicacionIdValida, ubicacionId]);
+  }, [ubicacionIdValida, ubicacionId, revisionCatalogos]);
 
   useEffect(() => {
     let cancelado = false;
@@ -212,7 +222,7 @@ export default function Graficos() {
       })
       .catch(err => { if (!cancelado) setErrorSeries({ ubicacion: ubicacionId!, mensaje: err instanceof ApiError ? err.message : "No se pudieron cargar las series" }); });
     return () => { cancelado = true; };
-  }, [ubicacionId, ubicacionIdValida, rangoFechas]);
+  }, [ubicacionId, ubicacionIdValida, rangoFechas, revisionCatalogos]);
   const seriesVisibles = catalogoSeries?.ubicacion === ubicacionId ? catalogoSeries.items.filter(s =>
     parametrosSeleccionados.includes(s.id_prmtr) && (!dispositivosSeleccionados.length || dispositivosSeleccionados.includes(s.id_dspstv))) : [];
 
@@ -223,13 +233,21 @@ export default function Graficos() {
   };
 
   const toggleDispositivo = (id: number) => {
-    setDispositivosSeleccionados((actual) => (actual.includes(id) ? actual.filter((v) => v !== id) : [...actual, id]));
+    elegirDispositivos(dispositivosSeleccionados.includes(id) ? dispositivosSeleccionados.filter(v => v !== id) : [...dispositivosSeleccionados, id]);
   };
+
+  function elegirDispositivos(ids: number[]) {
+    const siguiente = new URLSearchParams(searchParams);
+    siguiente.delete("dispositivo_ids");
+    ids.forEach(id => siguiente.append("dispositivo_ids", String(id)));
+    setSearchParams(siguiente, { replace: true });
+  }
 
   function elegirUbicacion(id: string) {
     const siguiente = new URLSearchParams(searchParams);
     if (id) siguiente.set("ubicacion_id", id);
     else siguiente.delete("ubicacion_id");
+    siguiente.delete("dispositivo_ids");
     setSearchParams(siguiente, { replace: true });
   }
 
@@ -263,6 +281,7 @@ export default function Graficos() {
   return (
     <div className="font-sans">
       <div className="flex h-screen bg-transparent transition-colors duration-300 overflow-hidden">
+        {calculoAbierto !== null && <ConsultaCalculo key={calculoAbierto} id={calculoAbierto} onCerrar={() => setCalculoAbierto(null)} />}
         <Sidebar onLogout={logout} activo="graficos" rol={rol} />
 
         <div className="flex-1 flex flex-col overflow-hidden">
@@ -271,6 +290,10 @@ export default function Graficos() {
           </div>
 
           <main className="flex-1 overflow-y-auto p-6 md:p-8">
+            {(errorParametros || errorProyectos || errorDispositivos) && <div role="alert" className="mb-4 rounded-xl bg-red-50 p-4 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">
+              {[errorParametros, errorProyectos, errorDispositivos].filter(Boolean).map(mensaje => <p key={mensaje}>{mensaje}</p>)}
+              <button type="button" onClick={() => setRevisionCatalogos(v => v + 1)} className="mt-2 underline">Reintentar catálogos</button>
+            </div>}
             <div className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl shadow-sm border border-black/10 dark:border-white/10 p-5 mb-6">
               {/* Elegir la ubicación es el primer paso: define qué
                   dataloggers hay disponibles para el paso siguiente
@@ -311,7 +334,7 @@ export default function Graficos() {
                   {/* Solo se ofrece el panel si la ubicación elegida
                       tiene más de un datalogger -con uno solo, filtrar
                       no cambiaría nada y sería un botón sin efecto-. */}
-                  {dispositivos.length > 1 && (
+                  {(dispositivos.length > 1 || dispositivosSeleccionados.length > 0) && (
                     <button
                       type="button"
                       onClick={() => setPanelDataloggersAbierto(true)}
@@ -329,13 +352,14 @@ export default function Graficos() {
                     </button>
                   )}
                 </div>
+                {dispositivosSeleccionados.length > 0 && <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">Equipos seleccionados: {dispositivosSeleccionados.map(id => dispositivos.find(d => d.id_dspstv === id)?.nmbr ?? `Equipo ${id}`).join(", ")}</p>}
               </div>
 
               {ubicacionIdValida && (
                 <fieldset className="mt-6 pt-6 border-t border-black/10 dark:border-white/10">
                   <legend className="text-sm font-bold text-gray-700 dark:text-gray-200 mb-3">Parámetros</legend>
                   <div className="flex flex-wrap gap-2">
-                    {parametrosGraficables.length === 0 && (
+                    {parametrosGraficables.length === 0 && !errorParametros && !errorSeries && (
                       <span className="text-sm text-gray-500 dark:text-gray-400">No hay parámetros disponibles.</span>
                     )}
                     {/* Chips tipo toggle en vez de checkboxes nativos: el
@@ -381,6 +405,7 @@ export default function Graficos() {
               {ubicacionIdValida && (
                 <div className="mt-6 pt-6 border-t border-black/10 dark:border-white/10">
                   <SelectorRangoFechasTimeline controlRef={controlTimeline} zonaHoraria={zonaHoraria} onCambiarRango={cambiarRango} />
+                  <div className="mt-4 flex flex-wrap gap-3">{parametrosGraficables.filter(p => p.id_prmtr < 0 && parametrosSeleccionados.includes(p.id_prmtr)).map(p => <button type="button" key={p.id_prmtr} className="text-sm text-gray-700 underline dark:text-gray-200" onClick={() => setCalculoAbierto(-p.id_prmtr)}>Ver fórmula y fuentes de {p.nmbr}</button>)}</div>
                 </div>
               )}
             </div>
@@ -517,7 +542,7 @@ export default function Graficos() {
           dispositivosSeleccionados.length > 0 ? (
             <button
               type="button"
-              onClick={() => setDispositivosSeleccionados([])}
+              onClick={() => elegirDispositivos([])}
               className="w-full px-4 py-2.5 rounded-xl border border-black/20 dark:border-white/20 text-gray-700 dark:text-gray-200 text-sm font-bold hover:bg-black/5 dark:hover:bg-white/10 transition-all"
             >
               Quitar selección ({dispositivosSeleccionados.length})

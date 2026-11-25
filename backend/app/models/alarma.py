@@ -93,7 +93,7 @@ class NotificacionEnviada(Base):
     __table_args__ = (
         CheckConstraint("cnl IN ('email','telegram')", name="ntfccnenvd_cnl_check"),
         CheckConstraint(
-            "estd IN ('Pendiente','Encolado','Reintentando','Enviado','Fallido')",
+            "estd IN ('Pendiente','Encolado','Reintentando','Enviado','Fallido','Omitido')",
             name="ntfccnenvd_estado_check",
         ),
         Index("idx_ntfccn_pendiente", "estd", "prxm_intnt"),
@@ -104,6 +104,7 @@ class NotificacionEnviada(Base):
     id_alrm = Column(Integer, ForeignKey("alrm.id_alrm"), nullable=True)
     id_usr = Column(Integer, ForeignKey("usr.id_usr"))
     id_sd = Column(Integer, ForeignKey("sd.id_sd"))
+    id_ubccn = Column(Integer, ForeignKey("ubccn.id_ubccn"))
     tipo = Column(String(50), nullable=False, server_default="alarma_activada")
     plantilla = Column(String(50), nullable=False, server_default="alarma_activada")
     contexto = Column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
@@ -129,7 +130,11 @@ class EstadoAlarma(Base):
         Integer, ForeignKey("dspstv.id_dspstv", ondelete="CASCADE"), primary_key=True
     )
     en_alarma = Column(Boolean, nullable=False, server_default=text("false"))
+    inicio_alarma = Column(TIMESTAMP(timezone=True), nullable=True)
+    pendiente_evaluacion = Column(Boolean, nullable=False, server_default=text("false"))
     ultima_fecha = Column(TIMESTAMP(timezone=True), nullable=False)
+    resumen_pendiente = Column(Boolean, nullable=False, server_default=text("false"))
+    ultimo_valor = Column(Numeric(14, 4))
 
 
 class IntentoNotificacion(Base):

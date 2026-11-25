@@ -37,6 +37,7 @@ import { apiFetch } from "../services/api";
 
 /** Lo que el backend manda por el canal (ver services/mapa/eventos.py). */
 export interface EventoLectura {
+  semaforo?: string;
   id_ubccn: number;
   parametro: string;
   unidad: string;

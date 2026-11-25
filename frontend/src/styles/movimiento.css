@@ -1,0 +1,137 @@
+:root {
+  --ui-movimiento-rapido: 140ms;
+  --ui-movimiento-entrada: 180ms;
+  --ui-movimiento-panel: 240ms;
+  --ui-curva-salida: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Una entrada por vista, sin animar filas ni repetirla al refrescar datos. */
+#root main {
+  animation: ui-vista-entrada var(--ui-movimiento-entrada) ease-out;
+}
+
+#root main > header {
+  animation: ui-titulo-entrada var(--ui-movimiento-panel) var(--ui-curva-salida);
+}
+
+html,
+#root main,
+.ui-panel-scroll {
+  scroll-behavior: smooth;
+  scroll-padding-block: 1rem;
+}
+
+#root main,
+.ui-panel-scroll {
+  overscroll-behavior-y: contain;
+}
+
+.ui-panel-fondo {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity var(--ui-movimiento-entrada) ease-out,
+    visibility 0s var(--ui-movimiento-entrada);
+}
+
+.ui-panel-fondo[data-abierto="true"] {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transition-delay: 0s;
+}
+
+.ui-panel-lateral {
+  transform: translateX(100%);
+  visibility: hidden;
+  transition: transform var(--ui-movimiento-panel) var(--ui-curva-salida),
+    visibility 0s var(--ui-movimiento-panel);
+}
+
+.ui-panel-lateral[data-abierto="true"] {
+  transform: translateX(0);
+  visibility: visible;
+  transition-delay: 0s;
+}
+
+.ui-menu-activo {
+  animation: ui-menu-entrada var(--ui-movimiento-entrada) var(--ui-curva-salida);
+}
+
+.ui-menu-enlace {
+  transition: color var(--ui-movimiento-rapido), background-color var(--ui-movimiento-rapido),
+    translate var(--ui-movimiento-rapido) ease-out;
+}
+
+.ui-popover-entrada,
+dialog[open] {
+  animation: ui-superficie-entrada var(--ui-movimiento-entrada) var(--ui-curva-salida);
+}
+
+.ui-modal-fondo,
+dialog[open]::backdrop {
+  animation: ui-vista-entrada var(--ui-movimiento-entrada) ease-out;
+}
+
+.ui-modal-superficie {
+  animation: ui-superficie-entrada var(--ui-movimiento-entrada) var(--ui-curva-salida);
+}
+
+/* Las propiedades individuales no pisan rotaciones ni posiciones del control. */
+:is(#root, [role="dialog"], dialog) :where(button, a[role="button"]) {
+  transition: color var(--ui-movimiento-rapido), background-color var(--ui-movimiento-rapido),
+    border-color var(--ui-movimiento-rapido), opacity var(--ui-movimiento-rapido),
+    translate var(--ui-movimiento-rapido) ease-out;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  :where(#root, [role="dialog"], dialog) button:enabled:hover {
+    translate: 0 -1px;
+  }
+
+  .ui-menu-enlace:hover {
+    translate: 2px 0;
+  }
+}
+
+:where(#root, [role="dialog"], dialog) button:enabled:active,
+.ui-menu-enlace:active {
+  translate: 0 1px;
+}
+
+@keyframes ui-vista-entrada {
+  from { opacity: 0.84; }
+  to { opacity: 1; }
+}
+
+@keyframes ui-titulo-entrada {
+  from { opacity: 0.8; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes ui-menu-entrada {
+  from { opacity: 0.5; transform: translateX(-8px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes ui-superficie-entrada {
+  from { opacity: 0.65; transform: translateY(6px) scale(0.99); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0s !important;
+    scroll-behavior: auto !important;
+  }
+
+  :where(#root, [role="dialog"], dialog) button,
+  .ui-menu-enlace {
+    translate: none !important;
+  }
+}

@@ -181,9 +181,15 @@ class TestVerCondicion:
         cuerpo = client.get(f"/alarmas/{alarma.id_alrm}/condicion").json()
         assert cuerpo["oprdr"] == ">" and cuerpo["condiciones_guardadas"] == 2
 
-    def test_alarma_ajena_o_inexistente_es_404(self, client, db_session, escenario, fabrica):
+    def test_otro_autor_es_visible_y_otro_proyecto_o_inexistente_es_404(
+        self, client, db_session, escenario, fabrica
+    ):
         otro = fabrica.usuario()
         ajena = crear_alarma(db_session, escenario, "Ajena", usuario=otro)
+        assert client.get(f"/alarmas/{ajena.id_alrm}/condicion").status_code == 200
+        fuera = base.crear_ubicacion(db_session, escenario["sede"], "Proyecto no asignado")
+        ajena.id_ubccn = fuera.id_ubccn
+        db_session.flush()
         assert client.get(f"/alarmas/{ajena.id_alrm}/condicion").status_code == 404
         assert client.get("/alarmas/999999/condicion").status_code == 404
 
@@ -242,8 +248,12 @@ class TestActualizarCondicion:
         assert resp.status_code == 422
         assert condiciones_en_bd(db_session, id_alarma) == [(">", 3.5)]
 
-    def test_alarma_ajena_es_404(self, client, db_session, escenario, fabrica):
+    def test_alarma_de_otro_proyecto_es_404(self, client, db_session, escenario, fabrica):
         ajena = crear_alarma(db_session, escenario, "Ajena", usuario=fabrica.usuario())
+        assert client.get(f"/alarmas/{ajena.id_alrm}/condicion").status_code == 200
+        fuera = base.crear_ubicacion(db_session, escenario["sede"], "Proyecto no asignado")
+        ajena.id_ubccn = fuera.id_ubccn
+        db_session.flush()
         resp = client.put(
             f"/alarmas/{ajena.id_alrm}/condicion", json={"oprdr": ">", "vlr_umbrl": 1}
         )

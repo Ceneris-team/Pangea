@@ -1,19 +1,19 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { apiFetch, ApiError } from "../services/api";
+import { listarTodasLasPaginas } from "../services/paginacion";
 import { useAuth } from "../hooks/useAuth";
 import Sidebar from "../components/layout/Sidebar";
 import Topbar from "../components/layout/Topbar";
 import DrawerPanel from "../components/layout/DrawerPanel";
 import SelectorRangoFechas from "../components/SelectorRangoFechas";
 import ExportacionesPanel from "../components/ExportacionesPanel";
+import ConsultaCalculo from "../components/ConsultaCalculo";
+import FiltrosAvanzadosPanel from "../components/FiltrosAvanzadosPanel";
+import { parametrosConRango, validarCondiciones, serializarCondiciones, describirCondicion, type CondicionBorrador, type ParametroFiltro } from "../services/filtrosAvanzados";
 import { formatearFechaHoraEnZona, rangoUltimas24Horas, type RangoFechas } from "../utils/fechas";
 
-interface ParametroItem {
-  id_prmtr: number;
-  nmbr: string;
-  undd: string;
-}
+type ParametroItem = ParametroFiltro;
 
 interface UbicacionItem {
   id_ubccn: number;
@@ -21,11 +21,13 @@ interface UbicacionItem {
 }
 
 interface MedicionItem {
+  id_calculado?: number | null;
   id_registro: number;
   fch_hr: string;
   ubicacion_nombre: string;
   parametro_nombre: string;
   undd: string;
+  dispositivo_nombre: string;
   vlr: number | string;
 }
 
@@ -40,59 +42,43 @@ interface ListadoUbicaciones {
   items: UbicacionItem[];
 }
 
-// HU32: valor mínimo/máximo (decimales) y frecuencia de muestreo
-// (minutos). Filtros v1.0, acumulativos entre sí (mín+máx = rango).
-interface FiltrosAvanzados {
-  valorMin: string;
-  valorMax: string;
-  frecuenciaMuestreo: string;
-}
-
-const FILTROS_AVANZADOS_VACIOS: FiltrosAvanzados = {
-  valorMin: "",
-  valorMax: "",
-  frecuenciaMuestreo: "",
-};
+interface DispositivoItem { id_dspstv: number; nmbr: string; id_ubccn: number }
 
 function construirQuery(
   parametroIds: number[],
   ubicacionIds: number[],
   rangoFechas: RangoFechas | null,
-  filtrosAvanzados: FiltrosAvanzados,
+  filtrosAvanzados: CondicionBorrador[],
+  dispositivoIds: number[],
 ): string {
   const params = new URLSearchParams();
   // La tabla recorre todas las páginas; el muestreo automático es para gráficas.
   params.append("sin_muestreo", "true");
   parametroIds.forEach((id) => params.append("parametro_ids", String(id)));
   ubicacionIds.forEach((id) => params.append("ubicacion_ids", String(id)));
+  dispositivoIds.forEach((id) => params.append("dispositivo_ids", String(id)));
   if (rangoFechas) {
     params.append("fecha_inicio", new Date(rangoFechas.inicio).toISOString());
     params.append("fecha_fin", new Date(rangoFechas.fin).toISOString());
   }
-  // CA3: se agregan a la misma query que parámetros/ubicaciones/fechas
-  // -el backend los intersecta, no hace falta nada especial acá para
-  // que HU32 se combine con el rango de HU12-.
-  if (filtrosAvanzados.valorMin !== "") {
-    params.append("valor_min", filtrosAvanzados.valorMin);
-  }
-  if (filtrosAvanzados.valorMax !== "") {
-    params.append("valor_max", filtrosAvanzados.valorMax);
-  }
-  if (filtrosAvanzados.frecuenciaMuestreo !== "") {
-    params.append("frecuencia_muestreo", filtrosAvanzados.frecuenciaMuestreo);
-  }
+  if (filtrosAvanzados.length) params.append("condiciones", JSON.stringify(serializarCondiciones(filtrosAvanzados)));
   const query = params.toString();
   return query ? `/mediciones?${query}` : "/mediciones";
 }
 
 export default function ConsultaDatos() {
+  const [calculoAbierto, setCalculoAbierto] = useState<number | null>(null);
   const { nombreCompleto, rol, logout, zonaHoraria } = useAuth();
 
-  // HU19 CA4: "VER HISTORIAL DE DATOS" desde el panel de estadísticas de un
-  // dispositivo llega acá con su ubicación preseleccionada -este módulo
-  // solo filtra por ubicación, no por dispositivo-, mismo patrón que
-  // ubicacion_id en Graficos.tsx (HU17 CA4).
-  const [searchParams] = useSearchParams();
+  // Los enlaces desde una ficha conservan tanto el proyecto como el equipo.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const idsEnlace = searchParams.getAll("dispositivo_ids").join(",");
+  const filtroDispositivos = useMemo(() => [...new Set(idsEnlace.split(",").map(Number).filter(id => Number.isInteger(id) && id !== 0))], [idsEnlace]);
+  const [seleccionDispositivos, setSeleccionDispositivos] = useState<number[]>(filtroDispositivos);
+  const [dispositivos, setDispositivos] = useState<DispositivoItem[]>([]);
+  const [errorCatalogos, setErrorCatalogos] = useState("");
+  const [cargandoCatalogos, setCargandoCatalogos] = useState(true);
+  const [revisionCatalogos, setRevisionCatalogos] = useState(0);
   const ubicacionIdParam = searchParams.get("ubicacion_id");
   const ubicacionIdInicial = ubicacionIdParam !== null ? Number(ubicacionIdParam) : null;
   const ubicacionesIniciales =
@@ -107,21 +93,15 @@ export default function ConsultaDatos() {
   const [filtroParametros, setFiltroParametros] = useState<number[]>([]);
   const [filtroUbicaciones, setFiltroUbicaciones] = useState<number[]>(ubicacionesIniciales);
 
-  // HU12: rango de fechas, con su propia selección/filtro aplicado.
-  // CA: el rango por defecto al ingresar al módulo son las últimas 24 horas.
+  // Todos los campos se editan como borrador y se aplican juntos.
+  // El rango inicial y el restablecimiento corresponden a las últimas 24 horas.
   const [seleccionFechas, setSeleccionFechas] = useState<RangoFechas>(rangoUltimas24Horas);
   const [filtroFechas, setFiltroFechas] = useState<RangoFechas>(rangoUltimas24Horas);
 
-  // HU32: filtros avanzados (valor mín/máx, frecuencia de muestreo), con
-  // su propia selección/filtro aplicado -mismo patrón que los tres
-  // bloques de arriba, panel propio con su propio APLICAR/LIMPIAR,
-  // independiente de "LIMPIAR" (HU13) y "LIMPIAR FILTRO" (HU12).
-  const [seleccionAvanzados, setSeleccionAvanzados] = useState<FiltrosAvanzados>(
-    FILTROS_AVANZADOS_VACIOS,
-  );
-  const [filtroAvanzados, setFiltroAvanzados] = useState<FiltrosAvanzados>(
-    FILTROS_AVANZADOS_VACIOS,
-  );
+  // Los filtros avanzados siguen el mismo borrador que fechas, equipos y proyectos.
+  const [seleccionAvanzados, setSeleccionAvanzados] = useState<CondicionBorrador[]>([]);
+  const [filtroAvanzados, setFiltroAvanzados] = useState<CondicionBorrador[]>([]);
+  const [revisionConsulta, setRevisionConsulta] = useState(0);
   const [errorAvanzados, setErrorAvanzados] = useState<string | null>(null);
 
   const [mediciones, setMediciones] = useState<ListadoMediciones | null>(null);
@@ -147,9 +127,17 @@ export default function ConsultaDatos() {
 
   // CA1: carga los parámetros y ubicaciones disponibles para el usuario (HU21/HU06)
   useEffect(() => {
-    apiFetch<{ items: ParametroItem[] }>("/mediciones/parametros")
-      .then((res) => setParametros(res.items))
-      .catch(() => setParametros([]));
+    const controller = new AbortController();
+    queueMicrotask(() => { if (!controller.signal.aborted) setCargandoCatalogos(true); });
+    Promise.all([
+      apiFetch<{ items: ParametroItem[] }>("/mediciones/parametros", { signal: controller.signal }),
+      listarTodasLasPaginas<DispositivoItem>("/dispositivos", {}, controller.signal),
+    ]).then(([catalogo, equipos]) => {
+      if (controller.signal.aborted) return;
+      const puntosCalculados = [...new Set(catalogo.items.filter(p => p.id_prmtr < 0).flatMap(p => p.fuentes?.map(f => f.ubicacion_id) ?? []))];
+      setParametros(catalogo.items); setDispositivos([...equipos, ...puntosCalculados.map(p => ({ id_dspstv: -p, id_ubccn: p, nmbr: "Cálculos del punto" }))]); setErrorCatalogos("");
+    }).catch(() => { if (!controller.signal.aborted) setErrorCatalogos("No se pudieron cargar los parámetros o los equipos disponibles."); })
+      .finally(() => { if (!controller.signal.aborted) setCargandoCatalogos(false); });
 
     let cancelado = false;
     async function cargarUbicaciones() {
@@ -168,7 +156,7 @@ export default function ConsultaDatos() {
           }
           pagina += 1;
         } while (todas.length < total);
-        if (!cancelado) setUbicaciones(todas);
+        if (!cancelado) { setUbicaciones(todas); setErrorUbicaciones(null); }
       } catch {
         if (!cancelado) setErrorUbicaciones("No se pudieron cargar los proyectos disponibles.");
       } finally {
@@ -176,11 +164,11 @@ export default function ConsultaDatos() {
       }
     }
     void cargarUbicaciones();
-    return () => { cancelado = true; };
-  }, []);
+    return () => { cancelado = true; controller.abort(); };
+  }, [revisionCatalogos]);
 
   const queryMediciones = construirQuery(
-    filtroParametros, filtroUbicaciones, filtroFechas, filtroAvanzados,
+    filtroParametros, filtroUbicaciones, filtroFechas, filtroAvanzados, filtroDispositivos,
   );
 
   useEffect(() => {
@@ -214,7 +202,7 @@ export default function ConsultaDatos() {
     return () => {
       cancelado = true;
     };
-  }, [queryMediciones]);
+  }, [queryMediciones, revisionConsulta]);
 
   const hayMasMediciones = mediciones !== null && (
     usaCursor ? mediciones.next_cursor !== null : mediciones.items.length < mediciones.total
@@ -265,25 +253,50 @@ export default function ConsultaDatos() {
   // Conteo de filtros YA APLICADOS (no la selección en curso dentro del
   // panel) para el badge del botón "Filtros": deja ver de un vistazo que
   // hay algo filtrado sin tener que abrir el panel a revisar.
-  const cantidadFiltrosAvanzados =
-    (filtroAvanzados.valorMin !== "" ? 1 : 0) +
-    (filtroAvanzados.valorMax !== "" ? 1 : 0) +
-    (filtroAvanzados.frecuenciaMuestreo !== "" ? 1 : 0);
+  const cantidadFiltrosAvanzados = filtroAvanzados.length;
+  const parametrosConCondicion = parametrosConRango(parametros, seleccionUbicaciones, seleccionDispositivos, seleccionParametros);
   const filtrosActivos =
-    filtroParametros.length + filtroUbicaciones.length + cantidadFiltrosAvanzados;
+    filtroParametros.length + filtroUbicaciones.length + filtroDispositivos.length + cantidadFiltrosAvanzados;
 
   // CA2/CA3: "APLICAR" traslada la selección en curso a los filtros activos
   const handleAplicar = () => {
+    const inicio = Date.parse(seleccionFechas.inicio), fin = Date.parse(seleccionFechas.fin);
+    if (!Number.isFinite(inicio) || !Number.isFinite(fin) || inicio >= fin) {
+      setErrorAvanzados("La fecha final debe ser posterior a la fecha inicial."); return;
+    }
+    if (fin > Date.now()) { setErrorAvanzados("No se permiten fechas futuras."); return; }
+    const errorCondiciones = validarCondiciones(seleccionAvanzados, parametrosConCondicion);
+    if (errorCondiciones) { setErrorAvanzados(errorCondiciones); return; }
+    if (seleccionDispositivos.some(id => !dispositivos.some(d => d.id_dspstv === id && (!seleccionUbicaciones.length || seleccionUbicaciones.includes(d.id_ubccn))))) {
+      setErrorAvanzados("Selecciona equipos disponibles en los proyectos elegidos."); return;
+    }
+    setErrorAvanzados(null);
     setFiltroParametros(seleccionParametros);
     setFiltroUbicaciones(seleccionUbicaciones);
+    setFiltroFechas(seleccionFechas);
+    setFiltroAvanzados(serializarCondiciones(seleccionAvanzados).map(c => ({ ...c, minimo: c.minimo ?? "", maximo: c.maximo ?? "" })));
+    const siguiente = new URLSearchParams(searchParams);
+    siguiente.delete("dispositivo_ids");
+    if (seleccionUbicaciones.length === 1) siguiente.set("ubicacion_id", String(seleccionUbicaciones[0]));
+    else siguiente.delete("ubicacion_id");
+    seleccionDispositivos.forEach(id => siguiente.append("dispositivo_ids", String(id)));
+    setSearchParams(siguiente, { replace: true });
+    setPanelFiltrosAbierto(false);
   };
 
-  // CA4: "LIMPIAR FILTROS" quita los filtros y muestra todos los datos disponibles
+  // Restablecer todo también quita los equipos del enlace y restaura las fechas.
   const handleLimpiar = () => {
     setSeleccionParametros([]);
     setSeleccionUbicaciones([]);
     setFiltroParametros([]);
     setFiltroUbicaciones([]);
+    setSeleccionDispositivos([]);
+    const siguiente = new URLSearchParams(searchParams);
+    siguiente.delete("dispositivo_ids");
+    siguiente.delete("ubicacion_id");
+    setSearchParams(siguiente, { replace: true });
+    handleLimpiarFechas();
+    handleLimpiarAvanzados();
   };
 
   // HU12 CA2/CA3: aplica el rango de fechas en curso como filtro activo
@@ -298,38 +311,17 @@ export default function ConsultaDatos() {
     setFiltroFechas(rangoPorDefecto);
   };
 
-  // HU32 CA1/CA2: "APLICAR FILTROS" traslada la selección en curso del
-  // panel de filtros avanzados a los filtros activos. Valida antes de
-  // aplicar -mismo patrón que SelectorRangoFechas.handleAplicar-: un
-  // mínimo mayor que el máximo no es un filtro válido, solo confundiría
-  // al ver "no hay registros" sin explicación.
-  const handleAplicarAvanzados = () => {
-    const { valorMin, valorMax, frecuenciaMuestreo } = seleccionAvanzados;
-    if (valorMin !== "" && valorMax !== "" && Number(valorMin) > Number(valorMax)) {
-      setErrorAvanzados("El valor mínimo no puede ser mayor que el valor máximo.");
-      return;
-    }
-    if (frecuenciaMuestreo !== "" && Number(frecuenciaMuestreo) <= 0) {
-      setErrorAvanzados("La frecuencia de muestreo debe ser mayor a 0.");
-      return;
-    }
-    setErrorAvanzados(null);
-    setFiltroAvanzados(seleccionAvanzados);
-  };
-
-  // HU32 CA4: "LIMPIAR FILTROS AVANZADOS" quita SOLO esas condiciones y
-  // restaura la vista con todos los datos dentro del rango de fechas
-  // activo -no toca filtroParametros/filtroUbicaciones (HU13) ni
-  // filtroFechas (HU12), cada bloque tiene su propio LIMPIAR-.
+  // Parte del restablecimiento completo del formulario.
   const handleLimpiarAvanzados = () => {
     setErrorAvanzados(null);
-    setSeleccionAvanzados(FILTROS_AVANZADOS_VACIOS);
-    setFiltroAvanzados(FILTROS_AVANZADOS_VACIOS);
+    setSeleccionAvanzados([]);
+    setFiltroAvanzados([]);
   };
 
   return (
     <div className="font-sans">
       <div className="flex h-screen bg-transparent transition-colors duration-300 overflow-hidden">
+        {calculoAbierto !== null && <ConsultaCalculo key={calculoAbierto} id={calculoAbierto} onCerrar={() => setCalculoAbierto(null)} />}
         <Sidebar onLogout={logout} activo="consulta-datos" rol={rol} />
 
         <div className="flex-1 flex flex-col overflow-hidden">
@@ -360,7 +352,7 @@ export default function ConsultaDatos() {
               {!sinUbicacionesAsignadas && !errorUbicaciones && (
                 <button
                   type="button"
-                  onClick={() => setPanelFiltrosAbierto(true)}
+                  onClick={() => { setSeleccionParametros(filtroParametros); setSeleccionUbicaciones(filtroUbicaciones); setSeleccionDispositivos(filtroDispositivos); setSeleccionFechas(filtroFechas); setSeleccionAvanzados(filtroAvanzados); setErrorAvanzados(null); setPanelFiltrosAbierto(true); }}
                   className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-[#5a7000] dark:text-[#ccff00] bg-[#ccff00]/10 hover:bg-[#ccff00]/20 border border-[#8fb300]/40 dark:border-[#ccff00]/30 rounded-xl transition-colors"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -375,7 +367,13 @@ export default function ConsultaDatos() {
                 </button>
               )}
             </header>
+            <p className="mb-4 text-sm text-gray-600 dark:text-gray-300">Período aplicado: {formatearFechaHoraEnZona(new Date(filtroFechas.inicio).toISOString(), zonaHoraria)} – {formatearFechaHoraEnZona(new Date(filtroFechas.fin).toISOString(), zonaHoraria)} ({zonaHoraria})</p>
+            {filtroDispositivos.length > 0 && <p className="mb-4 text-sm text-gray-700 dark:text-gray-200">Equipos seleccionados: {filtroDispositivos.map(id => dispositivos.find(d => d.id_dspstv === id)?.nmbr ?? `Equipo ${id}`).join(", ")}</p>}
+            {(errorCatalogos || errorUbicaciones) && <div role="alert" className="mb-4 rounded-xl bg-red-50 p-4 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">
+              <p>{errorCatalogos || errorUbicaciones}</p><button type="button" onClick={() => setRevisionCatalogos(v => v + 1)} className="mt-2 underline">Reintentar catálogos</button>
+            </div>}
 
+            {filtroAvanzados.length > 0 && <section aria-label="Condiciones aplicadas" className="mb-4 rounded-xl border border-black/10 p-4 text-sm text-gray-700 dark:border-white/20 dark:text-gray-200"><p className="mb-2 font-semibold">Condiciones aplicadas por parámetro</p><ul className="list-disc space-y-1 pl-5">{filtroAvanzados.map(c => <li key={c.parametro_id}>{describirCondicion(c, parametros)}</li>)}</ul><p className="mt-2 text-xs">Cada condición se evalúa sobre su propia serie. Los parámetros sin condición conservan sus lecturas.</p><button type="button" onClick={handleLimpiarAvanzados} className="mt-3 underline">Limpiar filtros avanzados</button></section>}
             {!sinUbicacionesAsignadas && !errorUbicaciones && <ExportacionesPanel
               idInicial={Number(searchParams.get("exportacion")) || undefined}
               filtros={{
@@ -383,17 +381,13 @@ export default function ConsultaDatos() {
                 fecha_fin: new Date(filtroFechas.fin).toISOString(),
                 ubicacion_ids: filtroUbicaciones,
                 parametro_ids: filtroParametros,
-                valor_min: filtroAvanzados.valorMin || null,
-                valor_max: filtroAvanzados.valorMax || null,
-                frecuencia_muestreo: filtroAvanzados.frecuenciaMuestreo ? Number(filtroAvanzados.frecuenciaMuestreo) : null,
+                dispositivo_ids: filtroDispositivos,
+                valor_min: null,
+                valor_max: null,
+                frecuencia_muestreo: null,
+                condiciones: serializarCondiciones(filtroAvanzados),
               }}
             />}
-
-            {errorUbicaciones && (
-              <div role="alert" className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm rounded-xl">
-                {errorUbicaciones}
-              </div>
-            )}
 
             {/* HU21: un Cliente Final sin ninguna ubicación asignada ve el
                 módulo vacío con este mensaje exacto, en lugar de unos filtros
@@ -410,9 +404,7 @@ export default function ConsultaDatos() {
             <>
             <div className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl shadow-sm border border-black/10 dark:border-white/10">
               {error && (
-                <div className="p-4 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm border-b border-red-200 dark:border-red-800/30">
-                  {error}
-                </div>
+                <div role="alert" className="p-4 bg-red-50 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">{error}<button type="button" className="ml-3 underline" onClick={() => { if (mediciones && hayMasMediciones) void cargarMasMediciones(); else setRevisionConsulta(v => v + 1); }}>Reintentar consulta</button></div>
               )}
               <div className="overflow-x-auto">
                 <table className="w-full text-sm text-left text-gray-600 dark:text-gray-300">
@@ -420,6 +412,7 @@ export default function ConsultaDatos() {
                     <tr>
                       <th className="px-6 py-4 font-bold tracking-wider">Parámetro</th>
                       <th className="px-6 py-4 font-bold tracking-wider">Proyecto</th>
+                      <th className="px-6 py-4 font-bold tracking-wider">Dispositivo</th>
                       <th className="px-6 py-4 font-bold tracking-wider">Valor</th>
                       <th className="px-6 py-4 font-bold tracking-wider">Fecha</th>
                     </tr>
@@ -427,14 +420,14 @@ export default function ConsultaDatos() {
                   <tbody>
                     {loading && (
                       <tr>
-                        <td colSpan={4} className="px-6 py-8 text-center text-gray-600 dark:text-gray-300">
+                        <td colSpan={5} className="px-6 py-8 text-center text-gray-600 dark:text-gray-300">
                           Cargando datos...
                         </td>
                       </tr>
                     )}
                     {!loading && mediciones?.items.length === 0 && (
                       <tr>
-                        <td colSpan={4} className="px-6 py-8 text-center text-gray-600 dark:text-gray-300">
+                        <td colSpan={5} className="px-6 py-8 text-center text-gray-600 dark:text-gray-300">
                           No hay registros para los filtros seleccionados.
                         </td>
                       </tr>
@@ -445,8 +438,9 @@ export default function ConsultaDatos() {
                           key={`${m.id_registro}-${indice}`}
                           className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm border-b border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
                         >
-                          <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">{m.parametro_nombre}</td>
+                          <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">{m.parametro_nombre}{m.id_calculado && <button type="button" className="ml-2 text-xs underline" onClick={() => setCalculoAbierto(m.id_calculado!)}>Ver fórmula y fuentes</button>}</td>
                           <td className="px-6 py-4">{m.ubicacion_nombre}</td>
+                          <td className="px-6 py-4">{m.dispositivo_nombre}</td>
                           <td className="px-6 py-4">
                             {m.vlr}
                             {typeof m.vlr === "number" && m.undd ? ` ${m.undd}` : ""}
@@ -489,13 +483,19 @@ export default function ConsultaDatos() {
         onCerrar={() => setPanelFiltrosAbierto(false)}
         titulo="Filtros"
         panelClassName="rounded-l-3xl overflow-hidden border-l border-black/10 dark:border-white/10"
+        pie={<div className="space-y-3">
+          {errorAvanzados && <p role="alert" className="text-sm text-red-700 dark:text-red-300">{errorAvanzados}</p>}
+          <div className="flex flex-wrap gap-2"><button type="button" onClick={handleAplicar} disabled={cargandoCatalogos || cargandoUbicaciones || Boolean(errorCatalogos || errorUbicaciones)} className="rounded-xl bg-[#ccff00] px-4 py-2 font-semibold text-gray-950 disabled:opacity-50">Aplicar filtros</button><button type="button" onClick={handleLimpiar} className="rounded-xl border border-gray-400 px-4 py-2 text-sm text-gray-700 dark:text-gray-200">Restablecer todo</button></div>
+          <p className="text-xs text-gray-600 dark:text-gray-400">Restablecer quita todos los filtros y vuelve a las últimas 24 horas.</p>
+        </div>}
       >
             <div className="min-w-0">
+              {cargandoCatalogos && <p role="status" className="mb-4 text-sm text-gray-600 dark:text-gray-300">Cargando parámetros y equipos…</p>}
               <div className="min-w-0 pb-5 border-b border-black/10 dark:border-white/10">
               <fieldset className="min-w-0">
                 <legend className="text-sm font-bold text-gray-700 dark:text-gray-200 mb-3">Parámetros</legend>
                 <div className="flex flex-wrap gap-2">
-                  {parametros.length === 0 && (
+                  {parametros.length === 0 && !errorCatalogos && !cargandoCatalogos && (
                     <span className="text-sm text-gray-500 dark:text-gray-400">No hay parámetros disponibles.</span>
                   )}
                   {/* Chips tipo toggle en vez de checkboxes nativos, mismo
@@ -570,32 +570,17 @@ export default function ConsultaDatos() {
                 </div>
               </fieldset>
 
-              <div className="mt-4 flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handleAplicar}
-                  className="min-w-32 px-5 py-2 rounded-xl bg-[#ccff00] text-gray-900 text-sm font-bold hover:brightness-95 transition-all"
-                >
-                  APLICAR
-                </button>
-                <button
-                  type="button"
-                  onClick={handleLimpiar}
-                  className="px-3 py-2 rounded-xl text-gray-600 dark:text-gray-300 text-sm font-semibold hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
-                >
-                  LIMPIAR FILTROS
-                </button>
-              </div>
+              <fieldset className="mt-5 space-y-2"><legend className="mb-2 text-sm font-bold text-gray-700 dark:text-gray-200">Dispositivos</legend>
+                <p className="text-xs text-gray-600 dark:text-gray-400">Sin selección se consultan todos los equipos de los proyectos elegidos.</p>
+                {dispositivos.filter(d => !seleccionUbicaciones.length || seleccionUbicaciones.includes(d.id_ubccn)).map(d => <label key={d.id_dspstv} className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200"><input type="checkbox" checked={seleccionDispositivos.includes(d.id_dspstv)} onChange={() => toggleSeleccion(seleccionDispositivos, setSeleccionDispositivos, d.id_dspstv)} />{d.nmbr}</label>)}
+              </fieldset>
               </div>
 
-              {/* HU12: rango de fechas con su propio par Aplicar/Limpiar,
-                  independiente del de arriba -es una decisión de diseño
-                  documentada en SelectorRangoFechas.tsx, no algo que
-                  cambie acá: "LIMPIAR FILTROS" (HU13/DEC-11) solo
-                  controla parámetros y ubicaciones-. */}
+              {/* El pie del panel aplica también estas fechas. */}
               <div className="min-w-0 py-5 border-b border-black/10 dark:border-white/10">
                 <SelectorRangoFechas
                   plano
+                  sinAcciones
                   seleccion={seleccionFechas}
                   onCambiarSeleccion={setSeleccionFechas}
                   onAplicar={handleAplicarFechas}
@@ -603,80 +588,7 @@ export default function ConsultaDatos() {
                 />
               </div>
 
-              {/* HU32: filtros avanzados (valor mín/máx, frecuencia de
-                  muestreo), con su propio par APLICAR/LIMPIAR -tercer
-                  bloque independiente, mismo patrón que HU13 y HU12 arriba-. */}
-              <fieldset className="min-w-0 pt-5">
-                <legend className="text-sm font-bold text-gray-700 dark:text-gray-200 mb-3">
-                  Filtros avanzados
-                </legend>
-                <div className="grid min-w-0 grid-cols-1 gap-3 min-[380px]:grid-cols-2">
-                  <label className="flex min-w-0 flex-col gap-1 text-sm text-gray-700 dark:text-gray-200">
-                    Valor mínimo
-                    <input
-                      type="number"
-                      step="any"
-                      inputMode="decimal"
-                      value={seleccionAvanzados.valorMin}
-                      onChange={(e) =>
-                        setSeleccionAvanzados({ ...seleccionAvanzados, valorMin: e.target.value })
-                      }
-                      className="w-full min-w-0 rounded-xl border border-black/20 dark:border-white/20 bg-transparent px-3 py-2 text-sm text-gray-900 dark:text-white"
-                    />
-                  </label>
-                  <label className="flex min-w-0 flex-col gap-1 text-sm text-gray-700 dark:text-gray-200">
-                    Valor máximo
-                    <input
-                      type="number"
-                      step="any"
-                      inputMode="decimal"
-                      value={seleccionAvanzados.valorMax}
-                      onChange={(e) =>
-                        setSeleccionAvanzados({ ...seleccionAvanzados, valorMax: e.target.value })
-                      }
-                      className="w-full min-w-0 rounded-xl border border-black/20 dark:border-white/20 bg-transparent px-3 py-2 text-sm text-gray-900 dark:text-white"
-                    />
-                  </label>
-                  <label className="flex min-w-0 flex-col gap-1 text-sm text-gray-700 dark:text-gray-200 min-[380px]:col-span-2">
-                    Frecuencia de muestreo (min)
-                    <input
-                      type="number"
-                      step="1"
-                      min="1"
-                      inputMode="numeric"
-                      value={seleccionAvanzados.frecuenciaMuestreo}
-                      onChange={(e) =>
-                        setSeleccionAvanzados({
-                          ...seleccionAvanzados,
-                          frecuenciaMuestreo: e.target.value,
-                        })
-                      }
-                      className="w-full min-w-0 rounded-xl border border-black/20 dark:border-white/20 bg-transparent px-3 py-2 text-sm text-gray-900 dark:text-white"
-                    />
-                  </label>
-                </div>
-
-                {errorAvanzados && (
-                  <p className="text-xs text-red-600 dark:text-red-400 mt-2">{errorAvanzados}</p>
-                )}
-
-                <div className="mt-4 flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={handleAplicarAvanzados}
-                    className="px-5 py-2 rounded-xl bg-[#ccff00] text-gray-900 text-sm font-bold hover:brightness-95 transition-all"
-                  >
-                    APLICAR FILTROS
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleLimpiarAvanzados}
-                    className="px-3 py-2 rounded-xl text-gray-600 dark:text-gray-300 text-sm font-semibold hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
-                  >
-                    LIMPIAR FILTROS AVANZADOS
-                  </button>
-                </div>
-              </fieldset>
+              <FiltrosAvanzadosPanel parametros={parametros} disponibles={parametrosConCondicion} condiciones={seleccionAvanzados} onCambiar={condiciones => { setSeleccionAvanzados(condiciones); setErrorAvanzados(null); }} onLimpiar={handleLimpiarAvanzados} hayAplicadas={filtroAvanzados.length > 0} />
             </div>
       </DrawerPanel>
     </div>

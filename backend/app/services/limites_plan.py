@@ -37,7 +37,19 @@ def consumo_cliente(db: Session, id_clnt: int) -> dict[str, int]:
     ubicaciones = (
         db.query(Ubicacion)
         .join(Sede, Sede.id_sd == Ubicacion.id_sd)
-        .filter(Sede.id_clnt == id_clnt, Ubicacion.estd == "Activa")
+        .filter(
+            Sede.id_clnt == id_clnt,
+            or_(
+                Ubicacion.estd == "Activa",
+                Ubicacion.monitoreo_activo.is_(True)
+                & db.query(Dispositivo.id_dspstv)
+                .filter(
+                    Dispositivo.id_ubccn == Ubicacion.id_ubccn,
+                    Dispositivo.estd == "Activo",
+                )
+                .exists(),
+            ),
+        )
         .count()
     )
     dispositivos = (

@@ -1,5 +1,6 @@
 from sqlalchemy import (
     TIMESTAMP,
+    Boolean,
     CheckConstraint,
     Column,
     ForeignKey,
@@ -32,6 +33,7 @@ class Ubicacion(Base):
     lngtd = Column(Numeric(9, 6), nullable=False)
     plgn_gjsn = Column(JSONB, nullable=False)  # [corrección compañero] polígono GeoJSON
     estd = Column(String(20), nullable=False, server_default="Activa")
+    monitoreo_activo = Column(Boolean, nullable=False, server_default=text("true"))
     fch_crcn = Column(TIMESTAMP(timezone=True), nullable=False, server_default=text("NOW()"))
 
 

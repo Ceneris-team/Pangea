@@ -139,7 +139,7 @@ export default function MapaEstacionesPage() {
               : estacion.ultima_lectura
             : evento.fch_hr ?? estacion.ultima_lectura;
 
-        return { ...estacion, parametros, ultima_lectura: ultima };
+        return { ...estacion, parametros, ultima_lectura: ultima, semaforo: evento.semaforo ?? estacion.semaforo };
       });
 
       if (!cambio) return previas;
@@ -151,6 +151,15 @@ export default function MapaEstacionesPage() {
   }, []);
 
   const { estado } = useMapaEnVivo(aplicarLectura);
+  useEffect(() => {
+    let cancelado = false;
+    const temporizador = window.setInterval(() => {
+      apiFetch<{ items: EstacionParaMapa[] }>("/mapa-cliente")
+        .then((res) => { if (!cancelado) setEstaciones(res.items); })
+        .catch(() => { if (!cancelado) setError("No se pudo actualizar el estado del monitoreo. Se muestran los últimos datos recibidos."); });
+    }, 60_000);
+    return () => { cancelado = true; window.clearInterval(temporizador); };
+  }, []);
   const indicador = TEXTO_ESTADO[estado] ?? TEXTO_ESTADO.conectando;
 
   return (

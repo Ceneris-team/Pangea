@@ -1,67 +1,9 @@
-"""
-HU 27 - Listar alarmas
-HU 28 - Crear alarma (PP-73)
-
-Base: módulo de la rama `fabio` (commit ca9e795, 04/09/2026), integrado a
-dev para PP-73. Única regla nueva de dev: crear una alarma es
-configuración operativa, así que exige la suscripción vigente de la
-empresa igual que Ubicaciones, Dispositivos e Ingesta (exigir_operacion).
-
-HU27 CA1: al cargar el módulo "Gestión de Alarmas y Notificaciones", se
-muestra una tabla con todas las alarmas configuradas por el usuario,
-indicando nombre de la alarma, parámetro asociado, condición, estado y
-acciones (las acciones las arma el frontend a partir de id_alrm/estd, no
-viajan como dato). CA2: filtro por estado. CA3: búsqueda por nombre.
-
-HU28 CA:
-  CA1  el formulario de creación ofrece Nombre de la alarma, Parámetro a
-       monitorear y Ubicación asociada
-  CA2  "SIGUIENTE" lleva al paso de condiciones (HU29)
-  CA3  "GUARDAR" crea la alarma con estado Activa, la agrega al listado y
-       muestra "Alarma creada correctamente"
-  CA4  "CANCELAR" descarta el formulario sin crear ningún registro
-
-Detalles de la conversación:
-  - Paginado de 10 registros por defecto -mismo criterio y misma forma de
-    respuesta (total/pagina/por_pagina/items) que listar_dispositivos en
-    routers/dispositivos.py-.
-  - "Cada usuario solo puede ver y gestionar sus propias alarmas": a
-    diferencia de Dispositivos/Ubicaciones, acá NO hay una vista
-    "administrador ve todo" -Alarma.id_usr es el dueño, y el listado
-    siempre filtra por el id_usr del token, para cualquier rol-. Por eso
-    tampoco hace falta verificar_sede: el filtro por dueño ya aísla el
-    recurso.
-  - El caso "sin alarmas configuradas" (mensaje + botón 'Crear alarma'
-    visible) es responsabilidad del frontend: el listado solo devuelve
-    total=0 igual que cualquier listado vacío.
-
-El alta (HU28) es un flujo de DOS pasos -datos generales acá, condiciones
-en HU29- pero UNA sola escritura: el registro recién existe cuando el
-usuario pulsa GUARDAR al final del paso 2 (CA3). Por eso el POST recibe
-las condiciones junto con los datos generales en vez de crear la alarma
-al pasar de paso: si HU28 persistiera al pulsar SIGUIENTE, abandonar el
-paso 2 dejaría alarmas a medio configurar, y CA4 dice explícitamente que
-salir del alta no crea ningún registro. Las reglas de la condición son de
-HU29 (PP-74, ver schemas_alarmas.CondicionAlarmaCrear): exactamente una
-por alarma, operador del CHECK de cndcn_alrm y umbral numérico finito con
-hasta 4 decimales. Se ve y se ACTUALIZA en /alarmas/{id}/condicion.
-
-Qué ubicaciones y parámetros ofrece el formulario: las asignadas al
-usuario según HU 21 (security/ubicaciones_permitidas.py), igual que HU13
-y HU17. Es un filtro distinto del de "mis alarmas" que usa el listado
--uno acota lo que se puede monitorear, el otro lo ya creado-.
-
-Los parámetros que se pueden monitorear se restringen a los de tipo
-'numerico'. Una condición de alarma es una comparación contra un umbral
-(cndcn_alrm.vlr_umbrl es Numeric), y un parámetro de texto -"Puerta
-Abierta", ver models/evento_texto.py- no admite ">= 3.5": ofrecerlo en el
-selector sería dejar armar una alarma que no puede dispararse nunca.
-"""
+"""Alarmas compartidas por proyecto; id_usr conserva la autoría de cada regla."""
 
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, or_
+from sqlalchemy import and_, func, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -83,6 +25,7 @@ from app.schemas_alarmas import (
     AlarmaActualizar,
     AlarmaCreada,
     AlarmaCrear,
+    AlarmaDetalle,
     AlarmaListItem,
     CanalNotificacion,
     CondicionAlarmaCrear,
@@ -96,9 +39,53 @@ from app.schemas_alarmas import (
 from app.security.entorno import sedes_permitidas
 from app.security.permisos import EDICION, LECTURA, require_permiso
 from app.security.ubicaciones_permitidas import ubicaciones_permitidas
+from app.services.cache.invalidacion import invalidar_por_lectura
 from app.services.contratos import exigir_operacion
+from app.services.monitoreo import correos_habilitados
 
 router = APIRouter(prefix="/alarmas", tags=["Alarmas"])
+
+
+def _estados_dispositivos(db, ids_alarma):
+    estados = {}
+    if not ids_alarma:
+        return estados
+    filas = (
+        db.query(Alarma.id_alrm, Dispositivo.id_dspstv, Dispositivo.nmbr, EstadoAlarma)
+        .select_from(Alarma)
+        .join(Dispositivo, Dispositivo.id_ubccn == Alarma.id_ubccn)
+        .join(MapeoFormato, MapeoFormato.id_dspstv == Dispositivo.id_dspstv)
+        .join(
+            MapeoColumna,
+            and_(
+                MapeoColumna.id_mp == MapeoFormato.id_mp,
+                MapeoColumna.id_prmtr == Alarma.id_prmtr,
+            ),
+        )
+        .outerjoin(
+            EstadoAlarma,
+            and_(
+                EstadoAlarma.id_alrm == Alarma.id_alrm,
+                EstadoAlarma.id_dspstv == Dispositivo.id_dspstv,
+            ),
+        )
+        .filter(Alarma.id_alrm.in_(ids_alarma))
+        .distinct()
+        .order_by(Dispositivo.nmbr, Dispositivo.id_dspstv)
+        .all()
+    )
+    for id_alarma, id_dispositivo, nombre, estado in filas:
+        estados.setdefault(id_alarma, []).append(
+            {
+                "id_dspstv": id_dispositivo,
+                "nombre": nombre,
+                "en_alarma": estado.en_alarma if estado else False,
+                "desde": estado.inicio_alarma if estado else None,
+                "ultima_evaluacion": estado.ultima_fecha if estado else None,
+                "pendiente_evaluacion": estado.pendiente_evaluacion if estado else True,
+            }
+        )
+    return estados
 
 
 def _formatear_condicion(condicion: CondicionAlarma | None, unidad: str) -> str | None:
@@ -188,12 +175,9 @@ def listar_alarmas(
     db: Session = Depends(get_db),
     usuario: dict = Depends(require_permiso("Alarmas", LECTURA)),
 ):
-    id_usr = int(usuario["sub"])
-
     query = (
         db.query(Alarma, Parametro.nmbr, Parametro.undd)
         .join(Parametro, Parametro.id_prmtr == Alarma.id_prmtr)
-        .filter(Alarma.id_usr == id_usr)
         .filter(Alarma.id_ubccn.in_(ubicaciones_permitidas(db, usuario)))
     )
 
@@ -212,7 +196,7 @@ def listar_alarmas(
 
     # Las condiciones de esta página, en una sola consulta (evita N+1).
     ids_alarma = [alarma.id_alrm for alarma, _nombre, _undd in filas]
-    condiciones_por_alarma: dict[int, CondicionAlarma] = {}
+    condiciones_por_alarma: dict[int, list[CondicionAlarma]] = {}
     if ids_alarma:
         for condicion in (
             db.query(CondicionAlarma)
@@ -220,18 +204,24 @@ def listar_alarmas(
             .order_by(CondicionAlarma.id_cndcn)
             .all()
         ):
-            # HU29 v1.0: una condición por alarma. Las creadas antes de
-            # PP-74 pueden tener varias; el listado muestra la primera y
-            # al ACTUALIZARlas quedan con una.
-            condiciones_por_alarma.setdefault(condicion.id_alrm, condicion)
+            condiciones_por_alarma.setdefault(condicion.id_alrm, []).append(condicion)
+
+    estados = _estados_dispositivos(db, ids_alarma)
 
     items = [
         AlarmaListItem(
             id_alrm=alarma.id_alrm,
             nmbr=alarma.nmbr,
             parametro_nombre=nombre_parametro,
-            condicion=_formatear_condicion(condiciones_por_alarma.get(alarma.id_alrm), unidad),
+            condicion=" o ".join(
+                _formatear_condicion(c, unidad)
+                for c in condiciones_por_alarma.get(alarma.id_alrm, [])
+            )
+            or None,
             estd=alarma.estd,
+            correos_habilitados=correos_habilitados(db, alarma.id_sd)
+            and db.get(Ubicacion, alarma.id_ubccn).monitoreo_activo,
+            dispositivos=estados.get(alarma.id_alrm, []),
         )
         for alarma, nombre_parametro, unidad in filas
     ]
@@ -290,8 +280,7 @@ def crear_alarma(
         exigir_operacion(db, sede.id_clnt)
 
     alarma = Alarma(
-        # El dueño de la alarma, que es por quien filtra el listado de
-        # HU27 ("cada usuario solo ve y gestiona las suyas").
+        # Autor de la regla. Su visibilidad pertenece al proyecto.
         id_usr=int(usuario["sub"]),
         # La sede sale de la ubicación, no del JWT: alrm.id_sd es NOT NULL
         # y tiene que ser la sede DEL RECURSO -un usuario 'global' no
@@ -323,6 +312,7 @@ def crear_alarma(
 
     db.commit()
     db.refresh(alarma)
+    invalidar_por_lectura(id_sd=alarma.id_sd, id_ubccn=alarma.id_ubccn)
 
     return AlarmaCreada(
         alarma=AlarmaListItem(
@@ -336,10 +326,9 @@ def crear_alarma(
     )
 
 
-def _alarma_propia(db, usuario, id_alarma, *, editar=False):
+def _alarma_del_proyecto(db, usuario, id_alarma, *, editar=False):
     query = db.query(Alarma).filter(
         Alarma.id_alrm == id_alarma,
-        Alarma.id_usr == int(usuario["sub"]),
         Alarma.id_ubccn.in_(ubicaciones_permitidas(db, usuario)),
     )
     if editar:
@@ -371,18 +360,24 @@ def historial_notificaciones(
     if desde and hasta and desde > hasta:
         raise HTTPException(422, "La fecha inicial no puede superar la final")
     propias = db.query(Alarma.id_alrm).filter(
-        Alarma.id_usr == int(usuario["sub"]),
         Alarma.id_ubccn.in_(ubicaciones_permitidas(db, usuario)),
     )
     q = db.query(NotificacionEnviada).filter(
-        NotificacionEnviada.id_usr == int(usuario["sub"]),
-        or_(NotificacionEnviada.id_alrm.is_(None), NotificacionEnviada.id_alrm.in_(propias)),
+        or_(
+            NotificacionEnviada.id_alrm.in_(propias),
+            NotificacionEnviada.id_ubccn.in_(ubicaciones_permitidas(db, usuario)),
+            and_(
+                NotificacionEnviada.id_alrm.is_(None),
+                NotificacionEnviada.id_ubccn.is_(None),
+                NotificacionEnviada.id_usr == int(usuario["sub"]),
+            ),
+        ),
     )
     sedes = sedes_permitidas(db, usuario)
     if sedes is not None:
         q = q.filter(or_(NotificacionEnviada.id_sd.is_(None), NotificacionEnviada.id_sd.in_(sedes)))
     if alarma_id is not None:
-        _alarma_propia(db, usuario, alarma_id)
+        _alarma_del_proyecto(db, usuario, alarma_id)
         q = q.filter(NotificacionEnviada.id_alrm == alarma_id)
     for campo, valor in ((NotificacionEnviada.tipo, tipo), (NotificacionEnviada.estd, estado)):
         if valor:
@@ -451,7 +446,7 @@ def listar_destinatarios(
     db: Session = Depends(get_db),
     usuario: dict = Depends(require_permiso("Alarmas", LECTURA)),
 ):
-    _alarma_propia(db, usuario, id_alarma)
+    _alarma_del_proyecto(db, usuario, id_alarma)
     filas = (
         db.query(DestinatarioAlarma)
         .filter_by(id_alrm=id_alarma, cnl="email")
@@ -468,7 +463,7 @@ def agregar_destinatario(
     db: Session = Depends(get_db),
     usuario: dict = Depends(require_permiso("Alarmas", EDICION)),
 ):
-    _alarma_propia(db, usuario, id_alarma, editar=True)
+    _alarma_del_proyecto(db, usuario, id_alarma, editar=True)
     correo = str(body.correo).lower()
     actuales = db.query(DestinatarioAlarma).filter_by(id_alrm=id_alarma, cnl="email")
     if actuales.filter(func.lower(DestinatarioAlarma.crr) == correo).first():
@@ -477,6 +472,9 @@ def agregar_destinatario(
         raise HTTPException(422, "La alarma admite hasta 100 destinatarios")
     d = DestinatarioAlarma(id_alrm=id_alarma, cnl="email", crr=correo)
     db.add(d)
+    db.query(EstadoAlarma).filter_by(id_alrm=id_alarma, en_alarma=True).update(
+        {"resumen_pendiente": True}
+    )
     try:
         db.commit()
     except IntegrityError:
@@ -492,7 +490,7 @@ def quitar_destinatario(
     db: Session = Depends(get_db),
     usuario: dict = Depends(require_permiso("Alarmas", EDICION)),
 ):
-    _alarma_propia(db, usuario, id_alarma, editar=True)
+    _alarma_del_proyecto(db, usuario, id_alarma, editar=True)
     d = (
         db.query(DestinatarioAlarma)
         .filter_by(id_alrm=id_alarma, id_dstntr=id_destinatario, cnl="email")
@@ -557,7 +555,7 @@ def ver_notificaciones(
     usuario: dict = Depends(require_permiso("Alarmas", LECTURA)),
 ):
     """HU30 CA1: canales disponibles y destinatarios actuales."""
-    alarma = _alarma_propia(db, usuario, id_alarma)
+    alarma = _alarma_del_proyecto(db, usuario, id_alarma)
     return _panel_notificaciones(db, alarma, _correo_de_la_cuenta(db, usuario))
 
 
@@ -573,7 +571,7 @@ def guardar_notificaciones(
     Activarlo sin destinatarios agrega el correo de la cuenta del usuario
     ("activar el canal de correo electrónico de la cuenta"): un canal activo
     sin nadie a quien escribir no notificaría a nadie."""
-    alarma = _alarma_propia(db, usuario, id_alarma, editar=True)
+    alarma = _alarma_del_proyecto(db, usuario, id_alarma, editar=True)
     correo_cuenta = _correo_de_la_cuenta(db, usuario)
     if body.canal_email_activo and not alarma.cnl_crr_actv:
         # Al reactivar, si la alarma ya está disparada, la próxima lectura
@@ -601,7 +599,7 @@ def actualizar_alarma(
     db: Session = Depends(get_db),
     usuario: dict = Depends(require_permiso("Alarmas", EDICION)),
 ):
-    alarma = _alarma_propia(db, usuario, id_alarma, editar=True)
+    alarma = _alarma_del_proyecto(db, usuario, id_alarma, editar=True)
     cambio = False
     if body.estado is not None and body.estado != alarma.estd:
         alarma.estd = body.estado
@@ -611,6 +609,7 @@ def actualizar_alarma(
     if cambio:
         _reiniciar_evaluacion(db, id_alarma)
     db.commit()
+    invalidar_por_lectura(id_sd=alarma.id_sd, id_ubccn=alarma.id_ubccn)
     return {"mensaje": "Alarma actualizada", "estado": alarma.estd}
 
 
@@ -651,7 +650,14 @@ def _reiniciar_evaluacion(db: Session, id_alarma: int) -> None:
     """Con otra regla (o al pausar/reactivar), el estado 'en alarma' de cada
     dispositivo ya no vale: la próxima lectura se evalúa desde cero y, si
     cumple la nueva condición, notifica."""
-    db.query(EstadoAlarma).filter_by(id_alrm=id_alarma).update({"en_alarma": False})
+    db.query(EstadoAlarma).filter_by(id_alrm=id_alarma).update(
+        {
+            "en_alarma": False,
+            "inicio_alarma": None,
+            "pendiente_evaluacion": True,
+            "resumen_pendiente": False,
+        }
+    )
 
 
 def _detalle_condicion(db: Session, alarma: Alarma) -> CondicionAlarmaDetalle:
@@ -678,7 +684,7 @@ def ver_condicion(
     usuario: dict = Depends(require_permiso("Alarmas", LECTURA)),
 ):
     """HU29: la condición vigente de una alarma propia."""
-    alarma = _alarma_propia(db, usuario, id_alarma)
+    alarma = _alarma_del_proyecto(db, usuario, id_alarma)
     return _detalle_condicion(db, alarma)
 
 
@@ -692,14 +698,42 @@ def actualizar_condicion(
     """HU29 "ACTUALIZAR": reemplaza la condición de la alarma (no agrega
     otra). Exige Edición en Alarmas y la suscripción vigente, igual que el
     resto de la edición de alarmas."""
-    alarma = _alarma_propia(db, usuario, id_alarma, editar=True)
+    alarma = _alarma_del_proyecto(db, usuario, id_alarma, editar=True)
     cambio = _reemplazar_condicion(db, id_alarma, body)
     if cambio:
         _reiniciar_evaluacion(db, id_alarma)
     db.commit()
+    invalidar_por_lectura(id_sd=alarma.id_sd, id_ubccn=alarma.id_ubccn)
     return {
         "mensaje": (
             "Condición actualizada correctamente" if cambio else "La condición no tuvo cambios"
         ),
         "condicion": _detalle_condicion(db, alarma),
+    }
+
+
+@router.get("/{id_alarma}", response_model=AlarmaDetalle)
+def detalle_alarma(
+    id_alarma: int,
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(require_permiso("Alarmas", LECTURA)),
+):
+    alarma = _alarma_del_proyecto(db, usuario, id_alarma)
+    parametro = db.get(Parametro, alarma.id_prmtr)
+    condiciones = (
+        db.query(CondicionAlarma)
+        .filter_by(id_alrm=id_alarma)
+        .order_by(CondicionAlarma.id_cndcn)
+        .all()
+    )
+    return {
+        "id_alrm": alarma.id_alrm,
+        "nmbr": alarma.nmbr,
+        "estd": alarma.estd,
+        "correos_habilitados": correos_habilitados(db, alarma.id_sd)
+        and db.get(Ubicacion, alarma.id_ubccn).monitoreo_activo,
+        "parametro_nombre": parametro.nmbr,
+        "unidad": parametro.undd,
+        "condiciones": [{"oprdr": c.oprdr, "vlr_umbrl": float(c.vlr_umbrl)} for c in condiciones],
+        "dispositivos": _estados_dispositivos(db, [id_alarma]).get(id_alarma, []),
     }

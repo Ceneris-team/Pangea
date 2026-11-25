@@ -3,15 +3,13 @@ import { aValorDatetimeLocal, type RangoFechas } from "../utils/fechas";
 
 /**
  * HU12: selector de rango de fechas (con hora HH:mm) para el módulo de
- * consulta de datos. Mantiene su propia selección en curso (seleccion vs.
- * filtro aplicado), igual que los selectores de parámetros/ubicaciones, y
- * se aplica/limpia con sus propios botones "APLICAR" y "LIMPIAR FILTRO":
- * es independiente de "LIMPIAR FILTROS" (HU13/DEC-11), que solo controla
- * parámetros y ubicaciones.
+ * consulta de datos. Mantiene la selección en curso; sinAcciones permite
+ * que el formulario padre aplique fechas y demás filtros en una sola acción.
  */
 
 interface SelectorRangoFechasProps {
   plano?: boolean;
+  sinAcciones?: boolean;
   seleccion: RangoFechas;
   onCambiarSeleccion: (rango: RangoFechas) => void;
   onAplicar: (rango: RangoFechas) => void;
@@ -20,6 +18,7 @@ interface SelectorRangoFechasProps {
 
 export default function SelectorRangoFechas({
   plano = false,
+  sinAcciones = false,
   seleccion,
   onCambiarSeleccion,
   onAplicar,
@@ -88,7 +87,7 @@ export default function SelectorRangoFechas({
 
       {error && <p className="text-xs text-red-600 dark:text-red-400 mt-2">{error}</p>}
 
-      <div className={plano ? "mt-4 flex flex-wrap items-center gap-2" : "flex gap-2 mt-3"}>
+      {!sinAcciones && <div className={plano ? "mt-4 flex flex-wrap items-center gap-2" : "flex gap-2 mt-3"}>
         <button
           type="button"
           onClick={handleAplicar}
@@ -107,7 +106,7 @@ export default function SelectorRangoFechas({
         >
           LIMPIAR FILTRO
         </button>
-      </div>
+      </div>}
     </fieldset>
   );
 }

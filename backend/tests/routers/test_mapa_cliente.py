@@ -305,7 +305,7 @@ class TestCA2UltimoValorPorParametro:
             for i in client.get("/mapa-cliente").json()["items"]
             if i["nmbr"] == "Estacion Asignada"
         )
-        assert item["ultima_lectura"].startswith(ahora.isoformat()[:19])
+        assert dt.datetime.fromisoformat(item["ultima_lectura"]) == ahora
 
     def test_estacion_sin_lecturas_no_rompe(self, client, db_session, escenario):
         """Una ubicación recién creada aparece en el mapa igual, con el
@@ -321,7 +321,7 @@ class TestCA2UltimoValorPorParametro:
         )
         assert item["parametros"] == []
         assert item["ultima_lectura"] is None
-        assert item["semaforo"] == "verde"
+        assert item["semaforo"] == "sin_datos"
 
     def test_incluye_eventos_de_texto(self, client, db_session, escenario):
         """evnt_txt es tan "último valor de un parámetro" como tlmtr."""
@@ -353,9 +353,23 @@ class TestCA2UltimoValorPorParametro:
 
 
 class TestSemaforoEnElEndpoint:
+    def regla_del_proyecto(self, db_session, escenario, parametro):
+        alarma = Alarma(
+            id_usr=escenario["usuario"].id_usr,
+            id_sd=escenario["sede"].id_sd,
+            id_ubccn=escenario["asignada"].id_ubccn,
+            id_prmtr=parametro.id_prmtr,
+            nmbr="Regla compartida",
+        )
+        db_session.add(alarma)
+        db_session.flush()
+        db_session.add(CondicionAlarma(id_alrm=alarma.id_alrm, oprdr=">", vlr_umbrl=30))
+        db_session.flush()
+
     def test_valor_en_rango_pinta_verde(self, client, db_session, escenario):
         dispositivo = crear_dispositivo(db_session, escenario["asignada"], escenario["sede"])
         temperatura = crear_parametro(db_session, "temperatura", "°C")
+        self.regla_del_proyecto(db_session, escenario, temperatura)
         agregar_lectura(
             db_session,
             dispositivo,
@@ -427,9 +441,9 @@ class TestSemaforoEnElEndpoint:
 
     def test_alarma_pausada_no_pinta(self, client, db_session, escenario):
         color = self._color_con_alarma(client, db_session, escenario, 35, (">", 32), "Inactiva")
-        assert color == "verde"
+        assert color == "sin_reglas"
 
     def test_sin_alarma_un_valor_alto_sigue_verde(self, client, db_session, escenario):
         """Antes los umbrales fijos pintaban 35 °C de rojo sin que nadie
         configurara nada; ahora solo pinta una alarma real."""
-        assert self._color_con_alarma(client, db_session, escenario, 35, None) == "verde"
+        assert self._color_con_alarma(client, db_session, escenario, 35, None) == "sin_reglas"

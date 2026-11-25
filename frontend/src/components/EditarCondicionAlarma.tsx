@@ -28,6 +28,7 @@ interface Detalle {
 }
 
 interface Props {
+  puedeEditar: boolean;
   alarma: { id_alrm: number; nmbr: string };
   onClose: () => void;
   /** Se llama tras actualizar, con el mensaje del backend. */
@@ -41,7 +42,7 @@ const boton =
 const botonPrimario =
   "rounded-lg px-4 py-2 text-sm font-bold bg-[#ccff00] text-[#1a202c] hover:bg-[#b8e600] disabled:opacity-50";
 
-export default function EditarCondicionAlarma({ alarma, onClose, onUpdate }: Props) {
+export default function EditarCondicionAlarma({ alarma, onClose, onUpdate, puedeEditar }: Props) {
   const dialogo = useRef<HTMLDialogElement>(null);
   const [detalle, setDetalle] = useState<Detalle | null>(null);
   const [operador, setOperador] = useState<OperadorAlarma>(">");
@@ -84,6 +85,7 @@ export default function EditarCondicionAlarma({ alarma, onClose, onUpdate }: Pro
 
   async function actualizar(e: FormEvent) {
     e.preventDefault();
+    if (!puedeEditar || ocupado) return;
     setTocado(true);
     const errorDelUmbral = errorUmbral(umbral);
     if (errorDelUmbral) {
@@ -159,6 +161,7 @@ export default function EditarCondicionAlarma({ alarma, onClose, onUpdate }: Pro
               <label className="text-sm font-medium space-y-1" htmlFor="condicion-oprdr">
                 <span className="block">Operador</span>
                 <select
+                  disabled={!puedeEditar || ocupado}
                   id="condicion-oprdr"
                   value={operador}
                   onChange={(e) => setOperador(e.target.value as OperadorAlarma)}
@@ -176,6 +179,7 @@ export default function EditarCondicionAlarma({ alarma, onClose, onUpdate }: Pro
                   Valor umbral{detalle.unidad ? ` (${detalle.unidad})` : ""}
                 </span>
                 <input
+                  disabled={!puedeEditar || ocupado}
                   id="condicion-umbral"
                   type="text"
                   inputMode="decimal"
@@ -207,9 +211,9 @@ export default function EditarCondicionAlarma({ alarma, onClose, onUpdate }: Pro
               <button type="button" onClick={onClose} className={boton} disabled={ocupado}>
                 Cancelar
               </button>
-              <button type="submit" className={botonPrimario} disabled={ocupado || sinCambios}>
+              {puedeEditar && <button type="submit" className={botonPrimario} disabled={ocupado || sinCambios}>
                 {ocupado ? "Actualizando…" : "Actualizar"}
-              </button>
+              </button>}
             </div>
           </>
         )}

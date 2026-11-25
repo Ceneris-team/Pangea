@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { apiFetch } from "../services/api";
 import { useAuth } from "../hooks/useAuth";
+import type { CondicionParametro } from "../services/filtrosAvanzados";
 
 interface FiltrosExportacion {
   fecha_inicio: string;
@@ -11,6 +12,7 @@ interface FiltrosExportacion {
   valor_min: string | null;
   valor_max: string | null;
   frecuencia_muestreo: number | null;
+  condiciones?: CondicionParametro[];
 }
 
 interface Exportacion {
@@ -40,6 +42,8 @@ export default function ExportacionesPanel({ filtros, idInicial }: { filtros: Fi
   const [paginaDispositivos, setPaginaDispositivos] = useState(1);
   const [hayMasDispositivos, setHayMasDispositivos] = useState(false);
   const proyectos = filtros.ubicacion_ids.join(",");
+  const equiposDisponibles = dispositivos.filter(d => !filtros.dispositivo_ids?.length || filtros.dispositivo_ids.includes(d.id_dspstv));
+  const dispositivoValido = equiposDisponibles.some(d => String(d.id_dspstv) === dispositivoElegido) ? dispositivoElegido : "";
 
   useEffect(() => {
     if (!abierto) return;
@@ -89,7 +93,7 @@ export default function ExportacionesPanel({ filtros, idInicial }: { filtros: Fi
     }
     setEnviando(true);
     try {
-      const respuesta = await apiFetch<{ mensaje: string }>("/exportaciones", { method: "POST", body: { ...filtros, formato, dispositivo_ids: dispositivoElegido ? [Number(dispositivoElegido)] : (filtros.dispositivo_ids ?? []) } });
+      const respuesta = await apiFetch<{ mensaje: string }>("/exportaciones", { method: "POST", body: { ...filtros, formato, dispositivo_ids: dispositivoValido ? [Number(dispositivoValido)] : (filtros.dispositivo_ids ?? []) } });
       setMensaje(respuesta.mensaje);
       setRecarga(actual => actual + 1);
     } catch (err) {
@@ -123,7 +127,7 @@ export default function ExportacionesPanel({ filtros, idInicial }: { filtros: Fi
       <p className="text-sm text-gray-600 dark:text-gray-300">Se exportarán los datos del rango y los filtros aplicados. Puedes seguir trabajando mientras se prepara el archivo.</p>
       {limites && <p className="text-xs text-gray-500 dark:text-gray-400">Máximo {limites.max_dias} días y {limites.max_filas.toLocaleString()} registros. Disponible durante {limites.vigencia_horas} horas desde que esté listo.</p>}
       <div className="flex flex-wrap items-center gap-3">
-        <label className="text-sm text-gray-700 dark:text-gray-200">Dispositivo <select aria-label="Dispositivo a exportar" value={dispositivoElegido} onChange={event => setDispositivoElegido(event.target.value)} className="ml-2 max-w-64 rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900 dark:border-white/20 dark:bg-gray-900 dark:text-white"><option value="">Todos los del filtro</option>{dispositivos.map(dispositivo => <option key={dispositivo.id_dspstv} value={dispositivo.id_dspstv}>{dispositivo.nmbr} · {dispositivo.proyecto_nombre}</option>)}</select></label>
+        <label className="text-sm text-gray-700 dark:text-gray-200">Dispositivo <select aria-label="Dispositivo a exportar" value={dispositivoValido} onChange={event => setDispositivoElegido(event.target.value)} className="ml-2 max-w-64 rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900 dark:border-white/20 dark:bg-gray-900 dark:text-white"><option value="">Todos los del filtro</option>{equiposDisponibles.map(dispositivo => <option key={dispositivo.id_dspstv} value={dispositivo.id_dspstv}>{dispositivo.nmbr} · {dispositivo.proyecto_nombre}</option>)}</select></label>
         {(paginaDispositivos > 1 || hayMasDispositivos) && <span className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300"><button type="button" disabled={paginaDispositivos === 1} onClick={() => { setDispositivoElegido(""); setPaginaDispositivos(pagina => pagina - 1); }} className="disabled:opacity-40">Anterior</button><span>Pág. {paginaDispositivos}</span><button type="button" disabled={!hayMasDispositivos} onClick={() => { setDispositivoElegido(""); setPaginaDispositivos(pagina => pagina + 1); }} className="disabled:opacity-40">Siguiente</button></span>}
         <label className="text-sm text-gray-700 dark:text-gray-200">Formato <select aria-label="Formato de exportación" value={formato} onChange={event => setFormato(event.target.value)} className="ml-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900 dark:border-white/20 dark:bg-gray-900 dark:text-white"><option value="csv">CSV</option><option value="xlsx">Excel (.xlsx)</option></select></label>
         <button type="button" disabled={enviando || !limites} onClick={() => { void solicitar(); }} className="rounded-xl bg-[#ccff00] px-4 py-2 text-sm font-bold text-gray-900 disabled:opacity-50">{enviando ? "Solicitando…" : "Solicitar exportación"}</button>
