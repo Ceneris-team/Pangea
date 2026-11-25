@@ -246,7 +246,9 @@ def test_listado_filtros_contexto_y_recuperacion(entorno_calculados, ancho, tmp_
             crear.get_by_role("button", name="Guardar", exact=True).click()
             expect(crear).to_have_count(0)
             expect(
-                pagina.get_by_role("status").filter(has_text="Parámetro calculado añadido correctamente")
+                pagina.get_by_role("status").filter(
+                    has_text="Parámetro calculado añadido correctamente"
+                )
             ).to_be_visible()
             expect(buscar).to_have_value("Balance")
             expect(filtro_estado).to_have_value("Activo")
@@ -264,6 +266,7 @@ def test_listado_filtros_contexto_y_recuperacion(entorno_calculados, ancho, tmp_
 
             # Ausencia real de configuraciones conserva la entrada al registro.
             from app.models import DependenciaCalculo, TrabajoCalculo
+
             e["db"].query(DependenciaCalculo).delete()
             e["db"].query(TrabajoCalculo).delete()
             e["db"].query(ParametroCalculado).delete()

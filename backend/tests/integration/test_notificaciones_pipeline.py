@@ -29,7 +29,9 @@ from app.models import (
     IntentoNotificacion,
     NotificacionEnviada,
     Parametro,
+    PlanSuscripcion,
     Sede,
+    Suscripcion,
     Telemetria,
     Ubicacion,
     Usuario,
@@ -43,6 +45,7 @@ from tests.routers.test_alarmas import (
     crear_dispositivo,
     crear_parametro,
     crear_ubicacion,
+    dar_suscripcion_vigente,
 )
 
 
@@ -132,6 +135,7 @@ def test_pipeline_real_con_reintento_y_dos_destinatarios(tmp_path, monkeypatch):
             sede = Sede(id_clnt=cliente.id_clnt, nmbr=f"HT14 {identificador}")
             db.add(sede)
             db.flush()
+            dar_suscripcion_vigente(db, sede)
             ubicacion = crear_ubicacion(db, sede)
             dispositivo = crear_dispositivo(db, ubicacion, crear_conexion(db, sede))
             parametro = crear_parametro(db, f"HT14 {identificador}", "°C")
@@ -272,6 +276,14 @@ def test_pipeline_real_con_reintento_y_dos_destinatarios(tmp_path, monkeypatch):
                         synchronize_session=False
                     )
                     db.query(Sede).filter_by(id_clnt=cliente.id_clnt).delete()
+                    planes = [
+                        p
+                        for (p,) in db.query(Suscripcion.id_pln).filter_by(id_clnt=cliente.id_clnt)
+                    ]
+                    db.query(Suscripcion).filter_by(id_clnt=cliente.id_clnt).delete()
+                    db.query(PlanSuscripcion).filter(PlanSuscripcion.id_pln.in_(planes)).delete(
+                        synchronize_session=False
+                    )
                     db.delete(cliente)
                 db.query(Parametro).filter_by(nmbr=f"HT14 {identificador}").delete()
                 db.commit()
