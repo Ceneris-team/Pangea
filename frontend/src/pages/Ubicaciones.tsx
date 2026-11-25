@@ -27,6 +27,19 @@ interface ListadoPaginado {
   items: UbicacionListItem[];
 }
 
+interface ConsultaUbicaciones {
+  busqueda: string;
+  estado: string;
+  pagina: number;
+}
+
+interface RespuestaListado {
+  consulta: ConsultaUbicaciones;
+  revision: number;
+  data?: ListadoPaginado;
+  error?: string;
+}
+
 interface Sede {
   id_sd: number;
   nmbr: string;
@@ -67,15 +80,6 @@ const POR_PAGINA = 10;
 // require_permiso('Ubicaciones', EDICION); esto solo evita mostrar un
 // botón que terminaría en 403.
 
-function useDebouncedValue<T>(value: T, delayMs: number): T {
-  const [debounced, setDebounced] = useState(value);
-  useEffect(() => {
-    const timeout = setTimeout(() => setDebounced(value), delayMs);
-    return () => clearTimeout(timeout);
-  }, [value, delayMs]);
-  return debounced;
-}
-
 export default function Ubicaciones() {
   const { nombreCompleto, rol, logout, puedeOperar } = useAuth();
   const navigate = useNavigate();
@@ -97,54 +101,63 @@ export default function Ubicaciones() {
 
   // Estado para el Modo Oscuro (mismo patrón que Usuarios.tsx)
 
-  // CA HU07: búsqueda por nombre, insensible a mayúsculas/minúsculas
-  const [busquedaInput, setBusquedaInput] = useState("");
-  const busqueda = useDebouncedValue(busquedaInput, 400);
+  // Cambiar un filtro y volver a la primera página es una sola actualización.
+  const [consulta, setConsulta] = useState<ConsultaUbicaciones>({ busqueda: "", estado: "", pagina: 1 });
+  const { busqueda: busquedaInput, estado, pagina } = consulta;
+  const [revision, setRevision] = useState(0);
+  const [respuesta, setRespuesta] = useState<RespuestaListado | null>(null);
+  // No presentar filas, errores ni totales de una consulta anterior mientras
+  // se espera el debounce o una respuesta más reciente.
+  const respuestaActual = respuesta?.consulta === consulta && respuesta.revision === revision ? respuesta : null;
+  const data = respuestaActual?.data ?? null;
+  const error = respuestaActual?.error ?? null;
+  const loading = respuestaActual === null;
+  const hayFiltros = busquedaInput !== "" || estado !== "";
 
-  // CA HU07: filtro por estado (Activa / Inactiva)
-  const [estado, setEstado] = useState("");
-  const [pagina, setPagina] = useState(1);
-
-  const [data, setData] = useState<ListadoPaginado | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    queueMicrotask(() => setPagina(1));
-  }, [busqueda, estado]);
-
-  // Nombrada (no solo dentro del useEffect) para poder recargar el
-  // listado después de crear/editar una ubicación desde el drawer, sin
-  // depender de que busqueda/estado/pagina cambien -mismo patrón que
-  // cargarPaneles en Paneles.tsx-.
   function cargarUbicaciones() {
-    setLoading(true);
-    setError(null);
-
-    apiFetch<ListadoPaginado>("/ubicaciones", {
-      params: {
-        busqueda: busqueda || undefined,
-        estado: estado || undefined,
-        pagina,
-        por_pagina: POR_PAGINA,
-      },
-    })
-      .then(setData)
-      .catch((err) => {
-        setError(err instanceof ApiError ? err.message : "No se pudo cargar el listado");
-      })
-      .finally(() => setLoading(false));
+    setRevision((actual) => actual + 1);
   }
 
   useEffect(() => {
     let cancelado = false;
-    queueMicrotask(() => { if (!cancelado) cargarUbicaciones(); });
-    return () => { cancelado = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [busqueda, estado, pagina]);
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => {
+      apiFetch<ListadoPaginado>("/ubicaciones", {
+        signal: controller.signal,
+        params: {
+          busqueda: consulta.busqueda.trim() || undefined,
+          estado: consulta.estado || undefined,
+          pagina: consulta.pagina,
+          por_pagina: POR_PAGINA,
+        },
+      })
+        .then((listado) => {
+          if (cancelado) return;
+          // Una edición puede quitar el último registro de la última página.
+          const ultimaPagina = Math.max(1, Math.ceil(listado.total / listado.por_pagina));
+          if (consulta.pagina > ultimaPagina) {
+            setConsulta((actual) => actual === consulta ? { ...actual, pagina: ultimaPagina } : actual);
+            return;
+          }
+          setRespuesta({ consulta, revision, data: listado });
+        })
+        .catch(() => {
+          if (!cancelado) setRespuesta({ consulta, revision, error: "No se pudo cargar el listado" });
+        });
+    }, consulta.busqueda.trim() ? 400 : 0);
+    return () => {
+      cancelado = true;
+      controller.abort();
+      window.clearTimeout(timeout);
+    };
+  }, [consulta, revision]);
+
+  function limpiarFiltros() {
+    setConsulta({ busqueda: "", estado: "", pagina: 1 });
+  }
 
   const totalPaginas = data ? Math.max(1, Math.ceil(data.total / data.por_pagina)) : 1;
-  const inicioRango = data ? (data.pagina - 1) * data.por_pagina + 1 : 0;
+  const inicioRango = data && data.total > 0 ? (data.pagina - 1) * data.por_pagina + 1 : 0;
   const finRango = data ? Math.min(data.pagina * data.por_pagina, data.total) : 0;
 
   // HU08: crear y editar ubicación viven como drawer lateral ANCHO
@@ -423,35 +436,46 @@ export default function Ubicaciones() {
                   </div>
                   <input
                     type="text"
+                    aria-label="Buscar por nombre de proyecto"
                     value={busquedaInput}
-                    onChange={(e) => setBusquedaInput(e.target.value)}
+                    onChange={(e) => setConsulta((actual) => ({ ...actual, busqueda: e.target.value, pagina: 1 }))}
                     placeholder="Buscar por nombre de proyecto..."
                     className="bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block w-full pl-10 p-2.5 transition-all outline-none placeholder-gray-400"
                   />
                 </div>
 
-                <div className="flex w-full lg:w-auto gap-3">
+                <div className="flex flex-col sm:flex-row w-full lg:w-auto gap-3">
                   <select
+                    aria-label="Estado del proyecto"
                     value={estado}
-                    onChange={(e) => setEstado(e.target.value)}
-                    className="bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block p-2.5 outline-none cursor-pointer"
+                    onChange={(e) => setConsulta((actual) => ({ ...actual, estado: e.target.value, pagina: 1 }))}
+                    className="bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block w-full sm:w-auto p-2.5 outline-none cursor-pointer"
                   >
                     <option value="">Todos los estados</option>
                     <option value="Activa">Activo</option>
                     <option value="Inactiva">Archivado</option>
                   </select>
+                  <button
+                    type="button"
+                    onClick={limpiarFiltros}
+                    disabled={!hayFiltros}
+                    className="shrink-0 px-3 py-2 text-sm font-semibold rounded-xl border border-black/20 dark:border-white/20 text-gray-700 dark:text-gray-200 hover:bg-black/5 dark:hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    Limpiar filtros
+                  </button>
                 </div>
               </div>
 
               {error && (
-                <div className="p-4 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm border-b border-red-200 dark:border-red-800/30">
+                <div role="alert" className="p-4 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm border-b border-red-200 dark:border-red-800/30 flex items-center justify-between gap-3">
                   {error}
+                  <button type="button" onClick={cargarUbicaciones} className="font-semibold underline">Reintentar</button>
                 </div>
               )}
 
               {/* Tabla */}
               <div className="overflow-x-auto">
-                <table className="w-full text-sm text-left text-gray-600 dark:text-gray-300">
+                <table aria-label="Listado de proyectos" aria-busy={loading} className="w-full text-sm text-left text-gray-600 dark:text-gray-300">
                   <thead className="text-xs text-gray-600 dark:text-gray-300 uppercase bg-black/5 dark:bg-white/5 border-b border-black/10 dark:border-white/10">
                     <tr>
                       <th className="px-6 py-4 font-bold tracking-wider">Nombre</th>
@@ -468,7 +492,7 @@ export default function Ubicaciones() {
                         <td colSpan={6} className="px-6 py-8 text-center text-gray-600 dark:text-gray-300">
                           <div className="flex justify-center items-center gap-2">
                             <div className="w-4 h-4 rounded-full bg-[#ccff00] animate-bounce"></div>
-                            <span>Cargando datos...</span>
+                            <span role="status">Cargando proyectos...</span>
                           </div>
                         </td>
                       </tr>
@@ -477,7 +501,7 @@ export default function Ubicaciones() {
                     {!loading && data?.items.length === 0 && (
                       <tr>
                         <td colSpan={6} className="px-6 py-8 text-center text-gray-600 dark:text-gray-300">
-                          No se encontraron proyectos con ese criterio.
+                          {hayFiltros ? "No se encontraron proyectos con los filtros seleccionados" : "Aún no hay proyectos registrados"}
                         </td>
                       </tr>
                     )}
@@ -559,15 +583,15 @@ export default function Ubicaciones() {
                   </span>
                   <div className="flex gap-2">
                     <button
-                      onClick={() => setPagina((p) => Math.max(1, p - 1))}
-                      disabled={pagina <= 1}
+                      onClick={() => setConsulta((actual) => ({ ...actual, pagina: Math.max(1, actual.pagina - 1) }))}
+                      disabled={loading || pagina <= 1}
                       className="px-3 py-1.5 text-sm rounded-lg border border-black/20 dark:border-white/20 text-gray-700 dark:text-gray-200 disabled:opacity-40 hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
                     >
                       Anterior
                     </button>
                     <button
-                      onClick={() => setPagina((p) => Math.min(totalPaginas, p + 1))}
-                      disabled={pagina >= totalPaginas}
+                      onClick={() => setConsulta((actual) => ({ ...actual, pagina: Math.min(totalPaginas, actual.pagina + 1) }))}
+                      disabled={loading || pagina >= totalPaginas}
                       className="px-3 py-1.5 text-sm rounded-lg border border-black/20 dark:border-white/20 text-gray-700 dark:text-gray-200 disabled:opacity-40 hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
                     >
                       Siguiente

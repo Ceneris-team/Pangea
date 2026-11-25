@@ -31,6 +31,8 @@ datos del panel emergente, incluida la cantidad de dispositivos asociados
 (CA2). CA3 y CA4 son navegación, puro frontend.
 """
 
+from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy import func
@@ -71,7 +73,9 @@ ROLES_CON_ACCESO_TOTAL = {"Administrador", "Tecnico CENERIS", "Técnico CENERIS"
 @router.get("")
 def listar_ubicaciones(
     busqueda: str | None = Query(default=None, description="Nombre de la ubicación, parcial"),
-    estado: str | None = Query(default=None, description="Activa / Inactiva"),
+    estado: Literal["Activa", "Inactiva", ""] | None = Query(
+        default=None, description="Activa (Activo) / Inactiva (Archivado)"
+    ),
     # HU36: variante para poblar selectores de filtro (p. ej. Dispositivos.tsx)
     # que no tiene sentido ofrecer con una ubicación sin ningún dispositivo
     # asociado -elegirla siempre daría una tabla vacía-. Parámetro nuevo
@@ -96,9 +100,9 @@ def listar_ubicaciones(
             PermisoUbicacion, PermisoUbicacion.id_ubccn == Ubicacion.id_ubccn
         ).filter(PermisoUbicacion.id_usr == id_usr)
 
-    if busqueda:
-        patron = f"%{busqueda.lower()}%"
-        query = query.filter(func.lower(Ubicacion.nmbr).like(patron))
+    nombre = (busqueda or "").strip().lower()
+    if nombre:
+        query = query.filter(func.lower(Ubicacion.nmbr).contains(nombre, autoescape=True))
     if estado:
         query = query.filter(Ubicacion.estd == estado)
     if con_dispositivos:
@@ -111,7 +115,10 @@ def listar_ubicaciones(
 
     total = query.count()
     ubicaciones = (
-        query.order_by(Ubicacion.nmbr).offset((pagina - 1) * por_pagina).limit(por_pagina).all()
+        query.order_by(func.lower(Ubicacion.nmbr), Ubicacion.id_ubccn)
+        .offset((pagina - 1) * por_pagina)
+        .limit(por_pagina)
+        .all()
     )
 
     items = [UbicacionListItem.model_validate(u) for u in ubicaciones]
