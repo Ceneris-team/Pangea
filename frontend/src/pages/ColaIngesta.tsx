@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { apiFetch, ApiError } from "../services/api";
+import { apiFetch, apiDownload, ApiError } from "../services/api";
 import { useAuth } from "../hooks/useAuth";
 import Sidebar from "../components/layout/Sidebar";
 import Topbar from "../components/layout/Topbar";
@@ -21,12 +21,14 @@ interface ArchivoIngestaListItem {
   datalogger_nombre: string;
   fch_dtccn: string;
   estado: string;
+  mnsj_errr: string | null;
 }
 
 interface ArchivoIngestaDetalle extends ArchivoIngestaListItem {
   fch_prcsd: string | null;
   rgstrs_prcsds: number | null;
   mnsj_errr: string | null;
+  puede_reprocesar: boolean;
 }
 
 interface FilaCrudaIngesta {
@@ -51,6 +53,10 @@ interface IntentoProcesamiento {
   mnsj_errr: string | null;
   id_usr: number | null;
   usuario_nombre: string | null;
+  fch_inicio: string | null;
+  fch_fin: string | null;
+  reintentos: number;
+  registros_guardados: number | null;
 }
 
 function esVacio(valor: string | null): boolean {
@@ -62,6 +68,8 @@ interface ListadoColaIngesta {
   pagina: number;
   por_pagina: number;
   items: ArchivoIngestaListItem[];
+  fallidos: number;
+  puede_reprocesar: boolean;
 }
 
 interface DataloggerFiltro {
@@ -87,14 +95,18 @@ function formatearFecha(iso: string | null): string {
 }
 
 export default function ColaIngesta() {
-  const { nombreCompleto, rol, logout } = useAuth();
+  const { nombreCompleto, rol, logout, operacionHabilitada, clienteId, proyectoId } = useAuth();
+  const [revision, setRevision] = useState(0);
+  const enviando = useRef(false);
+  const seleccionActual = useRef<number | null>(null);
 
   // HU19 CA3: "VER COLA DE PROCESAMIENTO" desde el panel de estadísticas de
   // un dispositivo llega acá con su conexión FTP preseleccionada. Se lee
   // con useSearchParams (mismo patrón que ubicacion_id en Graficos.tsx,
   // HU17 CA4) para que quede sincronizado con la navegación.
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const idCnxnParam = searchParams.get("id_cnxn");
+  const dispositivoFiltro = searchParams.get("dispositivo_id");
 
   const [pagina, setPagina] = useState(1);
   const [estadoFiltro, setEstadoFiltro] = useState("");
@@ -123,12 +135,13 @@ export default function ColaIngesta() {
   const [intentosError, setIntentosError] = useState<string | null>(null);
   const [intentosLoading, setIntentosLoading] = useState(false);
 
-  // Total real de Fallido (independiente de pagina/filtro actual): es lo
-  // que decide si se muestra "Reintentar todos" y el numero que se le
-  // muestra al usuario en la confirmacion, via /ingesta/metricas (HT-05
-  // CA3) en vez de contar sobre data.items, que solo trae la pagina
-  // visible y puede estar filtrada por otro estado.
-  const [totalFallidos, setTotalFallidos] = useState(0);
+  const totalFallidos = data?.fallidos ?? 0;
+  const puedeReprocesar = operacionHabilitada && data?.puede_reprocesar === true;
+
+  useEffect(() => {
+    const intervalo = setInterval(() => setRevision((valor) => valor + 1), REFRESCO_MS);
+    return () => clearInterval(intervalo);
+  }, []);
 
   useEffect(() => {
     apiFetch<{ items: DataloggerFiltro[] }>("/ingesta/dataloggers")
@@ -147,11 +160,14 @@ export default function ColaIngesta() {
           por_pagina: POR_PAGINA,
           estado: estadoFiltro || undefined,
           id_cnxn: dataloggerFiltro || undefined,
+          id_dspstv: dispositivoFiltro || undefined,
         },
       })
         .then((res) => {
           if (!cancelado) {
             setData(res);
+            const ultima = Math.max(1, Math.ceil(res.total / res.por_pagina));
+            if (pagina > ultima) setPagina(ultima);
             setError(null);
           }
         })
@@ -161,23 +177,11 @@ export default function ColaIngesta() {
         .finally(() => {
           if (!cancelado) setLoading(false);
         });
-
-      apiFetch<{ fallidos: number }>("/ingesta/metricas")
-        .then((res) => {
-          if (!cancelado) setTotalFallidos(res.fallidos);
-        })
-        .catch(() => {});
     };
 
     cargar();
-    // Refresco automático de la cola (ver Conversación de la HU: cada 30s).
-    const intervalo = setInterval(cargar, REFRESCO_MS);
-
-    return () => {
-      cancelado = true;
-      clearInterval(intervalo);
-    };
-  }, [pagina, estadoFiltro, dataloggerFiltro]);
+    return () => { cancelado = true; };
+  }, [pagina, estadoFiltro, dataloggerFiltro, dispositivoFiltro, revision, clienteId, proyectoId]);
 
   useEffect(() => {
     let cancelado = false;
@@ -196,7 +200,7 @@ export default function ColaIngesta() {
     return () => {
       cancelado = true;
     };
-  }, [idSeleccionado]);
+  }, [idSeleccionado, revision]);
 
   useEffect(() => {
     let cancelado = false;
@@ -251,67 +255,67 @@ export default function ColaIngesta() {
     return () => {
       cancelado = true;
     };
-  }, [idSeleccionado]);
+  }, [idSeleccionado, revision]);
 
   const totalPaginas = data ? Math.max(1, Math.ceil(data.total / data.por_pagina)) : 1;
 
+  const abrirDetalle = (id: number) => {
+    seleccionActual.current = id;
+    setDetalle(null);
+    setIntentos(null);
+    setRegistros(null);
+    setIdSeleccionado(id);
+  };
+
+  const cerrarDetalle = () => {
+    seleccionActual.current = null;
+    setIdSeleccionado(null);
+  };
+
   const reintentar = () => {
-    if (idSeleccionado === null) return;
+    if (idSeleccionado === null || enviando.current || !puedeReprocesar) return;
+    enviando.current = true;
     setReintentando(true);
     setDetalleError(null);
     apiFetch<ArchivoIngestaDetalle>(`/ingesta/cola/${idSeleccionado}/reintentar`, { method: "POST" })
       .then((res) => {
-        setDetalle(res);
-        // Refleja el nuevo estado ("En espera") también en la fila de la tabla.
-        setData((prev) =>
-          prev
-            ? {
-                ...prev,
-                items: prev.items.map((item) =>
-                  item.id_archv === res.id_archv ? { ...item, estado: res.estado } : item
-                ),
-              }
-            : prev
-        );
+        if (seleccionActual.current === res.id_archv) setDetalle(res);
+        setRevision((valor) => valor + 1);
       })
-      .catch((err) => setDetalleError(err instanceof ApiError ? err.message : "No se pudo reintentar el archivo"))
-      .finally(() => setReintentando(false));
+      .catch((err) => {
+        if (seleccionActual.current === idSeleccionado) setDetalleError(err instanceof ApiError ? err.message : "No se pudo reintentar el archivo");
+      })
+      .finally(() => { enviando.current = false; setReintentando(false); });
   };
 
   const reintentarTodosLosFallidos = () => {
+    if (enviando.current || !puedeReprocesar) return;
+    enviando.current = true;
     setReintentandoMasivo(true);
     setErrorReintentoMasivo(null);
     setMensajeReintentoMasivo(null);
-    apiFetch<{ reencolados: number }>("/ingesta/cola/reintentar-fallidos", { method: "POST" })
+    apiFetch<{ reencolados: number }>("/ingesta/cola/reintentar-fallidos", {
+      method: "POST",
+      params: {
+        estado: estadoFiltro || undefined,
+        id_cnxn: dataloggerFiltro || undefined,
+        id_dspstv: dispositivoFiltro || undefined,
+      },
+    })
       .then((res) => {
         setConfirmandoReintentoMasivo(false);
         setMensajeReintentoMasivo(
           res.reencolados === 0
-            ? "No había archivos fallidos para reintentar."
-            : `${res.reencolados} archivo(s) fallido(s) puesto(s) en cola de nuevo.`
+            ? "No quedan archivos fallidos disponibles en este filtro."
+            : `${res.reencolados} archivo(s) en espera de reproceso. Puedes consultar su avance e historial.`
         );
-        setTotalFallidos(0);
-        // Refleja el nuevo estado en la página visible sin esperar al
-        // refresco automático de 30s: cualquier fila Fallido en pantalla
-        // pasa a "En espera", igual que hace reintentar() con una sola fila.
-        setData((prev) =>
-          prev
-            ? {
-                ...prev,
-                items: prev.items.map((item) =>
-                  item.estado === "Fallido" ? { ...item, estado: "En espera" } : item
-                ),
-              }
-            : prev
-        );
+        setRevision((valor) => valor + 1);
       })
       .catch((err) => {
         setConfirmandoReintentoMasivo(false);
-        setErrorReintentoMasivo(
-          err instanceof ApiError ? err.message : "No se pudieron reintentar los archivos fallidos"
-        );
+        setErrorReintentoMasivo(err instanceof ApiError ? err.message : "No se pudieron reintentar los archivos fallidos");
       })
-      .finally(() => setReintentandoMasivo(false));
+      .finally(() => { enviando.current = false; setReintentandoMasivo(false); });
   };
 
   return (
@@ -367,6 +371,11 @@ export default function ColaIngesta() {
                   onChange={(e) => {
                     setPagina(1);
                     setDataloggerFiltro(e.target.value);
+                    if (dispositivoFiltro) {
+                      const siguientes = new URLSearchParams(searchParams);
+                      siguientes.delete("dispositivo_id");
+                      setSearchParams(siguientes, { replace: true });
+                    }
                   }}
                   className="bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] p-2.5 outline-none"
                 >
@@ -378,8 +387,9 @@ export default function ColaIngesta() {
                   ))}
                 </select>
 
-                {totalFallidos > 0 && (
+                {puedeReprocesar && totalFallidos > 0 && (
                   <button
+                    disabled={loading || reintentando || reintentandoMasivo}
                     onClick={() => {
                       setErrorReintentoMasivo(null);
                       setMensajeReintentoMasivo(null);
@@ -387,11 +397,14 @@ export default function ColaIngesta() {
                     }}
                     className="ml-auto inline-flex items-center justify-center px-4 py-2.5 text-sm font-semibold text-gray-900 bg-[#ccff00] rounded-xl hover:bg-[#b8e600] transition-all"
                   >
-                    Reintentar todos los fallidos ({totalFallidos})
+                    Reprocesar fallidos del filtro ({totalFallidos})
                   </button>
                 )}
               </div>
 
+              {dispositivoFiltro && <p className="mb-3 text-sm text-gray-600 dark:text-gray-300">Se muestran los archivos del equipo seleccionado. <button type="button" className="font-semibold underline" onClick={() => {
+                const siguientes = new URLSearchParams(searchParams); siguientes.delete("dispositivo_id"); setSearchParams(siguientes, { replace: true }); setPagina(1);
+              }}>Quitar filtro de equipo</button></p>}
               {error && (
                 <div className="p-4 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm border-b border-red-200 dark:border-red-800/30">
                   {error}
@@ -445,7 +458,7 @@ export default function ColaIngesta() {
                     {data?.items.map((item) => (
                       <tr
                         key={item.id_archv}
-                        onClick={() => setIdSeleccionado(item.id_archv)}
+                        onClick={() => abrirDetalle(item.id_archv)}
                         className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm border-b border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer"
                       >
                         <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">{item.nmbr_archv}</td>
@@ -459,12 +472,13 @@ export default function ColaIngesta() {
                           >
                             {item.estado}
                           </span>
+                          {item.estado === "Fallido" && item.mnsj_errr && <p className="mt-2 max-w-xs text-xs text-red-600 dark:text-red-400">{item.mnsj_errr}</p>}
                         </td>
                         <td className="px-6 py-4 text-right">
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              setIdSeleccionado(item.id_archv);
+                              abrirDetalle(item.id_archv);
                             }}
                             className="inline-flex items-center justify-center px-3 py-1.5 text-xs sm:text-sm font-medium whitespace-nowrap text-gray-700 dark:text-gray-200 bg-transparent border border-black/20 dark:border-white/20 rounded-lg hover:bg-black/10 dark:hover:bg-white/10 hover:text-gray-900 dark:hover:text-white transition-all"
                           >
@@ -513,11 +527,12 @@ export default function ColaIngesta() {
 
       {idSeleccionado !== null && (
         <div
-          className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
-          onClick={() => setIdSeleccionado(null)}
+          className="ui-modal-fondo fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          onClick={cerrarDetalle}
         >
           <div
-            className={`bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl shadow-xl border border-black/10 dark:border-white/10 w-full p-6 ${
+            role="dialog" aria-modal="true" aria-label="Detalle del archivo"
+            className={`ui-modal-superficie bg-white dark:bg-[#1f2733] rounded-2xl shadow-xl border border-black/10 dark:border-white/10 w-full max-h-[90vh] overflow-y-auto p-6 ${
               detalle?.estado === "Procesado" ? "max-w-4xl" : "max-w-lg"
             }`}
             onClick={(e) => e.stopPropagation()}
@@ -525,7 +540,7 @@ export default function ColaIngesta() {
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-bold text-gray-900 dark:text-white">Detalle del archivo</h2>
               <button
-                onClick={() => setIdSeleccionado(null)}
+                onClick={cerrarDetalle}
                 className="text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
                 aria-label="Cerrar"
               >
@@ -550,6 +565,13 @@ export default function ColaIngesta() {
                 <div className="flex justify-between gap-4">
                   <dt className="text-gray-600 dark:text-gray-300">Archivo</dt>
                   <dd className="font-medium text-gray-900 dark:text-white text-right">{detalle.nmbr_archv}</dd>
+                </div>
+                <div className="rounded-lg border border-black/10 p-3 dark:border-white/10">
+                  <p className="text-xs text-gray-600 dark:text-gray-300">El original se conserva sin editar. Las lecturas inválidas se excluyen con su motivo; no se rellenan con promedios.</p>
+                  <button type="button" className="mt-2 font-semibold text-[#5a7000] underline dark:text-[#ccff00]" onClick={() => {
+                    void apiDownload(`/ingesta/cola/${detalle.id_archv}/original`, `original-${detalle.nmbr_archv}`)
+                      .catch((err) => setDetalleError(err instanceof ApiError ? err.message : "No se pudo descargar el original"));
+                  }}>Descargar original para revisión</button>
                 </div>
                 <div className="flex justify-between gap-4">
                   <dt className="text-gray-600 dark:text-gray-300">Datalogger de origen</dt>
@@ -587,7 +609,7 @@ export default function ColaIngesta() {
                     {detalle.rgstrs_prcsds ?? "-"}
                   </dd>
                 </div>
-                {detalle.estado === "Fallido" && detalle.mnsj_errr && (
+                {detalle.mnsj_errr && (
                   <div>
                     <dt className="text-gray-600 dark:text-gray-300 mb-1">Mensaje de resultado</dt>
                     <dd className="text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 rounded-lg p-3">
@@ -629,20 +651,24 @@ export default function ColaIngesta() {
                               className={`inline-flex items-center px-2 py-0.5 rounded-full font-bold border mr-2 ${
                                 intento.rsltd === "Exitoso"
                                   ? "bg-[#ccff00]/20 text-[#5a7000] dark:text-[#ccff00] border-[#ccff00]/30"
-                                  : "bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 border-red-200 dark:border-red-800/30"
+                                  : intento.rsltd === "Fallido" ? ESTILO_ESTADO.Fallido : ESTILO_ESTADO["En espera"]
                               }`}
                             >
-                              {intento.rsltd}
+                              {intento.rsltd === "Pendiente" ? "En espera" : intento.rsltd === "Exitoso" ? "Procesado" : intento.rsltd}
                             </span>
                             <span className="text-gray-600 dark:text-gray-300">
-                              {intento.usuario_nombre ?? "Automático"}
+                              {intento.usuario_nombre ?? (intento.id_usr ? "Usuario no disponible" : "Automático")}
                             </span>
+                            <p className="mt-1 text-gray-600 dark:text-gray-300">{intento.reintentos > 0 ? "Reintento automático" : intento.id_usr ? "Solicitud manual" : "Automático"}</p>
+                            {intento.registros_guardados !== null && <p>{intento.registros_guardados} lectura(s) nueva(s)</p>}
                             {intento.mnsj_errr && (
                               <p className="text-red-600 dark:text-red-400 mt-1">{intento.mnsj_errr}</p>
                             )}
                           </div>
-                          <span className="text-gray-400 dark:text-gray-500 whitespace-nowrap">
-                            {formatearFecha(intento.fch_intnt)}
+                          <span className="text-gray-500 dark:text-gray-400 text-right">
+                            <span className="block">Solicitud: {formatearFecha(intento.fch_intnt)}</span>
+                            {intento.fch_inicio && <span className="block">Inicio: {formatearFecha(intento.fch_inicio)}</span>}
+                            {intento.fch_fin && <span className="block">Fin: {formatearFecha(intento.fch_fin)}</span>}
                           </span>
                         </li>
                       ))}
@@ -650,14 +676,14 @@ export default function ColaIngesta() {
                   )}
                 </div>
 
-                {detalle.estado === "Fallido" && (
+                {detalle.estado === "Fallido" && detalle.puede_reprocesar && puedeReprocesar && (
                   <div className="pt-3 border-t border-gray-100 dark:border-gray-700">
                     <button
                       onClick={reintentar}
                       disabled={reintentando}
                       className="inline-flex items-center justify-center w-full px-4 py-2.5 text-sm font-semibold text-gray-900 bg-[#ccff00] rounded-xl hover:bg-[#b8e600] transition-all disabled:opacity-50"
                     >
-                      {reintentando ? "Reencolando..." : "Reintentar"}
+                      {reintentando ? "Guardando solicitud..." : "Reprocesar"}
                     </button>
                   </div>
                 )}
@@ -669,7 +695,7 @@ export default function ColaIngesta() {
                     </dt>
 
                     {registrosLoading && (
-                      <p className="text-sm text-gray-500 dark:text-gray-400">Leyendo archivo del FTP...</p>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">Leyendo original conservado...</p>
                     )}
 
                     {registrosError && (
@@ -745,20 +771,23 @@ export default function ColaIngesta() {
 
       {confirmandoReintentoMasivo && (
         <div
-          className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+          className="ui-modal-fondo fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
           onClick={() => !reintentandoMasivo && setConfirmandoReintentoMasivo(false)}
         >
           <div
-            className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm rounded-2xl shadow-xl border border-black/10 dark:border-white/10 w-full max-w-md p-6"
+            role="dialog" aria-modal="true" aria-label="Confirmar reproceso de archivos"
+            className="ui-modal-superficie bg-white dark:bg-[#1f2733] rounded-2xl shadow-xl border border-black/10 dark:border-white/10 w-full max-w-md p-6"
             onClick={(e) => e.stopPropagation()}
           >
             <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-2">
-              Reintentar todos los fallidos
+              Reprocesar fallidos del filtro
             </h2>
             <p className="text-sm text-gray-600 dark:text-gray-300 mb-6">
-              Se van a reencolar <span className="font-semibold text-gray-900 dark:text-white">{totalFallidos}</span>{" "}
-              archivo(s) en estado Fallido para que se procesen de nuevo desde cero. Esta acción no se puede
-              deshacer.
+              Se solicitará el reproceso de <strong>{totalFallidos}</strong> archivo(s) fallido(s),
+              en todas las páginas de este filtro, dentro de la empresa y proyecto actuales.
+              {dataloggerFiltro ? ` Datalogger: ${dataloggers.find((d) => String(d.id_cnxn) === dataloggerFiltro)?.nombre ?? dataloggerFiltro}.` : " Todos los dataloggers del alcance actual."}
+              {dispositivoFiltro ? " Solo el equipo seleccionado." : ""}
+              {" Se usará el original conservado con el mapeo vigente, conservando las lecturas existentes. El total se verifica al confirmar y puede cambiar si llegan nuevos fallos u otro usuario solicita un reproceso."}
             </p>
             <div className="flex gap-3 justify-end">
               <button
@@ -773,7 +802,7 @@ export default function ColaIngesta() {
                 disabled={reintentandoMasivo}
                 className="px-4 py-2.5 text-sm font-semibold text-gray-900 bg-[#ccff00] rounded-xl hover:bg-[#b8e600] transition-all disabled:opacity-50"
               >
-                {reintentandoMasivo ? "Reencolando..." : "Sí, reintentar todos"}
+                {reintentandoMasivo ? "Guardando solicitudes..." : "Confirmar reproceso"}
               </button>
             </div>
           </div>

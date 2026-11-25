@@ -1,6 +1,7 @@
 from sqlalchemy import (
     TIMESTAMP,
     BigInteger,
+    Boolean,
     Column,
     ForeignKey,
     Index,
@@ -27,6 +28,9 @@ class ParametroCalculado(Base):
     undd = Column(String(30), nullable=False)
     dscrpcn = Column(String(300))
     estd = Column(String(20), nullable=False, server_default="Activo")
+    validada = Column(Boolean, nullable=False, server_default=text("false"))
+    id_usr_creador = Column(Integer, ForeignKey("usr.id_usr"))
+    creada_en = Column(TIMESTAMP(timezone=True), nullable=False, server_default=text("NOW()"))
 
 
 class LogAuditoria(Base):

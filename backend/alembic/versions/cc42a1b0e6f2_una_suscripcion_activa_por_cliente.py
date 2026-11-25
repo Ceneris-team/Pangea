@@ -14,8 +14,7 @@ depends_on = None
 
 def upgrade() -> None:
     op.execute(
-        "CREATE UNIQUE INDEX uq_sscrpcn_clnt_activa ON sscrpcn (id_clnt) "
-        "WHERE estd = 'Activa'"
+        "CREATE UNIQUE INDEX uq_sscrpcn_clnt_activa ON sscrpcn (id_clnt) " "WHERE estd = 'Activa'"
     )
 
 

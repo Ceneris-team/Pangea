@@ -15,6 +15,7 @@ interface LoginResponse {
  *  -"rol" es el único campo que comparten con el mismo nombre-, así que
  *  no se puede reutilizar esa interfaz para la verificación de sesión. */
 interface PerfilResponse {
+  puede_editar_alarmas: boolean;
   operacion_habilitada: boolean;
   rol_empresa: string | null;
   cliente_id: number | null;
@@ -29,6 +30,7 @@ interface PerfilResponse {
 }
 
 interface AuthState {
+  puedeEditarAlarmas: boolean;
   correo: string | null;
   operacionHabilitada: boolean;
   rolEmpresa: string | null;
@@ -53,6 +55,8 @@ interface AuthState {
 }
 
 export interface AuthContextValue extends AuthState {
+  errorVerificacion: boolean;
+  reintentarVerificacion: () => void;
   actualizarAccesoComercial: (habilitada: boolean) => void;
   puedeOperar: boolean;
   isAuthenticated: boolean;
@@ -88,6 +92,7 @@ function readInitialState(): AuthState {
   const zonaHoraria =
     localStorage.getItem("pangea_zona_horaria") ?? sessionStorage.getItem("pangea_zona_horaria");
   return {
+    puedeEditarAlarmas: false,
     correo: null,
     operacionHabilitada: false,
     rolEmpresa: null, clienteId: null, proyectoId: null,
@@ -102,6 +107,8 @@ function readInitialState(): AuthState {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>(readInitialState);
   const [verificandoSesion, setVerificandoSesion] = useState(true);
+  const [errorVerificacion, setErrorVerificacion] = useState(false);
+  const [intentoVerificacion, setIntentoVerificacion] = useState(0);
 
   // Se corre UNA vez al montar el Provider -pestaña nueva, F5, o la
   // primera carga de la app son exactamente los tres casos en los que
@@ -139,6 +146,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         localStorage.setItem("pangea_zona_horaria", perfil.zona_horaria);
 
         setState({
+          puedeEditarAlarmas: perfil.puede_editar_alarmas === true,
           correo: perfil.correo,
           operacionHabilitada: perfil.operacion_habilitada ?? true,
           rolEmpresa: perfil.rol_empresa, clienteId: perfil.cliente_id, proyectoId: perfil.proyecto_id,
@@ -150,19 +158,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
       } catch (err) {
         if (cancelado) return;
-        // 401 (cookie ausente/vencida) es el caso esperado de "no hay
-        // sesión": no es un error a reportar, solo el resultado normal de
-        // no estar logueado. Cualquier OTRO error (red caída, backend
-        // caído) también debe caer a "mostrar login" -no hay forma de
-        // confirmar una sesión que no se pudo consultar-, pero sin
-        // pisar silenciosamente datos de sesión que sí pudieran ser
-        // válidos: se limpian igual, porque una sesión que no se puede
-        // verificar no puede tratarse como activa.
         if (!(err instanceof ApiError) || err.status !== 401) {
-          console.warn("No se pudo verificar la sesión activa:", err);
+          // La red caída no invalida la cookie ni el entorno seleccionado.
+          // VigenciaAcceso oculta los módulos hasta que el reintento confirme la sesión.
+          setErrorVerificacion(true);
+          return;
         }
         limpiarDatosDeSesion();
         setState({
+          puedeEditarAlarmas: false,
           correo: null,
           operacionHabilitada: false,
           rolEmpresa: null, clienteId: null, proyectoId: null,
@@ -181,7 +185,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelado = true;
     };
-  }, []);
+  }, [intentoVerificacion]);
+
+  function reintentarVerificacion() {
+    setErrorVerificacion(false);
+    setVerificandoSesion(true);
+    setIntentoVerificacion(n => n + 1);
+  }
 
   async function login(correo: string, contrasena: string, recordar: boolean) {
     // El propio fetch (credentials: "include" en apiFetch) es lo que le
@@ -206,6 +216,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     storage.setItem("pangea_zona_horaria", data.zona_horaria);
 
     setState({
+      puedeEditarAlarmas: perfil.puede_editar_alarmas === true,
       correo: perfil.correo,
       operacionHabilitada: perfil.operacion_habilitada ?? true,
       rolEmpresa: perfil.rol_empresa, clienteId: perfil.cliente_id, proyectoId: perfil.proyecto_id,
@@ -226,6 +237,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     apiFetch("/auth/logout", { method: "POST" }).catch(() => {});
     limpiarDatosDeSesion();
     setState({
+      puedeEditarAlarmas: false,
       correo: null,
       operacionHabilitada: false,
       rolEmpresa: null, clienteId: null, proyectoId: null,
@@ -267,9 +279,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     <AuthContext.Provider
       value={{
         ...state,
+        puedeEditarAlarmas: state.puedeEditarAlarmas && state.operacionHabilitada,
         puedeOperar: state.operacionHabilitada && (["Administrador", "Técnico CENERIS", "Tecnico CENERIS"].includes(state.rol ?? "") || (state.rol === "Usuario Empresa" && ["Administrador", "Tecnico"].includes(state.rolEmpresa ?? ""))),
         isAuthenticated: state.sesionIniciada,
         verificandoSesion,
+        errorVerificacion,
+        reintentarVerificacion,
         login,
         logout,
         marcarContrasenaCambiada,

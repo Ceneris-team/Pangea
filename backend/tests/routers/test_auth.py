@@ -264,9 +264,10 @@ class TestZonaHoraria:
             headers=auth(token_de(usuario)),
         )
 
-        assert client.get("/auth/perfil", headers=auth(token_de(otro))).json()[
-            "zona_horaria"
-        ] == "America/Lima"
+        assert (
+            client.get("/auth/perfil", headers=auth(token_de(otro))).json()["zona_horaria"]
+            == "America/Lima"
+        )
 
     def test_zona_horaria_sin_token_devuelve_401(self, client):
         resp = client.put("/auth/zona-horaria", json={"zona_horaria": "America/Lima"})
@@ -791,9 +792,7 @@ class TestCookieDeSesion:
     pero el navegador debe además recibir la misma sesión en una cookie
     httpOnly, para no tener que guardar el JWT en localStorage/JS."""
 
-    def test_login_setea_cookie_httponly_secure_samesite_none(
-        self, client, usuario_con_password
-    ):
+    def test_login_setea_cookie_httponly_secure_samesite_none(self, client, usuario_con_password):
         usuario, _ = usuario_con_password
 
         resp = client.post(
@@ -852,9 +851,7 @@ class TestCookieDeSesion:
         # Sin cookie y sin header, el endpoint protegido vuelve a exigir login.
         assert client_https.get("/auth/perfil").status_code == 401
 
-    def test_header_authorization_sigue_funcionando_sin_cookie(
-        self, client, usuario_con_password
-    ):
+    def test_header_authorization_sigue_funcionando_sin_cookie(self, client, usuario_con_password):
         """Retrocompatibilidad explícita: un cliente que solo mande el
         header (sin cookie) debe seguir autenticando, tal como antes de
         esta migración."""

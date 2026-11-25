@@ -31,7 +31,6 @@ Create Date: 2026-09-16
 from alembic import op
 import sqlalchemy as sa
 
-
 revision = "d2f8a1c34b57"
 down_revision = "c1d4e7f90a21"
 branch_labels = None
@@ -60,20 +59,16 @@ def upgrade() -> None:
     # un LIKE 'contador%' clasificaria mal cualquier parametro futuro que
     # arranque igual sin ser acumulativo. Lo que no matchee queda
     # 'continuo' y un Administrador lo corrige desde el ABM.
-    op.execute(
-        """
+    op.execute("""
         UPDATE prmtr
            SET tipo_visualizacion = 'contador'
          WHERE nmbr IN ('contador_puerta', 'contador_eventos_puerta')
-        """
-    )
-    op.execute(
-        """
+        """)
+    op.execute("""
         UPDATE prmtr
            SET tipo_visualizacion = 'estado'
          WHERE nmbr IN ('estado_puerta', 'estado_gabinete')
-        """
-    )
+        """)
 
 
 def downgrade() -> None:

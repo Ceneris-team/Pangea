@@ -13,6 +13,7 @@ interface ProtectedRouteProps {
   rolesPermitidos?: readonly string[];
   requiereOperacion?: boolean;
   requiereAdministracionEmpresa?: boolean;
+  requiereEdicionAlarmas?: boolean;
 }
 
 /** Única ruta accesible mientras la contraseña temporal siga sin cambiarse:
@@ -25,8 +26,9 @@ export default function ProtectedRoute({
   rolesPermitidos,
   requiereOperacion,
   requiereAdministracionEmpresa,
+  requiereEdicionAlarmas,
 }: ProtectedRouteProps) {
-  const { isAuthenticated, rol, rolEmpresa, debeCambiarContrasena, verificandoSesion, puedeOperar } = useAuth();
+  const { isAuthenticated, rol, rolEmpresa, debeCambiarContrasena, verificandoSesion, puedeOperar, puedeEditarAlarmas } = useAuth();
   const location = useLocation();
 
   // Pestaña nueva, F5, o la primera carga de la app montan AuthProvider
@@ -72,6 +74,7 @@ export default function ProtectedRoute({
     return <Navigate to={rutaPorRol(rol)} replace />;
   }
   if (requiereOperacion && !puedeOperar) return <Navigate to={rutaPorRol(rol ?? "")} replace />;
+  if (requiereEdicionAlarmas && !puedeEditarAlarmas) return <Navigate to="/alarmas" replace />;
   if (esCeneris(rol) && esModuloOperativo(location.pathname) && !sessionStorage.getItem("pangea_cliente")) {
     return <Navigate to="/clientes" replace />;
   }

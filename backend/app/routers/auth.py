@@ -37,7 +37,9 @@ router = APIRouter(prefix="/auth", tags=["Autenticación"])
 
 @router.get("/acceso")
 def consultar_acceso(
-    response: Response, usuario: dict = Depends(get_current_user), db: Session = Depends(get_db),
+    response: Response,
+    usuario: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     response.headers["Cache-Control"] = "no-store"
     return estado_acceso(db, usuario)
@@ -130,12 +132,18 @@ def _resolver_sede_id_login(db: Session, usuario: Usuario) -> int | None:
         return None
 
     if usuario.scp == "por_cliente":
-        membresia = db.query(UsuarioCliente.id_mmb).filter(
-            UsuarioCliente.id_usr == usuario.id_usr,
-            UsuarioCliente.estd == "Activo",
-        ).first()
+        membresia = (
+            db.query(UsuarioCliente.id_mmb)
+            .filter(
+                UsuarioCliente.id_usr == usuario.id_usr,
+                UsuarioCliente.estd == "Activo",
+            )
+            .first()
+        )
         if membresia is None:
-            raise HTTPException(status_code=403, detail="Tu cuenta no tiene una empresa activa asignada")
+            raise HTTPException(
+                status_code=403, detail="Tu cuenta no tiene una empresa activa asignada"
+            )
         return None
 
     ids_sd = {
@@ -253,10 +261,16 @@ def crear_ticket_websocket(
     routers/mapa_cliente.py.
     """
     import json
+
     contenido = token_crudo
     if usuario_token.get("cliente_id") is not None:
-        contenido = json.dumps({"token": token_crudo, "cliente_id": usuario_token["cliente_id"],
-                                "proyecto_id": usuario_token.get("proyecto_id")})
+        contenido = json.dumps(
+            {
+                "token": token_crudo,
+                "cliente_id": usuario_token["cliente_id"],
+                "proyecto_id": usuario_token.get("proyecto_id"),
+            }
+        )
     return {"ticket": emitir_ticket(contenido)}
 
 
@@ -275,6 +289,8 @@ def mi_perfil(
     if usuario is None:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
+    from app.security.entorno import permiso_del_entorno
+    from app.security.permisos import EDICION, tiene_permiso
     from app.services.contratos import exigir_operacion
 
     operacion_habilitada = True
@@ -283,7 +299,13 @@ def mi_perfil(
             exigir_operacion(db, usuario_token["cliente_id"])
         except HTTPException:
             operacion_habilitada = False
+    permiso_alarmas = permiso_del_entorno(db, usuario_token, "Alarmas", EDICION)
+    if permiso_alarmas is None:
+        permiso_alarmas = tiene_permiso(
+            db, usuario.id_usr, usuario_token.get("sede_id"), "Alarmas", EDICION
+        )
     return {
+        "puede_editar_alarmas": operacion_habilitada and permiso_alarmas,
         "nombre_completo": usuario.nmbr_cmplt,
         "correo": usuario.crr,
         "rol": usuario.rol.nmbr,

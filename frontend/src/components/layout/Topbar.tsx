@@ -6,6 +6,7 @@ import { useTheme } from "../../hooks/useTheme";
 import { apiFetch } from "../../services/api";
 import { useAuth } from "../../hooks/useAuth";
 import DrawerPanel from "./DrawerPanel";
+import Sidebar from "./Sidebar";
 import PerfilConfiguracion from "../perfil/PerfilConfiguracion";
 
 interface TopbarProps {
@@ -34,13 +35,14 @@ const MAXIMO_EN_POPOVER = 15;
 
 export default function Topbar({ nombreCompleto, rol }: TopbarProps) {
   const { esOscuro, toggleTema } = useTheme();
-  const { puedeOperar, rolEmpresa, clienteId, actualizarAccesoComercial } = useAuth();
+  const { puedeOperar, rolEmpresa, clienteId, actualizarAccesoComercial, logout } = useAuth();
   const { pathname } = useLocation();
   const administracion = esCeneris(rol) && esAdministracion(pathname);
   const [conteoPendientes, setConteoPendientes] = useState(0);
   const [popoverAbierto, setPopoverAbierto] = useState(false);
   const [pendientes, setPendientes] = useState<ColumnaPendiente[] | null>(null);
   const [perfilAbierto, setPerfilAbierto] = useState(false);
+  const [menuAbierto, setMenuAbierto] = useState(false);
   const [perfilVisitado, setPerfilVisitado] = useState(false);
   const [avisoSuscripcion, setAvisoSuscripcion] = useState<string | null>(null);
   const [solicitudesPendientes, setSolicitudesPendientes] = useState(0);
@@ -114,6 +116,10 @@ export default function Topbar({ nombreCompleto, rol }: TopbarProps) {
   return (
     <>
     <div className="inline-flex flex-wrap items-center gap-4 bg-white/60 dark:bg-white/10 backdrop-blur-md border border-black/10 dark:border-white/10 rounded-2xl pl-3 pr-4 py-2 shadow-lg transition-colors duration-300">
+      <button type="button" onClick={() => setMenuAbierto(true)} aria-label="Abrir menú de navegación" aria-expanded={menuAbierto}
+        className="rounded-lg p-2 text-gray-700 dark:text-gray-200 md:hidden">
+        <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" strokeWidth="2" strokeLinecap="round" /></svg>
+      </button>
       {avisoSuscripcion && <p role="status" className="max-w-sm text-xs text-amber-800 dark:text-amber-200">{avisoSuscripcion}</p>}
       {puedeVerSolicitudes && solicitudesPendientes > 0 && <Link to={comercial ? "/planes-suscripciones?vista=solicitudes" : "/empresas#solicitudes"} className="rounded-xl border border-gray-300 px-3 py-2 text-xs font-semibold dark:border-white/20" aria-label={`Solicitudes de suscripción: ${solicitudesPendientes} por revisar`}>Solicitudes<span className="ml-2 rounded-full bg-[#ccff00] px-2 py-0.5 text-gray-950">{solicitudesPendientes}</span></Link>}
       {!administracion && esCeneris(rol) && <button type="button" onClick={volverAdministracion} className="text-xs text-gray-700 dark:text-gray-200 md:hidden">← Administración</button>}
@@ -157,7 +163,7 @@ export default function Topbar({ nombreCompleto, rol }: TopbarProps) {
           </button>
 
           {popoverAbierto && (
-            <div className="absolute right-0 mt-2 w-80 max-h-96 overflow-y-auto bg-white dark:bg-[#2d3748] border border-black/10 dark:border-white/10 rounded-xl shadow-xl z-50">
+            <div className="ui-popover-entrada absolute right-0 mt-2 w-80 max-h-96 overflow-y-auto bg-white dark:bg-[#2d3748] border border-black/10 dark:border-white/10 rounded-xl shadow-xl z-50">
               <div className="px-4 py-3 border-b border-black/10 dark:border-white/10">
                 <h3 className="text-sm font-bold text-gray-900 dark:text-white">
                   Columnas pendientes de asignar
@@ -224,6 +230,9 @@ export default function Topbar({ nombreCompleto, rol }: TopbarProps) {
         </button>
       </div>
     </div>
+    <DrawerPanel abierto={menuAbierto} onCerrar={() => setMenuAbierto(false)} titulo="Navegación">
+      {menuAbierto && <Sidebar activo="panel" rol={rol} movil onNavegar={() => setMenuAbierto(false)} onLogout={() => { setMenuAbierto(false); logout(); }} />}
+    </DrawerPanel>
     <DrawerPanel abierto={perfilAbierto} onCerrar={() => setPerfilAbierto(false)} titulo="Mi perfil">
       {perfilVisitado && <PerfilConfiguracion enPanel />}
     </DrawerPanel>

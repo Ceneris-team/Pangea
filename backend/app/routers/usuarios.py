@@ -83,7 +83,9 @@ def listar_usuarios(
     # La suscripción es del cliente, no del usuario. Un Cliente Final puede
     # acceder a varios clientes; se muestran todos los vinculados por permisos.
     ids_cliente_final = [u.id_usr for u in usuarios if u.rol.nmbr == "Cliente Final"]
-    ids_externos = [u.id_usr for u in usuarios if u.rol.nmbr in {"Cliente Final", "Usuario Empresa"}]
+    ids_externos = [
+        u.id_usr for u in usuarios if u.rol.nmbr in {"Cliente Final", "Usuario Empresa"}
+    ]
     clientes_por_usuario: dict[int, set[int]] = {id_usr: set() for id_usr in ids_externos}
     if ids_cliente_final:
         por_sede = (
@@ -105,16 +107,22 @@ def listar_usuarios(
             clientes_por_usuario[id_usr].add(id_clnt)
 
     if ids_externos:
-        for id_usr, id_clnt in db.query(UsuarioCliente.id_usr, UsuarioCliente.id_clnt).filter(
-            UsuarioCliente.id_usr.in_(ids_externos), UsuarioCliente.estd == "Activo"
-        ).all():
+        for id_usr, id_clnt in (
+            db.query(UsuarioCliente.id_usr, UsuarioCliente.id_clnt)
+            .filter(UsuarioCliente.id_usr.in_(ids_externos), UsuarioCliente.estd == "Activo")
+            .all()
+        ):
             clientes_por_usuario[id_usr].add(id_clnt)
 
     ids_clientes = set().union(*clientes_por_usuario.values()) if clientes_por_usuario else set()
-    nombres_clientes = {
-        cliente.id_clnt: cliente.rzn_scl
-        for cliente in db.query(Cliente).filter(Cliente.id_clnt.in_(ids_clientes)).all()
-    } if ids_clientes else {}
+    nombres_clientes = (
+        {
+            cliente.id_clnt: cliente.rzn_scl
+            for cliente in db.query(Cliente).filter(Cliente.id_clnt.in_(ids_clientes)).all()
+        }
+        if ids_clientes
+        else {}
+    )
     hoy = fecha_comercial()
     planes_clientes = {
         id_clnt: nombre_plan
@@ -128,7 +136,8 @@ def listar_usuarios(
                 Suscripcion.fch_vncmnt >= hoy,
             )
             .all()
-            if ids_clientes else []
+            if ids_clientes
+            else []
         )
     }
 
@@ -145,7 +154,9 @@ def listar_usuarios(
                     cliente=nombres_clientes[id_clnt],
                     plan=planes_clientes.get(id_clnt),
                 )
-                for id_clnt in sorted(clientes_por_usuario.get(u.id_usr, ()), key=lambda id: nombres_clientes[id])
+                for id_clnt in sorted(
+                    clientes_por_usuario.get(u.id_usr, ()), key=lambda id: nombres_clientes[id]
+                )
             ],
         )
         for u in usuarios
@@ -168,13 +179,20 @@ def crear_usuario(
     if rol is None:
         raise HTTPException(status_code=400, detail=f"Rol '{body.rol_nombre}' no existe")
     if rol.nmbr == "Usuario Empresa":
-        raise HTTPException(status_code=409, detail="Crea los usuarios de empresa desde Empresas y proyectos")
+        raise HTTPException(
+            status_code=409, detail="Crea los usuarios de empresa desde Empresas y proyectos"
+        )
 
     password_temporal = generar_password_temporal()
 
     usuario = Usuario(
         id_rl=rol.id_rl,
-        scp="global" if rol.nmbr in {"Administrador", "Técnico CENERIS", "Tecnico CENERIS", "Administrador Comercial"} else "por_sede",
+        scp=(
+            "global"
+            if rol.nmbr
+            in {"Administrador", "Técnico CENERIS", "Tecnico CENERIS", "Administrador Comercial"}
+            else "por_sede"
+        ),
         nmbr_cmplt=body.nmbr_cmplt,
         crr=body.crr.lower(),
         tlfn=body.tlfn,
@@ -273,7 +291,9 @@ def actualizar_usuario(
     if usuario is None:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
     if usuario.scp == "por_cliente":
-        raise HTTPException(status_code=409, detail="Gestiona esta cuenta desde Empresas y proyectos")
+        raise HTTPException(
+            status_code=409, detail="Gestiona esta cuenta desde Empresas y proyectos"
+        )
 
     datos = body.model_dump(exclude_unset=True)
 
@@ -293,7 +313,9 @@ def actualizar_usuario(
         if rol_nuevo is None:
             raise HTTPException(status_code=400, detail=f"Rol '{datos['rol_nombre']}' no existe")
         if rol_nuevo.nmbr == "Usuario Empresa":
-            raise HTTPException(status_code=409, detail="Asigna el rol empresarial desde Empresas y proyectos")
+            raise HTTPException(
+                status_code=409, detail="Asigna el rol empresarial desde Empresas y proyectos"
+            )
 
         # Regla de negocio HU20: nadie edita su propio rol desde este módulo.
         # Se compara contra el id del JWT (HT-04), no contra el rol que dice
@@ -306,7 +328,12 @@ def actualizar_usuario(
             )
 
         datos["id_rl"] = rol_nuevo.id_rl
-        datos["scp"] = "global" if rol_nuevo.nmbr in {"Administrador", "Técnico CENERIS", "Tecnico CENERIS", "Administrador Comercial"} else "por_sede"
+        datos["scp"] = (
+            "global"
+            if rol_nuevo.nmbr
+            in {"Administrador", "Técnico CENERIS", "Tecnico CENERIS", "Administrador Comercial"}
+            else "por_sede"
+        )
         del datos["rol_nombre"]
 
     # Correo: editable siempre que el nuevo valor no lo tenga OTRO usuario.
@@ -375,7 +402,9 @@ def _usuario_gestionable_o_error(db: Session, id_usr: int, bloquear: bool = Fals
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
     if usuario.scp == "por_cliente":
-        raise HTTPException(status_code=409, detail="Gestiona los proyectos desde Empresas y proyectos")
+        raise HTTPException(
+            status_code=409, detail="Gestiona los proyectos desde Empresas y proyectos"
+        )
 
     if usuario.rol.nmbr in ROLES_CON_ACCESO_TOTAL:
         raise HTTPException(
@@ -395,20 +424,36 @@ def _administrador_permisos(usuario: dict) -> None:
         raise HTTPException(403, "Solo un administrador puede gestionar permisos")
 
 
-def _opciones_permisos_ubicaciones(db: Session, usuario: Usuario, ids: set[int] | None = None) -> list[UbicacionPermisoItem]:
+def _opciones_permisos_ubicaciones(
+    db: Session, usuario: Usuario, ids: set[int] | None = None
+) -> list[UbicacionPermisoItem]:
     """Explica y valida el acceso con el mismo alcance que tendrá al iniciar sesión."""
-    permisos = db.query(PermisoUsuarioSede).filter(
-        PermisoUsuarioSede.id_usr == usuario.id_usr,
-    ).all()
+    permisos = (
+        db.query(PermisoUsuarioSede)
+        .filter(
+            PermisoUsuarioSede.id_usr == usuario.id_usr,
+        )
+        .all()
+    )
     sedes = {p.id_sd for p in permisos}
-    query = db.query(Ubicacion, Sede, Cliente).join(Sede, Sede.id_sd == Ubicacion.id_sd).join(
-        Cliente, Cliente.id_clnt == Sede.id_clnt,
+    query = (
+        db.query(Ubicacion, Sede, Cliente)
+        .join(Sede, Sede.id_sd == Ubicacion.id_sd)
+        .join(
+            Cliente,
+            Cliente.id_clnt == Sede.id_clnt,
+        )
     )
     if ids is not None:
         query = query.filter(Ubicacion.id_ubccn.in_(ids))
-    concedidas = {id_ubccn for (id_ubccn,) in db.query(PermisoUbicacion.id_ubccn).filter(
-        PermisoUbicacion.id_usr == usuario.id_usr,
-    ).all()}
+    concedidas = {
+        id_ubccn
+        for (id_ubccn,) in db.query(PermisoUbicacion.id_ubccn)
+        .filter(
+            PermisoUbicacion.id_usr == usuario.id_usr,
+        )
+        .all()
+    }
     items = []
     for ubicacion, sede, empresa in query.order_by(Ubicacion.nmbr).all():
         motivo = None
@@ -418,13 +463,20 @@ def _opciones_permisos_ubicaciones(db: Session, usuario: Usuario, ids: set[int] 
             motivo = "El proyecto no corresponde a la única sede configurada para esta cuenta"
         elif not any(p.mdl == "Tableros" and p.nvl in {"Lectura", "Edición"} for p in permisos):
             motivo = "La cuenta requiere permiso de lectura en Tableros para consultar telemetría"
-        items.append(UbicacionPermisoItem(
-            id_ubccn=ubicacion.id_ubccn, nmbr=ubicacion.nmbr,
-            tiene_acceso=ubicacion.id_ubccn in concedidas,
-            id_clnt=empresa.id_clnt, empresa=empresa.rzn_scl, id_sd=sede.id_sd,
-            sede=sede.nmbr, estado=ubicacion.estd,
-            puede_asignar=motivo is None, motivo_restriccion=motivo,
-        ))
+        items.append(
+            UbicacionPermisoItem(
+                id_ubccn=ubicacion.id_ubccn,
+                nmbr=ubicacion.nmbr,
+                tiene_acceso=ubicacion.id_ubccn in concedidas,
+                id_clnt=empresa.id_clnt,
+                empresa=empresa.rzn_scl,
+                id_sd=sede.id_sd,
+                sede=sede.nmbr,
+                estado=ubicacion.estd,
+                puede_asignar=motivo is None,
+                motivo_restriccion=motivo,
+            )
+        )
     return items
 
 

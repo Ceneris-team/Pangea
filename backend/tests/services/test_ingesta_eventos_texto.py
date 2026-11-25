@@ -42,8 +42,12 @@ def _crear_dispositivo(db_session, sede, nombre="Gabinete demo P"):
     db_session.flush()
 
     dispositivo = Dispositivo(
-        id_ubccn=ubicacion.id_ubccn, id_cnxn=conexion.id_cnxn, nmbr=nombre, mrc="Campbell",
-        lttd=0, lngtd=0,
+        id_ubccn=ubicacion.id_ubccn,
+        id_cnxn=conexion.id_cnxn,
+        nmbr=nombre,
+        mrc="Campbell",
+        lttd=0,
+        lngtd=0,
     )
     db_session.add(dispositivo)
     db_session.flush()
@@ -100,7 +104,9 @@ def test_trama_p_guarda_numerico_en_tlmtr_y_texto_en_evnt_txt(db_session, fabric
 
     fila_r = (
         db_session.query(Telemetria)
-        .filter(Telemetria.id_prmtr == param_r.id_prmtr, Telemetria.id_dspstv == dispositivo.id_dspstv)
+        .filter(
+            Telemetria.id_prmtr == param_r.id_prmtr, Telemetria.id_dspstv == dispositivo.id_dspstv
+        )
         .first()
     )
     assert fila_r is not None

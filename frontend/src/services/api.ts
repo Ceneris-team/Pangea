@@ -142,6 +142,19 @@ export async function apiUpload<T>(path: string, formData: FormData): Promise<T>
   return manejarRespuesta<T>(res);
 }
 
+export async function apiDownload(path: string, nombre: string): Promise<void> {
+  const res = await fetch(new URL(path, API_BASE_URL), {
+    credentials: "include", headers: headersEntorno(),
+  });
+  if (!res.ok) await manejarRespuesta(res, path);
+  const url = URL.createObjectURL(await res.blob());
+  const enlace = document.createElement("a");
+  enlace.href = url;
+  enlace.download = nombre;
+  enlace.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 async function manejarRespuesta<T>(
   res: Response,
   path?: string,
@@ -175,5 +188,6 @@ async function manejarRespuesta<T>(
     throw new ApiError(mensajeDeDetalle(data?.detail), res.status);
   }
 
+  if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
 }

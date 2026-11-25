@@ -71,9 +71,7 @@ def upgrade() -> None:
     )
 
     id_rl = conexion.execute(
-        sa.text("SELECT id_rl FROM rl WHERE nmbr = :nmbr").bindparams(
-            nmbr=NOMBRE_ROL_SISTEMA
-        )
+        sa.text("SELECT id_rl FROM rl WHERE nmbr = :nmbr").bindparams(nmbr=NOMBRE_ROL_SISTEMA)
     ).scalar()
 
     password_desechable = secrets.token_urlsafe(32)
@@ -99,9 +97,7 @@ def downgrade() -> None:
     """Downgrade schema."""
     conexion = op.get_bind()
     conexion.execute(
-        sa.text("DELETE FROM usr WHERE crr = :crr").bindparams(
-            crr=CORREO_USUARIO_SISTEMA
-        )
+        sa.text("DELETE FROM usr WHERE crr = :crr").bindparams(crr=CORREO_USUARIO_SISTEMA)
     )
     # El rol solo se borra si quedó sin usuarios (podría haber otro usuario
     # Sistema creado a mano en dev, aunque no es el flujo esperado).

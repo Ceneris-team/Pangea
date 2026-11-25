@@ -19,6 +19,7 @@ from app.models import (
 )
 from app.security.permisos import LECTURA, require_permiso
 from app.security.ubicaciones_permitidas import ubicaciones_permitidas
+from app.services.consulta_calculos import datos_calculados, item_serie, series_calculadas
 from app.services.visualizacion import ResumenSerieAcumulado, configuracion_columna
 
 router = APIRouter(prefix="/series")
@@ -68,6 +69,12 @@ def listar_series(
             }
             for c, f, p, d, u in filas
         ]
+        + [
+            item_serie(s, p, u)
+            for s, p, u in series_calculadas(db, ubicaciones_permitidas(db, usuario)).filter(
+                Ubicacion.id_ubccn == ubicacion_id
+            )
+        ]
     }
 
 
@@ -81,10 +88,6 @@ def datos_serie(
     db: Session = Depends(get_db),
     usuario: dict = Depends(require_permiso("Tableros", LECTURA)),
 ):
-    fila = _series(db, usuario).filter(MapeoColumna.id_mp_cl == id_serie).first()
-    if fila is None:
-        raise HTTPException(404, "Serie no disponible")
-    c, formato, parametro, dispositivo, ubicacion = fila
     inicio = (
         fecha_inicio.replace(tzinfo=dt.timezone.utc)
         if fecha_inicio.tzinfo is None
@@ -97,6 +100,14 @@ def datos_serie(
         zona = ZoneInfo(zona_horaria)
     except (ZoneInfoNotFoundError, ValueError) as exc:
         raise HTTPException(422, "Zona horaria no válida") from exc
+    if id_serie < 0:
+        return datos_calculados(
+            db, id_serie, ubicaciones_permitidas(db, usuario), inicio, fin, max_puntos
+        )
+    fila = _series(db, usuario).filter(MapeoColumna.id_mp_cl == id_serie).first()
+    if fila is None:
+        raise HTTPException(404, "Serie no disponible")
+    c, formato, parametro, dispositivo, ubicacion = fila
 
     # La tabla histórica no guarda índice de columna. No inventar una
     # separación si dos columnas del mismo archivo usan el mismo parámetro.

@@ -49,7 +49,10 @@ def ubicacion(db, sede, nombre):
         nmbr=nombre,
         lttd=-12,
         lngtd=-77,
-        plgn_gjsn={"type": "Polygon", "coordinates": [[[-77, -12], [-77.1, -12], [-77, -12.1], [-77, -12]]]},
+        plgn_gjsn={
+            "type": "Polygon",
+            "coordinates": [[[-77, -12], [-77.1, -12], [-77, -12.1], [-77, -12]]],
+        },
         estd="Activa",
     )
     db.add(fila)

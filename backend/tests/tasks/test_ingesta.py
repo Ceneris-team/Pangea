@@ -31,6 +31,7 @@ from botocore.exceptions import ClientError
 
 from app.models import ConexionFTP, Dispositivo, IntentoProcesamiento, Ubicacion
 from app.models.archivo_ingesta import ArchivoIngesta
+from app.services import object_storage
 from app.tasks import ingesta as tareas_ingesta
 
 POLIGONO_DUMMY = {"type": "Polygon", "coordinates": [[[0, 0], [0, 1], [1, 1], [1, 0], [0, 0]]]}
@@ -168,7 +169,7 @@ class TestRegistroDeIntentoAutomatico:
             {"id_mp": 1, "tipo_trama": "H", "config": None, "delimitador_decimal": "."},
         )()
         monkeypatch.setattr(tareas_ingesta, "resolver_formato", lambda *a, **k: formato_falso)
-        monkeypatch.setattr(tareas_ingesta, "descargar_archivo_dat", lambda *a, **k: "contenido")
+        monkeypatch.setattr(tareas_ingesta, "descargar_bytes_dat", lambda *a, **k: b"contenido")
         monkeypatch.setattr(
             tareas_ingesta,
             "interpretar_y_guardar",
@@ -304,7 +305,7 @@ class TestNoRegistraIntentosTransitoriosSinTerminar:
         monkeypatch.setattr(tareas_ingesta, "resolver_formato", lambda *a, **k: formato_falso)
         monkeypatch.setattr(
             tareas_ingesta,
-            "descargar_archivo_dat",
+            "descargar_bytes_dat",
             lambda *a, **k: (_ for _ in ()).throw(ftplib.error_temp("425 timeout")),
         )
 
@@ -363,7 +364,9 @@ def entorno_exitoso(db_session, fabrica, monkeypatch):
         {"id_mp": 1, "tipo_trama": "H", "config": None, "delimitador_decimal": "."},
     )()
     monkeypatch.setattr(tareas_ingesta, "resolver_formato", lambda *a, **k: formato_falso)
-    monkeypatch.setattr(tareas_ingesta, "descargar_archivo_dat", lambda *a, **k: CONTENIDO_DAT)
+    monkeypatch.setattr(
+        tareas_ingesta, "descargar_bytes_dat", lambda *a, **k: CONTENIDO_DAT.encode("utf-8")
+    )
 
     ResultadoValidacionFalso = dataclasses.make_dataclass(
         "ResultadoValidacionFalso", [("validas", list), ("errores", list)]
@@ -402,9 +405,9 @@ class TestArchivadoDatCrudo:
 
     def test_sube_el_dat_crudo_cuando_hay_bucket(self, db_session, entorno_exitoso, monkeypatch):
         subidos = []
-        monkeypatch.setattr(tareas_ingesta.object_storage, "esta_configurado", lambda: True)
+        monkeypatch.setattr(object_storage, "esta_configurado", lambda: True)
         monkeypatch.setattr(
-            tareas_ingesta.object_storage,
+            object_storage,
             "subir_contenido",
             lambda datos, clave, content_type="application/octet-stream": subidos.append(
                 (datos, clave, content_type)
@@ -420,15 +423,13 @@ class TestArchivadoDatCrudo:
         datos, clave, content_type = subidos[0]
         assert datos == CONTENIDO_DAT.encode("utf-8")
         assert clave.startswith(f"datos-crudos/cnxn-{entorno_exitoso.conexion.id_cnxn}/")
-        assert clave.endswith("/H_ejemplo.dat")
-        assert content_type == "text/plain; charset=utf-8"
+        assert clave.endswith(f"/{archivo.sha256}.dat")
+        assert content_type == "application/octet-stream"
 
     def test_no_sube_nada_si_no_hay_bucket(self, db_session, entorno_exitoso, monkeypatch):
         llamadas = []
-        monkeypatch.setattr(tareas_ingesta.object_storage, "esta_configurado", lambda: False)
-        monkeypatch.setattr(
-            tareas_ingesta.object_storage, "subir_contenido", lambda *a, **k: llamadas.append(a)
-        )
+        monkeypatch.setattr(object_storage, "esta_configurado", lambda: False)
+        monkeypatch.setattr(object_storage, "subir_contenido", lambda *a, **k: llamadas.append(a))
         archivo = crear_archivo(db_session, entorno_exitoso.conexion)
 
         procesar(db_session, id_archv=archivo.id_archv)
@@ -444,14 +445,14 @@ class TestArchivadoDatCrudo:
         propaga para que Celery reintente (retries<max), sin marcar Fallido ni
         registrar intento, y sin haber tocado telemetría (la subida va ANTES
         del parseo)."""
-        monkeypatch.setattr(tareas_ingesta.object_storage, "esta_configurado", lambda: True)
+        monkeypatch.setattr(object_storage, "esta_configurado", lambda: True)
 
         def falla(*a, **k):
             raise ClientError(
                 {"Error": {"Code": "ServiceUnavailable", "Message": "down"}}, "PutObject"
             )
 
-        monkeypatch.setattr(tareas_ingesta.object_storage, "subir_contenido", falla)
+        monkeypatch.setattr(object_storage, "subir_contenido", falla)
         archivo = crear_archivo(db_session, entorno_exitoso.conexion)
 
         with pytest.raises(ClientError):

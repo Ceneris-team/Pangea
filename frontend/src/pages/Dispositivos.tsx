@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { apiFetch, ApiError } from "../services/api";
 import { useAuth } from "../hooks/useAuth";
@@ -14,6 +14,9 @@ import {
 } from "../utils/fechas";
 
 interface DispositivoListItem {
+  monitoreo_activo?: boolean;
+  sin_datos_desde?: string | null;
+  ultima_recepcion?: string | null;
   id_dspstv: number;
   nmbr: string;
   mrc: string;
@@ -78,13 +81,13 @@ const POR_PAGINA = 10;
 // roles Técnico CENERIS y Administrador tienen acceso a esta vista'), así
 // que se reusa esta constante en vez de duplicarla.
 
-function useDebouncedValue<T>(value: T, delayMs: number): T {
+function useDebouncedValue(value: string, delayMs: number): string {
   const [debounced, setDebounced] = useState(value);
   useEffect(() => {
     const timeout = setTimeout(() => setDebounced(value), delayMs);
     return () => clearTimeout(timeout);
   }, [value, delayMs]);
-  return debounced;
+  return value === "" ? "" : debounced;
 }
 
 export default function Dispositivos() {
@@ -124,35 +127,43 @@ export default function Dispositivos() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // El selector de "Ubicación" se puebla con GET /ubicaciones?con_dispositivos=true
-  // (HU36): no tiene sentido ofrecer una ubicación sin ningún dispositivo
-  // asociado en este filtro -elegirla siempre daría una tabla vacía-.
+  // HU36: ambos catálogos usan el mismo permiso y alcance que el listado.
   const [ubicaciones, setUbicaciones] = useState<UbicacionListItem[]>([]);
-
-  useEffect(() => {
-    apiFetch<{ items: UbicacionListItem[] }>("/ubicaciones", {
-      params: { con_dispositivos: "true", por_pagina: 100 },
-    })
-      .then((res) => setUbicaciones(res.items))
-      .catch(() => setUbicaciones([]));
-  }, []);
-
-  // HU36 CA1: el selector de "Marca" se puebla con GET /dispositivos/marcas
-  // (marcas distintas entre los dispositivos que este usuario puede ver).
   const [marcas, setMarcas] = useState<string[]>([]);
+  const [revisionCatalogos, setRevisionCatalogos] = useState(0);
+  const [cargandoCatalogos, setCargandoCatalogos] = useState(true);
+  const [errorCatalogos, setErrorCatalogos] = useState<string | null>(null);
+  const solicitudListado = useRef(0);
 
   useEffect(() => {
-    apiFetch<{ items: string[] }>("/dispositivos/marcas")
-      .then((res) => setMarcas(res.items))
-      .catch(() => setMarcas([]));
-  }, []);
+    const controller = new AbortController();
+    Promise.all([
+      apiFetch<{ items: UbicacionListItem[] }>("/dispositivos/ubicaciones", { signal: controller.signal }),
+      apiFetch<{ items: string[] }>("/dispositivos/marcas", { signal: controller.signal }),
+    ])
+      .then(([proyectos, marcasDisponibles]) => {
+        if (controller.signal.aborted) return;
+        setUbicaciones(proyectos.items);
+        setMarcas(marcasDisponibles.items);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setErrorCatalogos("No se pudieron cargar las opciones de los filtros.");
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setCargandoCatalogos(false);
+      });
+    return () => controller.abort();
+  }, [revisionCatalogos]);
 
-  useEffect(() => {
-    queueMicrotask(() => setPagina(1));
-  }, [busqueda, idUbccn, estado, marca]);
+  function recargarCatalogos() {
+    setCargandoCatalogos(true);
+    setErrorCatalogos(null);
+    setRevisionCatalogos((revision) => revision + 1);
+  }
 
   function cargarDispositivos() {
     let cancelado = false;
+    const solicitud = ++solicitudListado.current;
     setLoading(true);
     setError(null);
 
@@ -167,14 +178,15 @@ export default function Dispositivos() {
       },
     })
       .then((res) => {
-        if (!cancelado) setData(res);
+        if (!cancelado && solicitud === solicitudListado.current) setData(res);
       })
       .catch((err) => {
-        if (cancelado) return;
+        if (cancelado || solicitud !== solicitudListado.current) return;
+        setData(null);
         setError(err instanceof ApiError ? err.message : "No se pudo cargar el listado");
       })
       .finally(() => {
-        if (!cancelado) setLoading(false);
+        if (!cancelado && solicitud === solicitudListado.current) setLoading(false);
       });
 
     return () => {
@@ -297,6 +309,7 @@ export default function Dispositivos() {
 
       setMostrarFormulario(false);
       setMensajeExito("Dispositivo añadido correctamente");
+      recargarCatalogos();
       cargarDispositivos();
     } catch (err) {
       setErrorFormulario(err instanceof ApiError ? err.message : "No se pudo registrar el dispositivo");
@@ -407,16 +420,14 @@ export default function Dispositivos() {
   /** HU19 CA3: redirige a la cola de procesamiento con este dispositivo
    *  (su conexión FTP) preseleccionado. */
   function irAColaDeProcesamiento() {
-    if (!estadisticas) return;
-    navigate(`/cola-ingesta?id_cnxn=${estadisticas.id_cnxn}`);
+    if (!estadisticas || !dispositivoEstadisticas) return;
+    navigate(`/cola-ingesta?dispositivo_id=${dispositivoEstadisticas.id_dspstv}`);
   }
 
-  /** HU19 CA4: redirige a Consulta de Datos con la ubicación de este
-   *  dispositivo preseleccionada -el módulo no filtra por dispositivo,
-   *  solo por ubicación (mismo criterio que HU17 CA4 en Gráficos)-. */
+  /** El historial conserva el equipo analizado, igual que el enlace de su ficha. */
   function irAHistorialDeDatos() {
-    if (!estadisticas) return;
-    navigate(`/consulta-datos?ubicacion_id=${estadisticas.id_ubccn}`);
+    if (!estadisticas || !dispositivoEstadisticas) return;
+    navigate(`/consulta-datos?ubicacion_id=${estadisticas.id_ubccn}&dispositivo_ids=${dispositivoEstadisticas.id_dspstv}`);
   }
 
   const inputClaseDispositivo =
@@ -424,7 +435,7 @@ export default function Dispositivos() {
   const labelClaseDispositivo = "block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1";
 
   const totalPaginas = data ? Math.max(1, Math.ceil(data.total / data.por_pagina)) : 1;
-  const inicioRango = data ? (data.pagina - 1) * data.por_pagina + 1 : 0;
+  const inicioRango = data && data.total > 0 ? (data.pagina - 1) * data.por_pagina + 1 : 0;
   const finRango = data ? Math.min(data.pagina * data.por_pagina, data.total) : 0;
 
   const hayFiltrosActivos =
@@ -435,6 +446,7 @@ export default function Dispositivos() {
     setIdUbccn("");
     setEstado("");
     setMarca("");
+    setPagina(1);
   }
 
   return (
@@ -511,19 +523,22 @@ export default function Dispositivos() {
                   <input
                     type="text"
                     value={busquedaInput}
-                    onChange={(e) => setBusquedaInput(e.target.value)}
+                    onChange={(e) => { setBusquedaInput(e.target.value); setPagina(1); }}
+                    aria-label="Buscar dispositivos"
                     placeholder="Buscar por nombre o marca..."
                     className="bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block w-full pl-10 p-2.5 transition-all outline-none placeholder-gray-400"
                   />
                 </div>
 
-                <div className="flex w-full lg:w-auto gap-3">
+                <div className="flex flex-col sm:flex-row sm:flex-wrap w-full lg:w-auto gap-3 min-w-0">
                   <select
                     value={idUbccn}
-                    onChange={(e) => setIdUbccn(e.target.value)}
+                    onChange={(e) => { setIdUbccn(e.target.value); setPagina(1); }}
+                    aria-label="Filtrar por proyecto"
+                    disabled={cargandoCatalogos || !!errorCatalogos}
                     className="bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block p-2.5 outline-none cursor-pointer"
                   >
-                    <option value="">Todas los proyectos</option>
+                    <option value="">Todos los proyectos</option>
                     {ubicaciones.map((u) => (
                       <option key={u.id_ubccn} value={u.id_ubccn}>
                         {u.nmbr}
@@ -533,7 +548,8 @@ export default function Dispositivos() {
 
                   <select
                     value={estado}
-                    onChange={(e) => setEstado(e.target.value)}
+                    onChange={(e) => { setEstado(e.target.value); setPagina(1); }}
+                    aria-label="Filtrar por estado"
                     className="bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block p-2.5 outline-none cursor-pointer"
                   >
                     <option value="">Todos los estados</option>
@@ -545,7 +561,9 @@ export default function Dispositivos() {
                       acumulativo con ubicación y estado. */}
                   <select
                     value={marca}
-                    onChange={(e) => setMarca(e.target.value)}
+                    onChange={(e) => { setMarca(e.target.value); setPagina(1); }}
+                    aria-label="Filtrar por marca"
+                    disabled={cargandoCatalogos || !!errorCatalogos}
                     className="bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block p-2.5 outline-none cursor-pointer"
                   >
                     <option value="">Todas las marcas</option>
@@ -567,6 +585,13 @@ export default function Dispositivos() {
                 </div>
               </div>
 
+              {cargandoCatalogos && <p role="status" className="p-4 text-sm">Cargando opciones de filtros…</p>}
+              {errorCatalogos && (
+                <div role="alert" className="p-4 text-sm text-red-700 dark:text-red-300">
+                  {errorCatalogos}
+                  <button type="button" onClick={recargarCatalogos} className="ml-3 underline">Reintentar filtros</button>
+                </div>
+              )}
               {error && (
                 <div className="p-4 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm border-b border-red-200 dark:border-red-800/30">
                   {error}
@@ -640,6 +665,7 @@ export default function Dispositivos() {
                               )}
                               {d.estd}
                             </span>
+                            {d.monitoreo_activo === false ? <p className="mt-2 text-xs text-gray-500">Monitoreo detenido en el proyecto</p> : d.sin_datos_desde && <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">Sin nuevas lecturas válidas</p>}
                           </td>
                           {/* DEC-09: abre la ficha del dispositivo, donde se
                               configura su formato y su mapeo de columnas. */}
@@ -725,14 +751,14 @@ export default function Dispositivos() {
                   <div className="flex gap-2">
                     <button
                       onClick={() => setPagina((p) => Math.max(1, p - 1))}
-                      disabled={pagina <= 1}
+                      disabled={loading || busquedaInput !== busqueda || pagina <= 1}
                       className="px-3 py-1.5 text-sm rounded-lg border border-black/20 dark:border-white/20 text-gray-700 dark:text-gray-200 disabled:opacity-40 hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
                     >
                       Anterior
                     </button>
                     <button
                       onClick={() => setPagina((p) => Math.min(totalPaginas, p + 1))}
-                      disabled={pagina >= totalPaginas}
+                      disabled={loading || busquedaInput !== busqueda || pagina >= totalPaginas}
                       className="px-3 py-1.5 text-sm rounded-lg border border-black/20 dark:border-white/20 text-gray-700 dark:text-gray-200 disabled:opacity-40 hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
                     >
                       Siguiente
@@ -892,11 +918,11 @@ export default function Dispositivos() {
       {/* HU19: panel de estadísticas de operación del dispositivo. */}
       {dispositivoEstadisticas && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+          className="ui-modal-fondo fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
           onClick={cerrarEstadisticas}
         >
           <div
-            className="w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-white dark:bg-[#1f2733] rounded-2xl shadow-xl border border-black/10 dark:border-white/10"
+            className="ui-modal-superficie ui-panel-scroll w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-white dark:bg-[#1f2733] rounded-2xl shadow-xl border border-black/10 dark:border-white/10"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="p-6 border-b border-black/10 dark:border-white/10 flex items-start justify-between gap-4">

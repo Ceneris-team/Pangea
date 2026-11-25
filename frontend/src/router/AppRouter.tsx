@@ -28,6 +28,7 @@ import ConsultaDatos from "../pages/ConsultaDatos";
 import Graficos from "../pages/Graficos";
 import DispositivoDetalle from "../pages/DispositivoDetalle";
 import Parametros from "../pages/Parametros";
+import ParametrosCalculados from "../pages/ParametrosCalculados";
 import ColaIngesta from "../pages/ColaIngesta";
 import Paneles from "../pages/Paneles";
 import DetallePanel from "../pages/DetallePanel";
@@ -263,6 +264,15 @@ export default function AppRouter() {
             }
           />
 
+          <Route
+            path="/parametros-calculados"
+            element={
+              <ProtectedRoute requiereOperacion rolesPermitidos={ROLES_MAPEOS}>
+                <ParametrosCalculados />
+              </ProtectedRoute>
+            }
+          />
+
           {/* HU09: monitorear cola de procesamiento */}
           <Route
             path="/cola-ingesta"
@@ -316,7 +326,7 @@ export default function AppRouter() {
           <Route
             path="/alarmas/nueva"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requiereEdicionAlarmas>
                 <CrearAlarma />
               </ProtectedRoute>
             }

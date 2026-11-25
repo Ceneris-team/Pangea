@@ -49,9 +49,7 @@ def upgrade() -> None:
 
     op.add_column(
         "mp_frmt",
-        sa.Column(
-            "orgn_crcn", sa.String(length=20), nullable=False, server_default="Manual"
-        ),
+        sa.Column("orgn_crcn", sa.String(length=20), nullable=False, server_default="Manual"),
     )
     op.create_check_constraint(
         "mpfrmt_orgncrcn_check",
@@ -71,9 +69,7 @@ def downgrade() -> None:
     # en vez de perder datos sin que nadie lo note.
     conexion = op.get_bind()
     filas_largas = conexion.execute(
-        sa.text(
-            f"SELECT COUNT(*) FROM mp_frmt WHERE length(tp_trm) > {_LONGITUD_TP_TRM_ANTERIOR}"
-        )
+        sa.text(f"SELECT COUNT(*) FROM mp_frmt WHERE length(tp_trm) > {_LONGITUD_TP_TRM_ANTERIOR}")
     ).scalar()
     if filas_largas:
         raise RuntimeError(

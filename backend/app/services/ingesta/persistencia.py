@@ -23,11 +23,13 @@ import logging
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.models.alarma import Alarma
 from app.models.evento_texto import EventoTexto
 from app.models.mapeo_dispositivo import Dispositivo, Parametro
 from app.models.telemetria import Telemetria
 from app.models.ubicacion_conexion import Ubicacion
 from app.services.cache.invalidacion import invalidar_por_lectura
+from app.services.notificaciones import evaluar_alarmas
 from app.services.particiones import (
     ParticionInexistenteError,
     es_error_de_particion_faltante,
@@ -105,9 +107,30 @@ def guardar_lecturas(
     omitidas_sin_valor = 0
     parametros_desconocidos = set()
     fechas_numericas = []
+    lecturas_nuevas = []
     # HU17 CA3: {nombre_parametro: (valor, fecha_hora)} con la lectura más
     # reciente de cada parámetro vista en este archivo.
     ultimos_por_parametro: dict = {}
+    # Serializa archivos del mismo equipo y evita duplicar lecturas cuando
+    # un datalogger agrega filas al mismo .dat o se reprocesa un original.
+    db.query(Alarma).filter_by(id_ubccn=dispositivo.id_ubccn, estd="Activa").order_by(
+        Alarma.id_alrm
+    ).with_for_update().all()
+    db.query(Dispositivo).filter_by(id_dspstv=dispositivo.id_dspstv).with_for_update().one()
+    fechas = [lectura.fecha_hora for lectura in lecturas if lectura.valor is not None]
+    existentes = set()
+    if fechas:
+        for modelo in (Telemetria, EventoTexto):
+            existentes.update(
+                (id_prmtr, fecha)
+                for id_prmtr, fecha in db.query(modelo.id_prmtr, modelo.fch_hr)
+                .filter(
+                    modelo.id_dspstv == dispositivo.id_dspstv,
+                    modelo.fch_hr >= min(fechas),
+                    modelo.fch_hr <= max(fechas),
+                )
+                .all()
+            )
 
     for lectura in lecturas:
         if lectura.valor is None:
@@ -118,6 +141,12 @@ def guardar_lecturas(
         if id_prmtr is None:
             parametros_desconocidos.add(lectura.parametro)
             continue
+
+        identidad = (id_prmtr, lectura.fecha_hora)
+        if identidad in existentes:
+            continue
+        existentes.add(identidad)
+        lecturas_nuevas.append(lectura)
 
         if isinstance(lectura.valor, str):
             db.add(
@@ -199,6 +228,9 @@ def guardar_lecturas(
     # aparece otro llamador de guardar_lecturas() que no sea la tarea de
     # Celery actual.
     if guardadas:
+        evaluar_alarmas(
+            db, lecturas=lecturas_nuevas, dispositivo=dispositivo, id_sd=ubicacion.id_sd
+        )
         invalidar_por_lectura(id_sd=ubicacion.id_sd, id_ubccn=dispositivo.id_ubccn)
 
     return ResultadoPersistencia(

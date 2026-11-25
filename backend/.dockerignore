@@ -5,4 +5,9 @@ __pycache__/
 .ruff_cache/
 .git/
 .env
+.env.*
+containers*.json
+endpoint*.json
 tests/
+.venv/
+docs/

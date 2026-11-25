@@ -864,6 +864,7 @@ def test_contenido_panel_permite_agregar_ubicacion_visible_y_crear_widget(
             "lngtd": -77.0428,
             "estd": "Activa",
             "semaforo": "sin_datos",
+            "monitoreo_activo": True,
             "ultima_lectura": None,
             "ultimos_valores": [],
         }

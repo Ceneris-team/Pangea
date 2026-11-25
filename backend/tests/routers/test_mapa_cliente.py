@@ -25,6 +25,8 @@ from fastapi.testclient import TestClient
 from app.database import get_db
 from app.main import app
 from app.models import (
+    Alarma,
+    CondicionAlarma,
     ConexionFTP,
     Dispositivo,
     EventoTexto,
@@ -169,7 +171,9 @@ class TestCA1FiltroDePermisos:
         )
 
         item = next(
-            i for i in client.get("/mapa-cliente").json()["items"] if i["nmbr"] == "Estacion Asignada"
+            i
+            for i in client.get("/mapa-cliente").json()["items"]
+            if i["nmbr"] == "Estacion Asignada"
         )
         assert item["lttd"] == 10
         assert item["lngtd"] == -70
@@ -227,8 +231,22 @@ class TestCA2UltimoValorPorParametro:
         temperatura = crear_parametro(db_session, "temperatura", "°C")
 
         ahora = dt.datetime.now(dt.timezone.utc)
-        agregar_lectura(db_session, dispositivo, temperatura, escenario["sede"], 10, ahora - dt.timedelta(hours=2))
-        agregar_lectura(db_session, dispositivo, temperatura, escenario["sede"], 20, ahora - dt.timedelta(hours=1))
+        agregar_lectura(
+            db_session,
+            dispositivo,
+            temperatura,
+            escenario["sede"],
+            10,
+            ahora - dt.timedelta(hours=2),
+        )
+        agregar_lectura(
+            db_session,
+            dispositivo,
+            temperatura,
+            escenario["sede"],
+            20,
+            ahora - dt.timedelta(hours=1),
+        )
         agregar_lectura(db_session, dispositivo, temperatura, escenario["sede"], 25, ahora)
 
         app.dependency_overrides[get_current_user] = lambda: usuario_jwt(
@@ -236,7 +254,9 @@ class TestCA2UltimoValorPorParametro:
         )
 
         item = next(
-            i for i in client.get("/mapa-cliente").json()["items"] if i["nmbr"] == "Estacion Asignada"
+            i
+            for i in client.get("/mapa-cliente").json()["items"]
+            if i["nmbr"] == "Estacion Asignada"
         )
         parametros = {p["parametro"]: p for p in item["parametros"]}
         assert parametros["temperatura"]["valor"] == 25
@@ -257,7 +277,9 @@ class TestCA2UltimoValorPorParametro:
         )
 
         item = next(
-            i for i in client.get("/mapa-cliente").json()["items"] if i["nmbr"] == "Estacion Asignada"
+            i
+            for i in client.get("/mapa-cliente").json()["items"]
+            if i["nmbr"] == "Estacion Asignada"
         )
         parametros = {p["parametro"]: p["valor"] for p in item["parametros"]}
         assert parametros == {"temperatura": 25, "ph": 7}
@@ -269,7 +291,9 @@ class TestCA2UltimoValorPorParametro:
         humedad = crear_parametro(db_session, "ph", "pH")
 
         ahora = dt.datetime.now(dt.timezone.utc).replace(microsecond=0)
-        agregar_lectura(db_session, dispositivo, humedad, escenario["sede"], 7, ahora - dt.timedelta(hours=3))
+        agregar_lectura(
+            db_session, dispositivo, humedad, escenario["sede"], 7, ahora - dt.timedelta(hours=3)
+        )
         agregar_lectura(db_session, dispositivo, temperatura, escenario["sede"], 25, ahora)
 
         app.dependency_overrides[get_current_user] = lambda: usuario_jwt(
@@ -277,9 +301,11 @@ class TestCA2UltimoValorPorParametro:
         )
 
         item = next(
-            i for i in client.get("/mapa-cliente").json()["items"] if i["nmbr"] == "Estacion Asignada"
+            i
+            for i in client.get("/mapa-cliente").json()["items"]
+            if i["nmbr"] == "Estacion Asignada"
         )
-        assert item["ultima_lectura"].startswith(ahora.isoformat()[:19])
+        assert dt.datetime.fromisoformat(item["ultima_lectura"]) == ahora
 
     def test_estacion_sin_lecturas_no_rompe(self, client, db_session, escenario):
         """Una ubicación recién creada aparece en el mapa igual, con el
@@ -289,11 +315,13 @@ class TestCA2UltimoValorPorParametro:
         )
 
         item = next(
-            i for i in client.get("/mapa-cliente").json()["items"] if i["nmbr"] == "Estacion Asignada"
+            i
+            for i in client.get("/mapa-cliente").json()["items"]
+            if i["nmbr"] == "Estacion Asignada"
         )
         assert item["parametros"] == []
         assert item["ultima_lectura"] is None
-        assert item["semaforo"] == "verde"
+        assert item["semaforo"] == "sin_datos"
 
     def test_incluye_eventos_de_texto(self, client, db_session, escenario):
         """evnt_txt es tan "último valor de un parámetro" como tlmtr."""
@@ -316,18 +344,39 @@ class TestCA2UltimoValorPorParametro:
         )
 
         item = next(
-            i for i in client.get("/mapa-cliente").json()["items"] if i["nmbr"] == "Estacion Asignada"
+            i
+            for i in client.get("/mapa-cliente").json()["items"]
+            if i["nmbr"] == "Estacion Asignada"
         )
         parametros = {p["parametro"]: p["valor"] for p in item["parametros"]}
         assert parametros["mensaje_puerta"] == "Puerta Abierta"
 
 
 class TestSemaforoEnElEndpoint:
+    def regla_del_proyecto(self, db_session, escenario, parametro):
+        alarma = Alarma(
+            id_usr=escenario["usuario"].id_usr,
+            id_sd=escenario["sede"].id_sd,
+            id_ubccn=escenario["asignada"].id_ubccn,
+            id_prmtr=parametro.id_prmtr,
+            nmbr="Regla compartida",
+        )
+        db_session.add(alarma)
+        db_session.flush()
+        db_session.add(CondicionAlarma(id_alrm=alarma.id_alrm, oprdr=">", vlr_umbrl=30))
+        db_session.flush()
+
     def test_valor_en_rango_pinta_verde(self, client, db_session, escenario):
         dispositivo = crear_dispositivo(db_session, escenario["asignada"], escenario["sede"])
         temperatura = crear_parametro(db_session, "temperatura", "°C")
+        self.regla_del_proyecto(db_session, escenario, temperatura)
         agregar_lectura(
-            db_session, dispositivo, temperatura, escenario["sede"], 20, dt.datetime.now(dt.timezone.utc)
+            db_session,
+            dispositivo,
+            temperatura,
+            escenario["sede"],
+            20,
+            dt.datetime.now(dt.timezone.utc),
         )
 
         app.dependency_overrides[get_current_user] = lambda: usuario_jwt(
@@ -335,23 +384,66 @@ class TestSemaforoEnElEndpoint:
         )
 
         item = next(
-            i for i in client.get("/mapa-cliente").json()["items"] if i["nmbr"] == "Estacion Asignada"
+            i
+            for i in client.get("/mapa-cliente").json()["items"]
+            if i["nmbr"] == "Estacion Asignada"
         )
         assert item["semaforo"] == "verde"
 
-    def test_valor_fuera_de_rango_pinta_rojo(self, client, db_session, escenario):
-        """Con los umbrales TEMPORALES de HU 28 simulada: >32 °C es rojo."""
+    # HU29 (PP-230): el color sale de las condiciones de las alarmas activas
+    # de la ubicación, ya no de umbrales fijos en memoria.
+
+    def _color_con_alarma(self, client, db_session, escenario, valor, condicion, estado="Activa"):
         dispositivo = crear_dispositivo(db_session, escenario["asignada"], escenario["sede"])
         temperatura = crear_parametro(db_session, "temperatura", "°C")
         agregar_lectura(
-            db_session, dispositivo, temperatura, escenario["sede"], 35, dt.datetime.now(dt.timezone.utc)
+            db_session,
+            dispositivo,
+            temperatura,
+            escenario["sede"],
+            valor,
+            dt.datetime.now(dt.timezone.utc),
         )
+        if condicion is not None:
+            alarma = Alarma(
+                id_usr=escenario["usuario"].id_usr,
+                id_sd=escenario["sede"].id_sd,
+                nmbr="Temperatura alta",
+                id_prmtr=temperatura.id_prmtr,
+                id_ubccn=escenario["asignada"].id_ubccn,
+                estd=estado,
+            )
+            db_session.add(alarma)
+            db_session.flush()
+            db_session.add(
+                CondicionAlarma(id_alrm=alarma.id_alrm, oprdr=condicion[0], vlr_umbrl=condicion[1])
+            )
+            db_session.flush()
 
         app.dependency_overrides[get_current_user] = lambda: usuario_jwt(
             escenario["usuario"], "Cliente Final", escenario["sede"].id_sd
         )
+        return next(
+            i
+            for i in client.get("/mapa-cliente").json()["items"]
+            if i["nmbr"] == "Estacion Asignada"
+        )["semaforo"]
 
-        item = next(
-            i for i in client.get("/mapa-cliente").json()["items"] if i["nmbr"] == "Estacion Asignada"
-        )
-        assert item["semaforo"] == "rojo"
+    def test_alarma_activa_que_se_cumple_pinta_rojo(self, client, db_session, escenario):
+        assert self._color_con_alarma(client, db_session, escenario, 35, (">", 32)) == "rojo"
+
+    def test_cerca_del_umbral_pinta_amarillo(self, client, db_session, escenario):
+        """31 está a menos del 10 % de 32 (margen 3.2) sin cumplir > 32."""
+        assert self._color_con_alarma(client, db_session, escenario, 31, (">", 32)) == "amarillo"
+
+    def test_lejos_del_umbral_pinta_verde(self, client, db_session, escenario):
+        assert self._color_con_alarma(client, db_session, escenario, 20, (">", 32)) == "verde"
+
+    def test_alarma_pausada_no_pinta(self, client, db_session, escenario):
+        color = self._color_con_alarma(client, db_session, escenario, 35, (">", 32), "Inactiva")
+        assert color == "sin_reglas"
+
+    def test_sin_alarma_un_valor_alto_sigue_verde(self, client, db_session, escenario):
+        """Antes los umbrales fijos pintaban 35 °C de rojo sin que nadie
+        configurara nada; ahora solo pinta una alarma real."""
+        assert self._color_con_alarma(client, db_session, escenario, 35, None) == "sin_reglas"

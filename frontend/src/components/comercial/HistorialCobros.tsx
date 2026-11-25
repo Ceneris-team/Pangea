@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { desplazarHastaElemento } from "../../utils/movimiento";
 import { apiFetch } from "../../services/api";
 import { fechaVisible } from "./asignacionPlan";
 import { montoVisible } from "./registroCobro";
@@ -24,7 +25,7 @@ export default function HistorialCobros({ clienteId, nombre, recarga, onCerrar }
     return () => { activo = false; };
   }, [clienteId, recarga]);
 
-  useEffect(() => { panel.current?.scrollIntoView?.({ behavior: "smooth", block: "start" }); }, [clienteId]);
+  useEffect(() => { desplazarHastaElemento(panel.current, { block: "start" }); }, [clienteId]);
 
   return <section ref={panel} aria-label="Historial de cobros" className="scroll-mt-28 space-y-4 rounded-2xl border border-gray-200 bg-white/80 p-5 shadow-sm dark:border-white/10 dark:bg-[#171d2a]/90">
     <div className="flex flex-wrap items-center justify-between gap-3">

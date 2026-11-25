@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { desplazarHastaElemento } from "../../utils/movimiento";
 import { apiFetch } from "../../services/api";
 import { fechaLima, type Cliente } from "../../types/comercial";
 import { fechaVisible } from "./asignacionPlan";
@@ -28,7 +29,7 @@ export default function RegistrarCobroFormulario({ cliente, onCancelar, onRegist
   const formulario = useRef<HTMLFormElement>(null);
 
   // El botón está en la tarjeta del cliente, más abajo: se lleva la vista al formulario.
-  useEffect(() => { formulario.current?.scrollIntoView?.({ behavior: "smooth", block: "start" }); }, []);
+  useEffect(() => { desplazarHastaElemento(formulario.current, { block: "start" }); }, []);
 
   function cambiar(clave: keyof DatosCobro, valor: string) {
     setDatos({ ...datos, [clave]: valor });

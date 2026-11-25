@@ -22,5 +22,5 @@ export function textoDeProyectos(texto: string): string {
 }
 
 export function estadoProyecto(estado: string): string {
-  return estado === "Activa" ? "Activo" : estado === "Inactiva" ? "Inactivo" : estado;
+  return estado === "Activa" ? "Activo" : estado === "Inactiva" ? "Archivado" : estado;
 }

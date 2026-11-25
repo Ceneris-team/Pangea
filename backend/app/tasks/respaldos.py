@@ -1,28 +1,44 @@
-"""Tarea Celery del respaldo extendido semanal (HT-06, PP-129).
-
-Wrapper fino sobre services/respaldos.py, igual que el resto de tasks/ sobre
-sus services: la tarea solo se encarga de ser invocable por Celery Beat y de
-loguear el resultado; toda la lógica (dump, cifrado, subida, retención) vive en
-el service, que se puede testear sin Celery."""
+"""Respaldo semanal con bloqueo, reintentos y aviso independiente de la cola."""
 
 import logging
 
 from app.core.celery_app import celery_app
-from app.services.respaldos import ejecutar_respaldo
+from app.services.correo_ses import codigo_error
+from app.services.respaldos import RespaldoEnCurso, ejecutar_respaldo, entero_configurado
+from app.services.vigilancia_respaldos import emitir_alerta, habilitado
 
 logger = logging.getLogger(__name__)
 
 
-@celery_app.task(name="app.tasks.respaldos.respaldo_semanal")
-def respaldo_semanal() -> dict:
-    """Corre vía Celery Beat una vez por semana (ver beat_schedule en
-    app/core/celery_app.py). Genera el dump cifrado, lo sube a Object Storage
-    y aplica la retención de 12 meses.
-
-    No usa autoretry_for: si una corrida falla (bucket caído, credenciales
-    mal), reintentar en el acto rara vez ayuda y Beat volverá a dispararlo la
-    semana siguiente. El fallo queda logueado para que se note; un respaldo
-    perdido no debe tumbar nada más del sistema."""
-    resultado = ejecutar_respaldo()
-    logger.info("HT-06: respaldo semanal completado: %s", resultado)
-    return resultado
+@celery_app.task(bind=True, max_retries=3, name="app.tasks.respaldos.respaldo_semanal")
+def respaldo_semanal(self):
+    if not habilitado("BACKUP_ENABLED"):
+        return {"estado": "Deshabilitado"}
+    try:
+        resultado = ejecutar_respaldo()
+        logger.info("Respaldo completado: %s", resultado["clave"])
+        return resultado
+    except RespaldoEnCurso:
+        return {"estado": "YaEnCurso"}
+    except Exception as exc:
+        # Nunca incluir cadenas de conexion o errores SQL crudos en correo/log.
+        codigo = codigo_error(exc)
+        logger.error("Fallo del respaldo: %s", codigo)
+        try:
+            emitir_alerta(
+                "tarea-" + str(self.request.id),
+                "El respaldo fallo. Codigo: "
+                + codigo
+                + ". Se realizaran hasta tres reintentos automaticos; revisar el resultado en el monitor.",
+            )
+        except Exception as aviso:
+            logger.error("No se pudo enviar la alerta: %s", codigo_error(aviso))
+        if self.request.retries < self.max_retries:
+            raise self.retry(
+                exc=RuntimeError(codigo),
+                countdown=min(
+                    entero_configurado("BACKUP_RETRY_BASE_SECONDS", 60) * 2**self.request.retries,
+                    900,
+                ),
+            )
+        raise RuntimeError("Respaldo fallido: " + codigo) from None

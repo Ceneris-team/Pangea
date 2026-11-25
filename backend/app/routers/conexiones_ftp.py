@@ -39,7 +39,9 @@ FRECUENCIAS_VALIDAS = {1, 60}  # CA: "cada minuto" o "cada hora"
 TIMEOUT_SEGUNDOS = 8
 
 
-def _requerir_tecnico_o_admin(usuario: dict = Depends(get_current_user), db: Session = Depends(get_db)) -> dict:
+def _requerir_tecnico_o_admin(
+    usuario: dict = Depends(get_current_user), db: Session = Depends(get_db)
+) -> dict:
     """HU 05 CA: 'Solo los roles Técnico CENERIS y Administrador tienen
     acceso a este módulo.'"""
     if not puede_operar(db, usuario):

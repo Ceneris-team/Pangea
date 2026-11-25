@@ -28,6 +28,7 @@ env:
   # llegue a consumir la tarea dentro del test.
   CELERY_BROKER_URL: redis://localhost:6379/2
   CELERY_RESULT_BACKEND: redis://localhost:6379/3
+  PLAN_LIMITS_REQUIRE_SUBSCRIPTION: "false"
   # FTP_CREDENTIAL_KEY se deja sin declarar a propósito: si se pone como
   # string vacío, os.environ.get(...) en app/security/ftp_crypto.py
   # devuelve "" (no None) y el fallback dev-safe del código no se activa,
@@ -61,6 +62,7 @@ jobs:
 
   test:
     name: Tests (pytest)
+    timeout-minutes: 20
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -72,7 +74,7 @@ jobs:
         ports:
           - 5432:5432
         options: >-
-          --health-cmd pg_isready
+          --health-cmd "pg_isready -U postgres -d pangea_dev"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
@@ -112,7 +114,14 @@ jobs:
       # Suite completa: autenticación, permisos, modelo de datos y el resto
       # (246 tests verificados en local a la fecha de esta HT).
       - name: pytest (suite completa)
-        run: python -m pytest -v
+        run: python -m pytest -v -k "not test_mes_completo_por_minuto_con_memoria_acotada" -o faulthandler_timeout=120
+
+      - name: Rendimiento de exportaciones en procesos independientes
+        run: |
+          set -euo pipefail
+          for formato in csv xlsx; do
+            python -m pytest "tests/routers/test_exportaciones.py::test_mes_completo_por_minuto_con_memoria_acotada[$formato]" -v -s -o faulthandler_timeout=120
+          done
 
   build:
     name: Build imagen Docker

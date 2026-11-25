@@ -149,9 +149,7 @@ class TestListarParametros:
         resp = client.get("/parametros")
         assert isinstance(resp.json(), list)
 
-    def test_con_paginacion_devuelve_el_objeto_paginado(
-        self, client, tecnico_editor, parametros
-    ):
+    def test_con_paginacion_devuelve_el_objeto_paginado(self, client, tecnico_editor, parametros):
         resp = client.get("/parametros", params={"pagina": 1, "por_pagina": 2})
         assert resp.status_code == 200
         body = resp.json()
@@ -200,9 +198,7 @@ class TestCrearParametro:
     -antes de esto todo parámetro se validaba como número y un parámetro
     de texto perdía cada fila en silencio."""
 
-    def test_crear_sin_tipo_dato_usa_numerico_por_defecto(
-        self, client, db_session, tecnico_editor
-    ):
+    def test_crear_sin_tipo_dato_usa_numerico_por_defecto(self, client, db_session, tecnico_editor):
         resp = client.post(
             "/parametros", json={"nmbr": "Parametro numerico default", "undd": "N/A"}
         )
@@ -226,7 +222,9 @@ class TestCrearParametro:
 
 
 class TestActualizarParametro:
-    def test_edita_nombre_unidad_y_descripcion(self, client, db_session, tecnico_editor, parametros):
+    def test_edita_nombre_unidad_y_descripcion(
+        self, client, db_session, tecnico_editor, parametros
+    ):
         id_prmtr = parametros[0].id_prmtr
         resp = client.put(
             f"/parametros/{id_prmtr}",
@@ -291,9 +289,10 @@ class TestEliminarParametro:
 
         resp = client.delete(f"/parametros/{parametros[0].id_prmtr}")
         assert resp.status_code == 409
-        assert db_session.query(Parametro).filter(
-            Parametro.id_prmtr == parametros[0].id_prmtr
-        ).first() is not None
+        assert (
+            db_session.query(Parametro).filter(Parametro.id_prmtr == parametros[0].id_prmtr).first()
+            is not None
+        )
 
     def test_parametro_inexistente_devuelve_404(self, client, tecnico_editor):
         assert client.delete("/parametros/999999").status_code == 404
@@ -487,9 +486,7 @@ class TestCrearMapeo:
         assert resp.status_code == 201
         assert resp.json()["mapeo"]["tp_trm"] == "X"
 
-    def test_tipo_de_trama_vacio_devuelve_422(
-        self, client, db_session, tecnico_editor, parametros
-    ):
+    def test_tipo_de_trama_vacio_devuelve_422(self, client, db_session, tecnico_editor, parametros):
         sede, _ = tecnico_editor
         dispositivo = crear_dispositivo(db_session, sede)
         resp = client.post(
@@ -907,9 +904,7 @@ class TestEliminarMapeo:
         formato = db_session.query(MapeoFormato).filter(MapeoFormato.id_mp == id_mp).first()
         assert formato.estd == "Inactivo"
 
-    def test_no_borra_la_fila_ni_las_columnas(
-        self, client, db_session, tecnico_editor, parametros
-    ):
+    def test_no_borra_la_fila_ni_las_columnas(self, client, db_session, tecnico_editor, parametros):
         sede, _ = tecnico_editor
         dispositivo = crear_dispositivo(db_session, sede)
         id_mp = client.post("/mapeos", json=cuerpo_mapeo(parametros, dispositivo.id_dspstv)).json()[
@@ -918,7 +913,9 @@ class TestEliminarMapeo:
 
         client.delete(f"/mapeos/{id_mp}")
 
-        assert db_session.query(MapeoFormato).filter(MapeoFormato.id_mp == id_mp).first() is not None
+        assert (
+            db_session.query(MapeoFormato).filter(MapeoFormato.id_mp == id_mp).first() is not None
+        )
         columnas = db_session.query(MapeoColumna).filter(MapeoColumna.id_mp == id_mp).all()
         assert len(columnas) == 2
 
@@ -1100,17 +1097,13 @@ class TestVistaPrevia:
         )
         assert self._subir(client, "ejemplo_estado_gabinete.dat").status_code == 403
 
-    def test_avisa_si_un_parametro_numerico_recibe_texto(
-        self, client, db_session, tecnico_editor
-    ):
+    def test_avisa_si_un_parametro_numerico_recibe_texto(self, client, db_session, tecnico_editor):
         """P_demo_gabinete.dat trae "Puerta Abierta" en la columna
         MensajeP (índice 2). Si esa columna se asigna a un parámetro
         NUMÉRICO por error, la vista previa debe marcarlo -esas filas se
         perderían en la ingesta real, igual que pasaba con MensajeP/
         MensajeA antes de que existiera prmtr.tipo_dato."""
-        parametro_numerico = Parametro(
-            nmbr="Mensaje mal tipado", undd="N/A", tipo_dato="numerico"
-        )
+        parametro_numerico = Parametro(nmbr="Mensaje mal tipado", undd="N/A", tipo_dato="numerico")
         db_session.add(parametro_numerico)
         db_session.flush()
 
@@ -1123,9 +1116,7 @@ class TestVistaPrevia:
         columnas = {c["nombre_columna"]: c for c in resp.json()["columnas"]}
         assert columnas["MensajeP"]["tipo_dato_incompatible"] is True
 
-    def test_no_avisa_si_el_parametro_es_de_tipo_texto(
-        self, client, db_session, tecnico_editor
-    ):
+    def test_no_avisa_si_el_parametro_es_de_tipo_texto(self, client, db_session, tecnico_editor):
         parametro_texto = Parametro(nmbr="Mensaje bien tipado", undd="N/A", tipo_dato="texto")
         db_session.add(parametro_texto)
         db_session.flush()
@@ -1142,7 +1133,9 @@ class TestVistaPrevia:
         self, client, db_session, tecnico_editor
     ):
         # R (índice 1) sí es numérico en P_demo_gabinete.dat.
-        parametro_numerico = Parametro(nmbr="Contador bien tipado", undd="N/A", tipo_dato="numerico")
+        parametro_numerico = Parametro(
+            nmbr="Contador bien tipado", undd="N/A", tipo_dato="numerico"
+        )
         db_session.add(parametro_numerico)
         db_session.flush()
 

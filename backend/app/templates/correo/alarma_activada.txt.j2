@@ -1,0 +1,14 @@
+Se activó la alarma «{{ alarma }}».
+{% if condicion_texto is defined %}
+{{ parametro }} registró {{ valor }} {{ unidad }} y la alarma se activa cuando es {{ condicion_texto }}.
+{% endif %}
+Ubicación: {{ ubicacion }}
+Dispositivo: {{ dispositivo }}
+Parámetro: {{ parametro }}
+Valor medido: {{ valor }} {{ unidad }}
+Condición: {% if condicion_texto is defined %}{{ condicion_texto }} ({{ condicion }}){% else %}{{ condicion }}{% endif %}
+Fecha de lectura: {% if fecha_local is defined %}{{ fecha_local }} ({{ zona_horaria }}){% else %}{{ fecha }} (UTC){% endif %}
+
+Revisa tus alarmas en {{ app_url }}/alarmas
+Recibirás otro aviso cuando el valor vuelva a la normalidad y la condición se cumpla de nuevo.
+Para dejar de recibir estos correos, desactiva el canal en «Configurar notificaciones» de la alarma.

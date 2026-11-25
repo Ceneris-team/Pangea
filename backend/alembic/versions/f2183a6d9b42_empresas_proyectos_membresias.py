@@ -43,14 +43,21 @@ def upgrade() -> None:
         sa.Column("rol_emp", sa.String(20), nullable=False),
         sa.Column("estd", sa.String(20), nullable=False, server_default="Activo"),
         sa.UniqueConstraint("id_usr", "id_clnt", name="uq_usrclnt_usr_clnt"),
-        sa.CheckConstraint("rol_emp IN ('Administrador','Tecnico','Lector')", name="usrclnt_rol_check"),
+        sa.CheckConstraint(
+            "rol_emp IN ('Administrador','Tecnico','Lector')", name="usrclnt_rol_check"
+        ),
         sa.CheckConstraint("estd IN ('Activo','Inactivo')", name="usrclnt_estd_check"),
     )
     op.create_index("idx_usrclnt_clnt_estd", "usr_clnt", ["id_clnt", "estd"])
     op.create_table(
         "usr_pryct",
         sa.Column("id_usr_pryct", sa.Integer(), primary_key=True),
-        sa.Column("id_mmb", sa.Integer(), sa.ForeignKey("usr_clnt.id_mmb", ondelete="CASCADE"), nullable=False),
+        sa.Column(
+            "id_mmb",
+            sa.Integer(),
+            sa.ForeignKey("usr_clnt.id_mmb", ondelete="CASCADE"),
+            nullable=False,
+        ),
         sa.Column("id_pryct", sa.Integer(), sa.ForeignKey("pryct.id_pryct"), nullable=False),
         sa.UniqueConstraint("id_mmb", "id_pryct", name="uq_usrpryct_mmb_pryct"),
     )

@@ -47,3 +47,4 @@ endpoint-*.json
 # de backend/tests/ son datos generados internamente y si van al repo.
 *.dat
 !backend/tests/fixtures/*.dat
+.backup-monitor/

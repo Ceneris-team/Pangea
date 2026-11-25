@@ -1,114 +1,178 @@
 """
-HU 17 - Semáforo del mapa (umbrales TEMPORALES, ver
-app/services/mapa/semaforo.py).
+HU 17 - Semáforo del mapa con las condiciones reales de las alarmas
+(HU 29, PP-74 / PP-230; ver app/services/mapa/semaforo.py).
 
-Estos tests fijan el COMPORTAMIENTO de la evaluación (precedencia del
-nivel más grave, operadores, parámetros sin umbral, valores de texto), no
-los valores concretos de los umbrales. Cuando HU 28 reemplace
-_condiciones_de_parametro() por una consulta a cndcn_alrm, los tests que
-usan UMBRALES_TEMPORALES habrá que reapuntarlos a datos de BD, pero los
-de evaluar_semaforo() y _cumple_condicion() deberían seguir pasando tal
-cual: esa es justamente la señal de que la lógica quedó bien separada de
-la fuente de datos.
+ROJO   alguna alarma activa cumple su condición con el último valor.
+AMARILLO  preaviso: sin cumplirla, a 10 % o menos del umbral, del lado en
+          que se dispararía.
+VERDE  el resto (incluido "sin alarma configurada" y valores de texto).
+
+Antes de PP-74 estos tests fijaban umbrales TEMPORALES en memoria; la
+lógica (precedencia del más grave, operadores, texto, sin datos) se
+conserva y ahora se alimenta de condiciones (operador, umbral).
 """
 
 from decimal import Decimal
 
+import pytest
+
+from app.models import Alarma, CondicionAlarma
 from app.services.mapa.semaforo import (
     AMARILLO,
     ROJO,
     VERDE,
     _cumple_condicion,
+    _en_preaviso,
+    condiciones_por_ubicacion,
     evaluar_parametro,
     evaluar_semaforo,
 )
 
+D = Decimal
+
 
 class TestCumpleCondicion:
     def test_operadores_soportados(self):
-        assert _cumple_condicion(Decimal("5"), ">", Decimal("3")) is True
-        assert _cumple_condicion(Decimal("2"), "<", Decimal("3")) is True
-        assert _cumple_condicion(Decimal("3"), ">=", Decimal("3")) is True
-        assert _cumple_condicion(Decimal("3"), "<=", Decimal("3")) is True
-        assert _cumple_condicion(Decimal("3"), "=", Decimal("3")) is True
+        assert _cumple_condicion(D("5"), ">", D("3")) is True
+        assert _cumple_condicion(D("2"), "<", D("3")) is True
+        assert _cumple_condicion(D("3"), ">=", D("3")) is True
+        assert _cumple_condicion(D("3"), "<=", D("3")) is True
+        assert _cumple_condicion(D("3"), "=", D("3")) is True
+        assert _cumple_condicion(D("3"), ">", D("3")) is False
+        assert _cumple_condicion(D("3"), "<", D("3")) is False
 
     def test_operador_desconocido_no_revienta(self):
-        """Cuando HU 28 lea de la BD, una fila con oprdr corrupto no debe
-        tumbar el mapa entero: devuelve False y sigue."""
-        assert _cumple_condicion(Decimal("5"), "!!", Decimal("3")) is False
+        assert _cumple_condicion(D("3"), "!=", D("4")) is False
+
+
+class TestPreaviso:
+    @pytest.mark.parametrize(
+        "valor, operador, umbral, esperado",
+        [
+            # ">" 32 -> margen 3.2: [28.8, 32] es preaviso; 32 ya no cumple ">".
+            ("28.8", ">", "32", True),
+            ("28.79", ">", "32", False),
+            ("32", ">", "32", True),
+            ("32.01", ">", "32", False),  # ya cumple: es rojo, no preaviso
+            # ">=" 32: 32 ya cumple.
+            ("31.9", ">=", "32", True),
+            ("32", ">=", "32", False),
+            # "<" 6.5 -> margen 0.65: [6.5, 7.15].
+            ("7.15", "<", "6.5", True),
+            ("7.16", "<", "6.5", False),
+            ("6.5", "<", "6.5", True),
+            ("6.4", "<", "6.5", False),  # ya cumple
+            ("6.6", "<=", "6.5", True),
+            # Umbral negativo: el margen es el 10 % del valor absoluto.
+            ("-9.5", ">", "-10", False),  # ya cumple (-9.5 > -10)
+            ("-10.5", ">", "-10", True),
+            # Sin preaviso para "=" ni para umbral 0.
+            ("3.1", "=", "3", False),
+            ("-0.1", ">", "0", False),
+        ],
+    )
+    def test_bordes(self, valor, operador, umbral, esperado):
+        assert _en_preaviso(D(valor), operador, D(umbral)) is esperado
 
 
 class TestEvaluarParametro:
-    """Usa los parámetros REALES de la instalación (calidad de agua), con
-    los nombres tal como están en prmtr: minúscula y guion bajo."""
+    MAYOR_32 = [(">", D("32"))]
 
-    def test_valor_normal_es_verde(self):
-        assert evaluar_parametro("temperatura", 20) == VERDE
+    def test_cumple_es_rojo(self):
+        assert evaluar_parametro(self.MAYOR_32, 35) == ROJO
 
-    def test_valor_alto_es_amarillo(self):
-        assert evaluar_parametro("temperatura", 30) == AMARILLO
+    def test_cerca_es_amarillo(self):
+        assert evaluar_parametro(self.MAYOR_32, 30) == AMARILLO
 
-    def test_valor_muy_alto_es_rojo(self):
-        assert evaluar_parametro("temperatura", 35) == ROJO
+    def test_lejos_es_verde(self):
+        assert evaluar_parametro(self.MAYOR_32, 20) == VERDE
 
-    def test_rojo_gana_a_amarillo_cuando_cumple_ambos(self):
-        """35 cumple '>32' (rojo) y '>28' (amarillo). Gana el más grave."""
-        assert evaluar_parametro("temperatura", 35) == ROJO
+    def test_sin_condiciones_es_verde_aunque_el_valor_sea_alto(self):
+        assert evaluar_parametro([], 99999) == VERDE
+
+    def test_rojo_gana_a_amarillo_entre_varias_alarmas(self):
+        """Dos alarmas sobre el mismo parámetro: una se cumple y la otra
+        está en preaviso -gana la más grave-."""
+        assert evaluar_parametro([(">", D("40")), (">", D("32"))], 35) == ROJO
 
     def test_umbral_por_debajo_tambien_dispara(self):
-        """Varios parámetros definen rango por ambos lados (ej. pH)."""
-        assert evaluar_parametro("ph", 5) == ROJO
-        assert evaluar_parametro("ph", 6.2) == AMARILLO
-        assert evaluar_parametro("ph", 7.2) == VERDE
+        menor = [("<", D("6.5"))]
+        assert evaluar_parametro(menor, 5) == ROJO
+        assert evaluar_parametro(menor, 6.8) == AMARILLO
+        assert evaluar_parametro(menor, 8) == VERDE
 
-    def test_bateria_baja_dispara_alarma(self):
-        """La batería del datalogger es salud del EQUIPO, no del agua:
-        por debajo de 11.5 V está por quedarse sin energía."""
-        assert evaluar_parametro("bateria_v", 11.0) == ROJO
-        assert evaluar_parametro("bateria_v", 12.0) == AMARILLO
-        assert evaluar_parametro("bateria_v", 12.6) == VERDE
-
-    def test_nombre_se_normaliza(self):
-        """Un mapeo cargado con otra grafía ('Temperatura', 'TEMPERATURA')
-        tiene que encontrar los mismos umbrales: si no, la estación
-        quedaría en verde sin que nadie note por qué."""
-        assert evaluar_parametro("Temperatura", 35) == ROJO
-        assert evaluar_parametro("TEMPERATURA", 35) == ROJO
-        assert evaluar_parametro("Oxigeno Disuelto", 3) == ROJO
-
-    def test_parametro_sin_umbrales_es_verde(self):
-        """"Sin condición de alarma definida" no es lo mismo que "en
-        alarma": un parámetro desconocido no puede pintar la estación."""
-        assert evaluar_parametro("parametro_inventado", 99999) == VERDE
-
-    def test_valor_none_es_verde(self):
-        assert evaluar_parametro("temperatura", None) == VERDE
-
-    def test_valor_de_texto_es_verde(self):
-        """Un evento de evnt_txt se muestra en el panel pero no
-        semaforiza: no hay forma de compararlo con un umbral numérico."""
-        assert evaluar_parametro("mensaje_puerta", "Puerta Abierta") == VERDE
+    def test_valor_none_o_texto_es_verde(self):
+        assert evaluar_parametro(self.MAYOR_32, None) == VERDE
+        assert evaluar_parametro(self.MAYOR_32, "Puerta Abierta") == VERDE
+        assert evaluar_parametro(self.MAYOR_32, True) == VERDE
 
     def test_acepta_decimal_y_str_numerico(self):
-        """Los valores llegan como Decimal desde tlmtr (Numeric(14,4))."""
-        assert evaluar_parametro("temperatura", Decimal("35.0000")) == ROJO
-        assert evaluar_parametro("temperatura", "35") == ROJO
+        assert evaluar_parametro(self.MAYOR_32, D("35.0000")) == ROJO
+        assert evaluar_parametro(self.MAYOR_32, "35") == ROJO
 
 
 class TestEvaluarSemaforo:
+    CONDICIONES = {1: [(">", D("32"))], 2: [("<", D("6.5"))]}
+
     def test_estacion_sin_datos_es_verde(self):
-        assert evaluar_semaforo({}) == VERDE
+        assert evaluar_semaforo({}, self.CONDICIONES) == VERDE
+        assert evaluar_semaforo({1: 50}) == VERDE  # sin condiciones
 
     def test_gana_el_parametro_mas_grave(self):
-        """CA1: una estación con todo bien menos un parámetro en rojo se
-        pinta roja - es lo que hace útil el mapa de un vistazo."""
-        assert evaluar_semaforo({"temperatura": 20, "ph": 5}) == ROJO
+        assert evaluar_semaforo({1: 20, 2: 5}, self.CONDICIONES) == ROJO
 
     def test_amarillo_si_ninguno_llega_a_rojo(self):
-        assert evaluar_semaforo({"temperatura": 30, "ph": 7.2}) == AMARILLO
+        assert evaluar_semaforo({1: 31, 2: 8}, self.CONDICIONES) == AMARILLO
 
     def test_todos_normales_es_verde(self):
-        assert evaluar_semaforo({"temperatura": 20, "ph": 7.2}) == VERDE
+        assert evaluar_semaforo({1: 20, 2: 8}, self.CONDICIONES) == VERDE
+
+    def test_parametro_sin_alarma_no_pinta(self):
+        assert evaluar_semaforo({1: 20, 3: 99999}, self.CONDICIONES) == VERDE
 
     def test_texto_no_ensucia_el_color_de_la_estacion(self):
-        assert evaluar_semaforo({"temperatura": 20, "mensaje_puerta": "Puerta Abierta"}) == VERDE
+        assert evaluar_semaforo({1: 20, 4: "Puerta Abierta"}, self.CONDICIONES) == VERDE
+
+
+class TestCondicionesPorUbicacion:
+    """Contra la Postgres de test: solo alarmas ACTIVAS, agrupadas por
+    ubicación y parámetro."""
+
+    def test_agrupa_y_excluye_las_pausadas(self, db_session, fabrica):
+        from tests.routers.test_alarmas import crear_parametro, crear_ubicacion
+
+        sede = fabrica.sede()
+        usuario = fabrica.usuario()
+        u1 = crear_ubicacion(db_session, sede, "Estación semáforo 1")
+        u2 = crear_ubicacion(db_session, sede, "Estación semáforo 2")
+        p = crear_parametro(db_session, "Temperatura semáforo PP230", "°C")
+
+        def alarma(ubicacion, estado, *condiciones):
+            a = Alarma(
+                id_usr=usuario.id_usr,
+                id_sd=sede.id_sd,
+                nmbr=f"A {estado} {ubicacion.id_ubccn}",
+                id_prmtr=p.id_prmtr,
+                id_ubccn=ubicacion.id_ubccn,
+                estd=estado,
+            )
+            db_session.add(a)
+            db_session.flush()
+            for op, umbral in condiciones:
+                db_session.add(CondicionAlarma(id_alrm=a.id_alrm, oprdr=op, vlr_umbrl=umbral))
+            db_session.flush()
+
+        alarma(u1, "Activa", (">", 30))
+        alarma(u1, "Activa", ("<", 2))
+        alarma(u1, "Inactiva", (">", 10))
+        alarma(u2, "Activa", (">=", 5.5))
+
+        resultado = condiciones_por_ubicacion(db_session, [u1.id_ubccn, u2.id_ubccn])
+        assert resultado[u1.id_ubccn][p.id_prmtr] == [(">", D("30")), ("<", D("2"))]
+        assert resultado[u2.id_ubccn][p.id_prmtr] == [(">=", D("5.5"))]
+        assert condiciones_por_ubicacion(db_session, []) == {}
+
+        # Y el color de la estación 1 con un valor en preaviso de > 30.
+        assert evaluar_semaforo({p.id_prmtr: 28}, resultado[u1.id_ubccn]) == AMARILLO
+        # La pausada (> 10) no la pinta de rojo.
+        assert evaluar_semaforo({p.id_prmtr: 20}, resultado[u1.id_ubccn]) == VERDE

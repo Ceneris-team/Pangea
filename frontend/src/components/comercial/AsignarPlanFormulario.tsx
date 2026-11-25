@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { desplazarHastaElemento } from "../../utils/movimiento";
 import { apiFetch } from "../../services/api";
 import { fechaLima, type Cliente, type Plan } from "../../types/comercial";
 import { fechaVisible, planesActivos, planSinLimites, validarAsignacion, vencimientoPlan } from "./asignacionPlan";
@@ -34,7 +35,7 @@ export default function AsignarPlanFormulario({ cliente, planes, onCancelar, onA
 
   // El botón "Asignar plan" está en la tarjeta del cliente, más abajo: se
   // lleva la vista al formulario para que no quede fuera de pantalla.
-  useEffect(() => { formulario.current?.scrollIntoView?.({ behavior: "smooth", block: "start" }); }, []);
+  useEffect(() => { desplazarHastaElemento(formulario.current, { block: "start" }); }, []);
 
   async function confirmar(evento: FormEvent) {
     evento.preventDefault();

@@ -17,10 +17,19 @@ from app.database import Base
 class SolicitudSuscripcion(Base):
     __tablename__ = "solicitud_suscripcion"
     __table_args__ = (
-        CheckConstraint("estado IN ('Pendiente','En evaluación','Esperando aceptación','Aceptada','Aplicada','Rechazada','Cancelada')", name="solicitud_suscripcion_estado_check"),
+        CheckConstraint(
+            "estado IN ('Pendiente','En evaluación','Esperando aceptación','Aceptada','Aplicada','Rechazada','Cancelada')",
+            name="solicitud_suscripcion_estado_check",
+        ),
         UniqueConstraint("id_clnt", "clave_idempotencia", name="uq_solicitud_suscripcion_clave"),
-        Index("uq_solicitud_suscripcion_abierta", "id_clnt", unique=True,
-              postgresql_where=text("estado IN ('Pendiente','En evaluación','Esperando aceptación','Aceptada')")),
+        Index(
+            "uq_solicitud_suscripcion_abierta",
+            "id_clnt",
+            unique=True,
+            postgresql_where=text(
+                "estado IN ('Pendiente','En evaluación','Esperando aceptación','Aceptada')"
+            ),
+        ),
         Index("ix_solicitud_suscripcion_estado_fecha", "estado", "creada_en"),
     )
 

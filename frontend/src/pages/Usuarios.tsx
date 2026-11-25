@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { desplazarHastaElemento } from "../utils/movimiento";
 import { apiFetch, ApiError } from "../services/api";
 import { useAuth } from "../hooks/useAuth";
 import Sidebar from "../components/layout/Sidebar";
@@ -407,7 +408,7 @@ export default function Usuarios() {
   // trae a la vista; el resaltado se apaga solo a los pocos segundos.
   useEffect(() => {
     if (idResaltado === null) return;
-    filaResaltadaRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    desplazarHastaElemento(filaResaltadaRef.current, { block: "center" });
     const timeout = setTimeout(() => setIdResaltado(null), 3000);
     return () => clearTimeout(timeout);
   }, [idResaltado, data]);

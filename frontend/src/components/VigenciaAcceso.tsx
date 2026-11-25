@@ -19,8 +19,13 @@ function AccesoSinVerificar({ logout }: { logout: () => void }) {
 
 /** Cada cuenta valida su acceso antes de montar los módulos y cargar sus datos. */
 export default function VigenciaAcceso({ children }: { children: ReactNode }) {
-  const { sesionIniciada, verificandoSesion, rol, correo, logout } = useAuth();
+  const { sesionIniciada, verificandoSesion, errorVerificacion, reintentarVerificacion, rol, correo, logout } = useAuth();
   if (verificandoSesion) return <CargandoAcceso />;
+  if (errorVerificacion) return <main className="mx-auto max-w-xl p-8 text-gray-900 dark:text-white" role="alert">
+    <h1 className="text-xl font-bold">No pudimos comprobar tu sesión</h1>
+    <p className="my-4">Comprueba tu conexión y vuelve a intentarlo. Conservamos la empresa y el proyecto que seleccionaste.</p>
+    <button type="button" onClick={reintentarVerificacion} className="rounded-xl bg-[#ccff00] px-4 py-2 font-semibold text-gray-950">Reintentar</button>
+  </main>;
   if (!sesionIniciada || !["Cliente Final", "Usuario Empresa"].includes(rol ?? "")) return children;
   if (!correo) return <CargandoAcceso />;
   return <VigenciaSesion key={`${correo}:${rol}`} usuario={correo} logout={logout}>{children}</VigenciaSesion>;
