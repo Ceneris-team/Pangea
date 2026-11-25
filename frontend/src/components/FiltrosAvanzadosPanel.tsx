@@ -49,6 +49,7 @@ export default function FiltrosAvanzadosPanel({ parametros, disponibles, condici
           </label>
         </div>
         <p className="text-xs text-gray-600 dark:text-gray-400">Puedes dejar un extremo vacío. Dentro del rango incluye los límites; fuera del rango los excluye.</p>
+        <p className="text-xs text-gray-600 dark:text-gray-400">Usa dígitos del 0 al 9 y hasta 60 caracteres por límite.</p>
         <button type="button" className="text-sm text-red-700 underline dark:text-red-300" onClick={() => onCambiar(condiciones.filter(f => f.parametro_id !== c.parametro_id))}>Quitar condición de {p?.nmbr ?? "parámetro"}</button>
       </fieldset>;
     })}

@@ -1,7 +1,11 @@
+import math
 import os
 
 from fastapi import Depends, FastAPI
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
@@ -41,6 +45,18 @@ CORS_ALLOWED_ORIGINS = os.environ.get(
 ).split(",")
 
 app = FastAPI(dependencies=[Depends(preparar_peticion)])
+
+
+@app.exception_handler(RequestValidationError)
+async def manejar_error_validacion(_request, exc: RequestValidationError):
+    # Un número JSON como 1e400 llega como inf. Reflejarlo sin normalizar
+    # en el detalle del 422 haría fallar su serialización y devolvería 500.
+    errores = jsonable_encoder(
+        exc.errors(), custom_encoder={float: lambda n: n if math.isfinite(n) else str(n)}
+    )
+    return JSONResponse(status_code=422, content={"detail": errores})
+
+
 app.add_exception_handler(StarletteHTTPException, manejar_denegacion)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
