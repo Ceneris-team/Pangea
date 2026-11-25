@@ -425,6 +425,130 @@ def crear_dispositivo_en(db_session, ubicacion, sede, nombre):
     return dispositivo
 
 
+@pytest.mark.parametrize("busqueda", ["norte", "NORTE", "  NoRtE  ", "Estación Nor"])
+def test_filtrar_nombre_parcial_sin_mayusculas_ni_espacios(
+    client, db_session, tecnico_editor, busqueda
+):
+    crear_ubicacion_directa(db_session, tecnico_editor, "Estación Norte")
+    crear_ubicacion_directa(db_session, tecnico_editor, "Estación Sur")
+
+    respuesta = client.get("/ubicaciones", params={"busqueda": busqueda})
+
+    assert respuesta.status_code == 200
+    assert respuesta.json()["total"] == 1
+    assert [u["nmbr"] for u in respuesta.json()["items"]] == ["Estación Norte"]
+
+
+@pytest.mark.parametrize("busqueda", ["%", "_", "/"])
+def test_busqueda_trata_caracteres_como_texto_literal(client, db_session, tecnico_editor, busqueda):
+    crear_ubicacion_directa(db_session, tecnico_editor, "Estación Norte")
+    nombre = f"Proyecto {busqueda} especial"
+    crear_ubicacion_directa(db_session, tecnico_editor, nombre)
+
+    respuesta = client.get("/ubicaciones", params={"busqueda": busqueda})
+
+    assert respuesta.status_code == 200
+    assert [u["nmbr"] for u in respuesta.json()["items"]] == [nombre]
+
+
+@pytest.mark.parametrize("estado", ["Activa", "Inactiva"])
+def test_filtrar_estado_es_independiente_del_monitoreo(client, db_session, tecnico_editor, estado):
+    for valor in ("Activa", "Inactiva"):
+        ubicacion = crear_ubicacion_directa(db_session, tecnico_editor, valor, estado=valor)
+        ubicacion.monitoreo_activo = valor == "Inactiva"
+    db_session.flush()
+
+    respuesta = client.get("/ubicaciones", params={"estado": estado})
+
+    assert respuesta.status_code == 200
+    assert respuesta.json()["total"] == 1
+    assert respuesta.json()["items"][0]["estd"] == estado
+
+
+@pytest.mark.parametrize("estado", ["Archivado", "Cualquiera"])
+def test_listado_rechaza_estado_invalido(client, tecnico_editor, estado):
+    assert client.get("/ubicaciones", params={"estado": estado}).status_code == 422
+
+
+def test_filtros_combinados_antes_de_paginar_y_limpiar(client, db_session, tecnico_editor, fabrica):
+    for i in reversed(range(12)):
+        crear_ubicacion_directa(db_session, tecnico_editor, f"Norte {i:02d}")
+    crear_ubicacion_directa(db_session, tecnico_editor, "Norte archivado", estado="Inactiva")
+    crear_ubicacion_directa(db_session, tecnico_editor, "Sur")
+    crear_ubicacion_directa(db_session, fabrica.sede(), "Norte ajeno")
+    params = {"busqueda": "  NORTE  ", "estado": "Activa"}
+
+    primera = client.get("/ubicaciones", params=params).json()
+    segunda = client.get("/ubicaciones", params={**params, "pagina": 2}).json()
+    assert primera["total"] == segunda["total"] == 12
+    assert primera["por_pagina"] == 10
+    assert [u["nmbr"] for u in primera["items"]] == [f"Norte {i:02d}" for i in range(10)]
+    assert [u["nmbr"] for u in segunda["items"]] == ["Norte 10", "Norte 11"]
+    assert not {u["id_ubccn"] for u in primera["items"]} & {u["id_ubccn"] for u in segunda["items"]}
+
+    todos = client.get("/ubicaciones", params={"busqueda": "   ", "estado": ""}).json()
+    assert todos["total"] == 14
+    assert todos["pagina"] == 1
+    sin_coincidencias = client.get("/ubicaciones", params={"busqueda": "No existe"}).json()
+    assert sin_coincidencias["items"] == []
+    assert sin_coincidencias["total"] == 0
+
+
+def test_filtros_y_limpieza_respetan_proyectos_asignados(client, db_session, fabrica):
+    rol = fabrica.rol("Cliente Final")
+    sede = fabrica.sede()
+    usuario = fabrica.usuario(rol=rol)
+    agregar_permiso(db_session, usuario, sede, "Ubicaciones", "Lectura", rol)
+    asignada = crear_ubicacion_directa(db_session, sede, "Norte asignada", estado="Inactiva")
+    crear_ubicacion_directa(db_session, sede, "Norte ajena", estado="Inactiva")
+    db_session.add(PermisoUbicacion(id_usr=usuario.id_usr, id_ubccn=asignada.id_ubccn))
+    db_session.flush()
+    app.dependency_overrides[get_current_user] = lambda: usuario_jwt(
+        usuario, rol.nmbr, sede_id=sede.id_sd
+    )
+
+    for params in ({"busqueda": "NORTE", "estado": "Inactiva"}, {}):
+        respuesta = client.get("/ubicaciones", params=params)
+        assert respuesta.status_code == 200
+        assert respuesta.json()["total"] == 1
+        assert [u["id_ubccn"] for u in respuesta.json()["items"]] == [asignada.id_ubccn]
+
+
+def test_limpiar_filtros_conserva_empresa_y_proyecto_seleccionados(client, db_session, fabrica):
+    rol = fabrica.rol("Administrador")
+    usuario = fabrica.usuario(rol=rol, scp="global")
+    sede = fabrica.sede()
+    propia = crear_ubicacion_directa(db_session, sede, "Norte propia")
+    crear_ubicacion_directa(db_session, sede, "Norte otro proyecto")
+    crear_ubicacion_directa(db_session, fabrica.sede(), "Norte otra empresa")
+
+    for proyecto_id, total in ((None, 2), (propia.id_ubccn, 1)):
+        identidad = {
+            **usuario_jwt(usuario, rol.nmbr, scope="global"),
+            "cliente_id": sede.id_clnt,
+            "proyecto_id": proyecto_id,
+        }
+        app.dependency_overrides[get_current_user] = lambda: identidad
+        for params in ({"busqueda": "norte", "estado": "Activa"}, {}):
+            respuesta = client.get("/ubicaciones", params=params)
+            assert respuesta.status_code == 200
+            assert respuesta.json()["total"] == total
+            if proyecto_id:
+                assert [u["id_ubccn"] for u in respuesta.json()["items"]] == [proyecto_id]
+
+
+def test_listado_denegado_sin_permiso_de_lectura(client, db_session, fabrica):
+    rol = fabrica.rol("Cliente Final")
+    usuario = fabrica.usuario(rol=rol)
+    sede = fabrica.sede()
+    crear_ubicacion_directa(db_session, sede, "Privada")
+    app.dependency_overrides[get_current_user] = lambda: usuario_jwt(
+        usuario, rol.nmbr, sede_id=sede.id_sd
+    )
+
+    assert client.get("/ubicaciones", params={"busqueda": "Privada"}).status_code == 403
+
+
 def test_mapa_devuelve_el_poligono_y_el_punto(client, db_session, tecnico_editor):
     """CA1: el mapa necesita el punto (marcador) y el polígono (contorno)
     en la misma respuesta, sin pedir el detalle de cada ubicación."""
