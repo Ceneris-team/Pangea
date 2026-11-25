@@ -1,10 +1,9 @@
 from datetime import datetime
-from decimal import Decimal
 from typing import Literal
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
 
-from app.services.filtros_mediciones import Condiciones, validar_unicas
+from app.services.filtros_mediciones import Condiciones, LimiteNumerico, validar_unicas
 
 
 class ExportacionCrear(BaseModel):
@@ -16,8 +15,8 @@ class ExportacionCrear(BaseModel):
     ubicacion_ids: list[int] = Field(default_factory=list, max_length=1000)
     dispositivo_ids: list[int] = Field(default_factory=list, max_length=1000)
     parametro_ids: list[int] = Field(default_factory=list, max_length=1000)
-    valor_min: Decimal | None = None
-    valor_max: Decimal | None = None
+    valor_min: LimiteNumerico | None = None
+    valor_max: LimiteNumerico | None = None
     frecuencia_muestreo: int | None = Field(default=None, ge=1, le=525600)
     condiciones: Condiciones = Field(default_factory=list)
 

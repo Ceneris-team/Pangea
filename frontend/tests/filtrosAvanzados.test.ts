@@ -31,3 +31,20 @@ test("el resumen conserva unidad y expresa correctamente dentro y fuera del rang
   assert.equal(describirCondicion({ parametro_id: 1, minimo: "0", maximo: "10", modo: "fuera" }, parametros), "Temperatura: < 0 °C o > 10 °C");
   assert.equal(describirCondicion({ parametro_id: 2, minimo: "0", maximo: "", modo: "dentro" }, parametros), "Nivel: ≥ 0 m");
 });
+
+test("compara límites decimales sin perder precisión al convertirlos a Number", () => {
+  for (const [minimo, maximo] of [["0.30000000000000001", "0.3"], ["-0.3", "-0.30000000000000001"], ["9007199254740993", "9007199254740992"]]) {
+    assert.match(validarCondiciones([{ parametro_id: 1, minimo, maximo, modo: "dentro" }], parametros) ?? "", /mínimo no puede ser mayor/);
+  }
+  for (const [minimo, maximo] of [["0.3", "0.30000000000000001"], ["-.5000", "-0.5"], ["+.1", "0.100"], ["-0.000", "0"]]) {
+    assert.equal(validarCondiciones([{ parametro_id: 1, minimo, maximo, modo: "dentro" }], parametros), null);
+  }
+});
+
+test("rechaza dígitos no ASCII, notación no admitida y más de 60 caracteres", () => {
+  for (const valor of ["٢١", "１２", "1_000", "1e400", "9".repeat(61), "9".repeat(5000)]) {
+    for (const campo of ["minimo", "maximo"]) {
+      assert.ok(validarCondiciones([{ parametro_id: 1, minimo: "", maximo: "", modo: "dentro", [campo]: valor }], parametros));
+    }
+  }
+});
