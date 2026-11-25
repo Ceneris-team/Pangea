@@ -121,6 +121,6 @@ export default function ParametrosCalculados() {
       </main>
     </div>
     {seleccionado !== null && <DetalleParametroCalculado key={seleccionado} id={seleccionado} onCerrar={() => setSeleccionado(null)} />}
-    {creando && <CrearParametroCalculado onCerrar={() => setCreando(false)} onCreado={() => { setCreando(false); setAviso("Definición registrada. Se conservan los filtros actuales del listado."); setFiltros(actual => ({ ...actual, pagina: 1 })); setRevision(v => v + 1); }} />}
+    {creando && <CrearParametroCalculado onCerrar={() => setCreando(false)} onCreado={() => { setCreando(false); setAviso("Parámetro calculado añadido correctamente. Se inició el procesamiento histórico. Se conservan los filtros actuales del listado."); setFiltros(actual => ({ ...actual, pagina: 1 })); setRevision(v => v + 1); }} />}
   </div>;
 }

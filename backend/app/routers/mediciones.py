@@ -29,6 +29,8 @@ from app.models import (
     Dispositivo,
     EventoTexto,
     Parametro,
+    ParametroCalculado,
+    ResultadoCalculo,
     Telemetria,
     Ubicacion,
 )
@@ -76,6 +78,7 @@ router.include_router(series_router)
 # OFFSET, que se corre si algo se inserta/borra antes de la página pedida).
 _ORIGEN_TELEMETRIA = "t"
 _ORIGEN_EVENTO = "e"
+_ORIGEN_CALCULADO = "c"
 
 
 def _codificar_cursor(fch_hr: dt.datetime, origen: str, id_registro: int) -> str:
@@ -88,7 +91,7 @@ def _decodificar_cursor(cursor: str) -> tuple[dt.datetime, str, int]:
         crudo = base64.urlsafe_b64decode(cursor.encode()).decode()
         fch_hr_str, origen, id_registro_str = crudo.rsplit("|", 2)
         fch_hr = dt.datetime.fromisoformat(fch_hr_str)
-        if origen not in (_ORIGEN_TELEMETRIA, _ORIGEN_EVENTO):
+        if origen not in (_ORIGEN_TELEMETRIA, _ORIGEN_EVENTO, _ORIGEN_CALCULADO):
             raise ValueError
         return fch_hr, origen, int(id_registro_str)
     except (ValueError, UnicodeDecodeError) as exc:
@@ -131,6 +134,10 @@ def listar_parametros_disponibles(
         }
         if fuente not in item["fuentes"]:
             item["fuentes"].append(fuente)
+    from app.services.consulta_calculos import catalogo_calculados
+
+    for item in catalogo_calculados(db, ids_ubicaciones):
+        items[item["id_prmtr"]] = item
     return {"items": list(items.values())}
 
 
@@ -160,7 +167,12 @@ def _enriquecer_items(db: Session, candidatos: list[tuple]) -> list[MedicionList
     ubicaciones = {
         u.id_ubccn: u
         for u in db.query(Ubicacion)
-        .filter(Ubicacion.id_ubccn.in_({d.id_ubccn for d in dispositivos.values()}))
+        .filter(
+            Ubicacion.id_ubccn.in_(
+                {d.id_ubccn for d in dispositivos.values()}
+                | {fila.id_ubccn for _, _, _, tipo, fila in candidatos if tipo == "c"}
+            )
+        )
         .all()
     }
     parametros = {
@@ -169,7 +181,34 @@ def _enriquecer_items(db: Session, candidatos: list[tuple]) -> list[MedicionList
     }
 
     items = []
+    calculados = {
+        p.id_prm_clc: p
+        for p in db.query(ParametroCalculado).filter(
+            ParametroCalculado.id_prm_clc.in_({-id_ for id_ in ids_parametro if id_ < 0})
+        )
+    }
     for _fch_hr, _origen, _id, tipo, fila in candidatos:
+        if tipo == "c":
+            p = calculados[fila.id_prm_clc]
+            u = ubicaciones[fila.id_ubccn]
+            items.append(
+                MedicionListItem(
+                    id_registro=fila.id_resultado,
+                    fch_hr=fila.fch_hr,
+                    id_ubccn=u.id_ubccn,
+                    ubicacion_nombre=u.nmbr,
+                    id_sd=u.id_sd,
+                    id_dspstv=-u.id_ubccn,
+                    dispositivo_nombre="Cálculo del punto",
+                    id_prmtr=-p.id_prm_clc,
+                    parametro_nombre=p.nmbr,
+                    undd=p.undd,
+                    vlr=fila.vlr,
+                    origen="calculado",
+                    id_calculado=p.id_prm_clc,
+                )
+            )
+            continue
         dispositivo = dispositivos[fila.id_dspstv]
         ubicacion = ubicaciones[dispositivo.id_ubccn]
         parametro = parametros[fila.id_prmtr]
@@ -287,7 +326,13 @@ def listar_mediciones(
         equipos_contexto = equipos_contexto.filter(Dispositivo.id_ubccn.in_(ubicacion_ids))
     if dispositivo_ids:
         equipos_contexto = equipos_contexto.filter(Dispositivo.id_dspstv.in_(dispositivo_ids))
-    validar_contexto(db, reglas, equipos_contexto, parametro_ids)
+    puntos_calculados = [
+        p
+        for p in ids_ubicaciones_permitidas
+        if (not ubicacion_ids or p in ubicacion_ids)
+        and (not dispositivo_ids or -p in dispositivo_ids)
+    ]
+    validar_contexto(db, reglas, equipos_contexto, parametro_ids, puntos_calculados)
 
     # HT-10 CA4: el ámbito entra en la clave, así que dos usuarios con
     # visibilidad distinta nunca comparten entrada aunque pidan la misma
@@ -349,7 +394,19 @@ def listar_mediciones(
         )
 
     def _query_base(modelo):
-        query = db.query(modelo).filter(modelo.id_dspstv.in_(ids_dispositivos_query))
+        if modelo is ResultadoCalculo:
+            puntos = (
+                ids_ubicaciones_permitidas & set(ubicacion_ids)
+                if ubicacion_ids
+                else ids_ubicaciones_permitidas
+            )
+            query = db.query(modelo).filter(
+                modelo.id_ubccn.in_(puntos), modelo.estado == "Calculado"
+            )
+            if dispositivo_ids:
+                query = query.filter(modelo.id_dspstv.in_(dispositivo_ids))
+        else:
+            query = db.query(modelo).filter(modelo.id_dspstv.in_(ids_dispositivos_query))
         if parametro_ids:
             query = query.filter(modelo.id_prmtr.in_(parametro_ids))
         # HT-10 punto 4: el rango de fechas se aplica EN SQL.
@@ -372,7 +429,7 @@ def listar_mediciones(
         # comparación lexicográfica sin sentido de negocio, no un filtro
         # de rango. _query_base se llama una vez por modelo (ver abajo),
         # así que alcanza con mirar cuál es antes de aplicar el filtro.
-        if modelo is Telemetria:
+        if modelo in (Telemetria, ResultadoCalculo):
             if valor_min is not None:
                 query = query.filter(modelo.vlr >= valor_min)
             if valor_max is not None:
@@ -408,7 +465,7 @@ def listar_mediciones(
         # EXACTAMENTE el mismo fch_hr (real en telemetría de alta frecuencia,
         # más de un dispositivo/parámetro puede compartir timestamp) quedan
         # en un orden no determinista entre ejecuciones.
-        columna_id = modelo.id_lctr if modelo is Telemetria else modelo.id_evnt
+        columna_id = modelo.id_evnt if modelo is EventoTexto else modelo.id_lctr
         return query.order_by(modelo.fch_hr.desc(), columna_id.desc())
 
     # HT-16 CA3: el modo cursor aplica cuando no habrá downsampling
@@ -442,21 +499,17 @@ def listar_mediciones(
             #     hace al cursor estable ante una inserción concurrente con
             #     el MISMO fch_hr: una fila nueva con id mayor cae después
             #     del cursor, nunca se repite ni se salta una ya servida).
-            #   - origen < cursor_origen ("e" < "t", Telemetria antes que
-            #     EventoTexto en el orden DESC): un empate exacto en fch_hr
-            #     ya quedó resuelto a favor de Telemetria en la página del
-            #     cursor, así que EventoTexto con ESE MISMO fch_hr también
-            #     ya se sirvió -se excluye con <=, no <-.
-            #   - origen > cursor_origen: el empate exacto en fch_hr
-            #     todavía no se sirvió para esta tabla -se incluye con <=-.
+            #   - origen < cursor_origen: el empate todavía no se sirvió
+            #     para esta fuente; incluirlo (orden t, e, c descendente).
+            #   - origen > cursor_origen: el empate ya se sirvió; excluirlo.
             if origen == cursor_origen:
                 return query.filter(
                     (modelo.fch_hr < cursor_fch_hr)
                     | ((modelo.fch_hr == cursor_fch_hr) & (columna_id < cursor_id))
                 )
             if origen < cursor_origen:
-                return query.filter(modelo.fch_hr < cursor_fch_hr)
-            return query.filter(modelo.fch_hr <= cursor_fch_hr)
+                return query.filter(modelo.fch_hr <= cursor_fch_hr)
+            return query.filter(modelo.fch_hr < cursor_fch_hr)
 
         # HT-16 punto 3: LIMIT real en SQL, no .all() completo. Se pide
         # por_pagina+1 de CADA modelo (no se sabe de antemano cuántas de
@@ -474,16 +527,27 @@ def listar_mediciones(
             .limit(por_pagina + 1)
             .all()
         )
+        calculados = (
+            _con_cursor(ResultadoCalculo, _ORIGEN_CALCULADO, ResultadoCalculo.id_lctr)
+            .limit(por_pagina + 1)
+            .all()
+        )
 
-        candidatos = [(t.fch_hr, _ORIGEN_TELEMETRIA, t.id_lctr, "t", t) for t in mediciones] + [
-            (e.fch_hr, _ORIGEN_EVENTO, e.id_evnt, "e", e) for e in eventos
-        ]
+        candidatos = (
+            [(t.fch_hr, _ORIGEN_TELEMETRIA, t.id_lctr, "t", t) for t in mediciones]
+            + [(e.fch_hr, _ORIGEN_EVENTO, e.id_evnt, "e", e) for e in eventos]
+            + [(c.fch_hr, _ORIGEN_CALCULADO, c.id_lctr, "c", c) for c in calculados]
+        )
         candidatos.sort(key=lambda c: (c[0], c[1], c[2]), reverse=True)
 
         hay_mas = len(candidatos) > por_pagina
         pagina_candidatos = candidatos[:por_pagina]
 
-        total = _query_base(Telemetria).count() + _query_base(EventoTexto).count()
+        total = (
+            _query_base(Telemetria).count()
+            + _query_base(EventoTexto).count()
+            + _query_base(ResultadoCalculo).count()
+        )
         downsampling_aplicado = False
         total_sin_muestrear = total
 
@@ -497,10 +561,13 @@ def listar_mediciones(
     else:
         mediciones = _query_base(Telemetria).all()
         eventos = _query_base(EventoTexto).all()
+        calculados = _query_base(ResultadoCalculo).all()
 
-        candidatos = [(t.fch_hr, _ORIGEN_TELEMETRIA, t.id_lctr, "t", t) for t in mediciones] + [
-            (e.fch_hr, _ORIGEN_EVENTO, e.id_evnt, "e", e) for e in eventos
-        ]
+        candidatos = (
+            [(t.fch_hr, _ORIGEN_TELEMETRIA, t.id_lctr, "t", t) for t in mediciones]
+            + [(e.fch_hr, _ORIGEN_EVENTO, e.id_evnt, "e", e) for e in eventos]
+            + [(c.fch_hr, _ORIGEN_CALCULADO, c.id_lctr, "c", c) for c in calculados]
+        )
         # Las dos consultas ya vienen ordenadas de SQL, pero hay que
         # reordenar la UNION de ambas (tlmtr + evnt_txt son tablas distintas).
         candidatos.sort(key=lambda c: (c[0], c[1], c[2]), reverse=True)

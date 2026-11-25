@@ -8,6 +8,7 @@ import Topbar from "../components/layout/Topbar";
 import DrawerPanel from "../components/layout/DrawerPanel";
 import SelectorRangoFechas from "../components/SelectorRangoFechas";
 import ExportacionesPanel from "../components/ExportacionesPanel";
+import ConsultaCalculo from "../components/ConsultaCalculo";
 import FiltrosAvanzadosPanel from "../components/FiltrosAvanzadosPanel";
 import { parametrosConRango, validarCondiciones, serializarCondiciones, describirCondicion, type CondicionBorrador, type ParametroFiltro } from "../services/filtrosAvanzados";
 import { formatearFechaHoraEnZona, rangoUltimas24Horas, type RangoFechas } from "../utils/fechas";
@@ -20,6 +21,7 @@ interface UbicacionItem {
 }
 
 interface MedicionItem {
+  id_calculado?: number | null;
   id_registro: number;
   fch_hr: string;
   ubicacion_nombre: string;
@@ -65,12 +67,13 @@ function construirQuery(
 }
 
 export default function ConsultaDatos() {
+  const [calculoAbierto, setCalculoAbierto] = useState<number | null>(null);
   const { nombreCompleto, rol, logout, zonaHoraria } = useAuth();
 
   // Los enlaces desde una ficha conservan tanto el proyecto como el equipo.
   const [searchParams, setSearchParams] = useSearchParams();
   const idsEnlace = searchParams.getAll("dispositivo_ids").join(",");
-  const filtroDispositivos = useMemo(() => [...new Set(idsEnlace.split(",").map(Number).filter(id => Number.isInteger(id) && id > 0))], [idsEnlace]);
+  const filtroDispositivos = useMemo(() => [...new Set(idsEnlace.split(",").map(Number).filter(id => Number.isInteger(id) && id !== 0))], [idsEnlace]);
   const [seleccionDispositivos, setSeleccionDispositivos] = useState<number[]>(filtroDispositivos);
   const [dispositivos, setDispositivos] = useState<DispositivoItem[]>([]);
   const [errorCatalogos, setErrorCatalogos] = useState("");
@@ -131,7 +134,8 @@ export default function ConsultaDatos() {
       listarTodasLasPaginas<DispositivoItem>("/dispositivos", {}, controller.signal),
     ]).then(([catalogo, equipos]) => {
       if (controller.signal.aborted) return;
-      setParametros(catalogo.items); setDispositivos(equipos); setErrorCatalogos("");
+      const puntosCalculados = [...new Set(catalogo.items.filter(p => p.id_prmtr < 0).flatMap(p => p.fuentes?.map(f => f.ubicacion_id) ?? []))];
+      setParametros(catalogo.items); setDispositivos([...equipos, ...puntosCalculados.map(p => ({ id_dspstv: -p, id_ubccn: p, nmbr: "Cálculos del punto" }))]); setErrorCatalogos("");
     }).catch(() => { if (!controller.signal.aborted) setErrorCatalogos("No se pudieron cargar los parámetros o los equipos disponibles."); })
       .finally(() => { if (!controller.signal.aborted) setCargandoCatalogos(false); });
 
@@ -317,6 +321,7 @@ export default function ConsultaDatos() {
   return (
     <div className="font-sans">
       <div className="flex h-screen bg-transparent transition-colors duration-300 overflow-hidden">
+        {calculoAbierto !== null && <ConsultaCalculo key={calculoAbierto} id={calculoAbierto} onCerrar={() => setCalculoAbierto(null)} />}
         <Sidebar onLogout={logout} activo="consulta-datos" rol={rol} />
 
         <div className="flex-1 flex flex-col overflow-hidden">
@@ -433,7 +438,7 @@ export default function ConsultaDatos() {
                           key={`${m.id_registro}-${indice}`}
                           className="bg-white/25 dark:bg-white/[0.02] backdrop-blur-sm border-b border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
                         >
-                          <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">{m.parametro_nombre}</td>
+                          <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">{m.parametro_nombre}{m.id_calculado && <button type="button" className="ml-2 text-xs underline" onClick={() => setCalculoAbierto(m.id_calculado!)}>Ver fórmula y fuentes</button>}</td>
                           <td className="px-6 py-4">{m.ubicacion_nombre}</td>
                           <td className="px-6 py-4">{m.dispositivo_nombre}</td>
                           <td className="px-6 py-4">

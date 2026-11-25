@@ -693,6 +693,8 @@ class MedicionListItem(BaseModel):
     podía agrupar series por ubicación y mezclaba las lecturas de
     dataloggers distintos en una sola línea."""
 
+    origen: str = "telemetria"
+    id_calculado: int | None = None
     id_registro: int
     fch_hr: datetime
     id_ubccn: int

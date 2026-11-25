@@ -2,6 +2,7 @@ import KpisAmpliados from "../components/KpisAmpliados";
 import { acotarZoom, crearActualizadorSerial, type CambioRangoGrafico } from "./actualizacionGraficos";
 import { NOMBRES_VISTA, VISTAS_SERIE, type VistaSerie } from "../components/configuracionSerieUtils";
 import ComparacionDataloggers from "../components/ComparacionDataloggers";
+import ConsultaCalculo from "../components/ConsultaCalculo";
 import { agruparSeriesComparables, nombreFuente, colorDatalogger, type FuenteSerie, type SerieTelemetria, type DatosSerie } from "./seriesTelemetria";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -36,6 +37,7 @@ import type { RangoFechas } from "../utils/fechas";
  * anterior al rango. La reducción de puntos solo afecta al dibujo. */
 
 export default function Graficos() {
+  const [calculoAbierto, setCalculoAbierto] = useState<number | null>(null);
   const { nombreCompleto, rol, logout, zonaHoraria } = useAuth();
 
   // HU17 CA4: ubicación preseleccionada por query param. Se lee con
@@ -65,7 +67,7 @@ export default function Graficos() {
   // paso-. Sin selección de dispositivos = "todos los de esa ubicación".
   const [dispositivos, setDispositivos] = useState<DispositivoItem[]>([]);
   const idsEnlace = searchParams.getAll("dispositivo_ids").join(",");
-  const dispositivosSeleccionados = useMemo(() => [...new Set(idsEnlace.split(",").map(Number).filter(id => Number.isInteger(id) && id > 0))], [idsEnlace]);
+  const dispositivosSeleccionados = useMemo(() => [...new Set(idsEnlace.split(",").map(Number).filter(id => Number.isInteger(id) && id !== 0))], [idsEnlace]);
   const [errorParametros, setErrorParametros] = useState("");
   const [errorProyectos, setErrorProyectos] = useState("");
   const [errorDispositivos, setErrorDispositivos] = useState("");
@@ -141,7 +143,7 @@ export default function Graficos() {
     });
     if (!ubicacionIdValida) return () => controlador.abort();
     listarTodasLasPaginas<DispositivoItem>("/dispositivos", { id_ubccn: ubicacionId as number }, controlador.signal)
-      .then(items => { if (!controlador.signal.aborted) setDispositivos(items); })
+      .then(items => { if (!controlador.signal.aborted) setDispositivos([...items, { id_dspstv: -(ubicacionId as number), ubicacion_nombre: "Punto seleccionado", nmbr: "Cálculos del punto" }]); })
       .catch(() => { if (!controlador.signal.aborted) setErrorDispositivos("No se pudieron cargar todos los dataloggers."); });
     return () => controlador.abort();
   }, [ubicacionIdValida, ubicacionId, revisionCatalogos]);
@@ -279,6 +281,7 @@ export default function Graficos() {
   return (
     <div className="font-sans">
       <div className="flex h-screen bg-transparent transition-colors duration-300 overflow-hidden">
+        {calculoAbierto !== null && <ConsultaCalculo key={calculoAbierto} id={calculoAbierto} onCerrar={() => setCalculoAbierto(null)} />}
         <Sidebar onLogout={logout} activo="graficos" rol={rol} />
 
         <div className="flex-1 flex flex-col overflow-hidden">
@@ -402,6 +405,7 @@ export default function Graficos() {
               {ubicacionIdValida && (
                 <div className="mt-6 pt-6 border-t border-black/10 dark:border-white/10">
                   <SelectorRangoFechasTimeline controlRef={controlTimeline} zonaHoraria={zonaHoraria} onCambiarRango={cambiarRango} />
+                  <div className="mt-4 flex flex-wrap gap-3">{parametrosGraficables.filter(p => p.id_prmtr < 0 && parametrosSeleccionados.includes(p.id_prmtr)).map(p => <button type="button" key={p.id_prmtr} className="text-sm text-gray-700 underline dark:text-gray-200" onClick={() => setCalculoAbierto(-p.id_prmtr)}>Ver fórmula y fuentes de {p.nmbr}</button>)}</div>
                 </div>
               )}
             </div>

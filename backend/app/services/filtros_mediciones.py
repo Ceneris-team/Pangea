@@ -7,19 +7,28 @@ from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError, model_validator
 from sqlalchemy import and_, or_
 
-from app.models import Dispositivo, MapeoColumna, MapeoFormato, Parametro, Telemetria
+from app.models import (
+    Dispositivo,
+    MapeoColumna,
+    MapeoFormato,
+    Parametro,
+    ResultadoCalculo,
+    Telemetria,
+)
 
 
 class CondicionParametro(BaseModel):
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
 
-    parametro_id: int = Field(gt=0)
+    parametro_id: int
     minimo: Decimal | None = None
     maximo: Decimal | None = None
     modo: Literal["dentro", "fuera"] = "dentro"
 
     @model_validator(mode="after")
     def validar_rango(self):
+        if self.parametro_id == 0:
+            raise ValueError("Selecciona un parámetro válido")
         if self.minimo is None and self.maximo is None:
             raise ValueError("Introduce al menos un límite para cada condición")
         if self.minimo is not None and self.maximo is not None and self.minimo > self.maximo:
@@ -68,7 +77,7 @@ def admite_rango(parametro, visualizacion):
     return parametro.tipo_dato == "numerico" and significado != "estado"
 
 
-def validar_contexto(db, condiciones, ids_dispositivos, parametro_ids=None):
+def validar_contexto(db, condiciones, ids_dispositivos, parametro_ids=None, puntos_calculados=None):
     if not condiciones:
         return
     elegibles = {}
@@ -76,6 +85,20 @@ def validar_contexto(db, condiciones, ids_dispositivos, parametro_ids=None):
         elegibles[parametro.id_prmtr] = elegibles.get(parametro.id_prmtr, True) and admite_rango(
             parametro, visualizacion
         )
+    from app.services.consulta_calculos import catalogo_calculados
+
+    puntos = (
+        puntos_calculados
+        if puntos_calculados is not None
+        else [
+            id_
+            for (id_,) in db.query(Dispositivo.id_ubccn)
+            .filter(Dispositivo.id_dspstv.in_(ids_dispositivos))
+            .distinct()
+        ]
+    )
+    for p in catalogo_calculados(db, puntos):
+        elegibles[p["id_prmtr"]] = True
     if any(
         not elegibles.get(c.parametro_id, False)
         or (parametro_ids and c.parametro_id not in parametro_ids)
@@ -88,7 +111,7 @@ def validar_contexto(db, condiciones, ids_dispositivos, parametro_ids=None):
 
 
 def aplicar_condiciones(query, modelo, condiciones):
-    if not condiciones or modelo is not Telemetria:
+    if not condiciones or modelo not in (Telemetria, ResultadoCalculo):
         return query
     ramas = [modelo.id_prmtr.notin_([c.parametro_id for c in condiciones])]
     for condicion in condiciones:

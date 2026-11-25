@@ -231,19 +231,22 @@ def test_listado_filtros_contexto_y_recuperacion(entorno_calculados, ancho, tmp_
             formula = crear.get_by_role("textbox", name="Fórmula", exact=True)
             expect(formula).to_have_value("[Nivel de entrada]")
             formula.fill("[Nivel de entrada] +")
-            crear.get_by_role("textbox", name="Unidad de medida", exact=True).fill("m")
+            crear.get_by_label("Unidad de medida", exact=True).fill("m")
             crear.get_by_role("combobox", name="Estado de la definición", exact=True).select_option(
                 "Inactivo"
             )
-            crear.get_by_role("button", name="Guardar definición", exact=True).click()
+            expect(crear.get_by_role("button", name="Guardar", exact=True)).to_be_disabled()
+            crear.get_by_role("button", name="Validar fórmula", exact=True).click()
             expect(crear.get_by_role("alert")).to_contain_text("Revisa la fórmula")
             formula.fill("[Nivel de entrada] - [Nivel de salida]")
             crear.get_by_role("textbox", name="Descripción (opcional)").fill("Balance operativo")
+            crear.get_by_role("button", name="Validar fórmula", exact=True).click()
+            expect(crear.get_by_role("status")).to_have_text("Fórmula válida")
             crear.screenshot(path=str(tmp_path / f"calculados-registro-{ancho}.png"))
-            crear.get_by_role("button", name="Guardar definición", exact=True).click()
+            crear.get_by_role("button", name="Guardar", exact=True).click()
             expect(crear).to_have_count(0)
             expect(
-                pagina.get_by_role("status").filter(has_text="Definición registrada")
+                pagina.get_by_role("status").filter(has_text="Parámetro calculado añadido correctamente")
             ).to_be_visible()
             expect(buscar).to_have_value("Balance")
             expect(filtro_estado).to_have_value("Activo")
@@ -260,6 +263,9 @@ def test_listado_filtros_contexto_y_recuperacion(entorno_calculados, ancho, tmp_
             )
 
             # Ausencia real de configuraciones conserva la entrada al registro.
+            from app.models import DependenciaCalculo, TrabajoCalculo
+            e["db"].query(DependenciaCalculo).delete()
+            e["db"].query(TrabajoCalculo).delete()
             e["db"].query(ParametroCalculado).delete()
             e["db"].flush()
             limpiar.click()

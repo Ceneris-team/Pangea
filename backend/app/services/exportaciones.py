@@ -10,13 +10,15 @@ from zoneinfo import ZoneInfo
 from fastapi import HTTPException
 from openpyxl import Workbook
 from openpyxl.cell import WriteOnlyCell
-from sqlalchemy import func, text
+from sqlalchemy import func, literal, text
 
 from app.models import (
     Dispositivo,
     EventoTexto,
     Exportacion,
     Parametro,
+    ParametroCalculado,
+    ResultadoCalculo,
     Sede,
     Telemetria,
     Ubicacion,
@@ -77,11 +79,16 @@ def validar_solicitud(db, usuario, body: ExportacionCrear):
             )
         }
         if validos != set(body.dispositivo_ids):
-            raise HTTPException(403, "No tienes acceso a todos los dispositivos solicitados")
+            validos |= {-p for p in solicitadas}
+            if not set(body.dispositivo_ids) <= validos:
+                raise HTTPException(403, "No tienes acceso a todos los dispositivos solicitados")
     equipos = db.query(Dispositivo.id_dspstv).filter(Dispositivo.id_ubccn.in_(solicitadas))
     if body.dispositivo_ids:
         equipos = equipos.filter(Dispositivo.id_dspstv.in_(body.dispositivo_ids))
-    validar_contexto(db, body.condiciones, equipos, body.parametro_ids)
+    puntos_calculados = [
+        p for p in solicitadas if not body.dispositivo_ids or -p in body.dispositivo_ids
+    ]
+    validar_contexto(db, body.condiciones, equipos, body.parametro_ids, puntos_calculados)
     filtros = body.model_dump(mode="json", exclude={"formato"})
     filtros.update(
         ubicacion_ids=sorted(solicitadas),
@@ -138,7 +145,8 @@ def revalidar_acceso(db, exportacion):
                 Dispositivo.id_ubccn.in_(filtros["ubicacion_ids"]),
             )
         }
-        if ids != set(filtros["dispositivo_ids"]):
+        ids |= {-p for p in filtros["ubicacion_ids"]}
+        if not set(filtros["dispositivo_ids"]) <= ids:
             raise HTTPException(403, "El alcance del dispositivo cambió")
     return cuenta
 
@@ -164,40 +172,68 @@ def obtener_propia(db, id_exportacion, usuario):
 def _lecturas(db, modelo, filtros, lote):
     from app.models import Cliente
 
-    id_lectura = modelo.id_lctr if modelo is Telemetria else modelo.id_evnt
-    query = (
-        db.query(
-            modelo.fch_hr,
-            id_lectura,
-            Cliente.rzn_scl,
-            Sede.nmbr,
-            Ubicacion.nmbr,
-            Dispositivo.id_dspstv,
-            Dispositivo.nmbr,
-            Parametro.id_prmtr,
-            Parametro.nmbr,
-            Parametro.undd,
-            modelo.vlr,
+    id_lectura = modelo.id_evnt if modelo is EventoTexto else modelo.id_lctr
+    if modelo is ResultadoCalculo:
+        query = (
+            db.query(
+                modelo.fch_hr,
+                id_lectura,
+                Cliente.rzn_scl,
+                Sede.nmbr,
+                Ubicacion.nmbr,
+                modelo.id_dspstv,
+                literal("Cálculo del punto"),
+                modelo.id_prmtr,
+                ParametroCalculado.nmbr,
+                ParametroCalculado.undd,
+                modelo.vlr,
+            )
+            .select_from(modelo)
+            .join(Ubicacion, Ubicacion.id_ubccn == modelo.id_ubccn)
+            .join(Sede, Sede.id_sd == Ubicacion.id_sd)
+            .join(Cliente, Cliente.id_clnt == Sede.id_clnt)
+            .join(ParametroCalculado, ParametroCalculado.id_prm_clc == modelo.id_prm_clc)
+            .filter(
+                modelo.id_ubccn.in_(filtros["ubicacion_ids"]),
+                modelo.estado == "Calculado",
+                modelo.fch_hr >= dt.datetime.fromisoformat(filtros["fecha_inicio"]),
+                modelo.fch_hr <= dt.datetime.fromisoformat(filtros["fecha_fin"]),
+            )
         )
-        .select_from(modelo)
-        .join(Dispositivo, Dispositivo.id_dspstv == modelo.id_dspstv)
-        .join(Ubicacion, Ubicacion.id_ubccn == Dispositivo.id_ubccn)
-        .join(Sede, Sede.id_sd == Ubicacion.id_sd)
-        .join(Cliente, Cliente.id_clnt == Sede.id_clnt)
-        .join(Parametro, Parametro.id_prmtr == modelo.id_prmtr)
-        .filter(
-            Dispositivo.id_ubccn.in_(filtros["ubicacion_ids"]),
-            modelo.fch_hr >= dt.datetime.fromisoformat(filtros["fecha_inicio"]),
-            modelo.fch_hr <= dt.datetime.fromisoformat(filtros["fecha_fin"]),
+    else:
+        query = (
+            db.query(
+                modelo.fch_hr,
+                id_lectura,
+                Cliente.rzn_scl,
+                Sede.nmbr,
+                Ubicacion.nmbr,
+                Dispositivo.id_dspstv,
+                Dispositivo.nmbr,
+                Parametro.id_prmtr,
+                Parametro.nmbr,
+                Parametro.undd,
+                modelo.vlr,
+            )
+            .select_from(modelo)
+            .join(Dispositivo, Dispositivo.id_dspstv == modelo.id_dspstv)
+            .join(Ubicacion, Ubicacion.id_ubccn == Dispositivo.id_ubccn)
+            .join(Sede, Sede.id_sd == Ubicacion.id_sd)
+            .join(Cliente, Cliente.id_clnt == Sede.id_clnt)
+            .join(Parametro, Parametro.id_prmtr == modelo.id_prmtr)
+            .filter(
+                Dispositivo.id_ubccn.in_(filtros["ubicacion_ids"]),
+                modelo.fch_hr >= dt.datetime.fromisoformat(filtros["fecha_inicio"]),
+                modelo.fch_hr <= dt.datetime.fromisoformat(filtros["fecha_fin"]),
+            )
         )
-    )
     for campo, columna in (
         ("dispositivo_ids", modelo.id_dspstv),
         ("parametro_ids", modelo.id_prmtr),
     ):
         if filtros[campo]:
             query = query.filter(columna.in_(filtros[campo]))
-    if modelo is Telemetria:
+    if modelo in (Telemetria, ResultadoCalculo):
         if filtros["valor_min"] is not None:
             query = query.filter(modelo.vlr >= Decimal(filtros["valor_min"]))
         if filtros["valor_max"] is not None:
@@ -233,9 +269,12 @@ def generar_archivo(db, exportacion, destino):
     db.execute(text("SET LOCAL statement_timeout = '300000'"))
     numericas = _lecturas(db, Telemetria, exportacion.fltrs_aplcds, config["lote"])
     eventos = _lecturas(db, EventoTexto, exportacion.fltrs_aplcds, config["lote"])
+    calculadas = _lecturas(db, ResultadoCalculo, exportacion.fltrs_aplcds, config["lote"])
+    iteradores = [iter(numericas), iter(eventos), iter(calculadas)]
     fuentes = (
-        ((fila, "numerico") for fila in numericas),
-        ((fila, "texto") for fila in eventos),
+        ((fila, "numerico") for fila in iteradores[0]),
+        ((fila, "texto") for fila in iteradores[1]),
+        ((fila, "calculado") for fila in iteradores[2]),
     )
     filas = heapq.merge(*fuentes, key=lambda item: (item[0][0], item[1], item[0][1]))
     zona = ZoneInfo(exportacion.fltrs_aplcds["zona_horaria"])
@@ -304,6 +343,15 @@ def generar_archivo(db, exportacion, destino):
         if libro:
             libro.save(destino)
     finally:
+        # Cerrar los cursores antes de que el llamador revierta la transacción
+        # si se excede un límite o falla la escritura del archivo.
+        filas.close()
+        for fuente in fuentes:
+            fuente.close()
+        for iterador in iteradores:
+            cerrar = getattr(iterador, "close", None)
+            if cerrar:
+                cerrar()
         if archivo_csv:
             archivo_csv.close()
         if libro:

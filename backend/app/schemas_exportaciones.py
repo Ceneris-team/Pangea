@@ -36,12 +36,12 @@ class ExportacionCrear(BaseModel):
             and self.valor_min > self.valor_max
         ):
             raise ValueError("El valor mínimo no puede superar al máximo")
-        if any(
-            id_ <= 0
-            for ids in (self.ubicacion_ids, self.dispositivo_ids, self.parametro_ids)
-            for id_ in ids
+        if any(id_ <= 0 for id_ in self.ubicacion_ids) or any(
+            id_ == 0 for ids in (self.dispositivo_ids, self.parametro_ids) for id_ in ids
         ):
-            raise ValueError("Los identificadores deben ser positivos")
+            raise ValueError(
+                "Los identificadores no pueden ser cero y las ubicaciones deben ser positivas"
+            )
         return self
 
 
