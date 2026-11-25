@@ -107,6 +107,7 @@ def guardar_lecturas(
     omitidas_sin_valor = 0
     parametros_desconocidos = set()
     fechas_numericas = []
+    lecturas_nuevas = []
     # HU17 CA3: {nombre_parametro: (valor, fecha_hora)} con la lectura más
     # reciente de cada parámetro vista en este archivo.
     ultimos_por_parametro: dict = {}
@@ -145,6 +146,7 @@ def guardar_lecturas(
         if identidad in existentes:
             continue
         existentes.add(identidad)
+        lecturas_nuevas.append(lectura)
 
         if isinstance(lectura.valor, str):
             db.add(
@@ -226,7 +228,9 @@ def guardar_lecturas(
     # aparece otro llamador de guardar_lecturas() que no sea la tarea de
     # Celery actual.
     if guardadas:
-        evaluar_alarmas(db, lecturas=lecturas, dispositivo=dispositivo, id_sd=ubicacion.id_sd)
+        evaluar_alarmas(
+            db, lecturas=lecturas_nuevas, dispositivo=dispositivo, id_sd=ubicacion.id_sd
+        )
         invalidar_por_lectura(id_sd=ubicacion.id_sd, id_ubccn=dispositivo.id_ubccn)
 
     return ResultadoPersistencia(

@@ -475,7 +475,7 @@ class TestRegistrosArchivoIngesta:
         archivo = crear_archivo(db_session, conexion, nombre="H_ejemplo.dat", estd="Exitoso")
 
         dat_falso["H_ejemplo.dat"] = (
-            "Fecha,Nivel,Bateria\n" "2026-08-21 12:00:00,,0\n" "2026-08-21 12:05:00,12.5,11.8\n"
+            "Fecha,Nivel,Bateria\n2026-08-21 12:00:00,,0\n2026-08-21 12:05:00,12.5,11.8\n"
         )
 
         resp = client.get(f"/ingesta/cola/{archivo.id_archv}/registros")
@@ -572,9 +572,12 @@ def tecnico_editor(db_session, fabrica):
     Devuelve (sede, rol, usuario): usuario se agregó para HU31 -los tests
     de reintentar necesitan su id_usr para verificar que
     procesar_archivo_dat.delay() recibe id_usr_reintento correcto (ver
-    reintentos_encolados)."""
+    solicitudes_persistidas)."""
     rol = fabrica.rol("Técnico CENERIS")
     sede = fabrica.sede()
+    from tests.routers.test_alarmas import dar_suscripcion_vigente
+
+    dar_suscripcion_vigente(db_session, sede)
     usuario = fabrica.usuario(rol=rol)
     agregar_permiso(db_session, usuario, sede, "Ingesta", "Edición", rol)
     app.dependency_overrides[get_current_user] = lambda: usuario_jwt(
@@ -584,27 +587,21 @@ def tecnico_editor(db_session, fabrica):
 
 
 @pytest.fixture()
-def reintentos_encolados(monkeypatch):
-    """Spy sobre procesar_archivo_dat: lo que corresponde verificar acá es
-    que el endpoint reencola la task con el id correcto, no que el
-    pipeline corra de nuevo de punta a punta (eso ya lo cubren los tests
-    de app/tasks/ingesta.py)."""
-    llamadas = []
+def solicitudes_persistidas(db_session):
+    def consultar():
+        return [
+            {"id_archv": intento.id_archv, "id_usr_reintento": intento.id_usr}
+            for intento in db_session.query(IntentoProcesamiento).filter_by(rsltd="Pendiente").all()
+        ]
 
-    class TaskFalsa:
-        @staticmethod
-        def delay(**kwargs):
-            llamadas.append(kwargs)
-
-    monkeypatch.setattr("app.routers.ingesta.procesar_archivo_dat", TaskFalsa)
-    return llamadas
+    return consultar
 
 
 class TestReintentarArchivoIngesta:
     """HU31: reprocesamiento manual de un archivo Fallido."""
 
     def test_reencola_un_archivo_fallido(
-        self, client, db_session, tecnico_editor, reintentos_encolados
+        self, client, db_session, tecnico_editor, solicitudes_persistidas
     ):
         sede, _, usuario = tecnico_editor
         conexion = crear_conexion(db_session, sede)
@@ -620,11 +617,11 @@ class TestReintentarArchivoIngesta:
         assert resp.status_code == 200
         body = resp.json()
         assert body["estado"] == "En espera"
-        assert body["mnsj_errr"] is None
+        assert body["mnsj_errr"] == "dispositivo no resoluble"
         assert body["rgstrs_prcsds"] is None
         # HU31: el endpoint identifica quién pidió el reintento -ver
         # id_usr_reintento en app/tasks/ingesta.py::procesar_archivo_dat-.
-        assert reintentos_encolados == [
+        assert solicitudes_persistidas() == [
             {"id_archv": archivo.id_archv, "id_usr_reintento": usuario.id_usr}
         ]
 
@@ -669,7 +666,7 @@ class TestReintentarFallidosEnCantidad:
     sede del usuario en una sola llamada."""
 
     def test_reencola_todos_los_fallidos_de_la_sede(
-        self, client, db_session, tecnico_editor, reintentos_encolados
+        self, client, db_session, tecnico_editor, solicitudes_persistidas
     ):
         sede, _, usuario = tecnico_editor
         conexion = crear_conexion(db_session, sede)
@@ -681,12 +678,12 @@ class TestReintentarFallidosEnCantidad:
         assert resp.status_code == 200
         assert resp.json() == {"reencolados": 2}
 
-        ids_reencolados = {llamada["id_archv"] for llamada in reintentos_encolados}
+        ids_reencolados = {llamada["id_archv"] for llamada in solicitudes_persistidas()}
         assert ids_reencolados == {fallido_1.id_archv, fallido_2.id_archv}
         # HU31: TODAS las llamadas llevan el usuario que pidió el reintento
         # masivo, no solo la primera.
         assert all(
-            llamada["id_usr_reintento"] == usuario.id_usr for llamada in reintentos_encolados
+            llamada["id_usr_reintento"] == usuario.id_usr for llamada in solicitudes_persistidas()
         )
 
         db_session.refresh(fallido_1)
@@ -694,8 +691,8 @@ class TestReintentarFallidosEnCantidad:
         assert fallido_1.estd == "Pendiente"
         assert fallido_2.estd == "Pendiente"
 
-    def test_limpia_mensaje_de_error_y_metadata_de_procesamiento(
-        self, client, db_session, tecnico_editor, reintentos_encolados
+    def test_conserva_motivo_anterior_y_reinicia_metadata_de_procesamiento(
+        self, client, db_session, tecnico_editor, solicitudes_persistidas
     ):
         sede, _, _ = tecnico_editor
         conexion = crear_conexion(db_session, sede)
@@ -711,11 +708,11 @@ class TestReintentarFallidosEnCantidad:
 
         db_session.refresh(fallido)
         assert fallido.estd == "Pendiente"
-        assert fallido.mnsj_errr is None
+        assert fallido.mnsj_errr == "dispositivo no resoluble"
         assert fallido.rgstrs_prcsds is None
 
     def test_no_toca_archivos_en_otros_estados(
-        self, client, db_session, tecnico_editor, reintentos_encolados
+        self, client, db_session, tecnico_editor, solicitudes_persistidas
     ):
         sede, _, _ = tecnico_editor
         conexion = crear_conexion(db_session, sede)
@@ -724,7 +721,7 @@ class TestReintentarFallidosEnCantidad:
 
         resp = client.post("/ingesta/cola/reintentar-fallidos")
         assert resp.json() == {"reencolados": 0}
-        assert reintentos_encolados == []
+        assert solicitudes_persistidas() == []
 
         db_session.refresh(pendiente)
         db_session.refresh(exitoso)
@@ -732,15 +729,15 @@ class TestReintentarFallidosEnCantidad:
         assert exitoso.estd == "Exitoso"
 
     def test_sin_fallidos_devuelve_cero_sin_error(
-        self, client, db_session, tecnico_editor, reintentos_encolados
+        self, client, db_session, tecnico_editor, solicitudes_persistidas
     ):
         resp = client.post("/ingesta/cola/reintentar-fallidos")
         assert resp.status_code == 200
         assert resp.json() == {"reencolados": 0}
-        assert reintentos_encolados == []
+        assert solicitudes_persistidas() == []
 
     def test_no_reencola_fallidos_de_otra_sede(
-        self, client, db_session, tecnico_editor, reintentos_encolados, fabrica
+        self, client, db_session, tecnico_editor, solicitudes_persistidas, fabrica
     ):
         sede, _, _ = tecnico_editor
         crear_archivo(db_session, crear_conexion(db_session, sede), estd="Fallido")

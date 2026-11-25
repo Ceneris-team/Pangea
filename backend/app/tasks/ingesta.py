@@ -155,7 +155,12 @@ def interpretar_y_guardar(
 
 
 def _registrar_intento(
-    db, id_archv: int, resultado: str, mensaje_error: str | None, id_usr: int | None
+    db,
+    id_archv: int,
+    resultado: str,
+    mensaje_error: str | None,
+    id_usr: int | None,
+    inicio=None,
 ) -> None:
     """HU31: una fila en intnt_prcsmnt por cada intento TERMINADO de
     procesar_archivo_dat -éxito o fallo definitivo-, para poder mostrar el
@@ -186,10 +191,12 @@ def _registrar_intento(
     db.add(
         IntentoProcesamiento(
             id_archv=id_archv,
-            fch_intnt=dt.datetime.now(dt.timezone.utc),
+            fch_intnt=inicio or dt.datetime.now(dt.timezone.utc),
             rsltd=resultado,
             mnsj_errr=mensaje_error,
             id_usr=id_usr,
+            fch_inicio=inicio,
+            fch_fin=dt.datetime.now(dt.timezone.utc),
         )
     )
 
@@ -272,13 +279,12 @@ def procesar_archivo_dat(self, id_archv: int, id_usr_reintento: int | None = Non
     id_usr_reintento (HU31): quién pidió ESTE intento. None para el
     procesamiento automático -sondear_conexiones_ftp/
     reencolar_pendientes_atascados nunca lo pasan-; el id real cuando
-    routers/ingesta.py::reintentar_archivo_ingesta o
-    reintentar_fallidos_ingesta encolan la task tras un reintento manual
-    (ya tienen el usuario del JWT en ese punto). Se usa solo para poblar
-    intnt_prcsmnt.id_usr -ver _registrar_intento-, ninguna otra lógica del
-    pipeline depende de él.
+    clientes antiguos encolan la tarea tras un reintento manual. Las nuevas
+    solicitudes se ejecutan mediante tasks.reprocesos y su outbox durable.
+    Un mensaje manual antiguo tampoco puede sustituir un original faltante.
     """
     db = SessionLocal()
+    inicio = dt.datetime.now(dt.timezone.utc)
     try:
         archivo = db.query(ArchivoIngesta).filter_by(id_archv=id_archv).with_for_update().first()
         if archivo is None:
@@ -287,6 +293,18 @@ def procesar_archivo_dat(self, id_archv: int, id_usr_reintento: int | None = Non
 
         if archivo.estd == "Exitoso":
             return {"id_archv": id_archv, "estado": "Exitoso", "guardadas": 0}
+        if archivo.estd == "Fallido" and id_usr_reintento is None:
+            # Una entrega tardía no constituye una nueva solicitud manual.
+            return {"id_archv": id_archv, "estado": "Fallido", "guardadas": 0}
+        if (
+            db.query(IntentoProcesamiento.id_intnt)
+            .filter(
+                IntentoProcesamiento.id_archv == id_archv,
+                IntentoProcesamiento.rsltd.in_(("Pendiente", "Procesando")),
+            )
+            .first()
+        ):
+            return {"id_archv": id_archv, "estado": archivo.estd, "guardadas": 0}
         archivo.estd = "Procesando"
         db.commit()
         # Reserva de la copia original: dos entregas del mismo job no pueden
@@ -294,6 +312,15 @@ def procesar_archivo_dat(self, id_archv: int, id_usr_reintento: int | None = Non
         archivo = db.query(ArchivoIngesta).filter_by(id_archv=id_archv).with_for_update().first()
         if archivo.estd == "Exitoso":
             return {"id_archv": id_archv, "estado": "Exitoso", "guardadas": 0}
+        if (
+            db.query(IntentoProcesamiento.id_intnt)
+            .filter(
+                IntentoProcesamiento.id_archv == id_archv,
+                IntentoProcesamiento.rsltd.in_(("Pendiente", "Procesando")),
+            )
+            .first()
+        ):
+            return {"id_archv": id_archv, "estado": archivo.estd, "guardadas": 0}
 
         logger.info(
             "Procesando archivo .dat: id_archv=%s cnxn=%s archivo=%s",
@@ -313,6 +340,10 @@ def procesar_archivo_dat(self, id_archv: int, id_usr_reintento: int | None = Non
 
         datos = leer_original(archivo)
         if datos is None:
+            if id_usr_reintento is not None:
+                raise ErrorDatosNoRecuperable(
+                    "No existe una copia original conservada para este reproceso; requiere revisión técnica"
+                )
             datos = descargar_bytes_dat(cnxn, archivo.nmbr_archv)
             conservar_original(archivo, datos)
             # Confirmar el original antes del parseo: un rollback no lo pierde.
@@ -382,7 +413,7 @@ def procesar_archivo_dat(self, id_archv: int, id_usr_reintento: int | None = Non
                 f"fila {e.numero_fila}: {e.motivo}" for e in resultado_validacion.errores[:5]
             )
             archivo.mnsj_errr = resumen_errores[:500]
-        _registrar_intento(db, id_archv, archivo.estd, archivo.mnsj_errr, id_usr_reintento)
+        _registrar_intento(db, id_archv, archivo.estd, archivo.mnsj_errr, id_usr_reintento, inicio)
         db.commit()
 
         # HU17 CA3: la lectura ya está PERSISTIDA Y CONFIRMADA (el commit
@@ -427,7 +458,9 @@ def procesar_archivo_dat(self, id_archv: int, id_usr_reintento: int | None = Non
         if archivo is not None:
             archivo.estd = "Fallido"
             archivo.mnsj_errr = str(exc)[:500]
-            _registrar_intento(db, id_archv, archivo.estd, archivo.mnsj_errr, id_usr_reintento)
+            _registrar_intento(
+                db, id_archv, archivo.estd, archivo.mnsj_errr, id_usr_reintento, inicio
+            )
             db.commit()
         logger.error("archv_ingst id=%s marcado Fallido (error no recuperable): %s", id_archv, exc)
         return {"id_archv": id_archv, "estado": "Fallido"}
@@ -451,7 +484,9 @@ def procesar_archivo_dat(self, id_archv: int, id_usr_reintento: int | None = Non
             if archivo is not None:
                 archivo.estd = "Fallido"
                 archivo.mnsj_errr = str(exc)[:500]
-                _registrar_intento(db, id_archv, archivo.estd, archivo.mnsj_errr, id_usr_reintento)
+                _registrar_intento(
+                    db, id_archv, archivo.estd, archivo.mnsj_errr, id_usr_reintento, inicio
+                )
                 db.commit()
             logger.error(
                 "archv_ingst id=%s marcado Fallido (%s): %s",
@@ -615,7 +650,16 @@ def reencolar_pendientes_atascados() -> dict:
         limite = dt.datetime.now(dt.timezone.utc) - dt.timedelta(minutes=MINUTOS_PENDIENTE_ATASCADO)
         atascados = (
             db.query(ArchivoIngesta)
-            .filter(ArchivoIngesta.estd == "Pendiente", ArchivoIngesta.fch_dtccn < limite)
+            .filter(
+                ArchivoIngesta.estd == "Pendiente",
+                ArchivoIngesta.fch_dtccn < limite,
+                ~db.query(IntentoProcesamiento.id_intnt)
+                .filter(
+                    IntentoProcesamiento.id_archv == ArchivoIngesta.id_archv,
+                    IntentoProcesamiento.rsltd.in_(("Pendiente", "Procesando")),
+                )
+                .exists(),
+            )
             .order_by(ArchivoIngesta.fch_dtccn.asc())
             .all()
         )

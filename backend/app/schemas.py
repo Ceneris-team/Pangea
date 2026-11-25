@@ -601,6 +601,7 @@ class ArchivoIngestaListItem(BaseModel):
     datalogger_nombre: str
     fch_dtccn: datetime
     estado: str
+    mnsj_errr: str | None = None
 
 
 class ArchivoIngestaDetalle(BaseModel):
@@ -614,6 +615,7 @@ class ArchivoIngestaDetalle(BaseModel):
     fch_prcsd: datetime | None
     rgstrs_prcsds: int | None
     mnsj_errr: str | None
+    puede_reprocesar: bool = False
 
 
 class IntentoProcesamientoListItem(BaseModel):
@@ -628,12 +630,14 @@ class IntentoProcesamientoListItem(BaseModel):
     mnsj_errr: str | None
     id_usr: int | None
     usuario_nombre: str | None
+    fch_inicio: datetime | None = None
+    fch_fin: datetime | None = None
+    reintentos: int = 0
+    registros_guardados: int | None = None
 
 
 class ReintentoMasivoResponse(BaseModel):
-    """Reintento masivo de todos los archivos Fallido de la sede del
-    usuario (extensión de HU31 a "en cantidad", ver
-    reintentar_fallidos_ingesta en routers/ingesta.py)."""
+    """Solicitudes durables aceptadas dentro del contexto y filtros indicados."""
 
     reencolados: int
 

@@ -16,6 +16,7 @@ celery_app = Celery(
     include=[
         "app.tasks.ping",
         "app.tasks.ingesta",
+        "app.tasks.reprocesos",
         "app.tasks.notificaciones",
         "app.tasks.particiones",
         "app.tasks.suscripciones",
@@ -75,6 +76,10 @@ celery_app.conf.update(
 # posible, así que ninguna frcnc_mnts configurada por debajo de eso puede
 # cumplirse igual.
 celery_app.conf.beat_schedule = {
+    "despachar-reprocesos-cada-5-segundos": {
+        "task": "app.tasks.reprocesos.despachar_pendientes",
+        "schedule": 5.0,
+    },
     "procesar-calculos-cada-5-segundos": {
         "task": "app.tasks.calculos.procesar_pendientes",
         "schedule": 5.0,

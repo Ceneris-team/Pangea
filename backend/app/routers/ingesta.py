@@ -8,13 +8,13 @@ en vez de consultar celery.control.inspect(): así el conteo refleja también
 los jobs que un receptor FTP ya registró como 'Pendiente' pero que ningún
 worker ha tomado todavía, que es justo el caso que se quiere monitorear.
 
-CA1-CA3 (listado, filtro y detalle de la cola) se agregan más abajo en
-este mismo router: comparten módulo de permisos ('Ingesta') y tabla base
-(archv_ingst) con /metricas, que no se toca.
+Listado, métricas, detalle y reprocesos comparten permisos y alcance por
+empresa/proyecto. Las solicitudes de HU31 se guardan antes de su despacho.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import func
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -28,13 +28,19 @@ from app.schemas import (
     RegistrosIngestaResponse,
     ReintentoMasivoResponse,
 )
-from app.security.entorno import filtrar_sedes
-from app.security.permisos import EDICION, LECTURA, require_permiso, verificar_sede
+from app.security.entorno import (
+    ROLES_CENERIS,
+    filtrar_proyectos,
+    filtrar_sedes,
+    permiso_del_entorno,
+)
+from app.security.permisos import EDICION, LECTURA, require_permiso, tiene_permiso, verificar_sede
 from app.services.ingesta.mapeo import MapeoNoEncontradoError, resolver_formato
 from app.services.ingesta.originales import dispositivo_del_archivo, leer_original
 from app.services.ingesta.parser import parsear_dat
 from app.services.ingesta.persistencia import DispositivoNoResueltoError
-from app.tasks.ingesta import normalizar_contenido_dat, procesar_archivo_dat
+from app.services.ingesta.reprocesos import solicitar
+from app.tasks.ingesta import normalizar_contenido_dat
 
 router = APIRouter(prefix="/ingesta", tags=["Ingesta"])
 
@@ -55,6 +61,55 @@ ESTADO_BD_A_NEGOCIO = {
 ESTADO_NEGOCIO_A_BD = {negocio: bd for bd, negocio in ESTADO_BD_A_NEGOCIO.items()}
 
 POR_PAGINA_DEFAULT = 10  # CA1: "pagina de 10 registros por defecto"
+
+
+def _filtrar_cola(query, db, usuario):
+    query = filtrar_sedes(query, ConexionFTP.id_sd, db, usuario)
+    if usuario.get("proyecto_id") is not None or usuario.get("scope") == "por_cliente":
+        equipos = filtrar_proyectos(
+            db.query(Dispositivo.id_dspstv), Dispositivo.id_ubccn, db, usuario
+        )
+        query = query.filter(ArchivoIngesta.id_dspstv.in_(equipos))
+    return query
+
+
+def _puede_reprocesar(db, usuario):
+    if usuario.get("rol") not in ROLES_CENERIS:
+        return False
+    permiso = permiso_del_entorno(db, usuario, "Ingesta", EDICION)
+    return (
+        permiso
+        if permiso is not None
+        else tiene_permiso(db, int(usuario["sub"]), usuario.get("sede_id"), "Ingesta", EDICION)
+    )
+
+
+def _exigir_rol(usuario):
+    if usuario.get("rol") not in ROLES_CENERIS:
+        raise HTTPException(403, "Solo Técnico CENERIS y Administrador pueden reprocesar archivos")
+
+
+def _confirmar_solicitudes(db):
+    try:
+        db.commit()
+    except SQLAlchemyError as exc:
+        db.rollback()
+        raise HTTPException(
+            503, "No se pudo guardar la solicitud de reproceso. Vuelve a intentarlo."
+        ) from exc
+
+
+def _verificar_archivo(db, usuario, archivo, accion=LECTURA):
+    conexion = db.get(ConexionFTP, archivo.id_cnxn)
+    verificar_sede(usuario, conexion.id_sd, db, modulo="Ingesta", accion=accion)
+    if usuario.get("proyecto_id") is not None or usuario.get("scope") == "por_cliente":
+        visible = (
+            _filtrar_cola(db.query(ArchivoIngesta.id_archv).join(ConexionFTP), db, usuario)
+            .filter(ArchivoIngesta.id_archv == archivo.id_archv)
+            .first()
+        )
+        if visible is None:
+            raise HTTPException(403, "El archivo no pertenece al proyecto autorizado")
 
 
 def _validar_estado_negocio(estado: str) -> str:
@@ -98,7 +153,7 @@ def metricas_cola_ingesta(
         ConexionFTP, ConexionFTP.id_cnxn == ArchivoIngesta.id_cnxn
     )
     conteos = dict(
-        filtrar_sedes(query, ConexionFTP.id_sd, db, usuario)
+        _filtrar_cola(query, db, usuario)
         .filter(ArchivoIngesta.estd.in_(ESTADOS))
         .group_by(ArchivoIngesta.estd)
         .all()
@@ -129,7 +184,7 @@ def listar_dataloggers_cola(
     query = db.query(ArchivoIngesta.id_cnxn).join(
         ConexionFTP, ConexionFTP.id_cnxn == ArchivoIngesta.id_cnxn
     )
-    query = filtrar_sedes(query, ConexionFTP.id_sd, db, usuario)
+    query = _filtrar_cola(query, db, usuario)
 
     ids_cnxn = {id_cnxn for (id_cnxn,) in query.distinct().all()}
     dataloggers = dict(
@@ -173,7 +228,7 @@ def listar_cola_ingesta(
     # Aislamiento por sede (mismo criterio que el resto del módulo Ingesta,
     # ver routers/mapeos.py y HT-09 CA3): un usuario 'por_sede' solo ve los
     # archivos de conexiones FTP de su propia sede.
-    query = filtrar_sedes(query, ConexionFTP.id_sd, db, usuario)
+    query = _filtrar_cola(query, db, usuario)
 
     if estado is not None:
         query = query.filter(ArchivoIngesta.estd == _validar_estado_negocio(estado))
@@ -185,7 +240,7 @@ def listar_cola_ingesta(
 
     total = query.count()
     archivos = (
-        query.order_by(ArchivoIngesta.fch_dtccn.desc())
+        query.order_by(ArchivoIngesta.fch_dtccn.desc(), ArchivoIngesta.id_archv.desc())
         .offset((pagina - 1) * por_pagina)
         .limit(por_pagina)
         .all()
@@ -199,61 +254,47 @@ def listar_cola_ingesta(
             datalogger_nombre=dataloggers.get(a.id_archv, "Desconocido"),
             fch_dtccn=a.fch_dtccn,
             estado=ESTADO_BD_A_NEGOCIO.get(a.estd, a.estd),
+            mnsj_errr=a.mnsj_errr,
         )
         for a in archivos
     ]
-    return {"total": total, "pagina": pagina, "por_pagina": por_pagina, "items": items}
+    fallidos = query.filter(ArchivoIngesta.estd == "Fallido").count()
+    return {
+        "total": total,
+        "pagina": pagina,
+        "por_pagina": por_pagina,
+        "items": items,
+        "fallidos": fallidos,
+        "puede_reprocesar": _puede_reprocesar(db, usuario),
+    }
 
 
 @router.post("/cola/reintentar-fallidos", response_model=ReintentoMasivoResponse)
 def reintentar_fallidos_ingesta(
+    id_cnxn: int | None = Query(default=None, gt=0),
+    id_dspstv: int | None = Query(default=None, gt=0),
+    estado: str | None = Query(default=None),
     db: Session = Depends(get_db),
     usuario: dict = Depends(require_permiso("Ingesta", EDICION)),
 ):
-    """Extensión de HU31 "en cantidad": reencola TODOS los archivos
-    Fallido visibles para el usuario, no solo uno a la vez.
-
-    Se declara ANTES de GET /cola/{id_archv} (mismo motivo que
-    /dispositivos/mapa en routers/dispositivos.py): si fuera después, esa
-    ruta capturaría "reintentar-fallidos" como si fuera un id_archv y
-    respondería 422.
-
-    Alcance: TODOS los Fallido de la sede del usuario (aislamiento HT-09
-    CA3, igual que listar_cola_ingesta), sin importar qué filtro de
-    estado/datalogger tenga puesta la vista en ese momento -así el botón
-    "Reintentar todos" siempre hace lo mismo, sin depender de qué esté
-    filtrado en pantalla. Un scope 'global' (sin sede_id) toca los
-    Fallido de todas las sedes, igual que el resto de la matriz de
-    permisos para ese scope.
-
-    Reusa exactamente la misma transición que reintentar_archivo_ingesta
-    (Fallido -> Pendiente, limpia mnsj_errr/fch_prcsd/rgstrs_prcsds) y
-    reencola cada uno con procesar_archivo_dat.delay(), uno por archivo:
-    es la misma operación liviana que ya hace HU31, solo repetida en un
-    bucle -no hay nada que paralelizar a mano porque cada .delay() ya es
-    async (Celery encola y devuelve al instante).
-    """
-    query = db.query(ArchivoIngesta).join(
-        ConexionFTP, ConexionFTP.id_cnxn == ArchivoIngesta.id_cnxn
-    )
-    query = filtrar_sedes(query, ConexionFTP.id_sd, db, usuario)
+    _exigir_rol(usuario)
+    if estado is not None and _validar_estado_negocio(estado) != "Fallido":
+        return ReintentoMasivoResponse(reencolados=0)
+    query = _filtrar_cola(db.query(ArchivoIngesta).join(ConexionFTP), db, usuario)
     query = query.filter(ArchivoIngesta.estd == "Fallido")
-
-    fallidos = query.all()
+    if id_cnxn is not None:
+        query = query.filter(ArchivoIngesta.id_cnxn == id_cnxn)
+    if id_dspstv is not None:
+        query = query.filter(ArchivoIngesta.id_dspstv == id_dspstv)
+    fallidos = (
+        query.order_by(ArchivoIngesta.id_archv)
+        .with_for_update(of=ArchivoIngesta, skip_locked=True)
+        .all()
+    )
     for archivo in fallidos:
-        archivo.estd = "Pendiente"
-        archivo.mnsj_errr = None
-        archivo.fch_prcsd = None
-        archivo.rgstrs_prcsds = None
-    db.commit()
-
-    # HU31: id_usr_reintento identifica en intnt_prcsmnt que este intento
-    # fue pedido a mano por este usuario, no el sondeo automático (que
-    # nunca pasa este argumento, ver app/tasks/ingesta.py).
-    id_usr = int(usuario["sub"])
-    for archivo in fallidos:
-        procesar_archivo_dat.delay(id_archv=archivo.id_archv, id_usr_reintento=id_usr)
-
+        _verificar_archivo(db, usuario, archivo, EDICION)
+        solicitar(db, archivo, int(usuario["sub"]))
+    _confirmar_solicitudes(db)
     return ReintentoMasivoResponse(reencolados=len(fallidos))
 
 
@@ -270,8 +311,7 @@ def detalle_archivo_ingesta(
     if archivo is None:
         raise HTTPException(status_code=404, detail="Archivo no encontrado")
 
-    conexion = db.get(ConexionFTP, archivo.id_cnxn)
-    verificar_sede(usuario, conexion.id_sd, db, modulo="Ingesta", accion=LECTURA)
+    _verificar_archivo(db, usuario, archivo)
 
     datalogger_nombre = _mapa_dataloggers(db, [archivo])[archivo.id_archv]
 
@@ -284,6 +324,7 @@ def detalle_archivo_ingesta(
         fch_prcsd=archivo.fch_prcsd,
         rgstrs_prcsds=archivo.rgstrs_prcsds,
         mnsj_errr=archivo.mnsj_errr,
+        puede_reprocesar=_puede_reprocesar(db, usuario),
     )
 
 
@@ -293,22 +334,16 @@ def intentos_archivo_ingesta(
     db: Session = Depends(get_db),
     usuario: dict = Depends(require_permiso("Ingesta", LECTURA)),
 ):
-    """HU31: historial de intentos de procesamiento de un archivo -uno por
-    cada vez que procesar_archivo_dat terminó de correr, automático o
-    manual (ver _registrar_intento en app/tasks/ingesta.py)-, más reciente
-    primero.
+    """Solicitudes pendientes, ejecuciones y resultados, más recientes primero.
 
-    rsltd viaja tal cual está en BD ('Exitoso'/'Fallido', mismo vocabulario
-    que archv_ingst.estd) sin pasar por ESTADO_BD_A_NEGOCIO: es un
-    historial técnico de intentos, no el estado actual del archivo que
-    CA1/CA3 de HU09 sí traducen a lenguaje de negocio.
+    Conserva cada ejecución anterior, incluidas interrupciones y errores
+    transitorios. Los registros antiguos no inventan una fecha de inicio.
     """
     archivo = db.query(ArchivoIngesta).filter(ArchivoIngesta.id_archv == id_archv).first()
     if archivo is None:
         raise HTTPException(status_code=404, detail="Archivo no encontrado")
 
-    conexion = db.get(ConexionFTP, archivo.id_cnxn)
-    verificar_sede(usuario, conexion.id_sd, db, modulo="Ingesta", accion=LECTURA)
+    _verificar_archivo(db, usuario, archivo)
 
     # id_usr es NULLABLE (intento automático), así que el nombre se trae
     # con un LEFT JOIN -un INNER perdería justo esas filas-, mismo patrón
@@ -329,6 +364,10 @@ def intentos_archivo_ingesta(
             mnsj_errr=intento.mnsj_errr,
             id_usr=intento.id_usr,
             usuario_nombre=nombre,
+            fch_inicio=intento.fch_inicio,
+            fch_fin=intento.fch_fin,
+            reintentos=intento.reintentos,
+            registros_guardados=intento.registros_guardados,
         )
         for intento, nombre in filas
     ]
@@ -346,9 +385,15 @@ def descargar_original_ingesta(
     archivo = db.get(ArchivoIngesta, id_archv)
     if archivo is None:
         raise HTTPException(404, "Archivo no encontrado")
-    conexion = db.get(ConexionFTP, archivo.id_cnxn)
-    verificar_sede(usuario, conexion.id_sd, db, modulo="Ingesta", accion=LECTURA)
-    original = leer_original(archivo)
+    _verificar_archivo(db, usuario, archivo)
+    try:
+        original = leer_original(archivo)
+    except ValueError as exc:
+        raise HTTPException(409, "La copia original requiere revisión de integridad") from exc
+    except Exception as exc:
+        raise HTTPException(
+            503, "No se pudo recuperar la copia original. Vuelve a intentarlo."
+        ) from exc
     if original is None:
         raise HTTPException(409, "Este registro aún no tiene una copia original archivada")
     return Response(
@@ -380,8 +425,7 @@ def registros_archivo_ingesta(
     if archivo is None:
         raise HTTPException(status_code=404, detail="Archivo no encontrado")
 
-    conexion = db.get(ConexionFTP, archivo.id_cnxn)
-    verificar_sede(usuario, conexion.id_sd, db, modulo="Ingesta", accion=LECTURA)
+    _verificar_archivo(db, usuario, archivo)
 
     try:
         dispositivo = dispositivo_del_archivo(db, archivo)
@@ -444,49 +488,13 @@ def reintentar_archivo_ingesta(
     db: Session = Depends(get_db),
     usuario: dict = Depends(require_permiso("Ingesta", EDICION)),
 ):
-    """HU31: reprocesamiento manual de un archivo Fallido.
-
-    Cubre el caso que autoretry_for de procesar_archivo_dat deja afuera a
-    propósito (ver app/tasks/ingesta.py): errores de datos/configuración
-    (ErrorDatosNoRecuperable) no se reintentan solos porque reintentar no
-    los arregla -alguien tiene que corregir la causa primero (ej. cargar
-    el mapeo que faltaba, resolver el dispositivo)-. Este endpoint es esa
-    acción manual: solo tiene sentido sobre un archivo en estado Fallido,
-    y vuelve a dejarlo Pendiente para que un worker lo tome de nuevo desde
-    cero.
-    """
-    archivo = db.query(ArchivoIngesta).filter(ArchivoIngesta.id_archv == id_archv).first()
+    _exigir_rol(usuario)
+    archivo = db.query(ArchivoIngesta).filter_by(id_archv=id_archv).with_for_update().first()
     if archivo is None:
-        raise HTTPException(status_code=404, detail="Archivo no encontrado")
-
-    conexion = db.get(ConexionFTP, archivo.id_cnxn)
-    verificar_sede(usuario, conexion.id_sd, db, modulo="Ingesta", accion=EDICION)
-
+        raise HTTPException(404, "Archivo no encontrado")
+    _verificar_archivo(db, usuario, archivo, EDICION)
     if archivo.estd != "Fallido":
-        raise HTTPException(
-            status_code=409,
-            detail="Solo se pueden reintentar archivos en estado Fallido",
-        )
-
-    archivo.estd = "Pendiente"
-    archivo.mnsj_errr = None
-    archivo.fch_prcsd = None
-    archivo.rgstrs_prcsds = None
-    db.commit()
-
-    # HU31: mismo motivo que reintentar_fallidos_ingesta -id_usr_reintento
-    # deja constancia en intnt_prcsmnt de que este intento fue manual, con
-    # el usuario que lo pidió.
-    procesar_archivo_dat.delay(id_archv=archivo.id_archv, id_usr_reintento=int(usuario["sub"]))
-
-    datalogger_nombre = _mapa_dataloggers(db, [archivo])[archivo.id_archv]
-    return ArchivoIngestaDetalle(
-        id_archv=archivo.id_archv,
-        nmbr_archv=archivo.nmbr_archv,
-        datalogger_nombre=datalogger_nombre,
-        estado=ESTADO_BD_A_NEGOCIO.get(archivo.estd, archivo.estd),
-        fch_dtccn=archivo.fch_dtccn,
-        fch_prcsd=archivo.fch_prcsd,
-        rgstrs_prcsds=archivo.rgstrs_prcsds,
-        mnsj_errr=archivo.mnsj_errr,
-    )
+        raise HTTPException(409, "Solo se pueden reprocesar archivos en estado Fallido")
+    solicitar(db, archivo, int(usuario["sub"]))
+    _confirmar_solicitudes(db)
+    return detalle_archivo_ingesta(id_archv, db, usuario)
