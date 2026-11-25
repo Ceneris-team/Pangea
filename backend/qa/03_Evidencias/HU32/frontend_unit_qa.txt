@@ -1,0 +1,14 @@
+✔ CP-496 acepta decimales, negativos, cero y coma decimal (1.7469ms)
+✔ CP-497 rechaza no numéricos, vacíos, min>max y duplicados indicando el parámetro (0.3461ms)
+✔ CP-497 coma de miles: '1,000,5' se rechaza (0.2062ms)
+✔ CP-497 precisión: el cliente deja pasar lo que el backend rechaza (OBS) (0.2533ms)
+✔ CP-495 solo ofrece parámetros con todas sus fuentes numéricas en la selección (0.3741ms)
+✔ CP-501 el resumen muestra límites y unidad del parámetro propio (0.2353ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 150.918
