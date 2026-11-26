@@ -71,7 +71,7 @@ def test_filtros_limpieza_errores_respuestas_tardias_y_edicion(
                 url.path + (f"?{url.query}" if url.query else ""),
                 json=req.post_data_json if req.method == "PUT" else None,
             )
-            assert respuesta.status_code == 200, respuesta.text
+            assert respuesta.status_code in {200, 422}, respuesta.text
             if url.path == "/ubicaciones" and control["retener"]:
                 retenidas.append((route, respuesta.json()))
                 return
@@ -97,6 +97,18 @@ def test_filtros_limpieza_errores_respuestas_tardias_y_edicion(
             expect(limpiar).to_be_disabled()
             expect(estado).to_have_value("")
             expect(pagina.get_by_text("Mostrando 1 a 10 de 13 registros")).to_be_visible()
+
+            # DEF-20: NUL muestra la validación y limpiar recupera el listado.
+            for busqueda_invalida, estado_invalido in [("laguna\x00", ""), ("\x00", "Inactiva")]:
+                estado.select_option(estado_invalido)
+                buscar.fill(busqueda_invalida)
+                expect(pagina.get_by_role("alert")).to_contain_text("caracteres de control")
+                expect(filas).to_have_count(0)
+                assert consultas[-1][0]["busqueda"] == [busqueda_invalida]
+                if estado_invalido:
+                    assert consultas[-1][0]["estado"] == [estado_invalido]
+                limpiar.click()
+                expect(pagina.get_by_text("Mostrando 1 a 10 de 13 registros")).to_be_visible()
 
             buscar.fill("  NORTE  ")
             estado.select_option("Activa")

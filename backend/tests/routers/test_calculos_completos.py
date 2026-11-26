@@ -180,7 +180,7 @@ def test_tolerancia_no_usa_datos_futuros_y_configuracion(calculos):
     medir(e, e["nivel"], 10)
     medir(e, e["salida"], 4, e["fecha"] + dt.timedelta(seconds=30))
     drenar(e)
-    assert resultado(e, id_).estado == "Pendiente de datos"
+    assert e["db"].query(ResultadoCalculo).filter_by(id_prm_clc=id_).count() == 1
     assert resultado(e, id_, e["fecha"] + dt.timedelta(seconds=30)).vlr == 6
     r = e["client"].put(
         f"/parametros-calculados/configuracion/{e['sedes'][0].id_sd}",
@@ -367,7 +367,8 @@ def test_lotes_reanudables_y_reintento(calculos, monkeypatch):
     assert all(r.revision == 1 for r in e["db"].query(ResultadoCalculo))
 
 
-def test_celery_procesa_outbox_real(calculos, monkeypatch):
+@pytest.mark.parametrize("desfase", [0, -30])
+def test_celery_procesa_outbox_real(calculos, monkeypatch, desfase):
     e = calculos
     from celery import Celery
     from celery.contrib.testing.worker import start_worker
@@ -376,8 +377,11 @@ def test_celery_procesa_outbox_real(calculos, monkeypatch):
 
     id_ = crear(e)
     medir(e, e["nivel"], 10)
-    medir(e, e["salida"], 3)
+    medir(e, e["salida"], 3, e["fecha"] + dt.timedelta(seconds=desfase))
     monkeypatch.setattr(tareas, "SessionLocal", lambda: nullcontext(e["db"]))
+    monkeypatch.setattr(tareas, "invalidar_resultados", lambda *args: None)
+    monkeypatch.setenv("CELERY_BROKER_URL", "memory://")
+    monkeypatch.setenv("CELERY_RESULT_BACKEND", "cache+memory://")
     # Aplicación independiente para no reutilizar conexiones/productores del
     # broker operativo que otros módulos hayan inicializado al importarse.
     prueba = Celery(

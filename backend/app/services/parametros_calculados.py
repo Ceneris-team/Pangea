@@ -58,6 +58,7 @@ def origenes_por_sede(db: Session, sedes: list[int]) -> dict[int, list[Parametro
 
 def describir_formula(formula: str, origenes: list[Parametro]) -> dict:
     por_variable = {variable_origen(p): p for p in origenes}
+    etiquetas = etiquetas_origenes(origenes)
     # Las fórmulas anteriores no tienen una relación formal con el catálogo.
     # Se muestran sus variables sin inventar asociaciones por similitud de nombre.
     try:
@@ -83,7 +84,7 @@ def describir_formula(formula: str, origenes: list[Parametro]) -> dict:
         )
     legible = re.sub(
         r"\b[pc]_\d+\b",
-        lambda m: f"[{por_variable[m[0]].nmbr}]" if m[0] in por_variable else m[0],
+        lambda m: f"[{etiquetas[m[0]]}]" if m[0] in por_variable else m[0],
         formula,
     )
     return {"frml": legible, "referencias": referencias}
@@ -91,14 +92,20 @@ def describir_formula(formula: str, origenes: list[Parametro]) -> dict:
 
 def preparar_formula(formula: str, origenes: list[Parametro]) -> str:
     activos = [p for p in origenes if p.estd == "Activo"]
-    tokens = {f"[{p.nmbr}]": variable_origen(p) for p in activos}
-    if len(tokens) != len(activos):
-        raise ValueError(
-            "Hay nombres ambiguos entre los parámetros de origen; corrige los nombres antes de crear la fórmula."
-        )
-    if tokens:
-        patron = "|".join(re.escape(t) for t in sorted(tokens, key=len, reverse=True))
-        formula = re.sub(patron, lambda m: tokens[m[0]], formula)
+    etiquetas = etiquetas_origenes(activos)
+    tokens = {etiquetas[variable_origen(p)]: variable_origen(p) for p in activos}
+
+    def referencia(coincidencia):
+        nombre = coincidencia[1]
+        if nombre in tokens:
+            return tokens[nombre]
+        if sum(p.nmbr.casefold() == nombre.casefold() for p in activos) > 1:
+            raise ValueError(
+                f"La referencia [{nombre}] es ambigua; selecciona el origen identificado como telemetría o calculado."
+            )
+        raise ValueError(f"La referencia [{nombre}] no está disponible en el ámbito elegido.")
+
+    formula = re.sub(r"\[([^\[\]]+)\]", referencia, formula)
     formula = formula.strip()
     if not formula or len(formula) > 500:
         raise ValueError("La fórmula es obligatoria y admite hasta 500 caracteres.")
@@ -119,20 +126,18 @@ def preparar_formula(formula: str, origenes: list[Parametro]) -> str:
         ast.Sub,
         ast.Mult,
         ast.Div,
-        ast.Pow,
-        ast.Mod,
         ast.UAdd,
         ast.USub,
     )
     nodos = list(ast.walk(arbol))
     variables = {n.id for n in nodos if isinstance(n, ast.Name)}
+    if len(nodos) > 150 or any(not isinstance(n, permitidos) for n in nodos):
+        raise ValueError(
+            "La fórmula admite números, parámetros, paréntesis y las operaciones +, -, * y /."
+        )
     if not variables or not variables <= set(tokens.values()):
         raise ValueError(
             "La fórmula debe utilizar parámetros numéricos activos disponibles en el ámbito elegido."
-        )
-    if len(nodos) > 150 or any(not isinstance(n, permitidos) for n in nodos):
-        raise ValueError(
-            "La fórmula admite números, parámetros, paréntesis y las operaciones +, -, *, /, ** y %."
         )
     if any(
         isinstance(n, ast.Constant)
@@ -144,6 +149,27 @@ def preparar_formula(formula: str, origenes: list[Parametro]) -> str:
     ):
         raise ValueError("La fórmula solo admite constantes numéricas finitas.")
     return formula
+
+
+def etiquetas_origenes(origenes):
+    """Distingue orígenes homónimos sin bloquear fórmulas ajenas a ese nombre."""
+    grupos = {}
+    for p in origenes:
+        grupos.setdefault(p.nmbr.casefold(), []).append(p)
+    etiquetas = {}
+    for grupo in grupos.values():
+        for p in grupo:
+            etiqueta = p.nmbr
+            if len(grupo) > 1:
+                tipo = "calculado" if isinstance(p, ParametroCalculado) else "telemetría"
+                repetidos = sum(
+                    isinstance(otro, ParametroCalculado) == isinstance(p, ParametroCalculado)
+                    for otro in grupo
+                )
+                sufijo = tipo if repetidos == 1 else f"{tipo}: {variable_origen(p)}"
+                etiqueta = f"{p.nmbr} ({sufijo})"
+            etiquetas[variable_origen(p)] = etiqueta
+    return etiquetas
 
 
 def validar_definicion(db, sede_id, formula, salida, propio_id=None):

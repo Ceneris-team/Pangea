@@ -58,7 +58,11 @@ def consultar_resultados(
     q = (
         db.query(ResultadoCalculo, Ubicacion.nmbr)
         .join(Ubicacion)
-        .filter(ResultadoCalculo.id_prm_clc == p.id_prm_clc, ResultadoCalculo.id_ubccn.in_(puntos))
+        .filter(
+            ResultadoCalculo.id_prm_clc == p.id_prm_clc,
+            ResultadoCalculo.id_ubccn.in_(puntos),
+            ResultadoCalculo.vigente,
+        )
     )
     if ubicacion_id is not None:
         q = q.filter(ResultadoCalculo.id_ubccn == ubicacion_id)

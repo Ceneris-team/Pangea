@@ -333,7 +333,7 @@ export default function ColaIngesta() {
 
           <main className="flex-1 overflow-y-auto p-6 md:p-8">
             <header className="mb-6">
-              <h1 className="text-2xl font-extrabold text-gray-900 dark:text-white">Cola de Procesamiento</h1>
+              <h1 className="text-2xl font-extrabold text-gray-900 dark:text-white">Cola de ingesta</h1>
               <p className="text-sm text-gray-600 dark:text-gray-300 mt-1 font-light">
                 Archivos recibidos de los dataloggers y su estado de ingesta. Se actualiza automáticamente cada 30
                 segundos.
@@ -397,7 +397,7 @@ export default function ColaIngesta() {
                     }}
                     className="ml-auto inline-flex items-center justify-center px-4 py-2.5 text-sm font-semibold text-gray-900 bg-[#ccff00] rounded-xl hover:bg-[#b8e600] transition-all"
                   >
-                    Reprocesar fallidos del filtro ({totalFallidos})
+                    Reintentar todos los fallidos
                   </button>
                 )}
               </div>
@@ -683,7 +683,7 @@ export default function ColaIngesta() {
                       disabled={reintentando}
                       className="inline-flex items-center justify-center w-full px-4 py-2.5 text-sm font-semibold text-gray-900 bg-[#ccff00] rounded-xl hover:bg-[#b8e600] transition-all disabled:opacity-50"
                     >
-                      {reintentando ? "Guardando solicitud..." : "Reprocesar"}
+                      {reintentando ? "Guardando solicitud..." : "Reintentar"}
                     </button>
                   </div>
                 )}
@@ -775,15 +775,15 @@ export default function ColaIngesta() {
           onClick={() => !reintentandoMasivo && setConfirmandoReintentoMasivo(false)}
         >
           <div
-            role="dialog" aria-modal="true" aria-label="Confirmar reproceso de archivos"
+            role="dialog" aria-modal="true" aria-label="Confirmar reintento de archivos"
             className="ui-modal-superficie bg-white dark:bg-[#1f2733] rounded-2xl shadow-xl border border-black/10 dark:border-white/10 w-full max-w-md p-6"
             onClick={(e) => e.stopPropagation()}
           >
             <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-2">
-              Reprocesar fallidos del filtro
+              Reintentar todos los fallidos
             </h2>
             <p className="text-sm text-gray-600 dark:text-gray-300 mb-6">
-              Se solicitará el reproceso de <strong>{totalFallidos}</strong> archivo(s) fallido(s),
+              Se solicitará un reintento de <strong>{totalFallidos}</strong> archivo(s) fallido(s),
               en todas las páginas de este filtro, dentro de la empresa y proyecto actuales.
               {dataloggerFiltro ? ` Datalogger: ${dataloggers.find((d) => String(d.id_cnxn) === dataloggerFiltro)?.nombre ?? dataloggerFiltro}.` : " Todos los dataloggers del alcance actual."}
               {dispositivoFiltro ? " Solo el equipo seleccionado." : ""}
@@ -802,7 +802,7 @@ export default function ColaIngesta() {
                 disabled={reintentandoMasivo}
                 className="px-4 py-2.5 text-sm font-semibold text-gray-900 bg-[#ccff00] rounded-xl hover:bg-[#b8e600] transition-all disabled:opacity-50"
               >
-                {reintentandoMasivo ? "Guardando solicitudes..." : "Confirmar reproceso"}
+                {reintentandoMasivo ? "Guardando solicitudes..." : "Confirmar reintento"}
               </button>
             </div>
           </div>

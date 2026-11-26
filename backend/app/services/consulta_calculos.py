@@ -64,6 +64,7 @@ def datos_calculados(db, id_serie, puntos, inicio, fin, max_puntos):
         raise HTTPException(404, "Serie no disponible")
     s, p, u = fila
     q = db.query(ResultadoCalculo).filter(
+        ResultadoCalculo.vigente,
         ResultadoCalculo.id_prm_clc == p.id_prm_clc,
         ResultadoCalculo.id_ubccn == u.id_ubccn,
         ResultadoCalculo.fch_hr >= inicio,

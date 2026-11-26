@@ -263,12 +263,24 @@ def test_listado_filtros_contexto_y_recuperacion(entorno_calculados, ancho, tmp_
             expect(formula).to_have_value("[Nivel de entrada]")
             formula.fill("[Nivel de entrada] +")
             crear.get_by_label("Unidad de medida", exact=True).fill("m")
-            crear.get_by_role("combobox", name="Estado de la definición", exact=True).select_option(
-                "Inactivo"
-            )
+            expect(
+                crear.get_by_role("combobox", name="Ámbito de aplicación", exact=True)
+            ).to_be_visible()
+            expect(
+                crear.get_by_role("combobox", name="Estado de la definición", exact=True)
+            ).to_have_count(0)
             expect(crear.get_by_role("button", name="Guardar", exact=True)).to_be_disabled()
             crear.get_by_role("button", name="Validar fórmula", exact=True).click()
             expect(crear.get_by_role("alert")).to_contain_text("Revisa la fórmula")
+            formula.fill("[Nivel de entrada] ** 2")
+            crear.get_by_role("button", name="Validar fórmula", exact=True).click()
+            expect(crear.get_by_role("alert")).to_contain_text("operaciones +, -, * y /")
+            expect(crear.get_by_role("button", name="Guardar", exact=True)).to_be_disabled()
+            formula.fill("[Parámetro inexistente] * 2")
+            crear.get_by_role("button", name="Validar fórmula", exact=True).click()
+            expect(crear.get_by_role("alert")).to_contain_text(
+                "[Parámetro inexistente] no está disponible"
+            )
             formula.fill("[Nivel de entrada] - [Nivel de salida]")
             crear.get_by_role("textbox", name="Descripción (opcional)").fill("Balance operativo")
             crear.get_by_role("button", name="Validar fórmula", exact=True).click()
@@ -283,9 +295,7 @@ def test_listado_filtros_contexto_y_recuperacion(entorno_calculados, ancho, tmp_
             ).to_be_visible()
             expect(buscar).to_have_value("Balance")
             expect(filtro_estado).to_have_value("Activo")
-            expect(pagina.get_by_text("Mostrando 1 a 2 de 2 registros")).to_be_visible()
-            filtro_estado.select_option("Inactivo")
-            expect(pagina.get_by_text("Mostrando 1 a 1 de 1 registros")).to_be_visible()
+            expect(pagina.get_by_text("Mostrando 1 a 3 de 3 registros")).to_be_visible()
             expect(pagina.locator("tbody")).to_contain_text("Balance nuevo")
             assert (
                 e["db"]
@@ -293,6 +303,10 @@ def test_listado_filtros_contexto_y_recuperacion(entorno_calculados, ancho, tmp_
                 .filter(ParametroCalculado.nmbr == "Balance nuevo")
                 .count()
                 == 1
+            )
+            assert (
+                e["db"].query(ParametroCalculado).filter_by(nmbr="Balance nuevo").one().estd
+                == "Activo"
             )
 
             # Ausencia real de configuraciones conserva la entrada al registro.

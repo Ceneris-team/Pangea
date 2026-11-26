@@ -64,6 +64,7 @@ from app.security.permisos import EDICION, LECTURA, require_permiso, verificar_s
 from app.services.cache import consultas as cache
 from app.services.cache.invalidacion import invalidar_por_lectura
 from app.services.limites_plan import comprobar_cupo
+from app.validaciones import TextoSinControl
 
 router = APIRouter(prefix="/ubicaciones", tags=["Ubicaciones"])
 
@@ -72,7 +73,9 @@ ROLES_CON_ACCESO_TOTAL = {"Administrador", "Tecnico CENERIS", "Técnico CENERIS"
 
 @router.get("")
 def listar_ubicaciones(
-    busqueda: str | None = Query(default=None, description="Nombre de la ubicación, parcial"),
+    busqueda: TextoSinControl | None = Query(
+        default=None, description="Nombre de la ubicación, parcial"
+    ),
     estado: Literal["Activa", "Inactiva", ""] | None = Query(
         default=None, description="Activa (Activo) / Inactiva (Archivado)"
     ),
