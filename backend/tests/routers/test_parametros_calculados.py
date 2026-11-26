@@ -236,11 +236,40 @@ def test_consultar_filtrar_y_limpiar_no_modifican_definiciones(entorno_calculado
     assert item["empresa_nombre"] == e["empresas"][0].rzn_scl
 
 
-@pytest.mark.parametrize("params", [{"estado": "Pendiente"}, {"pagina": 0}, {"por_pagina": 101}])
+@pytest.mark.parametrize(
+    "params",
+    [
+        {"estado": "Pendiente"},
+        {"estado": "Activo\x00"},
+        {"pagina": 0},
+        {"por_pagina": 101},
+        {"q": "a" * 201},
+    ],
+)
 def test_rechaza_filtros_invalidos(entorno_calculados, params):
     assert (
         entorno_calculados["client"].get("/parametros-calculados", params=params).status_code == 422
     )
+
+
+@pytest.mark.parametrize("busqueda", ["caudal\x00", "\x00", "\tcaudal", "\n", "\x7f", "\x85"])
+@pytest.mark.parametrize("estado", [None, "Activo"])
+def test_busqueda_con_controles_devuelve_422_y_permite_consultar_despues(
+    entorno_calculados, busqueda, estado
+):
+    e = entorno_calculados
+    parametro = definir(e["db"], e["sedes"][0], "Caudal calculado")
+    params = {"q": busqueda}
+    if estado:
+        params["estado"] = estado
+    respuesta = e["client"].get("/parametros-calculados", params=params)
+    assert respuesta.status_code == 422, respuesta.text
+    error = respuesta.json()["detail"][0]
+    assert error["loc"] == ["query", "q"]
+    assert "caracteres de control" in error["msg"]
+    valida = e["client"].get("/parametros-calculados", params={"q": "caudal", "estado": "Activo"})
+    assert valida.status_code == 200
+    assert [p["id_prm_clc"] for p in valida.json()["items"]] == [parametro.id_prm_clc]
 
 
 def test_listado_vacio_y_sesion_obligatoria(entorno_calculados):

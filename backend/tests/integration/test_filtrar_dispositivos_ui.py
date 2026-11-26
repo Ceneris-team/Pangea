@@ -119,7 +119,10 @@ def test_filtros_acumulativos_limpieza_paginacion_y_recuperacion(ancho, tmp_path
         try:
             pagina.goto(f"{base}/dispositivos")
             marca = pagina.get_by_role("combobox", name="Filtrar por marca")
-            proyecto = pagina.get_by_role("combobox", name="Filtrar por proyecto")
+            proyecto = pagina.get_by_role("combobox", name="Filtrar por ubicación")
+            expect(proyecto.locator("option").first).to_have_text("Todas las ubicaciones")
+            expect(pagina.get_by_role("columnheader", name="Ubicación", exact=True)).to_be_visible()
+            expect(pagina.get_by_role("columnheader", name="Proyecto", exact=True)).to_have_count(0)
             filtro_estado = pagina.get_by_role("combobox", name="Filtrar por estado")
             filas = pagina.locator("tbody tr")
             expect(pagina.get_by_role("alert")).to_contain_text("No se pudieron cargar")

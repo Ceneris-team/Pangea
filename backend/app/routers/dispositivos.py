@@ -124,6 +124,8 @@ from app.services.particiones import (
     es_error_de_particion_faltante,
 )
 from app.tasks.ingesta import ErrorDatosNoRecuperable, interpretar_y_guardar
+from app.validaciones import TextoSinControl
+from app.validaciones_dispositivos import normalizar_marca
 
 router = APIRouter(prefix="/dispositivos", tags=["Dispositivos"])
 
@@ -224,25 +226,26 @@ def listar_marcas_disponibles(
     motivo que /mapa, más abajo).
     """
     query = _query_dispositivos_visibles(db, usuario)
-    marcas = [
-        fila[0]
-        for fila in query.with_entities(Dispositivo.mrc).distinct().order_by(Dispositivo.mrc)
-    ]
+    # También agrupa variantes históricas mientras se aplica la migración.
+    marcas = sorted(
+        {
+            normalizar_marca(fila[0])
+            for fila in query.with_entities(Dispositivo.mrc).distinct()
+            if fila[0].strip()
+        }
+    )
     return {"items": marcas}
 
 
 @router.get("")
 def listar_dispositivos(
-    busqueda: str | None = Query(
+    busqueda: TextoSinControl | None = Query(
         default=None, description="Nombre o marca del dispositivo, parcial"
     ),
     id_ubccn: int | None = Query(default=None, description="Filtrar por ubicación"),
-    estado: str | None = Query(default=None, description="Activo / Inactivo"),
-    # HU36 CA1: coincidencia EXACTA sobre Dispositivo.mrc, para combinarse
-    # de forma acumulativa (AND) con id_ubccn/estado -distinto de
-    # `busqueda`, que sigue siendo texto libre parcial sobre nombre+marca
-    # (HU10) y no se toca acá.
-    marca: str | None = Query(default=None, description="Marca exacta del dispositivo"),
+    estado: TextoSinControl | None = Query(default=None, description="Activo / Inactivo"),
+    # Coincidencia completa sin distinguir mayúsculas ni espacios exteriores.
+    marca: TextoSinControl | None = Query(default=None, description="Marca exacta del dispositivo"),
     pagina: int = Query(default=1, ge=1),
     por_pagina: int = Query(default=10, ge=1, le=100),  # CA: 10 por defecto
     db: Session = Depends(get_db),
@@ -260,7 +263,7 @@ def listar_dispositivos(
     if estado:
         query = query.filter(Dispositivo.estd == estado)
     if marca:
-        query = query.filter(Dispositivo.mrc == marca)
+        query = query.filter(func.lower(func.btrim(Dispositivo.mrc)) == marca.strip().lower())
 
     total = query.count()
     filas = (

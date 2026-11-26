@@ -4,6 +4,8 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 from app.services.visualizacion import ConfigVisualizacion
+from app.validaciones import validar_texto_sin_control
+from app.validaciones_dispositivos import normalizar_marca
 
 
 def _validar_ruta_remota(valor: str) -> str:
@@ -445,6 +447,13 @@ class DispositivoCrear(BaseModel):
     lttd: float | None = Field(default=None, ge=-90, le=90)
     lngtd: float | None = Field(default=None, ge=-180, le=180)
 
+    @field_validator("mrc", mode="before")
+    @classmethod
+    def validar_marca(cls, valor):
+        if isinstance(valor, str):
+            return normalizar_marca(validar_texto_sin_control(valor))
+        return valor
+
 
 class DispositivoCreado(BaseModel):
     """HU11 CA2: el dispositivo recién registrado, con el estado 'Activo'
@@ -485,6 +494,13 @@ class DispositivoUpdate(BaseModel):
     id_cnxn: int | None = None
     lttd: float | None = Field(default=None, ge=-90, le=90)
     lngtd: float | None = Field(default=None, ge=-180, le=180)
+
+    @field_validator("mrc", mode="before")
+    @classmethod
+    def validar_marca(cls, valor):
+        if isinstance(valor, str):
+            return normalizar_marca(validar_texto_sin_control(valor))
+        return valor
 
 
 # DEC-09 / IMP-06 - Ficha del dispositivo (pestañas Formato, Datos,

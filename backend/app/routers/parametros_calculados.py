@@ -1,6 +1,6 @@
 """Definiciones calculadas, validacion dimensional y seguimiento historico."""
 
-from typing import Literal
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
@@ -30,6 +30,7 @@ from app.services.parametros_calculados import (
     validar_definicion,
 )
 from app.services.unidades_calculo import CATALOGO
+from app.validaciones import TextoSinControl
 
 router = APIRouter(prefix="/parametros-calculados", tags=["Parámetros calculados"])
 
@@ -90,7 +91,7 @@ def serializar(fila, origenes, detalle=False):
 
 @router.get("")
 def listar_parametros_calculados(
-    q: str = Query(default="", max_length=200),
+    q: Annotated[TextoSinControl, Query(max_length=200)] = "",
     estado: Literal["Activo", "Inactivo"] | None = Query(default=None),
     pagina: int = Query(default=1, ge=1),
     por_pagina: int = Query(default=10, ge=1, le=100),
