@@ -1,0 +1,6 @@
+DEF-15 · reproducción contra la API real (uvicorn 127.0.0.1:8000), sesión Técnico CENERIS
+GET /dispositivos?marca=Campbell             -> [200, 200, 200]  (3/3)
+GET /dispositivos?marca=Campbell%00          -> [500, 500, 500]  (3/3)
+GET /dispositivos?estado=Activo%00           -> [500, 500, 500]  (3/3)
+GET /dispositivos?busqueda=Campbell%00       -> [500, 500, 500]  (3/3)
+GET /dispositivos?marca=%00                  -> [500, 500, 500]  (3/3)

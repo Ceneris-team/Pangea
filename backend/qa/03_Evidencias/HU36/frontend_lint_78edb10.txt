@@ -1,0 +1,6 @@
+commit 78edb10
+
+> frontend@0.0.0 lint
+> eslint .
+
+exit 0

@@ -1,0 +1,66 @@
+{
+  "ancho": 390,
+  "tag": "085809",
+  "resultados": [
+    {
+      "cp": "CP-510",
+      "que": "selector de marcas = marcas registradas",
+      "ok": true,
+      "detalle": "['Campbell', 'Hach', 'OTT HydroMet', 'Sutron', 'Vaisala 085754', 'Vaisala 180403', 'Vaisala 180413', 'Vaisala 180945', 'Vaisala 181001', 'Vaisala 181033', 'Vaisala 181602', 'Vaisala 181612']"
+    },
+    {
+      "cp": "CP-511",
+      "que": "selector de ubicaciones = solo con ≥1 equipo",
+      "ok": true,
+      "detalle": "['[DEMO] Planta de Tratamiento', '[DEMO] Río Rímac - Margen Izquierda', 'QA36 Sin equipos 085754', 'QA36 Sin equipos 180403', 'QA36 Sin equipos 180413', 'QA36 Sin equipos 180945', 'QA36 Sin equipos 181001', 'QA36 Sin equipos 181033', 'QA36 Sin equipos 181602', 'QA36 Sin equipos 181612']"
+    },
+    {
+      "cp": "CP-505",
+      "que": "filtro por marca Campbell",
+      "ok": true,
+      "detalle": "['Campbell', 'Campbell', 'Campbell']"
+    },
+    {
+      "cp": "CP-506",
+      "que": "filtro por ubicación [DEMO] Planta de Tratamiento",
+      "ok": true,
+      "detalle": "3 filas"
+    },
+    {
+      "cp": "CP-507",
+      "que": "filtro por estado Inactivo",
+      "ok": true,
+      "detalle": "['[DEMO] Sonda Retirada']"
+    },
+    {
+      "cp": "CP-508",
+      "que": "Campbell + Planta (AND)",
+      "ok": true,
+      "detalle": "['[DEMO] Gabinete Planta (H+E)']"
+    },
+    {
+      "cp": "CP-508",
+      "que": "Campbell + Planta + Inactivo → sin coincidencias",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "cp": "CP-509",
+      "que": "Limpiar filtros restaura el listado",
+      "ok": true,
+      "detalle": "10 filas · rótulo «Limpiar filtros»"
+    },
+    {
+      "cp": "CP-512",
+      "que": "alta con marca/ubicación nuevas refresca selectores",
+      "ok": true,
+      "detalle": "Vaisala 085809"
+    },
+    {
+      "cp": "UI",
+      "que": "sin errores JS en la página",
+      "ok": true,
+      "detalle": "[]"
+    }
+  ]
+}

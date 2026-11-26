@@ -1,0 +1,4 @@
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+- Generated html report: file:///C:/Users/Elliot/AppData/Local/Temp/claude/e4dbdb7cc13c5b73/415d9444-d172-432d-b5f8-578fc3d1bf4f/scratchpad/pytest_regresion_dev.html -
+== 1498 passed, 28 skipped, 41 deselected, 232 warnings in 624.36s (0:10:24) ==
+commit 78edb10 · entorno del job test del CI (pangea_test recreada)

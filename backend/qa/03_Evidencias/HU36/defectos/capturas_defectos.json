@@ -1,0 +1,42 @@
+{
+  "tag": "094216",
+  "marca": "Hobo094216",
+  "opciones_marca": [
+    "Todas las marcas",
+    "Campbell",
+    "Hach",
+    "hobo094109",
+    "Hobo094109",
+    "Hobo094109",
+    "Hobo094109",
+    "hobo094158",
+    "Hobo094158",
+    "Hobo094158",
+    "Hobo094158",
+    "hobo094216",
+    "Hobo094216",
+    "Hobo094216",
+    "Hobo094216",
+    "OTT HydroMet",
+    "Sutron",
+    "Vaisala 085754",
+    "Vaisala 085809",
+    "Vaisala 180403",
+    "Vaisala 180413",
+    "Vaisala 180945",
+    "Vaisala 181001",
+    "Vaisala 181033",
+    "Vaisala 181602",
+    "Vaisala 181612"
+  ],
+  "repetidas": [
+    "hobo094216",
+    "Hobo094216",
+    "Hobo094216",
+    "Hobo094216"
+  ],
+  "http": {
+    "ok": 200,
+    "nul": 500
+  }
+}
