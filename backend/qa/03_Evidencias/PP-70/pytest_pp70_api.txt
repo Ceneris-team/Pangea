@@ -1,0 +1,70 @@
+============================= test session starts =============================
+collecting ... collected 57 items
+
+tests/routers/test_qa_pp70_alta.py::test_cp570_sin_permiso_de_creacion[Lector] PASSED [  1%]
+tests/routers/test_qa_pp70_alta.py::test_cp570_sin_permiso_de_creacion[Cliente Final] PASSED [  3%]
+tests/routers/test_qa_pp70_alta.py::test_cp570_roles_autorizados_crean[CENERIS] PASSED [  5%]
+tests/routers/test_qa_pp70_alta.py::test_cp570_roles_autorizados_crean[Administrador] PASSED [  7%]
+tests/routers/test_qa_pp70_alta.py::test_cp570_roles_autorizados_crean[Tecnico] PASSED [  8%]
+tests/routers/test_qa_pp70_alta.py::test_cp571_origenes_disponibles PASSED [ 10%]
+tests/routers/test_qa_pp70_alta.py::test_cp572_aislamiento_ambito PASSED [ 12%]
+tests/routers/test_qa_pp70_alta.py::test_cp573_operadores_admitidos[[Nivel de entrada] + [Nivel de salida]] PASSED [ 14%]
+tests/routers/test_qa_pp70_alta.py::test_cp573_operadores_admitidos[[Nivel de entrada] - [Nivel de salida]] PASSED [ 15%]
+tests/routers/test_qa_pp70_alta.py::test_cp573_operadores_admitidos[([Nivel de entrada] - [Nivel de salida]) * 2 / 4] PASSED [ 17%]
+tests/routers/test_qa_pp70_alta.py::test_cp573_operadores_admitidos[[Nivel de entrada] * 1.5] PASSED [ 19%]
+tests/routers/test_qa_pp70_alta.py::test_cp573_operadores_admitidos[-[Nivel de entrada] + 0.25 * [Nivel de salida]] PASSED [ 21%]
+tests/routers/test_qa_pp70_alta.py::test_cp573_operadores_admitidos[(([Nivel de entrada]))] PASSED [ 22%]
+tests/routers/test_qa_pp70_alta.py::test_cp573_operadores_fuera_del_ticket_def23[[Nivel de entrada] ** 2-m^2] XFAIL [ 24%]
+tests/routers/test_qa_pp70_alta.py::test_cp573_operadores_fuera_del_ticket_def23[[Nivel de entrada] % [Nivel de salida]-m] XFAIL [ 26%]
+tests/routers/test_qa_pp70_alta.py::test_cp573_division_por_cero_constante_obs77 PASSED [ 28%]
+tests/routers/test_qa_pp70_alta.py::test_cp573_rechaza_expresiones_no_aritmeticas[abs([Nivel de entrada])] PASSED [ 29%]
+tests/routers/test_qa_pp70_alta.py::test_cp573_rechaza_expresiones_no_aritmeticas[[Nivel de entrada].real] PASSED [ 31%]
+tests/routers/test_qa_pp70_alta.py::test_cp573_rechaza_expresiones_no_aritmeticas[__import__('os').system('x')] PASSED [ 33%]
+tests/routers/test_qa_pp70_alta.py::test_cp573_rechaza_expresiones_no_aritmeticas[[Nivel de entrada] if 1 else [Nivel de salida]] PASSED [ 35%]
+tests/routers/test_qa_pp70_alta.py::test_cp573_rechaza_expresiones_no_aritmeticas[[Nivel de entrada] < [Nivel de salida]] PASSED [ 36%]
+tests/routers/test_qa_pp70_alta.py::test_cp573_rechaza_expresiones_no_aritmeticas[[Nivel de entrada] // 2] PASSED [ 38%]
+tests/routers/test_qa_pp70_alta.py::test_cp573_rechaza_expresiones_no_aritmeticas[[Nivel de entrada] + 'x'] PASSED [ 40%]
+tests/routers/test_qa_pp70_alta.py::test_cp573_rechaza_expresiones_no_aritmeticas[[Nivel de entrada] * 1e400] PASSED [ 42%]
+tests/routers/test_qa_pp70_alta.py::test_cp573_rechaza_expresiones_no_aritmeticas[[[Nivel de entrada]]] PASSED [ 43%]
+tests/routers/test_qa_pp70_alta.py::test_cp573_rechaza_expresiones_no_aritmeticas[[Nivel de entrada]; [Nivel de salida]] PASSED [ 45%]
+tests/routers/test_qa_pp70_alta.py::test_cp573_rechaza_expresiones_no_aritmeticas[lambda: [Nivel de entrada]] PASSED [ 47%]
+tests/routers/test_qa_pp70_alta.py::test_cp573_rechaza_expresiones_no_aritmeticas[[Nivel de entrada] + True] PASSED [ 49%]
+tests/routers/test_qa_pp70_alta.py::test_cp573_rechaza_expresiones_no_aritmeticas[formula12] PASSED [ 50%]
+tests/routers/test_qa_pp70_alta.py::test_cp574_errores_de_estructura[[Nivel de entrada] +-Revisa la f\xf3rmula] PASSED [ 52%]
+tests/routers/test_qa_pp70_alta.py::test_cp574_errores_de_estructura[([Nivel de entrada] - [Nivel de salida]-Revisa la f\xf3rmula] PASSED [ 54%]
+tests/routers/test_qa_pp70_alta.py::test_cp574_errores_de_estructura[[Nivel de entrada] [Nivel de salida]-Revisa la f\xf3rmula] PASSED [ 56%]
+tests/routers/test_qa_pp70_alta.py::test_cp574_errores_de_estructura[[Inexistente] + 1-disponibles en el \xe1mbito] PASSED [ 57%]
+tests/routers/test_qa_pp70_alta.py::test_cp574_errores_de_estructura[1 + 2-par\xe1metros num\xe9ricos activos] PASSED [ 59%]
+tests/routers/test_qa_pp70_alta.py::test_cp574_errores_de_estructura[Nivel de entrada - 1-] PASSED [ 61%]
+tests/routers/test_qa_pp70_alta.py::test_cp574_referencia_inexistente_def25[[Parametro inexistente] * 2] XFAIL [ 63%]
+tests/routers/test_qa_pp70_alta.py::test_cp574_referencia_inexistente_def25[[nivel de entrada] * 2] XFAIL [ 64%]
+tests/routers/test_qa_pp70_alta.py::test_cp574_nombre_repetido_posterior_def26 XFAIL [ 66%]
+tests/routers/test_qa_pp70_alta.py::test_cp575_unidades PASSED           [ 68%]
+tests/routers/test_qa_pp70_alta.py::test_cp576_ciclos PASSED             [ 70%]
+tests/routers/test_qa_pp70_alta.py::test_cp578_unicidad PASSED           [ 71%]
+tests/routers/test_qa_pp70_alta.py::test_cp578_mismo_nombre_en_otra_sede PASSED [ 73%]
+tests/routers/test_qa_pp70_alta.py::test_cp579_registro PASSED           [ 75%]
+tests/routers/test_qa_pp70_alta.py::test_cp579_estado_inicial_activo_def24 XFAIL [ 77%]
+tests/routers/test_qa_pp70_alta.py::test_cp579_obligatorios[nmbr] PASSED [ 78%]
+tests/routers/test_qa_pp70_alta.py::test_cp579_obligatorios[frml] PASSED [ 80%]
+tests/routers/test_qa_pp70_alta.py::test_cp579_obligatorios[undd] PASSED [ 82%]
+tests/routers/test_qa_pp70_alta.py::test_cp579_obligatorios[id_sd] PASSED [ 84%]
+tests/routers/test_qa_pp70_alta.py::test_cp589_bordes PASSED             [ 85%]
+tests/routers/test_qa_pp70_alta.py::test_cp582_historico PASSED          [ 87%]
+tests/routers/test_qa_pp70_alta.py::test_cp582_tolerancia PASSED         [ 89%]
+tests/routers/test_qa_pp70_alta.py::test_cp582_dispositivos_mismo_punto PASSED [ 91%]
+tests/routers/test_qa_pp70_alta.py::test_cp583_medicion_nueva PASSED     [ 92%]
+tests/routers/test_qa_pp70_alta.py::test_cp584_pendiente_incompleto_fallido PASSED [ 94%]
+tests/routers/test_qa_pp70_alta.py::test_cp585_recalculo PASSED          [ 96%]
+tests/routers/test_qa_pp70_alta.py::test_cp586_consulta_y_exportacion PASSED [ 98%]
+tests/routers/test_qa_pp70_alta.py::test_cp587_detalle PASSED            [100%]
+
+- generated xml file: C:\Proyectos\PANGEA\backend\qa\03_Evidencias\PP-70\pytest_pp70_api.xml -
+=========================== short test summary info ===========================
+XFAIL tests/routers/test_qa_pp70_alta.py::test_cp573_operadores_fuera_del_ticket_def23[[Nivel de entrada] ** 2-m^2] - DEF-23: se aceptan ** y % (el ticket solo admite + - * /)
+XFAIL tests/routers/test_qa_pp70_alta.py::test_cp573_operadores_fuera_del_ticket_def23[[Nivel de entrada] % [Nivel de salida]-m] - DEF-23: se aceptan ** y % (el ticket solo admite + - * /)
+XFAIL tests/routers/test_qa_pp70_alta.py::test_cp574_referencia_inexistente_def25[[Parametro inexistente] * 2] - DEF-26: se responde un error de sintaxis genérico
+XFAIL tests/routers/test_qa_pp70_alta.py::test_cp574_referencia_inexistente_def25[[nivel de entrada] * 2] - DEF-26: se responde un error de sintaxis genérico
+XFAIL tests/routers/test_qa_pp70_alta.py::test_cp574_nombre_repetido_posterior_def26 - DEF-27: todas las fórmulas del ámbito quedan rechazadas
+XFAIL tests/routers/test_qa_pp70_alta.py::test_cp579_estado_inicial_activo_def24 - DEF-25: la API registra estd=Inactivo
+======================= 51 passed, 6 xfailed in 31.68s ========================

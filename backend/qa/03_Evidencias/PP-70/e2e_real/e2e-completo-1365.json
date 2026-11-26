@@ -1,0 +1,200 @@
+[
+ {
+  "cp": "CP-569",
+  "que": "Campo «Ámbito de aplicación» (DEF-24)",
+  "ok": false,
+  "detalle": "['Ámbito compartido', 'Nombre', 'Fórmula', 'Unidad de medida', 'Descripción (opcional)', 'Estado de la definición']"
+ },
+ {
+  "cp": "CP-569",
+  "que": "Campo «Nombre»",
+  "ok": true,
+  "detalle": ""
+ },
+ {
+  "cp": "CP-569",
+  "que": "Campo «Fórmula»",
+  "ok": true,
+  "detalle": ""
+ },
+ {
+  "cp": "CP-569",
+  "que": "Campo «Unidad de medida»",
+  "ok": true,
+  "detalle": ""
+ },
+ {
+  "cp": "CP-569",
+  "que": "Campo «Descripción (opcional)»",
+  "ok": true,
+  "detalle": ""
+ },
+ {
+  "cp": "CP-569",
+  "que": "Sin campos fuera del CA (DEF-25)",
+  "ok": false,
+  "detalle": "['Ámbito compartido', 'Nombre', 'Fórmula', 'Unidad de medida', 'Descripción (opcional)', 'Estado de la definición']"
+ },
+ {
+  "cp": "CP-571",
+  "que": "Orígenes numéricos del ámbito",
+  "ok": true,
+  "detalle": "['Insertar bateria_v (V)', 'Insertar conductividad (uS/cm)', 'Insertar contador_puerta (N/A)', 'Insertar orp (mV)', 'Insertar ph (pH)', 'Insertar QA27 Nivel A (m)', 'Insertar QA27 Nivel B (m)', 'Insertar temperatura (C°)', 'Insertar Caudal acumulado (m3) · Calculado', 'Insertar Caudal neto (m3/s) · Calculado', 'Insertar Conductividad 25 (uS/cm) · Calculado', 'Insertar Humedad 90% (%) · Calculado', 'Insertar Índice de calidad (%) · Calculado', 'Insertar Índice térmico ponderado (u) · Calculado', 'Insertar Nivel corregido (m) · Calculado', 'Insertar Presión diferencial (kPa) · Calculado', 'Insertar Temperatura media (°C) · Calculado', 'Insertar Turbidez ajustada (NTU) · Calculado']"
+ },
+ {
+  "cp": "CP-569",
+  "que": "Acción «Validar fórmula»",
+  "ok": true,
+  "detalle": ""
+ },
+ {
+  "cp": "CP-569",
+  "que": "Acción «Guardar»",
+  "ok": true,
+  "detalle": ""
+ },
+ {
+  "cp": "CP-569",
+  "que": "Acción «Cancelar»",
+  "ok": true,
+  "detalle": ""
+ },
+ {
+  "cp": "CP-569",
+  "que": "Guardar deshabilitado sin validar",
+  "ok": true,
+  "detalle": ""
+ },
+ {
+  "cp": "CP-573",
+  "que": "Ayuda solo con + - * / (DEF-23)",
+  "ok": false,
+  "detalle": "Inserta los parámetros y escribe operaciones con +, -, *, /, **, % y paréntesis. Usa punto para los decimales. Ejemplo de estructura: ([parámetro de origen] * 1.5)."
+ },
+ {
+  "cp": "CP-588",
+  "que": "Cancelar cierra el panel",
+  "ok": true,
+  "detalle": ""
+ },
+ {
+  "cp": "CP-588",
+  "que": "Al reabrir, campos vacíos",
+  "ok": true,
+  "detalle": ""
+ },
+ {
+  "cp": "CP-588",
+  "que": "Escape o X cierran sin guardar",
+  "ok": true,
+  "detalle": "escape=True"
+ },
+ {
+  "cp": "CP-588",
+  "que": "Sin registro tras cancelar",
+  "ok": true,
+  "detalle": "16"
+ },
+ {
+  "cp": "CP-574",
+  "que": "Error de unidades explica qué corregir",
+  "ok": true,
+  "detalle": "Unidades incompatibles: suma, resta y módulo requieren la misma magnitud."
+ },
+ {
+  "cp": "CP-574",
+  "que": "Guardar sigue deshabilitado",
+  "ok": true,
+  "detalle": ""
+ },
+ {
+  "cp": "CP-571",
+  "que": "Referencias entre corchetes",
+  "ok": true,
+  "detalle": "[QA27 Nivel A] - [QA27 Nivel B]"
+ },
+ {
+  "cp": "CP-577",
+  "que": "«Fórmula válida» habilita Guardar",
+  "ok": true,
+  "detalle": ""
+ },
+ {
+  "cp": "CP-577",
+  "que": "Cambiar unidad exige revalidar",
+  "ok": true,
+  "detalle": ""
+ },
+ {
+  "cp": "CP-577",
+  "que": "Cambiar fórmula exige revalidar",
+  "ok": true,
+  "detalle": ""
+ },
+ {
+  "cp": "CP-580",
+  "que": "Mensaje de éxito",
+  "ok": true,
+  "detalle": "0.15"
+ },
+ {
+  "cp": "CP-580",
+  "que": "Listado actualizado",
+  "ok": true,
+  "detalle": ""
+ },
+ {
+  "cp": "CP-579",
+  "que": "Registrado Activo y validado",
+  "ok": true,
+  "detalle": "Activo"
+ },
+ {
+  "cp": "CP-580",
+  "que": "La plataforma sigue usable durante el histórico",
+  "ok": true,
+  "detalle": ""
+ },
+ {
+  "cp": "CP-578",
+  "que": "Nombre duplicado sin distinguir mayúsculas",
+  "ok": true,
+  "detalle": "Ya existe un parámetro calculado con ese nombre en el ámbito elegido"
+ },
+ {
+  "cp": "CP-582",
+  "que": "Worker completa el histórico",
+  "ok": true,
+  "detalle": "Completado con incidencias"
+ },
+ {
+  "cp": "CP-582",
+  "que": "8 calculados y 4 incompletos, sin resultados en los instantes de B (DEF-28)",
+  "ok": false,
+  "detalle": "{'Calculado': 8, 'Incompleto': 12}"
+ },
+ {
+  "cp": "CP-586",
+  "que": "Consulta de datos devuelve 10…17",
+  "ok": true,
+  "detalle": "[10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0]"
+ },
+ {
+  "cp": "CP-587",
+  "que": "Detalle: fórmula, orígenes y estado del histórico",
+  "ok": true,
+  "detalle": ""
+ },
+ {
+  "cp": "CP-581",
+  "que": "Altas simultáneas: un 201 y un 409, sin duplicado",
+  "ok": true,
+  "detalle": "([409, 201], 1)"
+ },
+ {
+  "cp": "CP-580",
+  "que": "Errores de página",
+  "ok": true,
+  "detalle": "[]"
+ }
+]

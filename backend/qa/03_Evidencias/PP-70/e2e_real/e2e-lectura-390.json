@@ -1,0 +1,116 @@
+[
+ {
+  "cp": "CP-569",
+  "que": "Campo «Ámbito de aplicación» (DEF-24)",
+  "ok": false,
+  "detalle": "['Ámbito compartido', 'Nombre', 'Fórmula', 'Unidad de medida', 'Descripción (opcional)', 'Estado de la definición']"
+ },
+ {
+  "cp": "CP-569",
+  "que": "Campo «Nombre»",
+  "ok": true,
+  "detalle": ""
+ },
+ {
+  "cp": "CP-569",
+  "que": "Campo «Fórmula»",
+  "ok": true,
+  "detalle": ""
+ },
+ {
+  "cp": "CP-569",
+  "que": "Campo «Unidad de medida»",
+  "ok": true,
+  "detalle": ""
+ },
+ {
+  "cp": "CP-569",
+  "que": "Campo «Descripción (opcional)»",
+  "ok": true,
+  "detalle": ""
+ },
+ {
+  "cp": "CP-569",
+  "que": "Sin campos fuera del CA (DEF-25)",
+  "ok": false,
+  "detalle": "['Ámbito compartido', 'Nombre', 'Fórmula', 'Unidad de medida', 'Descripción (opcional)', 'Estado de la definición']"
+ },
+ {
+  "cp": "CP-571",
+  "que": "Orígenes numéricos del ámbito",
+  "ok": true,
+  "detalle": "['Insertar bateria_v (V)', 'Insertar conductividad (uS/cm)', 'Insertar contador_puerta (N/A)', 'Insertar orp (mV)', 'Insertar ph (pH)', 'Insertar QA27 Nivel A (m)', 'Insertar QA27 Nivel B (m)', 'Insertar temperatura (C°)', 'Insertar Caudal acumulado (m3) · Calculado', 'Insertar Caudal neto (m3/s) · Calculado', 'Insertar Conductividad 25 (uS/cm) · Calculado', 'Insertar Humedad 90% (%) · Calculado', 'Insertar Índice de calidad (%) · Calculado', 'Insertar Índice térmico ponderado (u) · Calculado', 'Insertar Nivel corregido (m) · Calculado', 'Insertar Presión diferencial (kPa) · Calculado', 'Insertar Temperatura media (°C) · Calculado', 'Insertar Turbidez ajustada (NTU) · Calculado']"
+ },
+ {
+  "cp": "CP-569",
+  "que": "Acción «Validar fórmula»",
+  "ok": true,
+  "detalle": ""
+ },
+ {
+  "cp": "CP-569",
+  "que": "Acción «Guardar»",
+  "ok": true,
+  "detalle": ""
+ },
+ {
+  "cp": "CP-569",
+  "que": "Acción «Cancelar»",
+  "ok": true,
+  "detalle": ""
+ },
+ {
+  "cp": "CP-569",
+  "que": "Guardar deshabilitado sin validar",
+  "ok": true,
+  "detalle": ""
+ },
+ {
+  "cp": "CP-573",
+  "que": "Ayuda solo con + - * / (DEF-23)",
+  "ok": false,
+  "detalle": "Inserta los parámetros y escribe operaciones con +, -, *, /, **, % y paréntesis. Usa punto para los decimales. Ejemplo de estructura: ([parámetro de origen] * 1.5)."
+ },
+ {
+  "cp": "CP-590",
+  "que": "Sin scroll horizontal a 390 px",
+  "ok": true,
+  "detalle": "[390, 390]"
+ },
+ {
+  "cp": "CP-590",
+  "que": "Controles con etiqueta",
+  "ok": true,
+  "detalle": "0"
+ },
+ {
+  "cp": "CP-588",
+  "que": "Cancelar cierra el panel",
+  "ok": true,
+  "detalle": ""
+ },
+ {
+  "cp": "CP-588",
+  "que": "Al reabrir, campos vacíos",
+  "ok": true,
+  "detalle": ""
+ },
+ {
+  "cp": "CP-588",
+  "que": "Escape o X cierran sin guardar",
+  "ok": true,
+  "detalle": "escape=True"
+ },
+ {
+  "cp": "CP-588",
+  "que": "Sin registro tras cancelar",
+  "ok": true,
+  "detalle": "16"
+ },
+ {
+  "cp": "CP-590",
+  "que": "Errores de página",
+  "ok": true,
+  "detalle": "[]"
+ }
+]
