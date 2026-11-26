@@ -95,7 +95,7 @@ export default function ParametrosCalculados() {
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm text-gray-700 dark:text-gray-200">
                 <thead className="bg-black/5 text-xs uppercase dark:bg-white/5"><tr>
-                  {["Nombre", "Fórmula", "Unidad", "Descripción", "Estado", "Ámbito", "Acciones"].map(t => <th key={t} className="px-5 py-4 font-semibold">{t}</th>)}
+                  {["Nombre", "Fórmula", "Unidad de medida", "Descripción", "Estado", "Ámbito", "Acciones"].map(t => <th key={t} className="px-5 py-4 font-semibold">{t}</th>)}
                 </tr></thead>
                 <tbody>{data.items.map(p => <tr key={p.id_prm_clc} className="border-t border-black/10 dark:border-white/10">
                   <td className="min-w-44 px-5 py-4 font-semibold text-gray-900 dark:text-white">{p.nmbr}</td>

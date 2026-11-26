@@ -90,7 +90,7 @@ def _candidatos(db, trabajo, parametros):
     # Incluye instantes cuyo único dato se borró: se invalida su resultado anterior.
     previos = select(
         ResultadoCalculo.id_ubccn.label("ubicacion"), ResultadoCalculo.fch_hr.label("fecha")
-    ).where(ResultadoCalculo.id_sd == trabajo.id_sd)
+    ).where(ResultadoCalculo.id_sd == trabajo.id_sd, ResultadoCalculo.vigente)
     candidatos = union(crudos, previos).subquery()
     q = db.query(candidatos.c.ubicacion, candidatos.c.fecha)
     if trabajo.id_ubccn:
@@ -169,6 +169,7 @@ def _resolver(db, definicion, deps, punto, instante, config, definiciones):
                 .filter(
                     ResultadoCalculo.id_prm_clc == d.id_origen_calculado,
                     ResultadoCalculo.id_ubccn == punto,
+                    ResultadoCalculo.vigente,
                     ResultadoCalculo.fch_hr <= instante,
                     ResultadoCalculo.fch_hr
                     >= instante - dt.timedelta(seconds=config["tolerancia_segundos"]),
@@ -262,6 +263,82 @@ def _guardar(db, p, punto, fecha, calculo):
     db.flush()
 
 
+def _mismas_lecturas(db, parcial, completo):
+    """Solo agrupa si el resultado completo utilizó las mismas lecturas disponibles."""
+    origenes = parcial.get("origenes", {})
+    otros = completo.get("origenes", {})
+    if not origenes:
+        return False
+    for nombre, origen in origenes.items():
+        otro = otros.get(nombre)
+        if otro is None or origen.get("tipo") != otro.get("tipo"):
+            return False
+        if origen.get("id") == otro.get("id"):
+            continue
+        if origen.get("tipo") != "calculado":
+            return False
+        anterior = db.get(ResultadoCalculo, origen["id"])
+        siguiente = db.get(ResultadoCalculo, otro["id"])
+        cubierto = anterior.trazabilidad.get("cubierto_por") if anterior else None
+        if not cubierto or not siguiente or dt.datetime.fromisoformat(cubierto) != siguiente.fch_hr:
+            return False
+    return True
+
+
+def _cubierto_despues(db, p, deps, punto, fecha, config, definiciones, hojas, calculo):
+    if calculo[0] not in {"Pendiente de datos", "Incompleto"} or not calculo[3]["origenes"]:
+        return False
+    limite = fecha + dt.timedelta(seconds=config["tolerancia_segundos"])
+    fechas = (
+        db.query(Telemetria.fch_hr)
+        .join(Dispositivo, Dispositivo.id_dspstv == Telemetria.id_dspstv)
+        .filter(
+            Dispositivo.id_ubccn == punto,
+            Telemetria.id_prmtr.in_(hojas),
+            Telemetria.fch_hr > fecha,
+            Telemetria.fch_hr <= limite,
+        )
+        .distinct()
+        .order_by(Telemetria.fch_hr)
+    )
+    for (siguiente,) in fechas:
+        futuro = _resolver(db, p, deps, punto, siguiente, config, definiciones)
+        if futuro[0] == "Calculado" and _mismas_lecturas(db, calculo[3], futuro[3]):
+            return True
+    return False
+
+
+def _cubrir_pendientes(db, p, punto, fecha, config, traza):
+    # Los pendientes de corridas anteriores se conservan con su revisión para
+    # auditoría, pero ya no cuentan como resultados/incidencias independientes.
+    anteriores = (
+        db.query(ResultadoCalculo)
+        .filter(
+            ResultadoCalculo.id_prm_clc == p.id_prm_clc,
+            ResultadoCalculo.id_ubccn == punto,
+            ResultadoCalculo.vigente,
+            ResultadoCalculo.estado.in_(["Pendiente de datos", "Incompleto"]),
+            ResultadoCalculo.fch_hr < fecha,
+            ResultadoCalculo.fch_hr >= fecha - dt.timedelta(seconds=config["tolerancia_segundos"]),
+        )
+        .all()
+    )
+    for anterior in anteriores:
+        if _mismas_lecturas(db, anterior.trazabilidad, traza):
+            _guardar(
+                db,
+                p,
+                punto,
+                anterior.fch_hr,
+                (
+                    anterior.estado,
+                    None,
+                    anterior.causa,
+                    {**anterior.trazabilidad, "cubierto_por": fecha.isoformat()},
+                ),
+            )
+
+
 def procesar_lote(db, trabajo):
     # Un worker por sede; ingesta solo escribe el outbox, nunca espera al motor.
     db.execute(text("SELECT pg_advisory_xact_lock(38001, :sede)"), {"sede": trabajo.id_sd})
@@ -294,13 +371,16 @@ def procesar_lote(db, trabajo):
         }
         previos = {
             id_
-            for (id_,) in db.query(ResultadoCalculo.id_prm_clc).filter_by(
-                id_ubccn=punto, fch_hr=fecha
-            )
+            for (id_,) in db.query(ResultadoCalculo.id_prm_clc)
+            .filter(ResultadoCalculo.vigente)
+            .filter_by(id_ubccn=punto, fch_hr=fecha)
         }
         for id_ in orden:
             p = definiciones[id_]
-            if p.estd != "Activo" or not (presentes & hojas[id_] or id_ in previos):
+            activado = any(
+                d.id_prmtr in presentes or d.id_origen_calculado in previos for d in deps[id_]
+            )
+            if p.estd != "Activo" or not (activado or id_ in previos):
                 continue
             db.execute(
                 insert(SerieCalculada)
@@ -308,11 +388,31 @@ def procesar_lote(db, trabajo):
                 .on_conflict_do_nothing()
             )
             calculo = _resolver(db, p, deps[id_], punto, fecha, config, definiciones)
+            if _cubierto_despues(
+                db, p, deps[id_], punto, fecha, config, definiciones, hojas[id_], calculo
+            ):
+                continue
             _guardar(db, p, punto, fecha, calculo)
+            previos.add(id_)
+            if calculo[0] == "Calculado":
+                _cubrir_pendientes(db, p, punto, fecha, config, calculo[3])
             trabajo.incidencias += int(calculo[0] != "Calculado")
             trabajo.procesados += 1
         trabajo.cursor = {"ubicacion": punto, "fecha": fecha.isoformat()}
     if len(candidatos) <= LOTE:
+        resultados = db.query(ResultadoCalculo).filter(
+            ResultadoCalculo.id_sd == trabajo.id_sd,
+            ResultadoCalculo.id_prm_clc.in_(orden),
+            ResultadoCalculo.vigente,
+        )
+        if trabajo.id_ubccn:
+            resultados = resultados.filter(ResultadoCalculo.id_ubccn == trabajo.id_ubccn)
+        if trabajo.inicio:
+            resultados = resultados.filter(ResultadoCalculo.fch_hr >= trabajo.inicio)
+        if trabajo.fin:
+            resultados = resultados.filter(ResultadoCalculo.fch_hr <= trabajo.fin)
+        trabajo.procesados = resultados.count()
+        trabajo.incidencias = resultados.filter(ResultadoCalculo.estado != "Calculado").count()
         trabajo.estado = "Completado con incidencias" if trabajo.incidencias else "Completado"
     trabajo.actualizado_en = ahora()
     db.flush()
@@ -334,6 +434,7 @@ def mantener_pendientes(db):
             .filter(
                 ResultadoCalculo.id_sd == sede,
                 ResultadoCalculo.estado == "Pendiente de datos",
+                ResultadoCalculo.vigente,
                 ResultadoCalculo.fch_hr <= ahora() - dt.timedelta(hours=config["espera_horas"]),
             )
             .with_for_update(skip_locked=True)

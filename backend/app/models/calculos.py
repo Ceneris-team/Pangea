@@ -73,6 +73,14 @@ class ResultadoCalculo(Base):
     trazabilidad = Column(JSONB, nullable=False)
     actualizado_en = Column(TIMESTAMP(timezone=True), nullable=False, server_default=text("NOW()"))
 
+    @hybrid_property
+    def vigente(self):
+        return not self.trazabilidad.get("cubierto_por")
+
+    @vigente.expression
+    def vigente(cls):
+        return cls.trazabilidad["cubierto_por"].astext.is_(None)
+
     # Identidades de lectura públicas: los valores negativos son fuentes
     # calculadas, nunca dispositivos ni parámetros físicos ficticios.
     @hybrid_property

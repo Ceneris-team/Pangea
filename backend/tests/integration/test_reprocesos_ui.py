@@ -6,7 +6,7 @@ from urllib.parse import urlparse
 
 import pytest
 
-from app.models import ArchivoIngesta, IntentoProcesamiento
+from app.models import ArchivoIngesta, IntentoProcesamiento, Rol
 from app.tasks import reprocesos
 from tests.routers.test_reprocesos import entorno as entorno
 
@@ -78,9 +78,9 @@ def test_permiso_lectura_muestra_cola_e_historial_sin_acciones(entorno):
             pagina.get_by_role("button", name="Ver detalle", exact=True).click()
             detalle = pagina.get_by_role("dialog", name="Detalle del archivo", exact=True)
             expect(detalle).to_contain_text("Historial de intentos")
-            expect(detalle.get_by_role("button", name="Reprocesar", exact=True)).to_have_count(0)
+            expect(detalle.get_by_role("button", name="Reintentar", exact=True)).to_have_count(0)
             expect(
-                pagina.get_by_role("button", name="Reprocesar fallidos del filtro", exact=False)
+                pagina.get_by_role("button", name="Reintentar todos los fallidos", exact=False)
             ).to_have_count(0)
             assert posts == []
         finally:
@@ -88,13 +88,18 @@ def test_permiso_lectura_muestra_cola_e_historial_sin_acciones(entorno):
 
 
 @pytest.mark.parametrize("ancho", [1365, 390])
-def test_reproceso_individual_masivo_cancelacion_historial_y_refresco(entorno, ancho, tmp_path):
+@pytest.mark.parametrize("rol", ["Técnico CENERIS", "Administrador"])
+def test_reproceso_individual_masivo_cancelacion_historial_y_refresco(
+    entorno, ancho, rol, tmp_path
+):
     base = os.getenv("REPROCESOS_UI_URL")
     if not base:
         pytest.skip("Definir REPROCESOS_UI_URL para probar la interfaz")
     from playwright.sync_api import expect, sync_playwright
 
     e = entorno
+    e["usuario"].rol = e["db"].query(Rol).filter_by(nmbr=rol).one()
+    e["identidad"]["rol"] = rol
     for i in range(12):
         e["db"].add(
             ArchivoIngesta(
@@ -119,7 +124,7 @@ def test_reproceso_individual_masivo_cancelacion_historial_y_refresco(entorno, a
                 json={
                     "nombre_completo": "Técnico QA",
                     "correo": "qa@example.com",
-                    "rol": "Técnico CENERIS",
+                    "rol": rol,
                     "scope": "global",
                     "estado": "Activo",
                     "debe_cambiar_contrasena": False,
@@ -164,10 +169,11 @@ def test_reproceso_individual_masivo_cancelacion_historial_y_refresco(entorno, a
             pagina.goto(
                 f"{base}/cola-ingesta?dispositivo_id={e['equipo'].id_dspstv}&id_cnxn={e['conexion'].id_cnxn}"
             )
+            expect(
+                pagina.get_by_role("heading", name="Cola de ingesta", exact=True)
+            ).to_be_visible()
             pagina.get_by_label("Estado:", exact=True).select_option("Fallido")
-            boton = pagina.get_by_role(
-                "button", name="Reprocesar fallidos del filtro (13)", exact=True
-            )
+            boton = pagina.get_by_role("button", name="Reintentar todos los fallidos", exact=True)
             expect(boton).to_be_visible()
             # El archivo original está en la segunda página por orden estable.
             pagina.get_by_role("button", name="Siguiente", exact=True).click()
@@ -176,7 +182,7 @@ def test_reproceso_individual_masivo_cancelacion_historial_y_refresco(entorno, a
             ).click()
             detalle = pagina.get_by_role("dialog", name="Detalle del archivo", exact=True)
             expect(detalle).to_contain_text("Mapeo pendiente")
-            detalle.get_by_role("button", name="Reprocesar", exact=True).click()
+            detalle.get_by_role("button", name="Reintentar", exact=True).click()
             expect(detalle).to_contain_text("Procesado")
             expect(detalle).to_contain_text("Solicitud manual")
             expect(detalle).to_contain_text("1 lectura(s) nueva(s)")
@@ -184,20 +190,22 @@ def test_reproceso_individual_masivo_cancelacion_historial_y_refresco(entorno, a
             detalle.get_by_role("button", name="Cerrar", exact=True).click()
             expect(pagina.get_by_label("Estado:", exact=True)).to_have_value("Fallido")
             expect(pagina.get_by_text("Página 2 de 2", exact=True)).to_be_visible()
-            masivo = pagina.get_by_role(
-                "button", name="Reprocesar fallidos del filtro (12)", exact=True
-            )
+            masivo = pagina.get_by_role("button", name="Reintentar todos los fallidos", exact=True)
             masivo.click()
             confirmar = pagina.get_by_role(
-                "dialog", name="Confirmar reproceso de archivos", exact=True
+                "dialog", name="Confirmar reintento de archivos", exact=True
             )
+            expect(
+                confirmar.get_by_role("heading", name="Reintentar todos los fallidos", exact=True)
+            ).to_be_visible()
+            expect(confirmar.locator("strong")).to_have_text("12")
             expect(confirmar).to_contain_text("todas las páginas")
             expect(confirmar).to_contain_text("Solo el equipo seleccionado")
             confirmar.get_by_role("button", name="Cancelar", exact=True).click()
             assert len(solicitudes) == 1
             assert e["db"].query(ArchivoIngesta).filter_by(estd="Fallido").count() == 12
             masivo.click()
-            confirmar.get_by_role("button", name="Confirmar reproceso", exact=True).click()
+            confirmar.get_by_role("button", name="Confirmar reintento", exact=True).click()
             expect(confirmar).to_have_count(0)
             expect(pagina.get_by_text("Página 1 de 1", exact=True)).to_be_visible()
             expect(pagina.get_by_text("No hay archivos en la cola", exact=False)).to_be_visible()

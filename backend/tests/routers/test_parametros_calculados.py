@@ -340,12 +340,11 @@ def test_registro_desde_listado_vacio_y_referencias_estables(entorno_calculados)
         "nmbr": "  Balance hídrico  ",
         "frml": "[Nivel de entrada] - [Nivel de salida]",
         "undd": "m",
-        "estd": "Inactivo",
     }
     resp = client.post("/parametros-calculados", json=body)
     assert resp.status_code == 201, resp.text
     data = resp.json()
-    assert data["nmbr"] == "Balance hídrico" and data["estd"] == "Inactivo"
+    assert data["nmbr"] == "Balance hídrico" and data["estd"] == "Activo"
     guardado = e["db"].get(ParametroCalculado, data["id_prm_clc"])
     assert guardado.frml == f"p_{nivel.id_prmtr} - p_{salida.id_prmtr}"
     nivel.nmbr = "Nivel aguas arriba"
