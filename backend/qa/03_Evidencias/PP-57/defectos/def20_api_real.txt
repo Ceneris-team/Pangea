@@ -1,0 +1,4 @@
+DEF-20 · reproducción contra la API real (uvicorn 127.0.0.1:8000, dev 78edb10), sesión Técnico CENERIS, X-Cliente-Id=1
+GET /ubicaciones?busqueda=laguna -> 200 {"total":2,"pagina":1,"por_pagina":10,"items":[{"id_ubccn":19,"nmbr":"QA57 Lagun
+GET /ubicaciones?busqueda=laguna%00 -> 500 Internal Server Error
+GET /ubicaciones?busqueda=%00&estado=Inactiva -> 500 Internal Server Error

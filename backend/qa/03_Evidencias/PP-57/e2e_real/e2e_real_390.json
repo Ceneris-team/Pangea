@@ -1,0 +1,92 @@
+[
+  {
+    "cp": "CP-529",
+    "que": "Listado autorizado, buscador y «Todos los estados» inicial",
+    "ok": true,
+    "detalle": "opciones=['Todos los estados', 'Activo', 'Archivado']; filas=10; pie='Mostrando 1 a 10 de 19 registros'"
+  },
+  {
+    "cp": "CP-539",
+    "que": "Orden alfabético por nombre",
+    "ok": true,
+    "detalle": "['[DEMO] Planta de Tratamiento', '[DEMO] Río Rímac - Margen Izquierda', 'QA36 Sin equipos 085754', 'QA36 Sin equipos 085809', 'QA36 Sin equipos 175641', 'QA36 Sin equipos 175714', 'QA36 Sin equipos 180257', 'QA36 Sin equipos 180321', 'QA36 Sin equipos 180403', 'QA36 Sin equipos 180413']"
+  },
+  {
+    "cp": "CP-530",
+    "que": "Parcial, sin mayúsculas ni espacios",
+    "ok": true,
+    "detalle": "['QA57 Laguna Norte', 'QA57 Laguna Sur']; busqueda enviada=['LAGUNA']"
+  },
+  {
+    "cp": "CP-530",
+    "que": "«%» se busca como texto",
+    "ok": true,
+    "detalle": "['QA57 Canal 90%']"
+  },
+  {
+    "cp": "CP-531",
+    "que": "Activo/Archivado filtran; «Todos» conserva la búsqueda",
+    "ok": true,
+    "detalle": "archivados=['QA57 Laguna Norte', 'QA57 Laguna Sur'] {'Archivado'}; activos={'Activo'}; todos+norte=['QA57 Laguna Norte', 'QA57 Pozo Norte']"
+  },
+  {
+    "cp": "CP-531",
+    "que": "Archivado con recogida habilitada (no implica monitoreo detenido)",
+    "ok": true,
+    "detalle": "fila QA57 Laguna Norte"
+  },
+  {
+    "cp": "CP-532",
+    "que": "Nombre + estado simultáneos",
+    "ok": true,
+    "detalle": "['QA57 Laguna Norte']"
+  },
+  {
+    "cp": "CP-533",
+    "que": "Página 2 conserva filtros; cambiar filtro vuelve a página 1 y actualiza total",
+    "ok": true,
+    "detalle": "pág2=7 q={'busqueda': ['qa'], 'pagina': ['2'], 'por_pagina': ['10']}; tras filtro={'busqueda': ['qa'], 'estado': ['Inactiva'], 'pagina': ['1'], 'por_pagina': ['10']}; pie='Mostrando 1 a 2 de 2 registros'"
+  },
+  {
+    "cp": "CP-534",
+    "que": "Limpiar: búsqueda vacía, Todos, página 1, misma empresa",
+    "ok": true,
+    "detalle": "q='' estado='' consulta={'pagina': ['1'], 'por_pagina': ['10']}"
+  },
+  {
+    "cp": "CP-534",
+    "que": "Rótulo del botón",
+    "ok": true,
+    "detalle": "Limpiar filtros"
+  },
+  {
+    "cp": "CP-535",
+    "que": "Mensaje exacto y controles disponibles",
+    "ok": true,
+    "detalle": "No se encontraron proyectos con los filtros seleccionados"
+  },
+  {
+    "cp": "CP-536",
+    "que": "Cargando, «No se pudo cargar el listado» y reintento conserva filtros",
+    "ok": true,
+    "detalle": "carga='Cargando proyectos...'; alerta='No se pudo cargar el listado\nReintentar'; reintento={'estado': ['Inactiva'], 'pagina': ['1'], 'por_pagina': ['10']}"
+  },
+  {
+    "cp": "CP-536",
+    "que": "La respuesta lenta (Activo) no reemplaza a Archivado",
+    "ok": true,
+    "detalle": "estados={'Archivado'}"
+  },
+  {
+    "cp": "CP-537",
+    "que": "Otra empresa: solo sus proyectos",
+    "ok": true,
+    "detalle": "['QA57 Laguna Ajena']"
+  },
+  {
+    "cp": "—",
+    "que": "Sin errores de JavaScript en la página",
+    "ok": true,
+    "detalle": "[]"
+  }
+]
