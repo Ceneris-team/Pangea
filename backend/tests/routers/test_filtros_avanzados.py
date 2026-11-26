@@ -143,6 +143,86 @@ def test_rechaza_configuracion_invalida(client, series, cambio):
     assert consultar(client, [{**regla(temp, "0", "10"), **cambio}]).status_code == 422
 
 
+@pytest.mark.parametrize("campo", ["minimo", "maximo"])
+@pytest.mark.parametrize(
+    "valor",
+    ["1e400", "-1e400", "9" * 5000, "1e-4000", "٢١", "１２", "1_000"],
+    ids=[
+        "exceso-positivo",
+        "exceso-negativo",
+        "5000-digitos",
+        "subdesbordamiento",
+        "arabigos",
+        "ancho-completo",
+        "separador",
+    ],
+)
+def test_limites_no_representables_o_no_ascii_devuelven_422(client, escenario_basico, campo, valor):
+    parametro = escenario_basico["parametro"]
+    respuesta = consultar(client, [{**regla(parametro), campo: valor}])
+    assert respuesta.status_code == 422
+    assert isinstance(respuesta.json()["detail"], str)
+    assert "límite" in respuesta.json()["detail"].lower()
+
+
+@pytest.mark.parametrize("valor", ["-1e308", "1e308", "0.00000000000000001", "0e999999"])
+def test_limites_representables_conservan_decimales_y_notacion_cientifica(
+    client, escenario_basico, valor
+):
+    respuesta = consultar(client, [regla(escenario_basico["parametro"], minimo=valor)])
+    assert respuesta.status_code == 200, respuesta.text
+
+
+def test_limites_invertidos_de_alta_precision_se_rechazan(client, escenario_basico):
+    respuesta = consultar(
+        client, [regla(escenario_basico["parametro"], "0.30000000000000001", "0.3")]
+    )
+    assert respuesta.status_code == 422
+    assert "mínimo no puede ser mayor" in respuesta.json()["detail"]
+
+
+@pytest.mark.parametrize("campo", ["valor_min", "valor_max"])
+def test_limites_globales_tambien_rechazan_desbordamientos(client, escenario_basico, campo):
+    respuesta = client.get("/mediciones", params={campo: "1e400"})
+    assert respuesta.status_code == 422
+
+
+@pytest.mark.parametrize("campo", ["minimo", "maximo"])
+def test_exportacion_rechaza_limites_extremos_antes_de_encolar(entorno_exportacion, campo):
+    client, db, _, _, _, _, body = entorno_exportacion
+    parametro = db.query(Parametro).filter(Parametro.tipo_dato == "numerico").first()
+    respuesta = client.post(
+        "/exportaciones", json={**body, "condiciones": [{**regla(parametro), campo: "1e400"}]}
+    )
+    assert respuesta.status_code == 422
+    assert "límite" in str(respuesta.json()["detail"]).lower()
+
+
+@pytest.mark.parametrize("campo", ["valor_min", "valor_max"])
+def test_exportacion_tambien_valida_limites_globales(entorno_exportacion, campo):
+    client, _, _, _, _, _, body = entorno_exportacion
+    respuesta = client.post("/exportaciones", json={**body, campo: "1e400"})
+    assert respuesta.status_code == 422
+
+
+@pytest.mark.parametrize("valor", ["1e400", "-1e400"])
+@pytest.mark.parametrize("globales", [False, True])
+def test_exportacion_responde_422_con_numeros_json_extremos(entorno_exportacion, valor, globales):
+    client, db, _, _, _, _, body = entorno_exportacion
+    parametro = db.query(Parametro).filter(Parametro.tipo_dato == "numerico").first()
+    cambios = (
+        {"valor_min": "NUMERO_EXTREMO"}
+        if globales
+        else {"condiciones": [regla(parametro, minimo="NUMERO_EXTREMO")]}
+    )
+    contenido = json.dumps({**body, **cambios}).replace('"NUMERO_EXTREMO"', valor)
+    respuesta = client.post(
+        "/exportaciones", content=contenido, headers={"Content-Type": "application/json"}
+    )
+    assert respuesta.status_code == 422
+    assert respuesta.json()["detail"]
+
+
 def test_rechaza_duplicados_json_roto_y_muestreo(client, series):
     _, temp, _, _ = series
     r = regla(temp, "0")

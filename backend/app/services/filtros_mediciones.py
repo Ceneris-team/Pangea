@@ -1,10 +1,21 @@
 """HU32: condiciones por parámetro, compartidas por consulta y exportación."""
 
+import re
+import sys
 from decimal import Decimal
 from typing import Annotated, Literal
 
 from fastapi import HTTPException
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError, model_validator
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    BeforeValidator,
+    ConfigDict,
+    Field,
+    TypeAdapter,
+    ValidationError,
+    model_validator,
+)
 from sqlalchemy import and_, or_
 
 from app.models import (
@@ -16,13 +27,42 @@ from app.models import (
     Telemetria,
 )
 
+# Las condiciones también alcanzan resultados calculados (double precision).
+# Validar antes de SQL evita tanto desbordamientos como subdesbordamientos.
+# No se redondean los límites a los cuatro decimales de la telemetría.
+MAXIMO_LIMITE = Decimal.from_float(sys.float_info.max)
+PATRON_LIMITE = re.compile(r"[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?")
+
+
+def validar_texto_limite(valor):
+    if isinstance(valor, str):
+        valor = valor.strip()
+        if len(valor) > 60:
+            raise ValueError("El límite admite hasta 60 caracteres")
+        if not PATRON_LIMITE.fullmatch(valor):
+            raise ValueError("El límite debe ser un decimal válido con dígitos del 0 al 9")
+    return valor
+
+
+def validar_limite_representable(valor: Decimal) -> Decimal:
+    if not valor.is_finite() or valor.copy_abs() > MAXIMO_LIMITE:
+        raise ValueError("El límite está fuera del rango numérico admitido")
+    if valor != 0 and float(valor) == 0:
+        raise ValueError("El límite es demasiado pequeño para el rango numérico admitido")
+    return Decimal(0) if valor == 0 else valor
+
+
+LimiteNumerico = Annotated[
+    Decimal, BeforeValidator(validar_texto_limite), AfterValidator(validar_limite_representable)
+]
+
 
 class CondicionParametro(BaseModel):
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
 
     parametro_id: int
-    minimo: Decimal | None = None
-    maximo: Decimal | None = None
+    minimo: LimiteNumerico | None = None
+    maximo: LimiteNumerico | None = None
     modo: Literal["dentro", "fuera"] = "dentro"
 
     @model_validator(mode="after")

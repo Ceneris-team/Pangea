@@ -122,6 +122,18 @@ def test_condiciones_validacion_paginas_limpieza_y_respuestas_tardias(
             condicion.get_by_role("textbox", name="Valor mínimo", exact=True).fill("abc")
             panel.get_by_role("button", name="Aplicar filtros", exact=True).click()
             expect(panel.get_by_role("alert")).to_contain_text("decimales válidos")
+            # Las observaciones de QA se rechazan en pantalla, sin consultar
+            # ni perder la configuración que se está editando.
+            for minimo, maximo, mensaje in [
+                ("0.30000000000000001", "0.3", "el mínimo no puede ser mayor"),
+                ("٢١", "30", "decimales válidos"),
+                ("1e400", "", "decimales válidos"),
+            ]:
+                condicion.get_by_role("textbox", name="Valor mínimo", exact=True).fill(minimo)
+                condicion.get_by_role("textbox", name="Valor máximo", exact=True).fill(maximo)
+                panel.get_by_role("button", name="Aplicar filtros", exact=True).click()
+                expect(panel.get_by_role("alert")).to_contain_text(mensaje)
+                assert len(consultas) == antes
             condicion.get_by_role("textbox", name="Valor mínimo", exact=True).fill("-5,25")
             condicion.get_by_role("textbox", name="Valor máximo", exact=True).fill("5.5")
             selector.select_option(str(nivel.id_prmtr))

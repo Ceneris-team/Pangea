@@ -318,13 +318,19 @@ class TestCA2Invalidacion:
         cache.guardar(clave, {"items": []}, indices=[cache.indice_de_sede(sede.id_sd)])
         assert cache.obtener(clave) is not None
 
-        guardar_lecturas(
+        # Dos datetime.now() pueden coincidir con la resolución del reloj de
+        # Windows. La ingesta descartaría esa lectura como duplicada y no
+        # tendría por qué invalidar la caché. Usar un instante distinto.
+        fecha_nueva = db_session.query(Telemetria.fch_hr).filter_by(
+            id_dspstv=dispositivo.id_dspstv
+        ).scalar() + dt.timedelta(seconds=1)
+        resultado = guardar_lecturas(
             db_session,
             [
                 LecturaValidada(
                     numero_fila=1,
                     id_cnxn=dispositivo.id_cnxn,
-                    fecha_hora=dt.datetime.now(dt.timezone.utc),
+                    fecha_hora=fecha_nueva,
                     parametro=parametro.nmbr,
                     valor=42.0,
                 )
@@ -333,6 +339,7 @@ class TestCA2Invalidacion:
             id_archv=None,
         )
 
+        assert resultado.guardadas == 1
         assert (
             cache.obtener(clave) is None
         ), "CA2: una lectura nueva del pipeline debe invalidar la caché de su sede"
@@ -355,13 +362,16 @@ class TestCA2Invalidacion:
         clave_b = cache.clave("mediciones", f"sd{sede_b.id_sd}:test")
         cache.guardar(clave_b, {"items": []}, indices=[cache.indice_de_sede(sede_b.id_sd)])
 
-        guardar_lecturas(
+        fecha_nueva = db_session.query(Telemetria.fch_hr).filter_by(
+            id_dspstv=dispositivo_a.id_dspstv
+        ).scalar() + dt.timedelta(seconds=1)
+        resultado = guardar_lecturas(
             db_session,
             [
                 LecturaValidada(
                     numero_fila=1,
                     id_cnxn=dispositivo_a.id_cnxn,
-                    fecha_hora=dt.datetime.now(dt.timezone.utc),
+                    fecha_hora=fecha_nueva,
                     parametro=parametro.nmbr,
                     valor=42.0,
                 )
@@ -370,6 +380,7 @@ class TestCA2Invalidacion:
             id_archv=None,
         )
 
+        assert resultado.guardadas == 1
         assert (
             cache.obtener(clave_b) is not None
         ), "una lectura de la sede A no puede tirar la caché de la sede B"

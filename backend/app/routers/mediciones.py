@@ -17,7 +17,6 @@ de HU13 sigue sin depender de ningún filtro de fecha).
 
 import base64
 import datetime as dt
-from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.encoders import jsonable_encoder
@@ -55,6 +54,7 @@ from app.services.cache.downsampling import (
     rango_es_amplio,
 )
 from app.services.filtros_mediciones import (
+    LimiteNumerico,
     admite_rango,
     aplicar_condiciones,
     fuentes_parametros,
@@ -278,8 +278,8 @@ def listar_mediciones(
     # numéricas -solo tienen sentido sobre Telemetria.vlr (decimal); un
     # EventoTexto.vlr es texto ("Puerta Abierta") y no se filtra por
     # rango, ver _query_base.
-    valor_min: Decimal | None = Query(default=None),
-    valor_max: Decimal | None = Query(default=None),
+    valor_min: LimiteNumerico | None = Query(default=None),
+    valor_max: LimiteNumerico | None = Query(default=None),
     # HU32: NO es el downsampling de HT-10 (services/cache/downsampling.py,
     # automático por cantidad de puntos cuando el rango supera 30 días).
     # Es un filtro explícito que pide el usuario ("una lectura cada N
