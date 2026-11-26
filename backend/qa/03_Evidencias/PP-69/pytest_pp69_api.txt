@@ -1,0 +1,35 @@
+============================= test session starts =============================
+platform win32 -- Python 3.12.10, pytest-9.2.0, pluggy-1.7.0 -- C:\Users\Elliot\AppData\Local\Temp\claude\d18f3ee8a3917f1a\9c7037f8-ee81-4cd1-b357-7bfce6b11117\scratchpad\venv-qa\Scripts\python.exe
+metadata: {'Python': '3.12.10', 'Platform': 'Windows-11-10.0.26200-SP0', 'Packages': {'pytest': '9.2.0', 'pluggy': '1.7.0'}, 'Plugins': {'anyio': '4.16.0', 'html': '4.2.0', 'metadata': '3.1.1'}}
+rootdir: C:\Proyectos\qa-PP-71\backend
+configfile: pyproject.toml
+plugins: anyio-4.16.0, html-4.2.0, metadata-3.1.1
+collecting ... collected 15 items
+
+tests/routers/test_qa_pp69_listado.py::test_cp554_roles_autorizados[CENERIS-200] PASSED
+tests/routers/test_qa_pp69_listado.py::test_cp554_roles_autorizados[Administrador-200] PASSED
+tests/routers/test_qa_pp69_listado.py::test_cp554_roles_autorizados[Tecnico-200] PASSED
+tests/routers/test_qa_pp69_listado.py::test_cp554_roles_autorizados[Lector-403] PASSED
+tests/routers/test_qa_pp69_listado.py::test_cp555_aislamiento_empresa_y_proyecto PASSED
+tests/routers/test_qa_pp69_listado.py::test_cp556_columnas_y_ambito PASSED
+tests/routers/test_qa_pp69_listado.py::test_cp557_formula_extensa_completa_en_detalle PASSED
+tests/routers/test_qa_pp69_listado.py::test_cp558_paginacion_completa PASSED
+tests/routers/test_qa_pp69_listado.py::test_cp559_orden_estable ORDEN_OBTENIDO ['abeto', 'Árbol', 'caudal', 'Caudal', 'Caudal', 'éter', 'Éxito', 'Ñandú', 'nube', 'Zeta']
+OBS74_N_ANTES_QUE_NUBE True
+PASSED
+tests/routers/test_qa_pp69_listado.py::test_cp560_limites_paginacion PAGINA_FUERA 12 9 0
+PASSED
+tests/routers/test_qa_pp69_listado.py::test_cp561_detalle_completo PASSED
+tests/routers/test_qa_pp69_listado.py::test_cp562_vacio_con_permiso_de_crear[Administrador-True] PASSED
+tests/routers/test_qa_pp69_listado.py::test_cp562_vacio_con_permiso_de_crear[CENERIS-True] PASSED
+tests/routers/test_qa_pp69_listado.py::test_cp566_ambos_estados_al_inicio PASSED
+tests/routers/test_qa_pp69_listado.py::test_cp567_consultar_no_modifica PASSED
+
+============================== warnings summary ===============================
+..\..\..\Users\Elliot\AppData\Local\Temp\claude\d18f3ee8a3917f1a\9c7037f8-ee81-4cd1-b357-7bfce6b11117\scratchpad\venv-qa\Lib\site-packages\fastapi\testclient.py:1
+  C:\Users\Elliot\AppData\Local\Temp\claude\d18f3ee8a3917f1a\9c7037f8-ee81-4cd1-b357-7bfce6b11117\scratchpad\venv-qa\Lib\site-packages\fastapi\testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+- generated xml file: C:\Proyectos\PANGEA\backend\qa\03_Evidencias\PP-69\pytest_pp69_api.xml -
+======================= 15 passed, 1 warning in 17.26s ========================

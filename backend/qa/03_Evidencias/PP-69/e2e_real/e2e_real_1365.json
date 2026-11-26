@@ -1,0 +1,92 @@
+[
+  {
+    "cp": "CP-556",
+    "que": "Columnas nombre, fórmula, unidad de medida, estado y acciones",
+    "ok": false,
+    "detalle": "cabeceras=['NOMBRE', 'FÓRMULA', 'UNIDAD', 'ESTADO', 'ÁMBITO', 'ACCIONES']; faltan=['Unidad de medida']"
+  },
+  {
+    "cp": "CP-556",
+    "que": "Ámbito identificado y acción Ver detalle",
+    "ok": true,
+    "detalle": "ámbito='Cliente Demo\\n\\nCompartido por los proyectos de Sede Demo'; acciones='Ver detalle'"
+  },
+  {
+    "cp": "CP-558",
+    "que": "10 por página, total y página actual, sin omitir ni duplicar",
+    "ok": true,
+    "detalle": "p1=10 p2=6 únicos=16; 'Mostrando 1 a 10 de 16 registros' / 'Mostrando 11 a 16 de 16 registros'"
+  },
+  {
+    "cp": "CP-560",
+    "que": "En la última página «Siguiente» está deshabilitado",
+    "ok": true,
+    "detalle": ""
+  },
+  {
+    "cp": "CP-559",
+    "que": "Orden por nombre entre páginas",
+    "ok": true,
+    "detalle": "['Amplitud sin descripción', 'Balance hídrico', 'Caudal acumulado', 'Caudal específico', 'Caudal máximo', 'Caudal neto', 'Conductividad 25', 'Factor_k', 'Humedad 90%', 'Índice de calidad', 'Índice térmico ponderado', 'Nivel corregido', 'Oxígeno saturado', 'Presión diferencial', 'Temperatura media', 'Turbidez ajustada']"
+  },
+  {
+    "cp": "CP-555",
+    "que": "Contexto Cliente Demo y sin definiciones de otra empresa",
+    "ok": true,
+    "detalle": "Empresa: Cliente Demo"
+  },
+  {
+    "cp": "CP-566",
+    "que": "Activo e Inactivo listados sin filtro",
+    "ok": true,
+    "detalle": "['Activo', 'Inactivo']"
+  },
+  {
+    "cp": "CP-557",
+    "que": "Fórmula resumida en la tabla y completa en el detalle",
+    "ok": true,
+    "detalle": "recortada=True; title=290 car.; '*' en detalle=16"
+  },
+  {
+    "cp": "CP-561",
+    "que": "Detalle: nombre, descripción, fórmula, referencias, unidad, estado y ámbito",
+    "ok": true,
+    "detalle": "referencias reconocidas=['temperatura', 'ph', 'conductividad', 'orp']; foco en el panel=True"
+  },
+  {
+    "cp": "CP-561",
+    "que": "Sin descripción se indica",
+    "ok": true,
+    "detalle": "«Sin descripción»"
+  },
+  {
+    "cp": "CP-564",
+    "que": "Error con reintento, sin presentarlo como vacío; contexto conservado",
+    "ok": true,
+    "detalle": "alerta='Error interno\\n\\nReintentar listado'; vacío visible=False; contexto visible durante el error=False; tras reintento='Empresa: Cliente Demo'"
+  },
+  {
+    "cp": "CP-562",
+    "que": "Vacío: mensaje exacto y botón Añadir visible con permiso",
+    "ok": true,
+    "detalle": "'Aún no hay parámetros calculados configurados en este contexto.'; botón=True"
+  },
+  {
+    "cp": "CP-565",
+    "que": "Mensajes distintos: sin coincidencias / vacío / error",
+    "ok": true,
+    "detalle": "'No se encontraron parámetros calculados con esos filtros.' | 'Aún no hay parámetros calculados configurados en este contexto.' | 'Error interno\\n\\nReintentar listado'"
+  },
+  {
+    "cp": "CP-563",
+    "que": "Vacío sin permiso de crear: mensaje sin botón Añadir",
+    "ok": true,
+    "detalle": "sin botón=True; mensaje=True"
+  },
+  {
+    "cp": "General",
+    "que": "Sin errores de JavaScript",
+    "ok": true,
+    "detalle": "[]"
+  }
+]

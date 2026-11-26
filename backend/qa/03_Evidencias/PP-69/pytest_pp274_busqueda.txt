@@ -1,0 +1,190 @@
+============================= test session starts =============================
+platform win32 -- Python 3.12.10, pytest-9.2.0, pluggy-1.7.0 -- C:\Users\Elliot\AppData\Local\Temp\claude\d18f3ee8a3917f1a\9c7037f8-ee81-4cd1-b357-7bfce6b11117\scratchpad\venv-qa\Scripts\python.exe
+metadata: {'Python': '3.12.10', 'Platform': 'Windows-11-10.0.26200-SP0', 'Packages': {'pytest': '9.2.0', 'pluggy': '1.7.0'}, 'Plugins': {'anyio': '4.16.0', 'html': '4.2.0', 'metadata': '3.1.1'}}
+rootdir: C:\Proyectos\qa-PP-71\backend
+configfile: pyproject.toml
+plugins: anyio-4.16.0, html-4.2.0, metadata-3.1.1
+collecting ... collected 20 items / 7 deselected / 13 selected
+
+tests/routers/test_qa_pp71_filtros.py::test_cp517_busqueda_parcial_insensible[presi\xf3n] PASSED [  7%]
+tests/routers/test_qa_pp71_filtros.py::test_cp517_busqueda_parcial_insensible[PRESI\xd3N] PASSED [ 15%]
+tests/routers/test_qa_pp71_filtros.py::test_cp517_busqueda_parcial_insensible[  PrEsI\xf3N  ] PASSED [ 23%]
+tests/routers/test_qa_pp71_filtros.py::test_cp517_busqueda_parcial_insensible[i\xf3n dif] PASSED [ 30%]
+tests/routers/test_qa_pp71_filtros.py::test_cp517_busqueda_parcial_insensible[\tpresi\xf3n\n] PASSED [ 38%]
+tests/routers/test_qa_pp71_filtros.py::test_cp518_busqueda_literal_y_limites[-3] PASSED [ 46%]
+tests/routers/test_qa_pp71_filtros.py::test_cp518_busqueda_literal_y_limites[   -3] PASSED [ 53%]
+tests/routers/test_qa_pp71_filtros.py::test_cp518_busqueda_literal_y_limites[\\-1] PASSED [ 61%]
+tests/routers/test_qa_pp71_filtros.py::test_cp518_busqueda_literal_y_limites[_-1] PASSED [ 69%]
+tests/routers/test_qa_pp71_filtros.py::test_cp518_busqueda_literal_y_limites[%-1] PASSED [ 76%]
+tests/routers/test_qa_pp71_filtros.py::test_cp518_busqueda_literal_y_limites[q5-0] PASSED [ 84%]
+tests/routers/test_qa_pp71_filtros.py::test_cp518_busqueda_demasiado_larga_422 PASSED [ 92%]
+tests/routers/test_qa_pp71_filtros.py::test_cp518_byte_nul_no_provoca_500 FAILED [100%]
+
+================================== FAILURES ===================================
+_____________________ test_cp518_byte_nul_no_provoca_500 ______________________
+
+entorno_calculados = {'client': <starlette.testclient.TestClient object at 0x000002887D1A98B0>, 'db': <sqlalchemy.orm.session.Session objec...els.cliente_sede.Sede object at 0x000002887CA41490>, <app.models.cliente_sede.Sede object at 0x000002887D860C50>], ...}
+
+    def test_cp518_byte_nul_no_provoca_500(entorno_calculados):
+>       resp = entorno_calculados["client"].get(URL, params={"q": "pres\x00ion"})
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\routers\test_qa_pp71_filtros.py:78: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+C:\Users\Elliot\AppData\Local\Temp\claude\d18f3ee8a3917f1a\9c7037f8-ee81-4cd1-b357-7bfce6b11117\scratchpad\venv-qa\Lib\site-packages\httpx\_client.py:1053: in get
+    return self.request(
+C:\Users\Elliot\AppData\Local\Temp\claude\d18f3ee8a3917f1a\9c7037f8-ee81-4cd1-b357-7bfce6b11117\scratchpad\venv-qa\Lib\site-packages\starlette\testclient.py:518: in request
+    return super().request(
+C:\Users\Elliot\AppData\Local\Temp\claude\d18f3ee8a3917f1a\9c7037f8-ee81-4cd1-b357-7bfce6b11117\scratchpad\venv-qa\Lib\site-packages\httpx\_client.py:825: in request
+    return self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\Elliot\AppData\Local\Temp\claude\d18f3ee8a3917f1a\9c7037f8-ee81-4cd1-b357-7bfce6b11117\scratchpad\venv-qa\Lib\site-packages\httpx\_client.py:928: in send
+    raise exc
+C:\Users\Elliot\AppData\Local\Temp\claude\d18f3ee8a3917f1a\9c7037f8-ee81-4cd1-b357-7bfce6b11117\scratchpad\venv-qa\Lib\site-packages\httpx\_client.py:922: in send
+    response.read()
+C:\Users\Elliot\AppData\Local\Temp\claude\d18f3ee8a3917f1a\9c7037f8-ee81-4cd1-b357-7bfce6b11117\scratchpad\venv-qa\Lib\site-packages\httpx\_models.py:881: in read
+    self._content = b"".join(self.iter_bytes())
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\Elliot\AppData\Local\Temp\claude\d18f3ee8a3917f1a\9c7037f8-ee81-4cd1-b357-7bfce6b11117\scratchpad\venv-qa\Lib\site-packages\httpx\_models.py:897: in iter_bytes
+    for raw_bytes in self.iter_raw():
+                     ^^^^^^^^^^^^^^^
+C:\Users\Elliot\AppData\Local\Temp\claude\d18f3ee8a3917f1a\9c7037f8-ee81-4cd1-b357-7bfce6b11117\scratchpad\venv-qa\Lib\site-packages\httpx\_models.py:951: in iter_raw
+    for raw_stream_bytes in self.stream:
+                            ^^^^^^^^^^^
+C:\Users\Elliot\AppData\Local\Temp\claude\d18f3ee8a3917f1a\9c7037f8-ee81-4cd1-b357-7bfce6b11117\scratchpad\venv-qa\Lib\site-packages\httpx\_client.py:153: in __iter__
+    for chunk in self._stream:
+                 ^^^^^^^^^^^^
+C:\Users\Elliot\AppData\Local\Temp\claude\d18f3ee8a3917f1a\9c7037f8-ee81-4cd1-b357-7bfce6b11117\scratchpad\venv-qa\Lib\site-packages\starlette\testclient.py:384: in iter_body
+    exit_stack.close()
+C:\Users\Elliot\AppData\Local\Programs\Python\Python312\Lib\contextlib.py:618: in close
+    self.__exit__(None, None, None)
+C:\Users\Elliot\AppData\Local\Programs\Python\Python312\Lib\contextlib.py:610: in __exit__
+    raise exc_details[1]
+C:\Users\Elliot\AppData\Local\Programs\Python\Python312\Lib\contextlib.py:595: in __exit__
+    if cb(*exc_details):
+       ^^^^^^^^^^^^^^^^
+C:\Users\Elliot\AppData\Local\Temp\claude\d18f3ee8a3917f1a\9c7037f8-ee81-4cd1-b357-7bfce6b11117\scratchpad\venv-qa\Lib\site-packages\starlette\testclient.py:399: in close_app
+    raise exception
+C:\Users\Elliot\AppData\Local\Temp\claude\d18f3ee8a3917f1a\9c7037f8-ee81-4cd1-b357-7bfce6b11117\scratchpad\venv-qa\Lib\site-packages\anyio\from_thread.py:272: in _call_func
+    retval = await retval_or_awaitable
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\Elliot\AppData\Local\Temp\claude\d18f3ee8a3917f1a\9c7037f8-ee81-4cd1-b357-7bfce6b11117\scratchpad\venv-qa\Lib\site-packages\starlette\testclient.py:366: in run_app
+    await self.app(scope, receive, send)
+C:\Users\Elliot\AppData\Local\Temp\claude\d18f3ee8a3917f1a\9c7037f8-ee81-4cd1-b357-7bfce6b11117\scratchpad\venv-qa\Lib\site-packages\fastapi\applications.py:1224: in __call__
+    await super().__call__(scope, receive, send)
+C:\Users\Elliot\AppData\Local\Temp\claude\d18f3ee8a3917f1a\9c7037f8-ee81-4cd1-b357-7bfce6b11117\scratchpad\venv-qa\Lib\site-packages\starlette\applications.py:96: in __call__
+    await self.middleware_stack(scope, receive, send)
+C:\Users\Elliot\AppData\Local\Temp\claude\d18f3ee8a3917f1a\9c7037f8-ee81-4cd1-b357-7bfce6b11117\scratchpad\venv-qa\Lib\site-packages\starlette\middleware\errors.py:186: in __call__
+    raise exc
+C:\Users\Elliot\AppData\Local\Temp\claude\d18f3ee8a3917f1a\9c7037f8-ee81-4cd1-b357-7bfce6b11117\scratchpad\venv-qa\Lib\site-packages\starlette\middleware\errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+C:\Users\Elliot\AppData\Local\Temp\claude\d18f3ee8a3917f1a\9c7037f8-ee81-4cd1-b357-7bfce6b11117\scratchpad\venv-qa\Lib\site-packages\fastapi\telemetry\_asgi.py:151: in __call__
+    await self.app(scope, receive, send)
+C:\Users\Elliot\AppData\Local\Temp\claude\d18f3ee8a3917f1a\9c7037f8-ee81-4cd1-b357-7bfce6b11117\scratchpad\venv-qa\Lib\site-packages\fastapi\_body_limit.py:80: in __call__
+    await self.app(scope, receive, send)
+C:\Users\Elliot\AppData\Local\Temp\claude\d18f3ee8a3917f1a\9c7037f8-ee81-4cd1-b357-7bfce6b11117\scratchpad\venv-qa\Lib\site-packages\starlette\middleware\cors.py:91: in __call__
+    await self.simple_response(scope, receive, send, request_headers=headers)
+C:\Users\Elliot\AppData\Local\Temp\claude\d18f3ee8a3917f1a\9c7037f8-ee81-4cd1-b357-7bfce6b11117\scratchpad\venv-qa\Lib\site-packages\starlette\middleware\cors.py:149: in simple_response
+    await self.app(scope, receive, send)
+C:\Users\Elliot\AppData\Local\Temp\claude\d18f3ee8a3917f1a\9c7037f8-ee81-4cd1-b357-7bfce6b11117\scratchpad\venv-qa\Lib\site-packages\starlette\middleware\exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+C:\Users\Elliot\AppData\Local\Temp\claude\d18f3ee8a3917f1a\9c7037f8-ee81-4cd1-b357-7bfce6b11117\scratchpad\venv-qa\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+C:\Users\Elliot\AppData\Local\Temp\claude\d18f3ee8a3917f1a\9c7037f8-ee81-4cd1-b357-7bfce6b11117\scratchpad\venv-qa\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+C:\Users\Elliot\AppData\Local\Temp\claude\d18f3ee8a3917f1a\9c7037f8-ee81-4cd1-b357-7bfce6b11117\scratchpad\venv-qa\Lib\site-packages\fastapi\middleware\asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+C:\Users\Elliot\AppData\Local\Temp\claude\d18f3ee8a3917f1a\9c7037f8-ee81-4cd1-b357-7bfce6b11117\scratchpad\venv-qa\Lib\site-packages\starlette\routing.py:683: in __call__
+    await self.middleware_stack(scope, receive, send)
+C:\Users\Elliot\AppData\Local\Temp\claude\d18f3ee8a3917f1a\9c7037f8-ee81-4cd1-b357-7bfce6b11117\scratchpad\venv-qa\Lib\site-packages\fastapi\routing.py:2929: in app
+    await route.handle(scope, receive, send)
+C:\Users\Elliot\AppData\Local\Temp\claude\d18f3ee8a3917f1a\9c7037f8-ee81-4cd1-b357-7bfce6b11117\scratchpad\venv-qa\Lib\site-packages\fastapi\routing.py:1916: in handle
+    await self.original_router.handle(scope, receive, send)
+C:\Users\Elliot\AppData\Local\Temp\claude\d18f3ee8a3917f1a\9c7037f8-ee81-4cd1-b357-7bfce6b11117\scratchpad\venv-qa\Lib\site-packages\fastapi\routing.py:3015: in handle
+    await included_router._handle_selected(scope, receive, send)
+C:\Users\Elliot\AppData\Local\Temp\claude\d18f3ee8a3917f1a\9c7037f8-ee81-4cd1-b357-7bfce6b11117\scratchpad\venv-qa\Lib\site-packages\fastapi\routing.py:1945: in _handle_selected
+    await original_route.handle(scope, receive, send)
+C:\Users\Elliot\AppData\Local\Temp\claude\d18f3ee8a3917f1a\9c7037f8-ee81-4cd1-b357-7bfce6b11117\scratchpad\venv-qa\Lib\site-packages\fastapi\routing.py:1373: in handle
+    await effective_context.app(scope, receive, send)
+C:\Users\Elliot\AppData\Local\Temp\claude\d18f3ee8a3917f1a\9c7037f8-ee81-4cd1-b357-7bfce6b11117\scratchpad\venv-qa\Lib\site-packages\fastapi\routing.py:175: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+C:\Users\Elliot\AppData\Local\Temp\claude\d18f3ee8a3917f1a\9c7037f8-ee81-4cd1-b357-7bfce6b11117\scratchpad\venv-qa\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+C:\Users\Elliot\AppData\Local\Temp\claude\d18f3ee8a3917f1a\9c7037f8-ee81-4cd1-b357-7bfce6b11117\scratchpad\venv-qa\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+C:\Users\Elliot\AppData\Local\Temp\claude\d18f3ee8a3917f1a\9c7037f8-ee81-4cd1-b357-7bfce6b11117\scratchpad\venv-qa\Lib\site-packages\fastapi\routing.py:161: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+C:\Users\Elliot\AppData\Local\Temp\claude\d18f3ee8a3917f1a\9c7037f8-ee81-4cd1-b357-7bfce6b11117\scratchpad\venv-qa\Lib\site-packages\fastapi\routing.py:762: in app
+    raw_response = await run_endpoint_function(
+C:\Users\Elliot\AppData\Local\Temp\claude\d18f3ee8a3917f1a\9c7037f8-ee81-4cd1-b357-7bfce6b11117\scratchpad\venv-qa\Lib\site-packages\fastapi\routing.py:383: in run_endpoint_function
+    return await run_in_threadpool(
+C:\Users\Elliot\AppData\Local\Temp\claude\d18f3ee8a3917f1a\9c7037f8-ee81-4cd1-b357-7bfce6b11117\scratchpad\venv-qa\Lib\site-packages\starlette\concurrency.py:34: in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\Elliot\AppData\Local\Temp\claude\d18f3ee8a3917f1a\9c7037f8-ee81-4cd1-b357-7bfce6b11117\scratchpad\venv-qa\Lib\site-packages\anyio\to_thread.py:65: in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+C:\Users\Elliot\AppData\Local\Temp\claude\d18f3ee8a3917f1a\9c7037f8-ee81-4cd1-b357-7bfce6b11117\scratchpad\venv-qa\Lib\site-packages\anyio\_backends\_asyncio.py:2779: in run_sync_in_worker_thread
+    return await future
+           ^^^^^^^^^^^^
+C:\Users\Elliot\AppData\Local\Temp\claude\d18f3ee8a3917f1a\9c7037f8-ee81-4cd1-b357-7bfce6b11117\scratchpad\venv-qa\Lib\site-packages\anyio\_backends\_asyncio.py:1124: in run
+    result = context.run(func, *args)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\Elliot\AppData\Local\Temp\claude\d18f3ee8a3917f1a\9c7037f8-ee81-4cd1-b357-7bfce6b11117\scratchpad\venv-qa\Lib\site-packages\fastapi\telemetry\_api.py:244: in _run_sync_endpoint
+    return function(**arguments)
+           ^^^^^^^^^^^^^^^^^^^^^
+app\routers\parametros_calculados.py:109: in listar_parametros_calculados
+    total = query.count()
+            ^^^^^^^^^^^^^
+C:\Users\Elliot\AppData\Local\Temp\claude\d18f3ee8a3917f1a\9c7037f8-ee81-4cd1-b357-7bfce6b11117\scratchpad\venv-qa\Lib\site-packages\sqlalchemy\orm\query.py:3207: in count
+    self._legacy_from_self(col).enable_eagerloads(False).scalar()
+C:\Users\Elliot\AppData\Local\Temp\claude\d18f3ee8a3917f1a\9c7037f8-ee81-4cd1-b357-7bfce6b11117\scratchpad\venv-qa\Lib\site-packages\sqlalchemy\orm\query.py:2899: in scalar
+    ret = self.one()
+          ^^^^^^^^^^
+C:\Users\Elliot\AppData\Local\Temp\claude\d18f3ee8a3917f1a\9c7037f8-ee81-4cd1-b357-7bfce6b11117\scratchpad\venv-qa\Lib\site-packages\sqlalchemy\orm\query.py:2872: in one
+    return self._iter().one()  # type: ignore[return-value]
+           ^^^^^^^^^^^^
+C:\Users\Elliot\AppData\Local\Temp\claude\d18f3ee8a3917f1a\9c7037f8-ee81-4cd1-b357-7bfce6b11117\scratchpad\venv-qa\Lib\site-packages\sqlalchemy\orm\query.py:2921: in _iter
+    result: Union[ScalarResult[_T], Result[_T]] = self.session.execute(
+C:\Users\Elliot\AppData\Local\Temp\claude\d18f3ee8a3917f1a\9c7037f8-ee81-4cd1-b357-7bfce6b11117\scratchpad\venv-qa\Lib\site-packages\sqlalchemy\orm\session.py:2555: in execute
+    return self._execute_internal(
+C:\Users\Elliot\AppData\Local\Temp\claude\d18f3ee8a3917f1a\9c7037f8-ee81-4cd1-b357-7bfce6b11117\scratchpad\venv-qa\Lib\site-packages\sqlalchemy\orm\session.py:2445: in _execute_internal
+    compile_state_cls.orm_execute_statement(
+C:\Users\Elliot\AppData\Local\Temp\claude\d18f3ee8a3917f1a\9c7037f8-ee81-4cd1-b357-7bfce6b11117\scratchpad\venv-qa\Lib\site-packages\sqlalchemy\orm\context.py:357: in orm_execute_statement
+    result = conn.execute(
+C:\Users\Elliot\AppData\Local\Temp\claude\d18f3ee8a3917f1a\9c7037f8-ee81-4cd1-b357-7bfce6b11117\scratchpad\venv-qa\Lib\site-packages\sqlalchemy\engine\base.py:1494: in execute
+    return meth(
+C:\Users\Elliot\AppData\Local\Temp\claude\d18f3ee8a3917f1a\9c7037f8-ee81-4cd1-b357-7bfce6b11117\scratchpad\venv-qa\Lib\site-packages\sqlalchemy\sql\elements.py:534: in _execute_on_connection
+    return connection._execute_clauseelement(
+C:\Users\Elliot\AppData\Local\Temp\claude\d18f3ee8a3917f1a\9c7037f8-ee81-4cd1-b357-7bfce6b11117\scratchpad\venv-qa\Lib\site-packages\sqlalchemy\engine\base.py:1714: in _execute_clauseelement
+    ret = self._execute_context(
+C:\Users\Elliot\AppData\Local\Temp\claude\d18f3ee8a3917f1a\9c7037f8-ee81-4cd1-b357-7bfce6b11117\scratchpad\venv-qa\Lib\site-packages\sqlalchemy\engine\base.py:1868: in _execute_context
+    return self._exec_single_context(
+C:\Users\Elliot\AppData\Local\Temp\claude\d18f3ee8a3917f1a\9c7037f8-ee81-4cd1-b357-7bfce6b11117\scratchpad\venv-qa\Lib\site-packages\sqlalchemy\engine\base.py:1996: in _exec_single_context
+    self._handle_dbapi_exception(
+C:\Users\Elliot\AppData\Local\Temp\claude\d18f3ee8a3917f1a\9c7037f8-ee81-4cd1-b357-7bfce6b11117\scratchpad\venv-qa\Lib\site-packages\sqlalchemy\engine\base.py:2354: in _handle_dbapi_exception
+    raise exc_info[1].with_traceback(exc_info[2])
+C:\Users\Elliot\AppData\Local\Temp\claude\d18f3ee8a3917f1a\9c7037f8-ee81-4cd1-b357-7bfce6b11117\scratchpad\venv-qa\Lib\site-packages\sqlalchemy\engine\base.py:1977: in _exec_single_context
+    self.dialect.do_execute(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <sqlalchemy.dialects.postgresql.psycopg2.PGDialect_psycopg2 object at 0x000002887D01E660>
+cursor = <cursor object at 0x000002887D8E7140; closed: -1>
+statement = "SELECT count(*) AS count_1 \nFROM (SELECT prmtr_clcld.id_prm_clc AS prmtr_clcld_id_prm_clc, prmtr_clcld.id_sd AS prmt...lower(prmtr_clcld.nmbr), %(translate_1)s, %(translate_2)s) LIKE '%%' || %(translate_3)s || '%%' ESCAPE '/')) AS anon_1"
+parameters = {'translate_1': 'ÁÉÍÓÚÜÑ', 'translate_2': 'áéíóúüñ', 'translate_3': 'pres\x00ion', 'id_sd_1_1': 4083, ...}
+context = <sqlalchemy.dialects.postgresql.psycopg2.PGExecutionContext_psycopg2 object at 0x000002887D8E3080>
+
+    def do_execute(self, cursor, statement, parameters, context=None):
+>       cursor.execute(statement, parameters)
+E       ValueError: A string literal cannot contain NUL (0x00) characters.
+
+C:\Users\Elliot\AppData\Local\Temp\claude\d18f3ee8a3917f1a\9c7037f8-ee81-4cd1-b357-7bfce6b11117\scratchpad\venv-qa\Lib\site-packages\sqlalchemy\engine\default.py:1192: ValueError
+============================== warnings summary ===============================
+..\..\..\Users\Elliot\AppData\Local\Temp\claude\d18f3ee8a3917f1a\9c7037f8-ee81-4cd1-b357-7bfce6b11117\scratchpad\venv-qa\Lib\site-packages\fastapi\testclient.py:1
+  C:\Users\Elliot\AppData\Local\Temp\claude\d18f3ee8a3917f1a\9c7037f8-ee81-4cd1-b357-7bfce6b11117\scratchpad\venv-qa\Lib\site-packages\fastapi\testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/routers/test_qa_pp71_filtros.py::test_cp518_byte_nul_no_provoca_500
+============ 1 failed, 12 passed, 7 deselected, 1 warning in 6.09s ============

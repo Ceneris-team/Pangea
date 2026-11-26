@@ -1,0 +1,17 @@
+     rzn_scl     |   estd   | count 
+-----------------+----------+-------
+ Cliente Demo    | Activo   |    10
+ Cliente Demo    | Inactivo |     6
+ Empresa QA PP71 | Activo   |     1
+(3 rows)
+
+ trabajos |            ultimo             
+----------+-------------------------------
+       12 | 2026-11-26 17:00:48.748179+00
+(1 row)
+
+ resultados 
+------------
+          0
+(1 row)
+
