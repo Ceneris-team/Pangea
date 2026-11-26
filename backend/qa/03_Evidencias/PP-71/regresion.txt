@@ -1,0 +1,2 @@
+1498 passed, 28 skipped, 2 deselected, 232 warnings in 922.41s (0:15:22)
+commit 78edb10 · entorno del job test del CI (pangea_test)

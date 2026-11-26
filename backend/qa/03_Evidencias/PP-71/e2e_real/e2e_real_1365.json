@@ -1,0 +1,80 @@
+[
+  {
+    "cp": "CP-515",
+    "que": "Columnas nombre, unidad, descripción y estado",
+    "ok": false,
+    "detalle": "cabeceras=['nombre', 'fórmula', 'unidad', 'estado', 'ámbito', 'acciones']; faltan=['descripción']"
+  },
+  {
+    "cp": "CP-515",
+    "que": "Contexto visible: Cliente Demo",
+    "ok": true,
+    "detalle": "Empresa: Cliente Demo"
+  },
+  {
+    "cp": "CP-516",
+    "que": "No aparece la definición de otra empresa",
+    "ok": true,
+    "detalle": "['Caudal acumulado', 'Caudal específico', 'Caudal máximo', 'Caudal neto']"
+  },
+  {
+    "cp": "CP-517",
+    "que": "Parcial, sin mayúsculas ni espacios",
+    "ok": true,
+    "detalle": "['Caudal acumulado', 'Caudal específico', 'Caudal máximo', 'Caudal neto']; q enviada=['CAUDAL']"
+  },
+  {
+    "cp": "CP-519",
+    "que": "Activo / Inactivo / Todos los estados",
+    "ok": true,
+    "detalle": "{'Inactivo': (5, {'Inactivo'}), 'Activo': (9, {'Activo'}), 'Todos': (10, {'Activo', 'Inactivo'})}; opciones=['Todos los estados', 'Activo', 'Inactivo']"
+  },
+  {
+    "cp": "CP-520",
+    "que": "Nombre + estado acumulativos; total del filtrado",
+    "ok": true,
+    "detalle": "['Caudal específico', 'Caudal máximo']"
+  },
+  {
+    "cp": "CP-521",
+    "que": "Página 2 conserva filtros; cambiar filtro vuelve a página 1",
+    "ok": true,
+    "detalle": "pág2=['Presión diferencial', 'Temperatura media', 'Turbidez ajustada'] q={'q': ['a'], 'pagina': ['2'], 'por_pagina': ['10']}; tras filtro={'q': ['a'], 'estado': ['Activo'], 'pagina': ['1'], 'por_pagina': ['10']}"
+  },
+  {
+    "cp": "CP-522",
+    "que": "Limpiar: búsqueda vacía, Todos, página 1, contexto conservado",
+    "ok": true,
+    "detalle": "q='' estado='' consulta={'pagina': ['1'], 'por_pagina': ['10']}"
+  },
+  {
+    "cp": "CP-523",
+    "que": "Mensaje sin resultados y condiciones editables",
+    "ok": true,
+    "detalle": "No se encontraron parámetros calculados con esos filtros."
+  },
+  {
+    "cp": "CP-524",
+    "que": "Error informado; reintento conserva filtros",
+    "ok": true,
+    "detalle": "alerta='Error interno\n\nReintentar listado'; reintento={'estado': ['Inactivo'], 'pagina': ['1'], 'por_pagina': ['10']}"
+  },
+  {
+    "cp": "CP-525",
+    "que": "La respuesta lenta (Activo) no reemplaza a Inactivo",
+    "ok": true,
+    "detalle": "estados={'Inactivo'}"
+  },
+  {
+    "cp": "CP-526",
+    "que": "Nueva empresa: consulta su contexto y página 1",
+    "ok": true,
+    "detalle": "['Caudal de otra empresa']; Empresa: Empresa QA PP71"
+  },
+  {
+    "cp": "—",
+    "que": "Sin errores de JavaScript en la página",
+    "ok": true,
+    "detalle": "[]"
+  }
+]

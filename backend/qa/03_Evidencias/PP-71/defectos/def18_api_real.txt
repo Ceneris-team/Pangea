@@ -1,0 +1,4 @@
+DEF-18 · reproducción contra la API real (uvicorn 127.0.0.1:8000, dev 78edb10), sesión Técnico CENERIS, X-Cliente-Id=1
+GET /parametros-calculados?q=caudal -> 200 {"total":4,"pagina":1,"por_pagina":10,"contexto":{"empresa":"Cliente Demo","proy
+GET /parametros-calculados?q=caudal%00 -> 500 Internal Server Error
+GET /parametros-calculados?q=%00&estado=Activo -> 500 Internal Server Error
