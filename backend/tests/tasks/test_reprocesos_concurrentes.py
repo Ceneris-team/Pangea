@@ -13,6 +13,7 @@ from app.models import (
     ConexionFTP,
     Dispositivo,
     IntentoProcesamiento,
+    LogIngesta,
     MapeoColumna,
     MapeoFormato,
     Parametro,
@@ -102,6 +103,7 @@ def test_worker_vivo_no_se_duplica_ni_es_rescatado(_engine, monkeypatch):
         liberar.set()
         db.rollback()
         for modelo, condicion in (
+            (LogIngesta, LogIngesta.id_archv == archivo.id_archv),
             (Telemetria, Telemetria.id_archv == archivo.id_archv),
             (IntentoProcesamiento, IntentoProcesamiento.id_archv == archivo.id_archv),
             (ArchivoIngesta, ArchivoIngesta.id_archv == archivo.id_archv),

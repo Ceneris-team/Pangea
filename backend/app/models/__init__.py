@@ -18,6 +18,7 @@ from app.models.calculos import (
 from app.models.cliente_sede import Cliente, Proyecto, Sede
 from app.models.evento_texto import EventoTexto
 from app.models.intento_procesamiento import IntentoProcesamiento
+from app.models.log_ingesta import LogIngesta
 from app.models.mapeo_dispositivo import (
     Dispositivo,
     MapeoColumna,

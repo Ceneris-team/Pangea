@@ -33,6 +33,7 @@ from app.models.mapeo_dispositivo import MapeoColumna, Parametro
 from app.models.telemetria import Telemetria
 from app.security.dependencies import get_current_user
 from app.services.ingesta.mapeo import resolver_formato
+from tests.routers.test_alarmas import dar_suscripcion_vigente
 from tests.routers.test_dispositivos import (
     agregar_permiso,
     preparar_dispositivo,
@@ -57,6 +58,7 @@ def tecnico(db_session, fabrica):
     y las cargas) e Ingesta (los mapeos, vía /mapeos de HU06)."""
     rol = fabrica.rol("Técnico CENERIS")
     sede = fabrica.sede()
+    dar_suscripcion_vigente(db_session, sede)
     usuario = fabrica.usuario(rol=rol)
     agregar_permiso(db_session, usuario, sede, "Dispositivos", "Edición", rol)
     agregar_permiso(db_session, usuario, sede, "Ingesta", "Edición", rol)
@@ -113,7 +115,7 @@ def fecha_en_particion() -> dt.datetime:
 
 
 def contenido_dat(fecha: dt.datetime, valor: str, columna="Temp") -> str:
-    return f"Fecha,{columna}\n" f"{fecha:%Y-%m-%d %H:%M:%S},{valor}\n"
+    return f"Fecha,{columna}\n{fecha:%Y-%m-%d %H:%M:%S},{valor}\n"
 
 
 # ---------------------------------------------------------------------------

@@ -15,6 +15,7 @@ from app.models.ubicacion_conexion import ConexionFTP, Ubicacion
 from app.security.auditoria import limpiar_contexto_auditoria, marcar_contexto_auditoria
 from app.services.cache.invalidacion import invalidar_por_lectura
 from app.services.ingesta.estandarizador import estandarizar_filas
+from app.services.ingesta.log import capturar_origen, registrar_evento
 from app.services.ingesta.mapeo import (
     HeaderCorruptoError,
     MapeoNoEncontradoError,
@@ -62,6 +63,10 @@ class ErrorDatosNoRecuperable(Exception):
     """El archivo se descargó y procesó, pero sus datos/configuración
     impiden completar el pipeline (ej. dispositivo no resoluble). No se
     reintenta: reintentar no cambia el resultado."""
+
+    def __init__(self, mensaje, rechazados=None):
+        super().__init__(mensaje)
+        self.rechazados = rechazados
 
 
 def normalizar_contenido_dat(contenido: str) -> str:
@@ -143,7 +148,9 @@ def interpretar_y_guardar(
     if not any(lectura.valor is not None for lectura in resultado_validacion.validas):
         raise ErrorDatosNoRecuperable(
             "El archivo no contiene lecturas válidas. Se conserva el original; "
-            "no se sustituyen datos inválidos por promedios."
+            "no se sustituyen datos inválidos por promedios. "
+            + "; ".join(f"fila {e.numero_fila}: {e.motivo}" for e in resultado_validacion.errores),
+            rechazados=len(resultado_validacion.errores),
         )
     resultado_persistencia = guardar_lecturas(
         db,
@@ -161,18 +168,13 @@ def _registrar_intento(
     mensaje_error: str | None,
     id_usr: int | None,
     inicio=None,
+    *,
+    registros=None,
+    rechazados=None,
+    origen=None,
 ) -> None:
-    """HU31: una fila en intnt_prcsmnt por cada intento TERMINADO de
-    procesar_archivo_dat -éxito o fallo definitivo-, para poder mostrar el
-    historial completo de reprocesos de un archivo (GET
-    /ingesta/cola/{id}/intentos, routers/ingesta.py).
-
-    "Terminado" es la palabra clave: NO se llama para un error transitorio
-    que Celery todavía va a reintentar solo (ver el bloque `except
-    Exception` de procesar_archivo_dat) -ese archivo sigue "en camino",
-    todavía no es un intento resuelto, y registrarlo ahí generaría una
-    fila fantasma por cada retry automático de un problema de red, sin
-    que el usuario haya hecho nada.
+    """HU31/HU37: registra cada ejecución terminada, incluidos fallos
+    transitorios anteriores a un nuevo intento automático.
 
     id_usr es NULL para el procesamiento automático (primera detección
     vía sondeo FTP) y el id real del usuario cuando el intento viene de
@@ -188,16 +190,24 @@ def _registrar_intento(
     intnt_prcsmnt quede en la MISMA transacción que el cambio de estado
     del archivo -o ambos se confirman, o ninguno-.
     """
-    db.add(
-        IntentoProcesamiento(
-            id_archv=id_archv,
-            fch_intnt=inicio or dt.datetime.now(dt.timezone.utc),
-            rsltd=resultado,
-            mnsj_errr=mensaje_error,
-            id_usr=id_usr,
-            fch_inicio=inicio,
-            fch_fin=dt.datetime.now(dt.timezone.utc),
-        )
+    intento = IntentoProcesamiento(
+        id_archv=id_archv,
+        fch_intnt=inicio or dt.datetime.now(dt.timezone.utc),
+        rsltd=resultado,
+        mnsj_errr=mensaje_error[:500] if mensaje_error else None,
+        id_usr=id_usr,
+        fch_inicio=inicio,
+        fch_fin=dt.datetime.now(dt.timezone.utc),
+        registros_guardados=registros,
+    )
+    db.add(intento)
+    registrar_evento(
+        db,
+        db.get(ArchivoIngesta, id_archv),
+        intento,
+        mensaje_error,
+        rechazados=rechazados,
+        origen=origen,
     )
 
 
@@ -284,6 +294,7 @@ def procesar_archivo_dat(self, id_archv: int, id_usr_reintento: int | None = Non
     Un mensaje manual antiguo tampoco puede sustituir un original faltante.
     """
     db = SessionLocal()
+    confirmado = False
     inicio = dt.datetime.now(dt.timezone.utc)
     try:
         archivo = db.query(ArchivoIngesta).filter_by(id_archv=id_archv).with_for_update().first()
@@ -305,6 +316,7 @@ def procesar_archivo_dat(self, id_archv: int, id_usr_reintento: int | None = Non
             .first()
         ):
             return {"id_archv": id_archv, "estado": archivo.estd, "guardadas": 0}
+        capturar_origen(db, archivo)
         archivo.estd = "Procesando"
         db.commit()
         # Reserva de la copia original: dos entregas del mismo job no pueden
@@ -413,8 +425,22 @@ def procesar_archivo_dat(self, id_archv: int, id_usr_reintento: int | None = Non
                 f"fila {e.numero_fila}: {e.motivo}" for e in resultado_validacion.errores[:5]
             )
             archivo.mnsj_errr = resumen_errores[:500]
-        _registrar_intento(db, id_archv, archivo.estd, archivo.mnsj_errr, id_usr_reintento, inicio)
+        diagnostico = (
+            "; ".join(f"fila {e.numero_fila}: {e.motivo}" for e in resultado_validacion.errores)
+            or None
+        )
+        _registrar_intento(
+            db,
+            id_archv,
+            archivo.estd,
+            diagnostico,
+            id_usr_reintento,
+            inicio,
+            registros=resultado_persistencia.guardadas,
+            rechazados=len(resultado_validacion.errores),
+        )
         db.commit()
+        confirmado = True
 
         # HU17 CA3: la lectura ya está PERSISTIDA Y CONFIRMADA (el commit
         # de arriba). Recién ahora se avisa al mapa, nunca antes: publicar
@@ -457,15 +483,29 @@ def procesar_archivo_dat(self, id_archv: int, id_usr_reintento: int | None = Non
         archivo = db.get(ArchivoIngesta, id_archv)
         if archivo is not None:
             archivo.estd = "Fallido"
+            archivo.fch_prcsd = dt.datetime.now(dt.timezone.utc)
             archivo.mnsj_errr = str(exc)[:500]
             _registrar_intento(
-                db, id_archv, archivo.estd, archivo.mnsj_errr, id_usr_reintento, inicio
+                db,
+                id_archv,
+                archivo.estd,
+                str(exc),
+                id_usr_reintento,
+                inicio,
+                rechazados=exc.rechazados,
             )
             db.commit()
         logger.error("archv_ingst id=%s marcado Fallido (error no recuperable): %s", id_archv, exc)
         return {"id_archv": id_archv, "estado": "Fallido"}
     except Exception as exc:
         db.rollback()
+        if confirmado:
+            logger.exception("No se pudo difundir el resultado confirmado del archivo %s", id_archv)
+            return {
+                "id_archv": id_archv,
+                "estado": "Exitoso",
+                "guardadas": resultado_persistencia.guardadas,
+            }
         # Se marca Fallido cuando ya no va a haber otro intento, sea porque
         # se agotaron los reintentos o porque el error no es de los
         # transitorios (autoretry_for) y por tanto Celery no lo reintenta.
@@ -474,19 +514,15 @@ def procesar_archivo_dat(self, id_archv: int, id_usr_reintento: int | None = Non
         # 'Procesando' indefinidamente: ni se reintentaba, ni aparecía como
         # fallido en las métricas de HU09, ni se podía reprocesar (HU31).
         #
-        # HU31: mismo criterio para intnt_prcsmnt -solo se registra el
-        # intento acá (dentro del if), nunca cuando todavía quedan
-        # reintentos automáticos por delante: ese caso no es un intento
-        # TERMINADO, es Celery reintentando solo (ver _registrar_intento).
+        # HU37 conserva también la ejecución que precede al retry de Celery.
         es_transitorio = isinstance(exc, ERRORES_TRANSITORIOS)
         if not es_transitorio or self.request.retries >= self.max_retries:
             archivo = db.get(ArchivoIngesta, id_archv)
             if archivo is not None:
                 archivo.estd = "Fallido"
+                archivo.fch_prcsd = dt.datetime.now(dt.timezone.utc)
                 archivo.mnsj_errr = str(exc)[:500]
-                _registrar_intento(
-                    db, id_archv, archivo.estd, archivo.mnsj_errr, id_usr_reintento, inicio
-                )
+                _registrar_intento(db, id_archv, archivo.estd, str(exc), id_usr_reintento, inicio)
                 db.commit()
             logger.error(
                 "archv_ingst id=%s marcado Fallido (%s): %s",
@@ -494,6 +530,10 @@ def procesar_archivo_dat(self, id_archv: int, id_usr_reintento: int | None = Non
                 "reintentos agotados" if es_transitorio else "error no reintentable",
                 exc,
             )
+        else:
+            # Cada ejecución fallida queda en el log aunque Celery vuelva a intentarlo.
+            _registrar_intento(db, id_archv, "Fallido", str(exc), id_usr_reintento, inicio)
+            db.commit()
         raise
     finally:
         db.close()
@@ -595,6 +635,7 @@ def sondear_conexiones_ftp() -> dict:
                     id_dspstv=dispositivo.id_dspstv,
                 )
                 db.add(archivo)
+                capturar_origen(db, archivo)
                 db.flush()  # asigna id_archv, todavía sin confirmar
                 if datos is not None:
                     conservar_original(archivo, datos)

@@ -30,6 +30,7 @@ import DispositivoDetalle from "../pages/DispositivoDetalle";
 import Parametros from "../pages/Parametros";
 import ParametrosCalculados from "../pages/ParametrosCalculados";
 import ColaIngesta from "../pages/ColaIngesta";
+import LogIngesta from "../pages/LogIngesta";
 import Paneles from "../pages/Paneles";
 import DetallePanel from "../pages/DetallePanel";
 import Alarmas from "../pages/Alarmas";
@@ -274,6 +275,11 @@ export default function AppRouter() {
           />
 
           {/* HU09: monitorear cola de procesamiento */}
+          <Route path="/cola-ingesta/log" element={
+            <ProtectedRoute rolesPermitidos={[ROLES.ADMINISTRADOR, ROLES.TECNICO_CENERIS]}>
+              <LogIngesta />
+            </ProtectedRoute>
+          } />
           <Route
             path="/cola-ingesta"
             element={

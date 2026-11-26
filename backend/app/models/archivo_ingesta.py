@@ -10,6 +10,7 @@ from sqlalchemy import (
     String,
     text,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import deferred
 
 from app.database import Base
@@ -35,6 +36,7 @@ class ArchivoIngesta(Base):
     id_archv = Column(BigInteger, primary_key=True, autoincrement=True)
     id_cnxn = Column(Integer, ForeignKey("cnxn_ftp.id_cnxn"), nullable=False)
     id_dspstv = Column(Integer, ForeignKey("dspstv.id_dspstv"), nullable=True, index=True)
+    origen_ingesta = Column(JSONB)
     version_origen = Column(String(64))
     sha256 = Column(String(64))
     clave_original = Column(String(600))

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
+import { esCeneris } from "../config/espacios";
 import { apiFetch, apiDownload, ApiError } from "../services/api";
 import { useAuth } from "../hooks/useAuth";
 import Sidebar from "../components/layout/Sidebar";
@@ -334,6 +335,7 @@ export default function ColaIngesta() {
           <main className="flex-1 overflow-y-auto p-6 md:p-8">
             <header className="mb-6">
               <h1 className="text-2xl font-extrabold text-gray-900 dark:text-white">Cola de ingesta</h1>
+              {esCeneris(rol) && <Link to={`/cola-ingesta/log?${searchParams.toString()}`} className="mt-2 inline-block text-sm font-semibold text-[#5a7000] underline dark:text-[#ccff00]">Consultar log de ingesta</Link>}
               <p className="text-sm text-gray-600 dark:text-gray-300 mt-1 font-light">
                 Archivos recibidos de los dataloggers y su estado de ingesta. Se actualiza automáticamente cada 30
                 segundos.

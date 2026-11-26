@@ -21,6 +21,7 @@ from app.routers import (
     empresas,
     exportaciones,
     ingesta,
+    log_ingesta,
     mapa_cliente,
     mapeos,
     mediciones,
@@ -77,6 +78,7 @@ app.include_router(usuarios.router)
 app.include_router(auditoria.router)
 app.include_router(ubicaciones.router)
 app.include_router(ingesta.router)
+app.include_router(log_ingesta.router)
 app.include_router(conexiones_ftp.router)
 app.include_router(mediciones.router)
 app.include_router(exportaciones.router)

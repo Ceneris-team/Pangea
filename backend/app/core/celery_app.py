@@ -16,6 +16,7 @@ celery_app = Celery(
     include=[
         "app.tasks.ping",
         "app.tasks.ingesta",
+        "app.tasks.log_ingesta",
         "app.tasks.reprocesos",
         "app.tasks.notificaciones",
         "app.tasks.particiones",
@@ -76,6 +77,10 @@ celery_app.conf.update(
 # posible, así que ninguna frcnc_mnts configurada por debajo de eso puede
 # cumplirse igual.
 celery_app.conf.beat_schedule = {
+    "depurar-log-ingesta-diario": {
+        "task": "app.tasks.log_ingesta.depurar",
+        "schedule": crontab(hour=3, minute=30),
+    },
     "despachar-reprocesos-cada-5-segundos": {
         "task": "app.tasks.reprocesos.despachar_pendientes",
         "schedule": 5.0,
