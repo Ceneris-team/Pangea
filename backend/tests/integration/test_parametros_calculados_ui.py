@@ -20,6 +20,9 @@ def test_listado_filtros_contexto_y_recuperacion(entorno_calculados, ancho, tmp_
 
     e = entorno_calculados
     nivel, salida, _ = preparar_origenes(e)
+    descripcion_larga = (
+        "Descripción completa del balance entre las mediciones de entrada y salida. " * 4
+    )
     for i in range(30):
         definir(
             e["db"],
@@ -32,6 +35,8 @@ def test_listado_filtros_contexto_y_recuperacion(entorno_calculados, ancho, tmp_
         if i == 0:
             p.frml = " + ".join([f"(p_{nivel.id_prmtr} - p_{salida.id_prmtr})"] * 6)
             p.dscrpcn = None
+        else:
+            p.dscrpcn = descripcion_larga
     e["db"].flush()
     definir(e["db"], e["sedes"][1], "Ajeno al proyecto")
     definir(e["db"], e["sedes"][2], "Ajeno a la empresa")
@@ -108,6 +113,23 @@ def test_listado_filtros_contexto_y_recuperacion(entorno_calculados, ancho, tmp_
             expect(
                 pagina.get_by_role("heading", name="Parámetros calculados", exact=True)
             ).to_be_visible()
+            expect(
+                pagina.get_by_role("columnheader", name="Descripción", exact=True)
+            ).to_be_visible()
+            expect(pagina.get_by_role("columnheader")).to_have_count(7)
+            fila_sin_descripcion = pagina.locator("tbody tr").filter(has_text="Balance 0")
+            expect(fila_sin_descripcion.get_by_role("cell").nth(3)).to_have_text("Sin descripción")
+            fila_descripcion = pagina.locator("tbody tr").filter(has_text="Balance 1")
+            descripcion = fila_descripcion.get_by_role("cell").nth(3).locator("span")
+            expect(descripcion).to_have_text(descripcion_larga.strip())
+            expect(descripcion).to_have_attribute("title", descripcion_larga)
+            descripcion.scroll_into_view_if_needed()
+            assert descripcion.evaluate(
+                "el => getComputedStyle(el).textOverflow === 'ellipsis' && el.scrollWidth > el.clientWidth"
+            )
+            pagina.screenshot(
+                path=str(tmp_path / f"calculados-descripcion-{ancho}.png"), full_page=True
+            )
             if ancho < 768:
                 pagina.get_by_role("button", name="Abrir menú de navegación").click()
                 menu = pagina.get_by_role("dialog", name="Navegación", exact=True)
@@ -125,6 +147,15 @@ def test_listado_filtros_contexto_y_recuperacion(entorno_calculados, ancho, tmp_
             for control in [buscar, filtro_estado, limpiar]:
                 caja = control.bounding_box()
                 assert caja and 0 <= caja["x"] and caja["x"] + caja["width"] <= ancho + 1
+
+            # DEF-18: el error de validación es legible y limpiar recupera el listado.
+            filtro_estado.select_option("Activo")
+            buscar.fill("caudal\x00")
+            expect(pagina.get_by_role("alert")).to_contain_text("caracteres de control")
+            assert consultas[-1]["q"] == ["caudal\x00"]
+            assert consultas[-1]["estado"] == ["Activo"]
+            limpiar.click()
+            expect(pagina.get_by_text("Mostrando 1 a 10 de 32 registros")).to_be_visible()
 
             buscar.fill("  ÍNDICE  ")
             expect(pagina.get_by_text("Mostrando 1 a 10 de 30 registros")).to_be_visible()

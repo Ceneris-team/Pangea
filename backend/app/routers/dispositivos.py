@@ -124,7 +124,8 @@ from app.services.particiones import (
     es_error_de_particion_faltante,
 )
 from app.tasks.ingesta import ErrorDatosNoRecuperable, interpretar_y_guardar
-from app.validaciones_dispositivos import TextoSinControl, normalizar_marca
+from app.validaciones import TextoSinControl
+from app.validaciones_dispositivos import normalizar_marca
 
 router = APIRouter(prefix="/dispositivos", tags=["Dispositivos"])
 

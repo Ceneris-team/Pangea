@@ -4,7 +4,8 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 from app.services.visualizacion import ConfigVisualizacion
-from app.validaciones_dispositivos import normalizar_marca, validar_texto_sin_control
+from app.validaciones import validar_texto_sin_control
+from app.validaciones_dispositivos import normalizar_marca
 
 
 def _validar_ruta_remota(valor: str) -> str:
