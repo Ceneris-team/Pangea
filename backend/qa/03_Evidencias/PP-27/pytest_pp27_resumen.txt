@@ -1,0 +1,5 @@
+﻿python -m pytest: error: unrecognized arguments: --html=C:\Proyectos\PANGEA\.claude\worktrees\reprocess-failed-files-ff
+6224\backend\qa\03_Evidencias\PP-27\pytest_pp27_api.html --self-contained-html
+  inifile: C:\Proyectos\qa-PP-27\backend\pyproject.toml
+  rootdir: C:\Proyectos\qa-PP-27\backend
+

@@ -1,0 +1,6 @@
+﻿lecturas_QA27|12|12
+estados|Exitoso|12
+estados|Fallido|2
+intentos_activos|0
+MALO|Fallido|auto|No hay un formato activo (mp_frmt) para el dispositivo y el tipo de tr
+MALO|Fallido|3|La copia del archivo original no coincide con su huella

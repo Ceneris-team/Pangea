@@ -1,0 +1,86 @@
+[
+  {
+    "cp": "CP-540",
+    "que": "Título de la pantalla = «Cola de ingesta»",
+    "ok": false,
+    "detalle": "h1='Cola de Procesamiento'; menú='Cola de ingesta'"
+  },
+  {
+    "cp": "CP-540",
+    "que": "Filtro Fallido: 10 por página, columnas y motivo visible",
+    "ok": true,
+    "detalle": "filas=10; pie='Página 1 de 2'; cab=['archivo', 'datalogger de origen', 'fecha de recepción', 'estado', 'acciones']; con motivo=10"
+  },
+  {
+    "cp": "CP-549",
+    "que": "Historial muestra el intento automático previo con su error",
+    "ok": true,
+    "detalle": "['FallidoAutomático\\n\\nAutomático\\n\\nNo hay un formato activo (mp_frmt) para el dispositivo y el tipo de trama\\n\\nSolicitud: 26 nov 2026, 11:10\\nInicio: 26 nov 2026, 11:10\\nFin: 26 nov 2026, 11:10']"
+  },
+  {
+    "cp": "CP-541",
+    "que": "Acción individual rotulada «Reintentar»",
+    "ok": false,
+    "detalle": "rótulo='Reprocesar'"
+  },
+  {
+    "cp": "CP-543",
+    "que": "Confirmación con cantidad y alcance de todas las páginas",
+    "ok": true,
+    "detalle": "Reprocesar fallidos del filtro  Se solicitará el reproceso de 13 archivo(s) fallido(s), en todas las páginas de este filtro, dentro de la empresa y proyecto actuales. Datalogger: QA27 Datalogger A. Se usará el original conservado con el mapeo vigente, conservando las lecturas existentes. El total se verifica al confirmar y puede cambiar si llegan nuevos fallos u otro usuario solicita un reproceso.  Cancelar Confirmar reproceso"
+  },
+  {
+    "cp": "CP-543",
+    "que": "Acción masiva rotulada «Reintentar todos los fallidos»",
+    "ok": false,
+    "detalle": "rótulo='Reprocesar fallidos del filtro (13)'"
+  },
+  {
+    "cp": "CP-543",
+    "que": "Cancelar no cambia estados",
+    "ok": true,
+    "detalle": "filas Fallido tras cancelar=10"
+  },
+  {
+    "cp": "CP-541",
+    "que": "Reintentar registra la solicitud y pasa a «En espera»",
+    "ok": true,
+    "detalle": "En esperaCarlos Tecnico  Solicitud manual  Solicitud: 26 nov 2026, 12:00"
+  },
+  {
+    "cp": "CP-548",
+    "que": "Procesado con fecha y resumen (registros procesados)",
+    "ok": true,
+    "detalle": "Detalle del archivo Archivo H_QA27_F_11.dat  El original se conserva sin editar. Las lecturas inválidas se excluyen con su motivo; no se rellenan con promedios.  Descargar original para revisión Datalogger de origen QA27 CR1000 A Estado Procesado Fecha de recepción 26 nov 2026, 11:10 Fecha de proces"
+  },
+  {
+    "cp": "CP-549",
+    "que": "Historial: solicitud manual del técnico con inicio y fin, conserva la automática",
+    "ok": true,
+    "detalle": "['ProcesadoCarlos Tecnico\\n\\nSolicitud manual\\n\\n1 lectura(s) nueva(s)\\n\\nSolicitud: 26 nov 2026, 12:00\\nInicio: 26 nov 2026, 12:00\\nFin: 26 nov 2026, 12:00', 'FallidoAutomático\\n\\nAutomático\\n\\nNo hay un formato activo (mp_frmt) para el dispositivo y el tipo de trama\\n\\nSolicitud: 26 nov 2026, 11:10\\nInicio: 26 nov 2026, 11:10\\nFin: 26 nov 2026, 11:10']"
+  },
+  {
+    "cp": "CP-544",
+    "que": "Masivo registra los 12 elegibles restantes y conserva filtros",
+    "ok": true,
+    "detalle": "12 archivo(s) en espera de reproceso. Puedes consultar su avance e historial."
+  },
+  {
+    "cp": "CP-548",
+    "que": "Un fallido no impide el lote; solo quedan MALO, B_00 y el demo",
+    "ok": true,
+    "detalle": "['H_QA27_B_00.dat', 'H_QA27_MALO.dat', 'H_20260812_1100.dat']"
+  },
+  {
+    "cp": "CP-545",
+    "que": "Original alterado: vuelve a Fallido con la causa de integridad",
+    "ok": true,
+    "detalle": "Detalle del archivo Archivo H_QA27_MALO.dat  El original se conserva sin editar. Las lecturas inválidas se excluyen con su motivo; no se rellenan con promedios.  Descargar original para revisión Datalogger de origen QA27 CR1000 A Estado Fallido Fecha de recepción 26 nov 2026, 11:11 Fecha de procesam"
+  },
+  {
+    "cp": "UI",
+    "que": "Sin errores JavaScript",
+    "ok": true,
+    "detalle": "[]"
+  }
+]
