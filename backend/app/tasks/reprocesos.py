@@ -55,8 +55,8 @@ def _reservar(db, id_archv):
     )
 
 
-def _fallar(db, archivo, intento, mensaje, *, transitorio=False):
-    finalizar(intento, "Fallido", mensaje)
+def _fallar(db, archivo, intento, mensaje, *, transitorio=False, rechazados=None):
+    finalizar(intento, "Fallido", mensaje, db=db, archivo=archivo, rechazados=rechazados)
     archivo.mnsj_errr = mensaje[:500]
     archivo.estd = "Fallido"
     archivo.fch_prcsd = ahora()
@@ -92,7 +92,13 @@ def procesar_reproceso(id_archv: int, id_intnt: int):
         if intento is None or intento.id_archv != id_archv or intento.rsltd != "Pendiente":
             return {"estado": "descartado"}
         if archivo.estd != "Pendiente":
-            finalizar(intento, "Fallido", "El archivo ya no está disponible para este reproceso")
+            finalizar(
+                intento,
+                "Fallido",
+                "El archivo ya no está disponible para este reproceso",
+                db=db,
+                archivo=archivo,
+            )
             db.commit()
             return {"estado": "descartado"}
         intento.rsltd = "Procesando"
@@ -156,7 +162,19 @@ def procesar_reproceso(id_archv: int, id_intnt: int):
             )[:500]
             or None
         )
-        finalizar(intento, "Exitoso", archivo.mnsj_errr, resultado.guardadas)
+        diagnostico = (
+            "; ".join(f"fila {error.numero_fila}: {error.motivo}" for error in validacion.errores)
+            or None
+        )
+        finalizar(
+            intento,
+            "Exitoso",
+            diagnostico,
+            resultado.guardadas,
+            db=db,
+            archivo=archivo,
+            rechazados=len(validacion.errores),
+        )
         if resultado.guardadas and (
             dispositivo.ultima_recepcion is None or archivo.fch_dtccn > dispositivo.ultima_recepcion
         ):
@@ -178,7 +196,14 @@ def procesar_reproceso(id_archv: int, id_intnt: int):
         archivo = _reservar(db, id_archv)
         intento = db.get(IntentoProcesamiento, id_intnt, populate_existing=True)
         if archivo is not None and intento is not None and intento.rsltd == "Procesando":
-            _fallar(db, archivo, intento, str(exc), transitorio=_es_transitorio(exc))
+            _fallar(
+                db,
+                archivo,
+                intento,
+                str(exc),
+                transitorio=_es_transitorio(exc),
+                rechazados=getattr(exc, "rechazados", None),
+            )
             db.commit()
         logger.warning("Reproceso %s no completado: %s", id_intnt, exc)
         return {"estado": archivo.estd if archivo else "ocupado"}
@@ -225,7 +250,13 @@ def despachar_pendientes():
                 )
                 continue
             if archivo.estd != "Pendiente":
-                finalizar(intento, "Fallido", "El estado del archivo cambió antes del despacho")
+                finalizar(
+                    intento,
+                    "Fallido",
+                    "El estado del archivo cambió antes del despacho",
+                    db=db,
+                    archivo=archivo,
+                )
                 continue
             # Reservar antes de publicar. Si se pierde el mensaje, vuelve a ser elegible.
             intento.proximo_envio = ahora() + dt.timedelta(seconds=60)

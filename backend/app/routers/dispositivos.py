@@ -124,6 +124,8 @@ from app.services.particiones import (
     es_error_de_particion_faltante,
 )
 from app.tasks.ingesta import ErrorDatosNoRecuperable, interpretar_y_guardar
+from app.validaciones import TextoSinControl
+from app.validaciones_dispositivos import normalizar_marca
 
 router = APIRouter(prefix="/dispositivos", tags=["Dispositivos"])
 
@@ -224,25 +226,26 @@ def listar_marcas_disponibles(
     motivo que /mapa, más abajo).
     """
     query = _query_dispositivos_visibles(db, usuario)
-    marcas = [
-        fila[0]
-        for fila in query.with_entities(Dispositivo.mrc).distinct().order_by(Dispositivo.mrc)
-    ]
+    # También agrupa variantes históricas mientras se aplica la migración.
+    marcas = sorted(
+        {
+            normalizar_marca(fila[0])
+            for fila in query.with_entities(Dispositivo.mrc).distinct()
+            if fila[0].strip()
+        }
+    )
     return {"items": marcas}
 
 
 @router.get("")
 def listar_dispositivos(
-    busqueda: str | None = Query(
+    busqueda: TextoSinControl | None = Query(
         default=None, description="Nombre o marca del dispositivo, parcial"
     ),
     id_ubccn: int | None = Query(default=None, description="Filtrar por ubicación"),
-    estado: str | None = Query(default=None, description="Activo / Inactivo"),
-    # HU36 CA1: coincidencia EXACTA sobre Dispositivo.mrc, para combinarse
-    # de forma acumulativa (AND) con id_ubccn/estado -distinto de
-    # `busqueda`, que sigue siendo texto libre parcial sobre nombre+marca
-    # (HU10) y no se toca acá.
-    marca: str | None = Query(default=None, description="Marca exacta del dispositivo"),
+    estado: TextoSinControl | None = Query(default=None, description="Activo / Inactivo"),
+    # Coincidencia completa sin distinguir mayúsculas ni espacios exteriores.
+    marca: TextoSinControl | None = Query(default=None, description="Marca exacta del dispositivo"),
     pagina: int = Query(default=1, ge=1),
     por_pagina: int = Query(default=10, ge=1, le=100),  # CA: 10 por defecto
     db: Session = Depends(get_db),
@@ -260,7 +263,7 @@ def listar_dispositivos(
     if estado:
         query = query.filter(Dispositivo.estd == estado)
     if marca:
-        query = query.filter(Dispositivo.mrc == marca)
+        query = query.filter(func.lower(func.btrim(Dispositivo.mrc)) == marca.strip().lower())
 
     total = query.count()
     filas = (
@@ -756,27 +759,6 @@ async def cargar_archivo_dat(
         # Los .dat de campo a veces vienen en latin-1 (grados, ñ).
         contenido = contenido_bytes.decode("latin-1")
 
-    # HU49 CA5: esta carga manual (IMP-06) comparte con la ingesta
-    # automática por FTP el mismo resolver_formato -así que también puede
-    # disparar la creación automática de una trama nueva, y esa creación
-    # tiene que auditarse igual, sin importar el canal de entrada. Se
-    # marca con el usuario Sistema (no con el usuario HTTP que subió el
-    # archivo): quien "crea" la trama es el algoritmo de HU49, no el
-    # técnico que casualmente disparó la corrida -mismo criterio que
-    # tasks/ingesta.py-.
-    id_usr_sistema = resolver_id_usuario_sistema(db)
-    marcar_contexto_auditoria(db, id_usr_sistema)
-    try:
-        formato = resolver_formato(db, dispositivo.id_dspstv, nombre)
-    except MapeoNoEncontradoError as exc:
-        # Mismo criterio que el pipeline automático: sin mapeo no se puede
-        # interpretar el archivo y adivinar produciría lecturas erróneas
-        # en silencio. Acá se responde 422 en vez de marcar Fallido porque
-        # hay un usuario esperando la respuesta.
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    finally:
-        limpiar_contexto_auditoria(db)
-
     registro = ArchivoIngesta(
         id_cnxn=dispositivo.id_cnxn,
         id_dspstv=dispositivo.id_dspstv,
@@ -785,12 +767,23 @@ async def cargar_archivo_dat(
     )
     db.add(registro)
     db.flush()  # necesitamos id_archv para las filas de tlmtr
+    from app.services.ingesta.log import capturar_origen
     from app.services.ingesta.originales import conservar_original
 
+    capturar_origen(db, registro)
     conservar_original(registro, contenido_bytes)
     db.commit()
+    inicio = dt.datetime.now(dt.timezone.utc)
+    from app.tasks.ingesta import _registrar_intento
 
     try:
+        # Resolver también forma parte del intento: conservar fallos de configuración.
+        id_usr_sistema = resolver_id_usuario_sistema(db)
+        marcar_contexto_auditoria(db, id_usr_sistema)
+        try:
+            formato = resolver_formato(db, dispositivo.id_dspstv, nombre)
+        finally:
+            limpiar_contexto_auditoria(db)
         resultado_validacion, resultado_persistencia = interpretar_y_guardar(
             db,
             contenido=contenido,
@@ -800,16 +793,38 @@ async def cargar_archivo_dat(
             id_archv=registro.id_archv,
             nombre_archivo=nombre,
         )
-    except (ErrorDatosNoRecuperable, ParticionInexistenteError) as exc:
-        # La transacción se descarta entera (incluida la fila de
-        # archv_ingst): no queda un log 'Procesando' colgado de una carga
-        # que el usuario ya sabe que falló.
+    except Exception as exc:
+        # El original ya está confirmado. Revertir lecturas parciales y conservar el fallo.
         db.rollback()
         registro = db.get(ArchivoIngesta, registro.id_archv)
         registro.estd = "Fallido"
+        registro.fch_prcsd = dt.datetime.now(dt.timezone.utc)
         registro.mnsj_errr = str(exc)[:500]
+        _registrar_intento(
+            db,
+            registro.id_archv,
+            "Fallido",
+            str(exc),
+            int(usuario["sub"]),
+            inicio,
+            rechazados=getattr(exc, "rechazados", None),
+            origen="Carga manual",
+        )
         db.commit()
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        from app.services.ingesta.log import mensaje_seguro
+
+        esperado = isinstance(
+            exc,
+            (
+                ErrorDatosNoRecuperable,
+                ParticionInexistenteError,
+                MapeoNoEncontradoError,
+                ValueError,
+            ),
+        )
+        raise HTTPException(
+            status_code=422 if esperado else 500, detail=mensaje_seguro(str(exc))
+        ) from exc
 
     registro.estd = "Exitoso"
     registro.fch_prcsd = dt.datetime.now(dt.timezone.utc)
@@ -819,6 +834,20 @@ async def cargar_archivo_dat(
             f"fila {e.numero_fila}: {e.motivo}" for e in resultado_validacion.errores[:5]
         )
         registro.mnsj_errr = resumen[:500]
+    diagnostico = (
+        "; ".join(f"fila {e.numero_fila}: {e.motivo}" for e in resultado_validacion.errores) or None
+    )
+    _registrar_intento(
+        db,
+        registro.id_archv,
+        "Exitoso",
+        diagnostico,
+        int(usuario["sub"]),
+        inicio,
+        registros=resultado_persistencia.guardadas,
+        rechazados=len(resultado_validacion.errores),
+        origen="Carga manual",
+    )
     db.commit()
 
     return {

@@ -1,6 +1,6 @@
 """Definiciones calculadas, validacion dimensional y seguimiento historico."""
 
-from typing import Literal
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
@@ -26,10 +26,13 @@ from app.security.ubicaciones_permitidas import ubicaciones_permitidas
 from app.services.motor_calculos import configuracion, encolar_historico
 from app.services.parametros_calculados import (
     describir_formula,
+    etiquetas_origenes,
     todos_origenes,
     validar_definicion,
+    variable_origen,
 )
 from app.services.unidades_calculo import CATALOGO
+from app.validaciones import TextoSinControl
 
 router = APIRouter(prefix="/parametros-calculados", tags=["Parámetros calculados"])
 
@@ -90,7 +93,7 @@ def serializar(fila, origenes, detalle=False):
 
 @router.get("")
 def listar_parametros_calculados(
-    q: str = Query(default="", max_length=200),
+    q: Annotated[TextoSinControl, Query(max_length=200)] = "",
     estado: Literal["Activo", "Inactivo"] | None = Query(default=None),
     pagina: int = Query(default=1, ge=1),
     por_pagina: int = Query(default=10, ge=1, le=100),
@@ -144,6 +147,10 @@ def opciones_creacion(
         raise HTTPException(403, "Selecciona una empresa para registrar una definición")
     sedes = sedes_visibles(db, ambito)
     origenes = todos_origenes(db, [s.id_sd for s in sedes])
+    etiquetas = {
+        id_sd: etiquetas_origenes([p for p in items if p.estd == "Activo"])
+        for id_sd, items in origenes.items()
+    }
     return {
         "unidades": sorted(CATALOGO),
         "sedes": [
@@ -156,7 +163,7 @@ def opciones_creacion(
                         "id_prmtr": (
                             -p.id_prm_clc if isinstance(p, ParametroCalculado) else p.id_prmtr
                         ),
-                        "nombre": p.nmbr,
+                        "nombre": etiquetas[s.id_sd][variable_origen(p)],
                         "unidad": p.undd,
                         "tipo": "calculado" if isinstance(p, ParametroCalculado) else "telemetria",
                     }
@@ -208,7 +215,11 @@ def detalle_parametro_calculado(
     resultado["resultados"] = [
         {"estado": estado, "cantidad": cantidad}
         for estado, cantidad in db.query(ResultadoCalculo.estado, func.count())
-        .filter(ResultadoCalculo.id_prm_clc == parametro_id, ResultadoCalculo.id_ubccn.in_(puntos))
+        .filter(
+            ResultadoCalculo.id_prm_clc == parametro_id,
+            ResultadoCalculo.id_ubccn.in_(puntos),
+            ResultadoCalculo.vigente,
+        )
         .group_by(ResultadoCalculo.estado)
     ]
     resultado["puede_crear"] = puede_crear(db, contexto(db, usuario))
@@ -222,7 +233,6 @@ class NuevaDefinicion(BaseModel):
     frml: str = Field(min_length=1, max_length=2000)
     undd: str = Field(min_length=1, max_length=30)
     dscrpcn: str | None = Field(default=None, max_length=300)
-    estd: Literal["Activo", "Inactivo"] = "Activo"
 
 
 class ValidacionFormula(BaseModel):
@@ -339,6 +349,7 @@ def crear_parametro_calculado(
         )
     p = ParametroCalculado(
         **body.model_dump(exclude={"frml"}),
+        estd="Activo",
         frml=formula,
         validada=True,
         id_usr_creador=int(usuario["sub"]),

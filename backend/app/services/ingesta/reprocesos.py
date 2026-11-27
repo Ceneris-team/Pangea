@@ -16,6 +16,9 @@ def ahora():
 
 
 def solicitar(db, archivo, id_usr, *, anterior=None, demora=0):
+    from app.services.ingesta.log import capturar_origen
+
+    capturar_origen(db, archivo)
     intento = IntentoProcesamiento(
         id_archv=archivo.id_archv,
         id_usr=id_usr,
@@ -33,9 +36,12 @@ def solicitar(db, archivo, id_usr, *, anterior=None, demora=0):
     return intento
 
 
-def finalizar(intento, resultado, mensaje=None, registros=None):
+def finalizar(intento, resultado, mensaje=None, registros=None, *, db, archivo, rechazados=None):
     intento.rsltd = resultado
     intento.mnsj_errr = mensaje[:500] if mensaje else None
     intento.fch_fin = ahora()
     intento.proximo_envio = None
     intento.registros_guardados = registros
+    from app.services.ingesta.log import registrar_evento
+
+    registrar_evento(db, archivo, intento, mensaje, rechazados=rechazados, origen="Reproceso")

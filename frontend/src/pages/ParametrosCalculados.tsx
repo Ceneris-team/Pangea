@@ -95,12 +95,13 @@ export default function ParametrosCalculados() {
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm text-gray-700 dark:text-gray-200">
                 <thead className="bg-black/5 text-xs uppercase dark:bg-white/5"><tr>
-                  {["Nombre", "Fórmula", "Unidad", "Estado", "Ámbito", "Acciones"].map(t => <th key={t} className="px-5 py-4 font-semibold">{t}</th>)}
+                  {["Nombre", "Fórmula", "Unidad de medida", "Descripción", "Estado", "Ámbito", "Acciones"].map(t => <th key={t} className="px-5 py-4 font-semibold">{t}</th>)}
                 </tr></thead>
                 <tbody>{data.items.map(p => <tr key={p.id_prm_clc} className="border-t border-black/10 dark:border-white/10">
                   <td className="min-w-44 px-5 py-4 font-semibold text-gray-900 dark:text-white">{p.nmbr}</td>
                   <td className="min-w-44 px-5 py-4"><span className="block max-w-64 truncate font-mono" title={p.frml}>{p.frml}</span></td>
                   <td className="px-5 py-4">{p.undd || "—"}</td>
+                  <td className="min-w-48 px-5 py-4"><span className="block max-w-64 truncate" title={p.dscrpcn || "Sin descripción"}>{p.dscrpcn || "Sin descripción"}</span></td>
                   <td className="px-5 py-4"><span className={`inline-block rounded-full px-2.5 py-1 text-xs font-semibold ${p.estd === "Activo" ? "bg-[#ccff00]/20 text-[#526600] dark:text-[#ccff00]" : "bg-black/5 text-gray-600 dark:bg-white/10 dark:text-gray-300"}`}>{p.estd}</span></td>
                   <td className="min-w-44 px-5 py-4"><p>{p.empresa_nombre}</p><p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{p.ambito}</p></td>
                   <td className="px-5 py-4"><button type="button" onClick={() => setSeleccionado(p.id_prm_clc)} aria-label={`Ver detalle de ${p.nmbr}`} className="whitespace-nowrap rounded-lg border border-gray-400 px-3 py-1.5">Ver detalle</button></td>

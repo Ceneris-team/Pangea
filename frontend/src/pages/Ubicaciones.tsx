@@ -141,8 +141,13 @@ export default function Ubicaciones() {
           }
           setRespuesta({ consulta, revision, data: listado });
         })
-        .catch(() => {
-          if (!cancelado) setRespuesta({ consulta, revision, error: "No se pudo cargar el listado" });
+        .catch((err) => {
+          if (!cancelado) setRespuesta({
+            consulta, revision,
+            error: err instanceof ApiError && err.status === 422
+              ? err.message
+              : "No se pudo cargar el listado",
+          });
         });
     }, consulta.busqueda.trim() ? 400 : 0);
     return () => {

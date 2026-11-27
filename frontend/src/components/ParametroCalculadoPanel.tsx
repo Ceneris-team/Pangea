@@ -102,14 +102,14 @@ export function DetalleParametroCalculado({ id, onCerrar }: { id: number; onCerr
 }
 
 interface Sede { id_sd: number; nombre: string; configuracion: { tolerancia_segundos: number; espera_horas: number }; origenes: { id_prmtr: number; nombre: string; unidad: string; tipo: string }[] }
-interface Formulario { nmbr: string; frml: string; undd: string; dscrpcn: string; estd: string }
+interface Formulario { nmbr: string; frml: string; undd: string; dscrpcn: string }
 
 export function CrearParametroCalculado({ onCerrar, onCreado }: { onCerrar: () => void; onCreado: () => void }) {
   const [sedes, setSedes] = useState<Sede[] | null>(null);
   const [sedeId, setSedeId] = useState("");
   const [errorOpciones, setErrorOpciones] = useState<string | null>(null);
   const [revision, setRevision] = useState(0);
-  const [form, setForm] = useState<Formulario>({ nmbr: "", frml: "", undd: "", dscrpcn: "", estd: "Activo" });
+  const [form, setForm] = useState<Formulario>({ nmbr: "", frml: "", undd: "", dscrpcn: "" });
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
   const [validando, setValidando] = useState(false);
@@ -144,7 +144,7 @@ export function CrearParametroCalculado({ onCerrar, onCreado }: { onCerrar: () =
       <p>Define una variable derivada. Al guardar se calculará la información histórica disponible y las nuevas mediciones, sin modificar los datos originales.</p>
       {errorOpciones ? <div role="alert"><p>{errorOpciones}</p><button type="button" className={`${boton} mt-3`} onClick={() => setRevision(v => v + 1)}>Reintentar opciones</button></div>
         : !sedes ? <p role="status">Cargando ámbitos y parámetros de origen…</p> : <>
-          <label className="block">Ámbito compartido
+          <label className="block">Ámbito de aplicación
             <select className={campo} required value={sedeId} disabled={guardando || validando} onChange={e => { setSedeId(e.target.value); cambiar("frml", ""); setClaveValidada(""); setError(null); }}>
               <option value="">Selecciona un ámbito</option>{sedes.map(s => <option key={s.id_sd} value={s.id_sd}>{s.nombre}</option>)}
             </select>
@@ -158,12 +158,11 @@ export function CrearParametroCalculado({ onCerrar, onCreado }: { onCerrar: () =
               : <div className="flex flex-wrap gap-2">{sede.origenes.map(p => <button type="button" key={p.id_prmtr} disabled={guardando || validando} className={`${boton} text-left`} onClick={() => cambiar("frml", `${form.frml}${form.frml && !form.frml.endsWith(" ") ? " " : ""}[${p.nombre}]`)}>Insertar {p.nombre} ({p.unidad || "Sin unidad"}){p.tipo === "calculado" ? " · Calculado" : ""}</button>)}</div>}
           </section>
           <label className="block">Fórmula<textarea className={`${campo} min-h-28 font-mono`} required maxLength={2000} value={form.frml} disabled={guardando || validando} onChange={e => cambiar("frml", e.target.value)} aria-describedby="ayuda-formula" /></label>
-          <p id="ayuda-formula" className="text-xs text-gray-500 dark:text-gray-400">Inserta los parámetros y escribe operaciones con +, -, *, /, **, % y paréntesis. Usa punto para los decimales. Ejemplo de estructura: ([parámetro de origen] * 1.5).</p>
+          <p id="ayuda-formula" className="text-xs text-gray-500 dark:text-gray-400">Inserta los parámetros y escribe operaciones con +, -, *, / y paréntesis. Usa punto para los decimales. Ejemplo de estructura: ([parámetro de origen] * 1.5).</p>
           <label className="block">Unidad de medida<input className={campo} list="unidades-calculo" required maxLength={30} value={form.undd} disabled={guardando || validando} onChange={e => cambiar("undd", e.target.value)} /></label>
           <datalist id="unidades-calculo">{unidades.map(u => <option key={u} value={u} />)}</datalist>
           <p className="text-xs text-gray-500 dark:text-gray-400">Selecciona una unidad reconocida. Se admiten unidades compuestas, como m/s o mg/L. Sumas y restas requieren magnitudes compatibles.</p>
           <label className="block">Descripción (opcional)<textarea className={campo} maxLength={300} value={form.dscrpcn} disabled={guardando} onChange={e => cambiar("dscrpcn", e.target.value)} /></label>
-          <label className="block">Estado de la definición<select className={campo} value={form.estd} disabled={guardando} onChange={e => cambiar("estd", e.target.value)}><option>Activo</option><option>Inactivo</option></select></label>
         </>}
       {error && <p role="alert" className="text-red-700 dark:text-red-300">{error}</p>}
       {validada && <p role="status" className="text-green-700 dark:text-green-300">Fórmula válida</p>}

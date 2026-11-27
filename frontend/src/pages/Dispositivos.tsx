@@ -534,11 +534,11 @@ export default function Dispositivos() {
                   <select
                     value={idUbccn}
                     onChange={(e) => { setIdUbccn(e.target.value); setPagina(1); }}
-                    aria-label="Filtrar por proyecto"
+                    aria-label="Filtrar por ubicación"
                     disabled={cargandoCatalogos || !!errorCatalogos}
                     className="bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/20 text-gray-900 dark:text-white text-sm rounded-xl focus:ring-[#ccff00] focus:border-[#ccff00] block p-2.5 outline-none cursor-pointer"
                   >
-                    <option value="">Todos los proyectos</option>
+                    <option value="">Todas las ubicaciones</option>
                     {ubicaciones.map((u) => (
                       <option key={u.id_ubccn} value={u.id_ubccn}>
                         {u.nmbr}
@@ -617,7 +617,7 @@ export default function Dispositivos() {
                     <tr>
                       <th className="px-6 py-4 font-bold tracking-wider">Nombre</th>
                       <th className="px-6 py-4 font-bold tracking-wider">Marca</th>
-                      <th className="px-6 py-4 font-bold tracking-wider">Proyecto</th>
+                      <th className="px-6 py-4 font-bold tracking-wider">Ubicación</th>
                       <th className="px-6 py-4 font-bold tracking-wider">Estado</th>
                       <th className="px-6 py-4 font-bold tracking-wider text-right">Acciones</th>
                     </tr>

@@ -258,18 +258,11 @@ class TestHistorialEntreReintentosMultiples:
         assert [i.id_usr for i in intentos_b] == [usuario_2.id_usr]
 
 
-class TestNoRegistraIntentosTransitoriosSinTerminar:
-    def test_error_transitorio_con_reintentos_disponibles_no_registra_intento(
+class TestRegistraIntentosTransitorios:
+    def test_error_transitorio_con_reintentos_disponibles_registra_ejecucion_fallida(
         self, db_session, conexion_sin_dispositivo, monkeypatch
     ):
-        """Un error de red (ERRORES_TRANSITORIOS) con reintentos
-        disponibles NO es un intento terminado -Celery lo va a reintentar
-        solo (autoretry_for)-, así que no debe dejar fila en
-        intnt_prcsmnt. Se fuerza sondeando una excepción transitoria
-        DESPUÉS de resolver el dispositivo -por eso esta vez la conexión
-        SÍ necesita un Dispositivo, y se fuerza el fallo en
-        descargar_archivo_dat, que es donde de verdad puede ocurrir un
-        error de FTP transitorio en producción."""
+        """HU37 conserva la ejecución fallida aunque Celery programe otra."""
         ubicacion = Ubicacion(
             id_sd=conexion_sin_dispositivo.id_sd,
             nmbr="Ubicacion de prueba",
@@ -310,12 +303,11 @@ class TestNoRegistraIntentosTransitoriosSinTerminar:
         )
 
         # self.request.retries=0 y max_retries=5 (default de la task):
-        # todavía quedan reintentos, así que NO se marca Fallido ni se
-        # registra el intento -Celery reintentaría solo en producción.
+        # Todavía quedan reintentos: la cola sigue activa, el log conserva el fallo.
         with pytest.raises(ftplib.error_temp):
             procesar(db_session, id_archv=archivo.id_archv)
 
-        assert intentos_de(db_session, archivo.id_archv) == []
+        assert [i.rsltd for i in intentos_de(db_session, archivo.id_archv)] == ["Fallido"]
 
 
 CONTENIDO_DAT = "TOA5,CR1000,datos\n2026-01-01 00:00:00,1,2.5\n"
@@ -442,8 +434,8 @@ class TestArchivadoDatCrudo:
         self, db_session, entorno_exitoso, monkeypatch
     ):
         """Una caída de S3 al archivar el .dat se trata como transitoria: se
-        propaga para que Celery reintente (retries<max), sin marcar Fallido ni
-        registrar intento, y sin haber tocado telemetría (la subida va ANTES
+        propaga para que Celery reintente (retries<max), conservando el fallo
+        de la ejecución y sin haber tocado telemetría (la subida va ANTES
         del parseo)."""
         monkeypatch.setattr(object_storage, "esta_configurado", lambda: True)
 
@@ -460,4 +452,4 @@ class TestArchivadoDatCrudo:
 
         db_session.refresh(archivo)
         assert archivo.estd != "Fallido"
-        assert intentos_de(db_session, archivo.id_archv) == []
+        assert [i.rsltd for i in intentos_de(db_session, archivo.id_archv)] == ["Fallido"]
