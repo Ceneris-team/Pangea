@@ -1,0 +1,14 @@
+✔ el contexto ofrece solo parámetros compatibles de los equipos y proyectos elegidos (3.8583ms)
+✔ valida decimales negativos y cero, normaliza coma y conserva extremos vacíos (0.9151ms)
+✔ rechaza límites invertidos, no numéricos, vacíos y condiciones fuera de contexto (0.4342ms)
+✔ el resumen conserva unidad y expresa correctamente dentro y fuera del rango (0.4406ms)
+✔ compara límites decimales sin perder precisión al convertirlos a Number (2.4362ms)
+✔ rechaza dígitos no ASCII, notación no admitida y más de 60 caracteres (0.5903ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 380.2766

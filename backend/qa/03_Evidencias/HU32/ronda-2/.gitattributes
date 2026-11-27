@@ -1,0 +1,4 @@
+# Preserve the original bytes checked by SHA256SUMS.txt.
+*.xml -text
+*.tap -text whitespace=cr-at-eol
+SHA256SUMS.txt -text
